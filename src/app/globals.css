@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-surface font-arabic text-slate-text antialiased;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply text-right;
+  }
+}
+
+@layer utilities {
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+@media print {
+  .no-print,
+  nav,
+  header {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  #patient-statement-print,
+  #master-clinic-report-print,
+  #doctor-payout-statement-print {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  #master-clinic-report-print {
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+}
