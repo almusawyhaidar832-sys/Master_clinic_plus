@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { DashboardShell } from "./DashboardShell";
-import { accountantNav } from "@/config/navigation";
+import { accountantModuleNav, superAdminModuleNav } from "@/config/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { fetchUnreadNotificationCount } from "@/lib/services/clinic-stats";
 import { getAuthProfile } from "@/lib/clinic-context";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { useClinicModules } from "@/contexts/ClinicModulesContext";
+import { useModuleNav } from "@/hooks/useModuleNav";
+import type { NavItem } from "@/types";
 
 export function DashboardLayoutClient({
   children,
@@ -14,26 +17,41 @@ export function DashboardLayoutClient({
   children: React.ReactNode;
 }) {
   const [notificationCount, setNotificationCount] = useState(0);
+  const [userRole, setUserRole] = useState<string>("accountant");
   const { displayName, profile } = useClinicProfile();
+  const { specialtyLabel } = useClinicModules();
+
+  // Pick the right base nav by role, then filter by enabled modules
+  const baseNav = userRole === "super_admin" ? superAdminModuleNav : accountantModuleNav;
+  const filteredModuleNav = useModuleNav(baseNav);
+
+  // Convert to NavItem shape that DashboardShell / Sidebar expects
+  const navItems: NavItem[] = filteredModuleNav.map((i) => ({
+    href: i.href,
+    label: i.label,
+    icon: i.icon,
+    roles: i.roles,
+  }));
 
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const profile = await getAuthProfile(supabase);
-      if (!profile) return;
-      const count = await fetchUnreadNotificationCount(supabase, profile.id);
+      const authProfile = await getAuthProfile(supabase);
+      if (!authProfile) return;
+      setUserRole(authProfile.role);
+      const count = await fetchUnreadNotificationCount(supabase, authProfile.id);
       setNotificationCount(count);
     }
     load();
-    const interval = setInterval(load, 30000);
+    const interval = setInterval(load, 30_000);
     return () => clearInterval(interval);
   }, []);
 
   return (
     <DashboardShell
-      navItems={accountantNav}
+      navItems={navItems}
       title={displayName}
-      subtitle="لوحة المحاسب"
+      subtitle={`لوحة المحاسب — ${specialtyLabel}`}
       clinicLogoUrl={profile?.logo_url}
       notificationCount={notificationCount}
     >

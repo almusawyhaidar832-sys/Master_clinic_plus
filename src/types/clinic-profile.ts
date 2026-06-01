@@ -1,5 +1,7 @@
 /** Tenant white-label profile — single source for clinic branding */
 
+import type { ClinicSpecialty } from "@/types/modules";
+
 export interface ClinicProfile {
   id: string;
   name: string;
@@ -10,6 +12,8 @@ export interface ClinicProfile {
   whatsapp_linked: boolean;
   review_fee_enabled?: boolean;
   review_fee_amount?: number;
+  /** Joined from clinic_settings — available after full profile fetch */
+  specialty?: ClinicSpecialty;
 }
 
 export type ClinicProfileUpdate = Partial<

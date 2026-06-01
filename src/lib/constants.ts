@@ -30,3 +30,11 @@ export const STAFF_SLOTS = 7;
 
 export const APP_NAME = "ماستر كلينك بلس";
 export const APP_NAME_EN = "Master Clinic Plus";
+
+export const DEVELOPER = {
+  nameAr:   "حيدر حازم الموسوي",
+  nameEn:   "Haider Hazim Al-Mousawi",
+  role:     "Full-Stack Developer & System Architect",
+  roleAr:   "مطوّر النظام ومهندس المعمارية",
+  year:     2026,
+} as const;

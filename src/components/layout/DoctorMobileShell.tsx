@@ -4,31 +4,48 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { useClinicModules } from "@/contexts/ClinicModulesContext";
+import { useModuleNav } from "@/hooks/useModuleNav";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { doctorModuleNav, doctorModuleQuickActions } from "@/config/navigation";
 import {
-  Wallet,
-  ArrowDownToLine,
-  Users,
-  Calendar,
-  CalendarClock,
-  AlertCircle,
-  FileText,
-  Home,
+  Wallet, ArrowDownToLine, Users, Calendar,
+  CalendarClock, AlertCircle, FileText, Home,
+  Smile, FilePen, Activity, Sun, Moon, Languages,
 } from "lucide-react";
 
-const doctorNav = [
-  { href: "/doctor", label: "الرئيسية", icon: Home },
-  { href: "/doctor/wallet", label: "المحفظة", icon: Wallet },
-  { href: "/doctor/patients", label: "المرضى", icon: Users },
-  { href: "/doctor/schedule", label: "المواعيد", icon: CalendarClock },
-];
+/** Maps icon string keys → Lucide components for the bottom nav */
+const NAV_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  home:            Home,
+  wallet:          Wallet,
+  users:           Users,
+  calendarClock:   CalendarClock,
+  arrowDownToLine: ArrowDownToLine,
+  calendar:        Calendar,
+  alertCircle:     AlertCircle,
+  fileText:        FileText,
+  smile:           Smile,
+  filePen:         FilePen,
+  activity:        Activity,
+};
+
+/** Maps icon string keys for quick actions */
+export const QUICK_ACTION_ICON_MAP = NAV_ICON_MAP;
 
 export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { displayName, profile } = useClinicProfile();
+  const { specialtyLabel, loading: modulesLoading } = useClinicModules();
+  const { isDark, toggleTheme } = useTheme();
+  const { lang, toggleLang } = useLanguage();
+
+  // Filter bottom nav items by enabled modules
+  const filteredNav = useModuleNav(doctorModuleNav);
 
   return (
     <div className="flex min-h-screen flex-col bg-surface pb-20">
-      <header className="safe-top sticky top-0 z-30 bg-primary px-4 py-4 text-white shadow-premium">
+      <header className="safe-top sticky top-0 z-30 bg-primary px-4 py-3 text-white shadow-premium">
         <div className="flex items-center gap-2">
           {profile?.logo_url && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -38,9 +55,28 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
               className="h-8 w-8 rounded-lg border border-white/20 bg-white object-contain p-0.5"
             />
           )}
-          <div>
-            <p className="text-xs opacity-90">تطبيق الطبيب — {displayName}</p>
-            <h1 className="text-lg font-bold">{displayName}</h1>
+          <div className="flex-1 min-w-0">
+            <p className="truncate text-xs opacity-90">
+              {modulesLoading ? "..." : specialtyLabel} — {displayName}
+            </p>
+            <h1 className="text-base font-bold">{displayName}</h1>
+          </div>
+          {/* Controls */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={toggleLang}
+              className="rounded-lg p-1.5 text-white/80 hover:bg-white/10"
+              title={lang === "ar" ? "EN" : "عر"}
+            >
+              <Languages className="h-4 w-4" />
+            </button>
+            <button
+              onClick={toggleTheme}
+              className="rounded-lg p-1.5 text-white/80 hover:bg-white/10"
+              title={isDark ? "Light" : "Dark"}
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
           </div>
         </div>
       </header>
@@ -49,8 +85,9 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
 
       <nav className="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-slate-border bg-surface-card px-2 py-2">
         <div className="flex justify-around">
-          {doctorNav.map(({ href, label, icon: Icon }) => {
+          {filteredNav.map(({ href, label, icon }) => {
             const active = pathname === href;
+            const Icon = NAV_ICON_MAP[icon] ?? Home;
             return (
               <Link
                 key={href}
@@ -71,12 +108,21 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const doctorQuickActions = [
-  { href: "/doctor/wallet", label: "المحفظة", icon: Wallet, desc: "الرصيد القابل للسحب" },
-  { href: "/doctor/withdraw", label: "طلب سحب", icon: ArrowDownToLine, desc: "إشعار فوري للمحاسب" },
-  { href: "/doctor/patients", label: "رعاية المرضى", icon: Users, desc: "السجل الطبي والمالي" },
-  { href: "/doctor/filter", label: "تصفية بالتاريخ", icon: Calendar, desc: "يوم أو فترة مخصصة" },
-  { href: "/doctor/schedule", label: "إدارة المواعيد", icon: CalendarClock, desc: "حجز وقفل الساعات" },
-  { href: "/doctor/incomplete", label: "علاجات غير مكتملة", icon: AlertCircle, desc: "لا تُنسى أبداً" },
-  { href: "/doctor/statement", label: "كشف حساب مريض", icon: FileText, desc: "طباعة ومشاركة" },
+/**
+ * Dynamic quick actions for the doctor home screen.
+ * Filtered by enabled modules via useModuleNav() at the call site.
+ * @example
+ *   const actions = useModuleNav(doctorModuleQuickActions);
+ */
+export { doctorModuleQuickActions as doctorQuickActions };
+
+// Legacy static export kept for backward compatibility with existing pages
+export const doctorQuickActionsStatic = [
+  { href: "/doctor/wallet",     label: "المحفظة",            icon: Wallet,          desc: "الرصيد القابل للسحب"  },
+  { href: "/doctor/withdraw",   label: "طلب سحب",            icon: ArrowDownToLine, desc: "إشعار فوري للمحاسب"   },
+  { href: "/doctor/patients",   label: "رعاية المرضى",       icon: Users,           desc: "السجل الطبي والمالي"  },
+  { href: "/doctor/filter",     label: "تصفية بالتاريخ",     icon: Calendar,        desc: "يوم أو فترة مخصصة"   },
+  { href: "/doctor/schedule",   label: "إدارة المواعيد",     icon: CalendarClock,   desc: "حجز وقفل الساعات"    },
+  { href: "/doctor/incomplete", label: "علاجات غير مكتملة",  icon: AlertCircle,     desc: "لا تُنسى أبداً"       },
+  { href: "/doctor/statement",  label: "كشف حساب مريض",      icon: FileText,        desc: "طباعة ومشاركة"       },
 ];

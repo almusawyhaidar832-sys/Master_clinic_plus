@@ -243,6 +243,19 @@ export default function LoginPage() {
           الحسابات الجديدة تُنشأ باسم مستخدم فقط. الحسابات القديمة يمكنها
           استخدام البريد الإلكتروني في حقل اسم المستخدم.
         </p>
+
+        {/* Developer signature */}
+        <div className="mt-8 flex flex-col items-center gap-1 select-none">
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/80 px-5 py-3 shadow-sm backdrop-blur">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-xs font-black">
+              ح
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-bold text-slate-700">حيدر حازم الموسوي</p>
+              <p className="text-[10px] text-slate-400">Full-Stack Developer · Master Clinic Plus © 2026</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

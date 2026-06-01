@@ -2,19 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────
+   CSS Design Tokens — Light Mode (default)
+───────────────────────────────────────────── */
+:root {
+  --color-text:          #0f172a;
+  --color-muted:         #64748b;
+  --color-border:        #e2e8f0;
+  --color-surface:       #f8fafc;
+  --color-surface-card:  #ffffff;
+  --color-debt-bg:       #fef2f2;
+  --color-debt-text:     #b91c1c;
+  --color-debt-border:   #fecaca;
+}
+
+/* ─────────────────────────────────────────────
+   Dark Mode tokens — applied when html.dark
+───────────────────────────────────────────── */
+html.dark {
+  --color-text:          #f1f5f9;
+  --color-muted:         #94a3b8;
+  --color-border:        #1e293b;
+  --color-surface:       #0f172a;
+  --color-surface-card:  #1e293b;
+  --color-debt-bg:       #450a0a;
+  --color-debt-text:     #fca5a5;
+  --color-debt-border:   #7f1d1d;
+}
+
 @layer base {
   html {
     @apply scroll-smooth;
   }
 
   body {
-    @apply bg-surface font-arabic text-slate-text antialiased;
+    @apply bg-surface font-arabic text-slate-text antialiased transition-colors duration-200;
   }
 
   input,
   select,
   textarea {
     @apply text-right;
+  }
+
+  /* Dark mode base overrides */
+  html.dark input,
+  html.dark select,
+  html.dark textarea {
+    @apply bg-slate-800 text-slate-100 border-slate-600;
   }
 }
 

@@ -6,6 +6,8 @@ const config: Config = {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  // Dark mode via class on <html> element
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
@@ -22,26 +24,27 @@ const config: Config = {
           800: "#115e59",
           900: "#134e4a",
         },
+        // CSS-variable-driven tokens — switch automatically with dark class
         slate: {
-          text: "#0f172a",
-          muted: "#64748b",
-          border: "#e2e8f0",
+          text:   "var(--color-text)",
+          muted:  "var(--color-muted)",
+          border: "var(--color-border)",
         },
         surface: {
-          DEFAULT: "#f8fafc",
-          card: "#ffffff",
+          DEFAULT: "var(--color-surface)",
+          card:    "var(--color-surface-card)",
         },
         debt: {
-          DEFAULT: "#fef2f2",
-          text: "#b91c1c",
-          border: "#fecaca",
+          DEFAULT: "var(--color-debt-bg)",
+          text:    "var(--color-debt-text)",
+          border:  "var(--color-debt-border)",
         },
       },
       fontFamily: {
         arabic: ["var(--font-noto-arabic)", "Tahoma", "Arial", "sans-serif"],
       },
       boxShadow: {
-        card: "0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.06)",
+        card:    "0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.06)",
         premium: "0 4px 24px -4px rgb(20 184 166 / 0.15)",
       },
     },

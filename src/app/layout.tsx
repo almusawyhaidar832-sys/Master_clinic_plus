@@ -15,6 +15,8 @@ export const metadata: Metadata = {
     template: `%s | ${APP_NAME}`,
   },
   description: "نظام إدارة عيادات متعدد المستأجرين — ماستر كلينك بلس",
+  authors: [{ name: "Haider Hazim Al-Mousawi" }],
+  creator: "Haider Hazim Al-Mousawi",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
