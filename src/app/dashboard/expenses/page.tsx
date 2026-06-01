@@ -7,11 +7,13 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { createClient } from "@/lib/supabase/client";
-import { getClinicIdFromProfile } from "@/lib/clinic-context";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { formatCurrency, formatDate, todayISO } from "@/lib/utils";
 import type { Expense } from "@/types";
 
 export default function ExpensesPage() {
+  const { clinicId, missingClinic } = useActiveClinicId();
+
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [expenseDate, setExpenseDate] = useState(todayISO());
@@ -35,25 +37,28 @@ export default function ExpensesPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!clinicId) {
+      setMessage({ type: "error", text: "لا توجد عيادة نشطة. تحقق من قاعدة البيانات." });
+      return;
+    }
+
     setLoading(true);
     setMessage(null);
 
     const supabase = createClient();
-    const clinicId = await getClinicIdFromProfile(supabase);
-
     const { error } = await supabase.from("expenses").insert({
       clinic_id: clinicId,
-      description_ar: description,
+      description_ar: description.trim(),
       amount: parseFloat(amount),
       expense_date: expenseDate,
     });
 
     setLoading(false);
     if (error) {
-      setMessage({ type: "error", text: "تعذر حفظ المصروف" });
+      setMessage({ type: "error", text: `تعذر حفظ المصروف: ${error.message}` });
       return;
     }
-    setMessage({ type: "success", text: "تم تسجيل المصروف" });
+    setMessage({ type: "success", text: "تم تسجيل المصروف بنجاح" });
     setDescription("");
     setAmount("");
     loadExpenses();
@@ -73,7 +78,9 @@ export default function ExpensesPage() {
     {
       key: "amount",
       header: "المبلغ",
-      render: (row) => formatCurrency(row.amount),
+      render: (row) => (
+        <span className="font-medium text-debt-text">{formatCurrency(row.amount)}</span>
+      ),
     },
   ];
 
@@ -87,6 +94,10 @@ export default function ExpensesPage() {
           إدخال حر — إيجار، مولد، أمبير، صيانة، وأي بند آخر
         </p>
       </div>
+
+      {missingClinic && (
+        <Alert variant="error">لا توجد عيادة في قاعدة البيانات.</Alert>
+      )}
 
       <Card>
         <CardHeader>
@@ -128,7 +139,7 @@ export default function ExpensesPage() {
             className="text-left"
           />
 
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading || !clinicId}>
             {loading ? "جاري الحفظ..." : "حفظ المصروف"}
           </Button>
         </form>

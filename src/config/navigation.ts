@@ -2,7 +2,8 @@ import type { NavItem } from "@/types";
 
 export const accountantNav: NavItem[] = [
   { href: "/dashboard", label: "لوحة التحكم", icon: "dashboard" },
-  { href: "/dashboard/ledger", label: "سجل المرضى", icon: "patients" },
+  { href: "/dashboard/ledger", label: "إدخال جلسة", icon: "patients" },
+  { href: "/dashboard/patients", label: "ملفات المرضى", icon: "patients" },
   { href: "/dashboard/reports", label: "تقارير العيادة", icon: "profits" },
   { href: "/dashboard/doctors", label: "الأطباء", icon: "doctors" },
   { href: "/dashboard/withdrawals", label: "طلبات السحب", icon: "withdrawals" },

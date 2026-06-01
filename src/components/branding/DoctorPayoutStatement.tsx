@@ -17,8 +17,9 @@ interface DoctorPayoutStatementProps {
   };
   operations: {
     id: string;
-    operation_date: string;
-    operation_name_ar: string;
+    operation_date?: string;
+    operation_type?: string;
+    operation_name_ar?: string;
     doctor_share_amount?: number;
     patient?: { full_name_ar: string };
   }[];
@@ -93,7 +94,7 @@ export function DoctorPayoutStatement({
                 <td className="py-1">
                   {(op.patient as { full_name_ar: string })?.full_name_ar ?? "—"}
                 </td>
-                <td className="py-1">{op.operation_name_ar}</td>
+                <td className="py-1">{op.operation_type || op.operation_name_ar || "—"}</td>
                 <td className="py-1 font-medium text-primary">
                   {formatCurrency(op.doctor_share_amount ?? 0)}
                 </td>

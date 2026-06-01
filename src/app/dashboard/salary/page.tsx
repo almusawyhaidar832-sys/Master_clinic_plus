@@ -14,8 +14,11 @@ import {
   todayISO,
 } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { getClinicIdFromProfile } from "@/lib/clinic-context";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import type { StaffMember, SalaryEntry, SalarySlip } from "@/types";
+
+// load ALL staff (active + inactive) to show toggle buttons
+
 
 const entryTypes = [
   { value: "advance", label: "سلفة" },
@@ -24,6 +27,7 @@ const entryTypes = [
 ];
 
 export default function SalaryPage() {
+  const { clinicId } = useActiveClinicId();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [staffId, setStaffId] = useState("");
   const [entryType, setEntryType] = useState("advance");
@@ -46,12 +50,12 @@ export default function SalaryPage() {
     const { data } = await supabase
       .from("staff_members")
       .select("*")
-      .eq("is_active", true)
       .order("slot_number");
     const list = (data as StaffMember[]) || [];
     setStaff(list);
-    if (list.length) {
-      setStaffId((prev) => prev || list[0].id);
+    const activeList = list.filter((s) => s.is_active);
+    if (activeList.length) {
+      setStaffId((prev) => prev || activeList[0].id);
     }
   }, []);
 
@@ -71,7 +75,7 @@ export default function SalaryPage() {
     const supabase = createClient();
     const { data } = await supabase
       .from("salary_slips")
-      .select("*, staff:staff_members(full_name_ar)")
+      .select("*, staff:staff_members!staff_id(full_name_ar)")
       .eq("month_year", monthYear)
       .order("created_at", { ascending: false });
     setSlips((data as SalarySlip[]) || []);
@@ -98,8 +102,8 @@ export default function SalaryPage() {
 
   async function handleEntry(e: React.FormEvent) {
     e.preventDefault();
+    if (!clinicId) { setMessage("لا توجد عيادة نشطة"); return; }
     const supabase = createClient();
-    const clinicId = await getClinicIdFromProfile(supabase);
     const { error } = await supabase.from("salary_entries").insert({
       clinic_id: clinicId,
       staff_id: staffId,
@@ -118,33 +122,36 @@ export default function SalaryPage() {
 
   async function addStaff(e: React.FormEvent) {
     e.preventDefault();
-    if (staff.length >= STAFF_SLOTS) {
-      setMessage(`الحد الأقصى ${STAFF_SLOTS} موظفين`);
+    const activeCount = staff.filter((s) => s.is_active).length;
+    if (activeCount >= STAFF_SLOTS) {
+      setMessage(`الحد الأقصى ${STAFF_SLOTS} موظفين نشطين`);
       return;
     }
+    if (!clinicId) { setMessage("لا توجد عيادة نشطة"); return; }
     const supabase = createClient();
-    const clinicId = await getClinicIdFromProfile(supabase);
-    const nextSlot = staff.length + 1;
+    const nextSlot = activeCount + 1;
     const { error } = await supabase.from("staff_members").insert({
       clinic_id: clinicId,
-      full_name_ar: newStaffName,
-      job_title_ar: newStaffJob,
+      full_name_ar: newStaffName.trim(),
+      job_title_ar: newStaffJob.trim(),
       base_salary: parseFloat(newStaffSalary),
       slot_number: nextSlot,
+      is_active: true,
     });
-    if (!error) {
+    if (error) {
+      setMessage(`تعذر إضافة الموظف: ${error.message}`);
+    } else {
       setNewStaffName("");
       setNewStaffJob("");
       setNewStaffSalary("");
-      loadStaff();
-      setMessage("تم إضافة الموظف");
+      await loadStaff();
+      setMessage("✓ تم إضافة الموظف");
     }
   }
 
   async function generateSlip() {
-    if (!selectedStaff) return;
+    if (!selectedStaff || !clinicId) return;
     const supabase = createClient();
-    const clinicId = await getClinicIdFromProfile(supabase);
     const { error } = await supabase.from("salary_slips").upsert(
       {
         clinic_id: clinicId,
@@ -172,10 +179,19 @@ export default function SalaryPage() {
     loadSlips();
   }
 
-  const staffOptions = staff.map((s) => ({
-    value: s.id,
-    label: `${s.full_name_ar} — ${s.job_title_ar}`,
-  }));
+  async function toggleStaffActive(staffMember: StaffMember) {
+    const supabase = createClient();
+    await supabase
+      .from("staff_members")
+      .update({ is_active: !staffMember.is_active })
+      .eq("id", staffMember.id);
+    loadStaff();
+  }
+
+  // Only active staff appear in the operation dropdowns
+  const staffOptions = staff
+    .filter((s) => s.is_active)
+    .map((s) => ({ value: s.id, label: `${s.full_name_ar} — ${s.job_title_ar}` }));
 
   return (
     <div className="space-y-6">
@@ -186,10 +202,41 @@ export default function SalaryPage() {
         </p>
       </div>
 
-      {staff.length < STAFF_SLOTS && (
+      {/* Active staff with toggle */}
+      {staff.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>إضافة موظف ({staff.length}/{STAFF_SLOTS})</CardTitle>
+            <CardTitle>الموظفون ({staff.filter(s => s.is_active).length} نشط)</CardTitle>
+          </CardHeader>
+          <ul className="space-y-2">
+            {staff.map((s) => (
+              <li key={s.id} className="flex items-center justify-between gap-2 rounded-lg bg-surface p-3">
+                <div>
+                  <p className={`font-medium ${s.is_active ? "text-slate-text" : "text-slate-400 line-through"}`}>
+                    {s.full_name_ar}
+                  </p>
+                  <p className="text-xs text-slate-muted">{s.job_title_ar} — {formatCurrency(s.base_salary)}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => toggleStaffActive(s)}
+                  className={s.is_active
+                    ? "text-slate-muted hover:text-debt-text"
+                    : "border-emerald-300 text-emerald-700"}
+                >
+                  {s.is_active ? "إيقاف" : "تفعيل"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {staff.filter(s => s.is_active).length < STAFF_SLOTS && (
+        <Card>
+          <CardHeader>
+            <CardTitle>إضافة موظف ({staff.filter(s => s.is_active).length}/{STAFF_SLOTS})</CardTitle>
           </CardHeader>
           <form onSubmit={addStaff} className="grid gap-3 sm:grid-cols-3">
             <Input

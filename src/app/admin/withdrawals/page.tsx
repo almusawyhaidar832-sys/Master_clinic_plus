@@ -18,7 +18,7 @@ export default function AdminWithdrawalsPage() {
     const supabase = createClient();
     let query = supabase
       .from("doctor_withdrawals")
-      .select("*, doctor:doctors(full_name_ar)")
+      .select("*, doctor:doctors!doctor_id(full_name_ar)")
       .order("requested_at", { ascending: false });
 
     if (filter === "pending") {

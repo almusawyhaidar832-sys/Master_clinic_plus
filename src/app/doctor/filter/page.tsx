@@ -33,7 +33,7 @@ export default function DoctorFilterPage() {
 
     const { data } = await supabase
       .from("patient_operations")
-      .select("*, patient:patients(full_name_ar)")
+      .select("*, patient:patients!patient_id(full_name_ar)")
       .eq("doctor_id", doctor.id)
       .gte("operation_date", from)
       .lte("operation_date", to)
@@ -116,7 +116,7 @@ export default function DoctorFilterPage() {
                   >
                     <span>
                       {(op.patient as { full_name_ar: string })?.full_name_ar} —{" "}
-                      {op.operation_name_ar}
+                      {op.operation_type || op.operation_name_ar || "—"}
                       <br />
                       <span className="text-xs text-slate-muted">
                         {formatDate(op.operation_date)}

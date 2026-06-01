@@ -11,14 +11,14 @@
   "dir": "rtl",
   "icons": [
     {
-      "src": "/icons/icon-192.png",
-      "sizes": "192x192",
+      "src": "/icon",
+      "sizes": "32x32",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/icons/icon-512.png",
-      "sizes": "512x512",
+      "src": "/apple-icon",
+      "sizes": "180x180",
       "type": "image/png",
       "purpose": "any maskable"
     }

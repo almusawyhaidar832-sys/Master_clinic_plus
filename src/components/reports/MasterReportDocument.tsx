@@ -207,7 +207,7 @@ export function MasterReportDocument({
                   <td className="py-0.5 font-medium text-primary">
                     {op.doctorName}
                   </td>
-                  <td className="py-0.5">{op.operation_name_ar}</td>
+                  <td className="py-0.5">{op.operation_type || op.operation_name_ar || "—"}</td>
                   <td className="py-0.5">{formatCurrency(op.paid_amount)}</td>
                 </tr>
               ))}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getClinicIdFromProfile } from "@/lib/clinic-context";
 import { fetchClinicProfile } from "@/lib/services/clinic-profile";
 import {
   appointmentConfirmationMessage,
@@ -39,18 +40,7 @@ export async function POST(request: NextRequest) {
   }
 
   const apiUrl = process.env.WHATSAPP_API_URL;
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  let clinicId: string | null = clinic?.id ?? null;
-  if (!clinicId && user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("clinic_id")
-      .eq("id", user.id)
-      .single();
-    clinicId = profile?.clinic_id ?? null;
-  }
+  const clinicId = clinic?.id ?? (await getClinicIdFromProfile(supabase));
 
   await supabase.from("whatsapp_messages").insert({
     clinic_id: clinicId,

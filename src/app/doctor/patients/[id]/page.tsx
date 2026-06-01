@@ -9,8 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
-import { useClinicProfile } from "@/contexts/ClinicProfileContext";
-import type { Patient, PatientOperation, MedicalLog, Treatment } from "@/types";
+import type { Doctor, Patient, PatientOperation, MedicalLog, Treatment } from "@/types";
 import { ArrowRight, FileText } from "lucide-react";
 
 export default function DoctorPatientDetailPage() {
@@ -22,25 +21,27 @@ export default function DoctorPatientDetailPage() {
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [newLog, setNewLog] = useState("");
   const [saving, setSaving] = useState(false);
+  const [doctor, setDoctor] = useState<Doctor | null>(null);
 
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const doctor = await getDoctorForCurrentUser(supabase);
+      const doc = await getDoctorForCurrentUser(supabase);
+      setDoctor(doc);
 
       let opsQuery = supabase
         .from("patient_operations")
         .select("*")
         .eq("patient_id", id)
         .order("operation_date", { ascending: false });
-      if (doctor) opsQuery = opsQuery.eq("doctor_id", doctor.id);
+      if (doc) opsQuery = opsQuery.eq("doctor_id", doc.id);
 
       const [pRes, oRes, lRes, tRes] = await Promise.all([
         supabase.from("patients").select("*").eq("id", id).single(),
         opsQuery,
         supabase
           .from("medical_logs")
-          .select("*, doctor:doctors(full_name_ar)")
+          .select("*, doctor:doctors!doctor_id(full_name_ar)")
           .eq("patient_id", id)
           .order("log_date", { ascending: false }),
         supabase
@@ -139,13 +140,11 @@ export default function DoctorPatientDetailPage() {
             {operations.map((op) => (
               <li key={op.id} className="flex justify-between border-b py-2">
                 <span>
-                  {op.operation_name_ar} — {formatDate(op.operation_date)}
+                  {op.operation_type || op.operation_name_ar || "—"}
+                  {op.operation_date ? ` — ${formatDate(op.operation_date)}` : ""}
                 </span>
-                <span>
-                  {formatCurrency(op.paid_amount)}
-                  <span className="block text-xs text-primary">
-                    {formatDoctorDisplayName(doctor?.full_name_ar)}
-                  </span>
+                <span className="font-medium text-primary">
+                  {formatCurrency(op.doctor_share_amount ?? op.paid_amount)}
                 </span>
               </li>
             ))}

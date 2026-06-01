@@ -9,6 +9,7 @@ import {
   FaChalkboardTeacher,
 } from "react-icons/fa";
 import { createClient } from "@/lib/supabase/client";
+import { getSession } from "@/lib/supabase/auth-helpers";
 import {
   signInWithUsername,
   registerWithUsername,
@@ -63,7 +64,7 @@ export default function LoginPage() {
         setSuccess(result.message);
         setIsRegister(false);
 
-        const { data: sessionData } = await supabase.auth.getSession();
+        const { data: sessionData } = await getSession(supabase);
         if (sessionData.session) {
           const { data: profile } = await supabase
             .from("profiles")

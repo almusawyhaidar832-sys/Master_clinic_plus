@@ -1,5 +1,25 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+function authClient(supabase: SupabaseClient) {
+  return supabase.auth as {
+    signInWithPassword: (opts: {
+      email: string;
+      password: string;
+    }) => Promise<{
+      data: { user: { id: string } | null };
+      error: { message: string } | null;
+    }>;
+    signUp: (opts: {
+      email: string;
+      password: string;
+      options?: { data?: Record<string, string> };
+    }) => Promise<{
+      data: { user: { id: string } | null; session: unknown | null };
+      error: { message: string } | null;
+    }>;
+  };
+}
+
 /** Internal auth email for username-only accounts */
 export function usernameToAuthEmail(username: string): string {
   const safe = username
@@ -47,7 +67,7 @@ export async function signInWithUsername(
     return { ok: false, error: "أدخل اسم المستخدم" };
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await authClient(supabase).signInWithPassword({
     email,
     password,
   });
@@ -120,7 +140,7 @@ export async function registerWithUsername(
     };
   }
 
-  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+  const { data: signUpData, error: signUpError } = await authClient(supabase).signUp({
     email,
     password,
     options: {

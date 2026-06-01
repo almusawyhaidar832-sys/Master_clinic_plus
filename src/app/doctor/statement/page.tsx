@@ -54,12 +54,12 @@ function StatementContent() {
       supabase.from("patients").select("*").eq("id", patientId).single(),
       supabase
         .from("patient_operations")
-        .select("*, doctor:doctors(full_name_ar)")
+        .select("*, doctor:doctors!doctor_id(full_name_ar)")
         .eq("patient_id", patientId)
         .order("operation_date", { ascending: false }),
       supabase
         .from("medical_logs")
-        .select("*, doctor:doctors(full_name_ar)")
+        .select("*, doctor:doctors!doctor_id(full_name_ar)")
         .eq("patient_id", patientId)
         .order("log_date", { ascending: false }),
     ]);

@@ -89,11 +89,12 @@ export async function fetchClinicProfitStats(
   );
 
   const profit = calculateClinicProfit({
-    totalRevenue: clinicShareTotal,
+    clinicShareFromOperations: clinicShareTotal,
     totalOutstandingDebts: outstandingDebts,
-    totalDoctorPayouts: doctorShareTotal,
     totalStaffSalaries: totalSalariesPaid,
     totalExpenses,
+    cashCollected: cashInflow,
+    doctorShareAccrued: doctorShareTotal,
   });
 
   return {
@@ -106,10 +107,11 @@ export async function fetchClinicProfitStats(
     totalSalariesPaid,
     breakdown: [
       { label: "حصة العيادة من العمليات", amount: clinicShareTotal },
-      { label: "حصص الأطباء (مستحقة)", amount: -doctorShareTotal },
+      { label: "المتحصل نقداً (مرضى)", amount: cashInflow },
+      { label: "أرباح الأطباء (محافظ — منفصلة)", amount: doctorShareTotal },
       { label: "رواتب مدفوعة", amount: -totalSalariesPaid },
       { label: "مصروفات عامة", amount: -totalExpenses },
-      { label: "صافي الربح", amount: profit.netProfit },
+      { label: "صافي ربح العيادة", amount: profit.netProfit },
     ],
   };
 }
@@ -118,28 +120,9 @@ export async function fetchDoctorWithdrawableBalance(
   supabase: SupabaseClient,
   doctorId: string
 ): Promise<number> {
-  const [opsRes, withdrawalsRes] = await Promise.all([
-    supabase
-      .from("patient_operations")
-      .select("doctor_share_amount")
-      .eq("doctor_id", doctorId),
-    supabase
-      .from("doctor_withdrawals")
-      .select("amount")
-      .eq("doctor_id", doctorId)
-      .in("status", ["approved", "paid", "pending"]),
-  ]);
-
-  const earned = (opsRes.data ?? []).reduce(
-    (s, r) => s + Number(r.doctor_share_amount ?? 0),
-    0
-  );
-  const withdrawn = (withdrawalsRes.data ?? []).reduce(
-    (s, r) => s + Number(r.amount ?? 0),
-    0
-  );
-
-  return Math.max(0, Math.round((earned - withdrawn) * 100) / 100);
+  const { fetchDoctorWalletStats } = await import("@/lib/services/doctor-wallet");
+  const stats = await fetchDoctorWalletStats(supabase, doctorId);
+  return stats.availableBalance;
 }
 
 export async function notifyAccountantsWithdrawal(

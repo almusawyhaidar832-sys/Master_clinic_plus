@@ -12,6 +12,13 @@ import {
 } from "@/lib/services/clinic-stats";
 import { currentMonthYear } from "@/lib/utils";
 
+function relationName(
+  rel: { full_name_ar: string } | { full_name_ar: string }[] | null | undefined
+): string | undefined {
+  if (!rel) return undefined;
+  return Array.isArray(rel) ? rel[0]?.full_name_ar : rel.full_name_ar;
+}
+
 export interface DoctorLedgerSummary {
   id: string;
   full_name_ar: string;
@@ -72,8 +79,9 @@ export interface MasterClinicReport {
     notes: string | null;
   }[];
   monthOperations: {
-    operation_date: string;
-    operation_name_ar: string;
+    operation_date?: string;
+    operation_name_ar?: string;
+    operation_type?: string;
     patientName: string;
     doctorName: string;
     total_amount: number;
@@ -175,7 +183,7 @@ export async function fetchDoctorLedgerDetail(
     supabase
       .from("patient_operations")
       .select(
-        "*, patient:patients(full_name_ar)"
+        "*, patient:patients!patient_id(full_name_ar)"
       )
       .eq("doctor_id", doctorId)
       .order("operation_date", { ascending: false })
@@ -218,7 +226,7 @@ export async function fetchMasterClinicReport(
     fetchDoctorLedgers(supabase),
     supabase
       .from("doctor_withdrawals")
-      .select("id, amount, requested_at, doctor:doctors(full_name_ar)")
+      .select("id, amount, requested_at, doctor:doctors!doctor_id(full_name_ar)")
       .eq("status", "pending")
       .order("requested_at", { ascending: false }),
     supabase
@@ -230,7 +238,7 @@ export async function fetchMasterClinicReport(
     supabase
       .from("salary_entries")
       .select(
-        "entry_type, amount, entry_date, notes_ar, staff:staff_members(full_name_ar, job_title_ar)"
+        "entry_type, amount, entry_date, notes_ar, staff:staff_members!staff_id(full_name_ar, job_title_ar)"
       )
       .gte("entry_date", start)
       .lte("entry_date", end)
@@ -238,7 +246,7 @@ export async function fetchMasterClinicReport(
     supabase
       .from("patient_operations")
       .select(
-        "operation_date, operation_name_ar, total_amount, paid_amount, remaining_debt, patient:patients(full_name_ar), doctor:doctors(full_name_ar)"
+        "operation_date, operation_type, operation_name_ar, total_amount, paid_amount, remaining_debt, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
       )
       .gte("operation_date", start)
       .lte("operation_date", end)
@@ -294,7 +302,7 @@ export async function fetchMasterClinicReport(
     pendingWithdrawals: (pendingWithdrawalsRes.data ?? []).map((w) => ({
       id: w.id,
       doctorName: formatDoctorDisplayName(
-        (w.doctor as { full_name_ar: string })?.full_name_ar
+        relationName(w.doctor as { full_name_ar: string } | { full_name_ar: string }[])
       ),
       amount: Number(w.amount),
       requested_at: w.requested_at,
@@ -302,9 +310,14 @@ export async function fetchMasterClinicReport(
     expenses: expensesRes.data ?? [],
     salaryAdvances: (salaryEntriesRes.data ?? []).map((e) => ({
       staffName:
-        (e.staff as { full_name_ar: string })?.full_name_ar ?? "موظف",
+        relationName(
+          e.staff as
+            | { full_name_ar: string; job_title_ar?: string }
+            | { full_name_ar: string; job_title_ar?: string }[]
+        ) ?? "موظف",
       jobTitle:
-        (e.staff as { job_title_ar: string })?.job_title_ar ?? "",
+        (Array.isArray(e.staff) ? e.staff[0]?.job_title_ar : (e.staff as { job_title_ar?: string })?.job_title_ar) ??
+        "",
       entryType: entryTypeLabels[e.entry_type] ?? e.entry_type,
       amount: Number(e.amount),
       entry_date: e.entry_date,
@@ -312,15 +325,20 @@ export async function fetchMasterClinicReport(
     })),
     monthOperations: (monthOpsRes.data ?? []).map((op) => ({
       operation_date: op.operation_date,
-      operation_name_ar: op.operation_name_ar,
+      operation_name_ar: op.operation_type || op.operation_name_ar,
+      operation_type: op.operation_type,
       patientName:
-        (op.patient as { full_name_ar: string })?.full_name_ar ?? "—",
+        relationName(
+          op.patient as { full_name_ar: string } | { full_name_ar: string }[]
+        ) ?? "—",
       doctorName: formatDoctorDisplayName(
-        (op.doctor as { full_name_ar: string })?.full_name_ar
+        relationName(
+          op.doctor as { full_name_ar: string } | { full_name_ar: string }[]
+        )
       ),
       total_amount: Number(op.total_amount),
       paid_amount: Number(op.paid_amount),
-      remaining_debt: Number(op.remaining_debt),
+      remaining_debt: Number(op.remaining_debt ?? Math.max(0, Number(op.total_amount) - Number(op.paid_amount))),
     })),
   };
 }

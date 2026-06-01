@@ -19,41 +19,39 @@ export function calculateDoctorShare(
   };
 }
 
-/** Net clinic profit snapshot */
+/**
+ * Net clinic profit — doctor withdrawals do NOT reduce clinic profit.
+ * Doctor wallet is separate from clinic earnings.
+ */
 export function calculateClinicProfit(params: {
-  totalRevenue: number;
+  clinicShareFromOperations: number;
   totalOutstandingDebts: number;
-  totalDoctorPayouts: number;
   totalStaffSalaries: number;
   totalExpenses: number;
+  cashCollected?: number;
+  doctorShareAccrued?: number;
 }): {
   cashInflow: number;
   outstandingDebts: number;
   netProfit: number;
+  doctorShareAccrued: number;
 } {
   const {
-    totalRevenue,
+    clinicShareFromOperations,
     totalOutstandingDebts,
-    totalDoctorPayouts,
     totalStaffSalaries,
     totalExpenses,
+    cashCollected = 0,
+    doctorShareAccrued = 0,
   } = params;
 
   const netProfit =
-    totalRevenue - totalDoctorPayouts - totalStaffSalaries - totalExpenses;
+    clinicShareFromOperations - totalStaffSalaries - totalExpenses;
 
   return {
-    cashInflow: totalRevenue,
+    cashInflow: cashCollected,
     outstandingDebts: totalOutstandingDebts,
     netProfit: Math.round(netProfit * 100) / 100,
+    doctorShareAccrued,
   };
-}
-
-/** Salary slip: Base - Advances - Deductions = Net */
-export function calculateSalaryNet(
-  baseSalary: number,
-  advances: number,
-  deductions: number
-): number {
-  return Math.max(0, baseSalary - advances - deductions);
 }

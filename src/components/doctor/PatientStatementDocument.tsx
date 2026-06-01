@@ -20,7 +20,10 @@ export function PatientStatementDocument({
   clinic,
 }: PatientStatementDocumentProps) {
   const totalPaid = operations.reduce((s, o) => s + o.paid_amount, 0);
-  const totalDebt = operations.reduce((s, o) => s + o.remaining_debt, 0);
+  const totalDebt = operations.reduce(
+    (s, o) => s + (o.remaining_debt ?? Math.max(0, o.total_amount - o.paid_amount)),
+    0
+  );
 
   return (
     <div
@@ -75,7 +78,7 @@ export function PatientStatementDocument({
                     (op.doctor as { full_name_ar: string })?.full_name_ar
                   )}
                 </td>
-                <td className="py-1">{op.operation_name_ar}</td>
+                <td className="py-1">{op.operation_type || op.operation_name_ar || "—"}</td>
                 <td className="py-1">{formatCurrency(op.paid_amount)}</td>
               </tr>
             ))}

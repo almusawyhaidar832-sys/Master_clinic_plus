@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-
-function internalEmail(username: string) {
-  const safe = username.toLowerCase().replace(/[^a-z0-9._-]/g, "");
-  return `${safe}@masterclinic.local`;
-}
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { registerWithUsername } from "@/lib/auth/credentials";
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -26,72 +22,24 @@ export async function POST(request: Request) {
     );
   }
 
-  const supabase = await createClient();
-  const email = internalEmail(username);
+  const supabase = createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
-  const { data: existing } = await supabase.rpc("get_email_for_username", {
-    p_username: username,
-  });
-
-  if (existing) {
-    return NextResponse.json(
-      { error: "اسم المستخدم مستخدم مسبقاً" },
-      { status: 409 }
-    );
-  }
-
-  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { username, full_name: fullName },
-    },
-  });
-
-  if (signUpError) {
-    return NextResponse.json(
-      { error: signUpError.message || "تعذر إنشاء الحساب" },
-      { status: 400 }
-    );
-  }
-
-  if (!signUpData.user) {
-    return NextResponse.json({ error: "تعذر إنشاء الحساب" }, { status: 400 });
-  }
-
-  const { data: clinic } = await supabase
-    .from("clinics")
-    .select("id")
-    .limit(1)
-    .maybeSingle();
-
-  if (!clinic?.id) {
-    return NextResponse.json(
-      {
-        error:
-          "لا توجد عيادة مسجّلة بعد. يجب على المدير إعداد العيادة قبل إنشاء حسابات.",
-      },
-      { status: 400 }
-    );
-  }
-
-  const { error: profileError } = await supabase.from("profiles").upsert({
-    id: signUpData.user.id,
+  const result = await registerWithUsername(
+    supabase,
     username,
-    full_name: fullName,
-    role: "accountant",
-    clinic_id: clinic.id,
-  });
+    password,
+    fullName
+  );
 
-  if (profileError) {
-    return NextResponse.json(
-      { error: "تم إنشاء الحساب لكن فشل ربط الملف الشخصي. تواصل مع الإدارة." },
-      { status: 500 }
-    );
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
   }
 
   return NextResponse.json({
     ok: true,
-    message: "تم إنشاء الحساب. يمكنك تسجيل الدخول الآن.",
+    message: result.message,
   });
 }

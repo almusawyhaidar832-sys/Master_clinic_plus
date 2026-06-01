@@ -18,9 +18,20 @@ export default function IncompleteTreatmentsPage() {
       const supabase = createClient();
       const { data } = await supabase
         .from("treatments")
-        .select("id, title_ar, patient:patients(full_name_ar)")
+        .select("id, title_ar, patient:patients!patient_id(full_name_ar)")
         .eq("status", "active");
-      setItems((data as Treatment[]) || []);
+      const rows = (data ?? []).map((row) => {
+        const patient = row.patient as
+          | { full_name_ar: string }
+          | { full_name_ar: string }[]
+          | null;
+        return {
+          id: row.id as string,
+          title_ar: row.title_ar as string,
+          patient: Array.isArray(patient) ? patient[0] : patient ?? undefined,
+        };
+      });
+      setItems(rows);
     }
     load();
   }, []);

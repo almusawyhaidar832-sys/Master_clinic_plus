@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/Card";
-import { DashboardTodaySummary } from "@/components/accountant/DashboardTodaySummary";
+import { ClinicFinancialOverview } from "@/components/accountant/ClinicFinancialOverview";
 import { Users, Stethoscope, Wallet, Receipt, FileText } from "lucide-react";
 
 const quickLinks = [
@@ -63,7 +63,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <DashboardTodaySummary />
+      <ClinicFinancialOverview />
     </div>
   );
 }

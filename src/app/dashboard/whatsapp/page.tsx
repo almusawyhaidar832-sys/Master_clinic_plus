@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
+import { getClinicIdFromProfile } from "@/lib/clinic-context";
 import { QrCode, MessageCircle, RefreshCw } from "lucide-react";
 
 export default function WhatsAppSettingsPage() {
@@ -17,10 +18,14 @@ export default function WhatsAppSettingsPage() {
 
   const loadStatus = useCallback(async () => {
     const supabase = createClient();
+    const clinicId = await getClinicIdFromProfile(supabase);
+    if (!clinicId) return;
+
     const { data: clinic } = await supabase
       .from("clinics")
       .select("whatsapp_linked")
-      .single();
+      .eq("id", clinicId)
+      .maybeSingle();
     if (clinic) setLinked(clinic.whatsapp_linked);
 
     const { data: logs } = await supabase

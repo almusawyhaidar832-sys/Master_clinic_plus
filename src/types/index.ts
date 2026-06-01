@@ -13,6 +13,7 @@ export type DoctorPercentage =
 export type MaterialsCostShare = "0" | "10" | "20" | "30" | "40" | "50";
 
 export type WithdrawalStatus = "pending" | "approved" | "paid" | "rejected";
+export type WithdrawalSource = "doctor_request" | "accountant_cash";
 export type AppointmentStatus =
   | "scheduled"
   | "confirmed"
@@ -42,6 +43,8 @@ export interface Clinic {
   address: string | null;
   logo_url: string | null;
   whatsapp_linked: boolean;
+  review_fee_enabled?: boolean;
+  review_fee_amount?: number;
 }
 
 export interface Doctor {
@@ -69,15 +72,34 @@ export interface PatientOperation {
   clinic_id: string;
   patient_id: string;
   doctor_id: string;
-  operation_name_ar: string;
-  operation_date: string;
+  /** New schema column name (user's DB) */
+  operation_type?: string;
+  /** Legacy column name (our migration) — one of the two will be present */
+  operation_name_ar?: string;
+  operation_date?: string;
   total_amount: number;
   paid_amount: number;
-  remaining_debt: number;
+  /** May be a generated/computed column — use opDebt() helper instead of accessing directly */
+  remaining_debt?: number;
+  materials_cost?: number;
   doctor_share_amount?: number;
   clinic_share_amount?: number;
+  notes?: string | null;
+  is_review_statement?: boolean;
+  created_at?: string;
   patient?: Patient | { full_name_ar: string };
   doctor?: Doctor | { full_name_ar: string };
+}
+
+/** Get operation display name — works with both operation_type and operation_name_ar columns */
+export function opName(op: PatientOperation): string {
+  return op.operation_type || op.operation_name_ar || "عملية";
+}
+
+/** Get remaining debt — works whether remaining_debt is a DB column or needs computing */
+export function opDebt(op: PatientOperation): number {
+  if (op.remaining_debt !== undefined) return Math.max(0, op.remaining_debt);
+  return Math.max(0, op.total_amount - op.paid_amount);
 }
 
 export interface Expense {
@@ -172,8 +194,10 @@ export interface DoctorWithdrawal {
   clinic_id: string;
   amount: number;
   status: WithdrawalStatus;
+  source?: WithdrawalSource;
   requested_at: string;
   processed_at?: string | null;
+  notes?: string | null;
   doctor?: { full_name_ar: string };
 }
 
