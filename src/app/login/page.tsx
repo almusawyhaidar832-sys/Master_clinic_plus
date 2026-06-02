@@ -1,306 +1,231 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
-import {
-  FaTooth,
-  FaUserMd,
-  FaClinicMedical,
-  FaCalendarCheck,
-  FaChalkboardTeacher,
-} from "react-icons/fa";
+import { useState } from "react";
+import { FaTooth } from "react-icons/fa";
 import { createClient } from "@/lib/supabase/client";
-import { getSession } from "@/lib/supabase/auth-helpers";
-import {
-  signInWithUsername,
-  registerWithUsername,
-} from "@/lib/auth/credentials";
+import { signInWithUsername } from "@/lib/auth/credentials";
+import { Eye, EyeOff } from "lucide-react";
+import { DEVELOPER } from "@/lib/constants";
 
-type PortalTarget = "dashboard" | "doctor" | "admin" | "booking";
+// كل بوابة لها دور محدد
+type Portal = {
+  id: string;
+  title: string;
+  subtitle: string;
+  emoji: string;
+  targetRole: string;   // الدور المتوقع بعد الدخول
+  color: string;
+  btnColor: string;
+};
 
-function redirectPath(portal: PortalTarget, role: string): string {
-  if (portal === "doctor") return "/doctor";
-  if (portal === "admin") return "/admin";
-  if (portal === "booking") return "/booking";
-  if (role === "doctor") return "/doctor";
-  if (role === "super_admin") return "/admin";
+const PORTALS: Portal[] = [
+  {
+    id:         "admin",
+    title:      "لوحة الإدارة",
+    subtitle:   "مدير العيادة / المالك",
+    emoji:      "🏥",
+    targetRole: "accountant",   // super_admin أو accountant
+    color:      "border-primary/30 bg-primary/5",
+    btnColor:   "bg-primary hover:bg-primary/90",
+  },
+  {
+    id:         "accountant",
+    title:      "واجهة المحاسب",
+    subtitle:   "الاستقبال والحسابات",
+    emoji:      "💼",
+    targetRole: "accountant",
+    color:      "border-violet-200 bg-violet-50/50",
+    btnColor:   "bg-violet-600 hover:bg-violet-700",
+  },
+  {
+    id:         "doctor",
+    title:      "تطبيق الطبيب",
+    subtitle:   "الكشفيات والمحفظة",
+    emoji:      "👨‍⚕️",
+    targetRole: "doctor",
+    color:      "border-blue-200 bg-blue-50/50",
+    btnColor:   "bg-blue-600 hover:bg-blue-700",
+  },
+  {
+    id:         "booking",
+    title:      "بوابة الحجوزات",
+    subtitle:   "حجز المرضى أونلاين",
+    emoji:      "📅",
+    targetRole: "booking",
+    color:      "border-teal-200 bg-teal-50/50",
+    btnColor:   "bg-teal-600 hover:bg-teal-700",
+  },
+];
+
+function redirectByRole(role: string, portalId: string): string {
+  if (portalId === "booking") return "/booking";
+  if (role === "super_admin")  return "/admin";
+  if (role === "doctor")       return "/doctor";
   return "/dashboard";
 }
 
-export default function LoginPage() {
+// ── بطاقة بوابة واحدة ─────────────────────────────────────────────────────
+function PortalCard({ portal }: { portal: Portal }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [isRegister, setIsRegister] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+  const [error,    setError]    = useState("");
+  const [loading,  setLoading]  = useState(false);
 
-  async function runAuth(portal: PortalTarget = "dashboard") {
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
     if (!username.trim() || !password) {
       setError("أدخل اسم المستخدم وكلمة المرور");
       return;
     }
 
+    // Booking portal: just redirect with the credentials
+    if (portal.id === "booking") {
+      window.location.href = "/booking";
+      return;
+    }
+
     setLoading(true);
     setError("");
-    setSuccess("");
-
-    const supabase = createClient();
 
     try {
-      if (isRegister) {
-        const result = await registerWithUsername(
-          supabase,
-          username,
-          password,
-          username.trim()
-        );
-
-        if (!result.ok) {
-          setError(result.error);
-          setLoading(false);
-          return;
-        }
-
-        setSuccess(result.message);
-        setIsRegister(false);
-
-        const { data: sessionData } = await getSession(supabase);
-        if (sessionData.session) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("role")
-            .eq("id", sessionData.session.user.id)
-            .maybeSingle();
-
-          window.location.href = redirectPath(
-            portal,
-            profile?.role ?? "accountant"
-          );
-          return;
-        }
-
-        setLoading(false);
-        return;
-      }
-
-      const result = await signInWithUsername(supabase, username, password);
+      const supabase = createClient();
+      const result = await signInWithUsername(supabase, username.trim(), password);
 
       if (!result.ok) {
-        setError(result.error);
+        setError("اسم المستخدم أو كلمة المرور غير صحيحة");
         setLoading(false);
         return;
       }
 
-      window.location.href = redirectPath(portal, result.role);
-    } catch (e) {
-      console.error(e);
-      setError("خطأ غير متوقع. تحقق من اتصال Supabase وملف .env.local");
+      window.location.href = redirectByRole(result.role, portal.id);
+    } catch {
+      setError("خطأ في الاتصال");
       setLoading(false);
     }
   }
 
-  function onFormSubmit(e: FormEvent) {
-    e.preventDefault();
-    void runAuth("dashboard");
-  }
-
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans">
-      <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-teal-500/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+    <div className={`flex flex-col rounded-2xl border-2 p-5 transition-shadow hover:shadow-md ${portal.color}`}>
 
-      <div className="w-full max-w-4xl bg-white/80 backdrop-blur-md rounded-3xl border border-slate-100 shadow-xl p-8 md:p-12 z-10 flex flex-col items-center">
-        <div className="text-teal-600 mb-6 drop-shadow-sm">
-          <FaTooth size={70} className="animate-pulse" />
-        </div>
-
-        <h1 className="text-4xl md:text-5xl font-extrabold text-slate-800 tracking-wide font-mono text-center mb-2">
-          MASTER CLINIC PLUS
-        </h1>
-
-        <p className="text-xs md:text-sm font-bold text-teal-600 tracking-widest text-center uppercase mb-8">
-          Modern Clinical Excellence in Dental Care
-        </p>
-
-        {(error || success) && (
-          <div
-            className={`mb-6 w-full rounded-xl px-4 py-3 text-sm text-center ${
-              error
-                ? "bg-red-50 text-red-700 border border-red-100"
-                : "bg-green-50 text-green-700 border border-green-100"
-            }`}
-          >
-            {error || success}
-          </div>
-        )}
-
-        <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6" dir="rtl">
-          <form
-            onSubmit={onFormSubmit}
-            className="bg-white border border-slate-100 p-6 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col items-center justify-between text-center group"
-          >
-            <div className="flex flex-col items-center w-full">
-              <div className="w-14 h-14 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <FaClinicMedical size={24} />
-              </div>
-              <h3 className="text-xl font-bold text-slate-800 mb-1">
-                تسجيل الدخول / إنشاء حساب
-              </h3>
-              <p className="text-xs text-slate-400 mb-4 font-mono uppercase tracking-wider">
-                Login / Register
-              </p>
-
-              <div className="w-full space-y-3 mb-4">
-                <input
-                  type="text"
-                  placeholder="اسم المستخدم (Username)"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  autoComplete="username"
-                  required
-                  disabled={loading}
-                  className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 text-right disabled:opacity-60"
-                />
-                <input
-                  type="password"
-                  placeholder="كلمة المرور (Password)"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete={
-                    isRegister ? "new-password" : "current-password"
-                  }
-                  required
-                  disabled={loading}
-                  className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 text-right disabled:opacity-60"
-                />
-              </div>
-
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => {
-                  setIsRegister(!isRegister);
-                  setError("");
-                  setSuccess("");
-                }}
-                className="text-xs text-teal-600 hover:underline mb-3"
-              >
-                {isRegister
-                  ? "لديك حساب؟ تسجيل الدخول"
-                  : "مستخدم جديد؟ إنشاء حساب"}
-              </button>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-teal-700 hover:bg-teal-800 disabled:opacity-60 text-white font-bold rounded-xl transition-colors shadow-sm"
-            >
-              {loading
-                ? "جاري المعالجة..."
-                : isRegister
-                  ? "CREATE ACCOUNT"
-                  : "LOGIN"}
-            </button>
-          </form>
-
-          <PortalCard
-            icon={<FaUserMd size={24} />}
-            iconClass="bg-cyan-50 text-cyan-600"
-            title="بوابة الطبيب المختص"
-            subtitle="Physician Portal"
-            buttonLabel="PHYSICIAN PORTAL"
-            buttonClass="bg-slate-600 hover:bg-slate-700"
-            loading={loading}
-            onAction={() => void runAuth("doctor")}
-          />
-
-          <PortalCard
-            icon={<FaChalkboardTeacher size={24} />}
-            iconClass="bg-slate-100 text-slate-600"
-            title="لوحة تحكم الإدارة (الويب والجوال)"
-            subtitle="Admin / Owner Dashboard"
-            buttonLabel="ADMIN / OWNER"
-            buttonClass="bg-slate-700 hover:bg-slate-800"
-            loading={loading}
-            onAction={() => void runAuth("admin")}
-          />
-
-          <PortalCard
-            icon={<FaCalendarCheck size={24} />}
-            iconClass="bg-teal-50 text-teal-600"
-            title="بوابة المريض وحجز المواعيد"
-            subtitle="Patient Portal & Booking"
-            buttonLabel="BOOKING"
-            buttonClass="bg-teal-600 hover:bg-teal-700"
-            loading={loading}
-            onAction={() => void runAuth("booking")}
-          />
-        </div>
-
-        <p className="mt-8 text-xs text-slate-muted text-center max-w-lg">
-          أدخل اسم المستخدم وكلمة المرور في البطاقة الأولى ثم اضغط LOGIN.
-          الحسابات الجديدة تُنشأ باسم مستخدم فقط. الحسابات القديمة يمكنها
-          استخدام البريد الإلكتروني في حقل اسم المستخدم.
-        </p>
-
-        {/* Developer signature */}
-        <div className="mt-8 flex flex-col items-center gap-1 select-none">
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/80 px-5 py-3 shadow-sm backdrop-blur">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-xs font-black">
-              ح
-            </div>
-            <div className="text-right">
-              <p className="text-sm font-bold text-slate-700">حيدر حازم الموسوي</p>
-              <p className="text-[10px] text-slate-400">Full-Stack Developer · Master Clinic Plus © 2026</p>
-            </div>
-          </div>
+      {/* Header */}
+      <div className="mb-4 flex items-center gap-3">
+        <span className="text-3xl">{portal.emoji}</span>
+        <div>
+          <h3 className="font-bold text-slate-800">{portal.title}</h3>
+          <p className="text-xs text-slate-500">{portal.subtitle}</p>
         </div>
       </div>
+
+      {/* Booking — no login needed */}
+      {portal.id === "booking" ? (
+        <a
+          href="/booking"
+          className={`mt-auto flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-bold text-white transition-colors ${portal.btnColor}`}
+        >
+          فتح بوابة الحجز
+        </a>
+      ) : (
+        <form onSubmit={handleLogin} className="flex flex-col gap-3">
+          {error && (
+            <p className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600 text-center">
+              {error}
+            </p>
+          )}
+
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="اسم المستخدم"
+            disabled={loading}
+            required
+            dir="ltr"
+            className="w-full rounded-xl border border-white bg-white/80 px-3 py-2.5 text-sm text-left placeholder:text-slate-400 focus:border-slate-300 focus:outline-none disabled:opacity-60"
+          />
+
+          <div className="relative">
+            <input
+              type={showPass ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="كلمة المرور"
+              disabled={loading}
+              required
+              dir="ltr"
+              className="w-full rounded-xl border border-white bg-white/80 px-3 py-2.5 text-sm text-left placeholder:text-slate-400 focus:border-slate-300 focus:outline-none disabled:opacity-60"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPass(!showPass)}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            >
+              {showPass ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className={`flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-bold text-white transition-colors disabled:opacity-60 ${portal.btnColor}`}
+          >
+            {loading ? (
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+              </svg>
+            ) : "دخول"}
+          </button>
+        </form>
+      )}
     </div>
   );
 }
 
-function PortalCard({
-  icon,
-  iconClass,
-  title,
-  subtitle,
-  buttonLabel,
-  buttonClass,
-  loading,
-  onAction,
-}: {
-  icon: ReactNode;
-  iconClass: string;
-  title: string;
-  subtitle: string;
-  buttonLabel: string;
-  buttonClass: string;
-  loading: boolean;
-  onAction: () => void;
-}) {
+// ── الصفحة الرئيسية ─────────────────────────────────────────────────────────
+export default function LoginPage() {
   return (
-    <div className="bg-white border border-slate-100 p-6 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col items-center justify-between text-center group">
-      <div className="flex flex-col items-center">
-        <div
-          className={`w-14 h-14 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform ${iconClass}`}
-        >
-          {icon}
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      {/* Background blobs */}
+      <div className="pointer-events-none absolute right-[-10%] top-[-10%] h-[500px] w-[500px] rounded-full bg-teal-500/5 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-[-10%] left-[-10%] h-[400px] w-[400px] rounded-full bg-cyan-500/5 blur-3xl" />
+
+      <div className="z-10 w-full max-w-4xl">
+
+        {/* Logo */}
+        <div className="mb-8 flex flex-col items-center gap-2">
+          <div className="text-primary drop-shadow-sm">
+            <FaTooth size={60} className="animate-pulse" />
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-widest text-slate-800 font-mono">
+            MASTER CLINIC PLUS
+          </h1>
+          <p className="text-xs font-bold tracking-widest text-primary uppercase">
+            نظام إدارة العيادات الذكي
+          </p>
         </div>
-        <h3 className="text-xl font-bold text-slate-800 mb-1">{title}</h3>
-        <p className="text-xs text-slate-400 mb-6 font-mono uppercase tracking-wider">
-          {subtitle}
-        </p>
+
+        {/* Portal cards grid */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" dir="rtl">
+          {PORTALS.map((p) => (
+            <PortalCard key={p.id} portal={p} />
+          ))}
+        </div>
+
+        {/* Developer signature */}
+        <div className="mt-8 flex items-center justify-center gap-2 select-none">
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/80 px-5 py-2.5 shadow-sm backdrop-blur">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-[10px] font-black text-white">
+              ح
+            </div>
+            <div className="text-right">
+              <p className="text-xs font-bold text-slate-700">{DEVELOPER.nameAr}</p>
+              <p className="text-[9px] text-slate-400">{DEVELOPER.roleAr} · {DEVELOPER.year}</p>
+            </div>
+          </div>
+        </div>
+
       </div>
-      <button
-        type="button"
-        disabled={loading}
-        onClick={onAction}
-        className={`w-full py-3 disabled:opacity-60 text-white font-bold rounded-xl transition-colors shadow-sm mt-auto ${buttonClass}`}
-      >
-        {loading ? "..." : buttonLabel}
-      </button>
     </div>
   );
 }

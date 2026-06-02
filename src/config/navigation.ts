@@ -27,6 +27,7 @@ export const accountantModuleNav: ModuleNavItem[] = [
   { href: "/dashboard/lab",         label: "المختبر",             icon: "testTube",    requiredModule: "lab_integration"    },
   { href: "/dashboard/pharmacy",    label: "الصيدلية",            icon: "pill",        requiredModule: "pharmacy_link"      },
   // Always at bottom
+  { href: "/dashboard/users",       label: "المستخدمون",          icon: "userCog"                                          },
   { href: "/dashboard/whatsapp",    label: "واتساب",              icon: "whatsapp",    requiredModule: "whatsapp"           },
   { href: "/dashboard/settings",    label: "ملف العيادة",         icon: "dashboard"    },
 ];

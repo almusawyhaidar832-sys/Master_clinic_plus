@@ -17,8 +17,74 @@ import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import type { StaffMember, SalaryEntry, SalarySlip } from "@/types";
 
-// load ALL staff (active + inactive) to show toggle buttons
+// ── Inline salary editor row ──────────────────────────────────────────────
+function StaffRow({
+  staff: s,
+  onToggle,
+  onSalaryChange,
+}: {
+  staff: StaffMember;
+  onToggle: () => void;
+  onSalaryChange: (v: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(String(s.base_salary));
 
+  return (
+    <li className="flex flex-wrap items-center gap-3 py-3 px-1">
+      <div className="flex-1 min-w-0">
+        <p className={`font-medium text-sm ${s.is_active ? "text-slate-text" : "text-slate-400 line-through"}`}>
+          {s.full_name_ar}
+        </p>
+        <p className="text-xs text-slate-muted">{s.job_title_ar}</p>
+      </div>
+
+      {editing ? (
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            className="w-28 rounded-lg border border-primary px-2 py-1 text-sm text-left focus:outline-none"
+            dir="ltr"
+            autoFocus
+          />
+          <button
+            onClick={() => { onSalaryChange(parseFloat(val)); setEditing(false); }}
+            className="rounded-lg bg-primary px-2 py-1 text-xs font-bold text-white hover:bg-primary/90"
+          >
+            حفظ
+          </button>
+          <button
+            onClick={() => { setVal(String(s.base_salary)); setEditing(false); }}
+            className="rounded-lg border border-slate-border px-2 py-1 text-xs text-slate-muted hover:bg-surface"
+          >
+            إلغاء
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setEditing(true)}
+          className="rounded-lg border border-slate-border px-3 py-1 text-sm font-semibold text-slate-700 hover:border-primary hover:text-primary"
+          title="اضغط لتعديل الراتب"
+        >
+          {formatCurrency(s.base_salary)}
+        </button>
+      )}
+
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onToggle}
+        className={s.is_active
+          ? "text-slate-muted hover:text-debt-text"
+          : "border-emerald-300 text-emerald-700"}
+      >
+        {s.is_active ? "إيقاف" : "تفعيل"}
+      </Button>
+    </li>
+  );
+}
 
 const entryTypes = [
   { value: "advance", label: "سلفة" },
@@ -188,6 +254,19 @@ export default function SalaryPage() {
     loadStaff();
   }
 
+  async function updateSalary(staffMember: StaffMember, newSalary: number) {
+    if (newSalary <= 0) return;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("staff_members")
+      .update({ base_salary: newSalary })
+      .eq("id", staffMember.id);
+    if (!error) {
+      setMessage(`تم تعديل راتب ${staffMember.full_name_ar}`);
+      loadStaff();
+    }
+  }
+
   // Only active staff appear in the operation dropdowns
   const staffOptions = staff
     .filter((s) => s.is_active)
@@ -208,26 +287,14 @@ export default function SalaryPage() {
           <CardHeader>
             <CardTitle>الموظفون ({staff.filter(s => s.is_active).length} نشط)</CardTitle>
           </CardHeader>
-          <ul className="space-y-2">
+          <ul className="divide-y divide-slate-border/40">
             {staff.map((s) => (
-              <li key={s.id} className="flex items-center justify-between gap-2 rounded-lg bg-surface p-3">
-                <div>
-                  <p className={`font-medium ${s.is_active ? "text-slate-text" : "text-slate-400 line-through"}`}>
-                    {s.full_name_ar}
-                  </p>
-                  <p className="text-xs text-slate-muted">{s.job_title_ar} — {formatCurrency(s.base_salary)}</p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => toggleStaffActive(s)}
-                  className={s.is_active
-                    ? "text-slate-muted hover:text-debt-text"
-                    : "border-emerald-300 text-emerald-700"}
-                >
-                  {s.is_active ? "إيقاف" : "تفعيل"}
-                </Button>
-              </li>
+              <StaffRow
+                key={s.id}
+                staff={s}
+                onToggle={() => toggleStaffActive(s)}
+                onSalaryChange={(val) => updateSalary(s, val)}
+              />
             ))}
           </ul>
         </Card>
