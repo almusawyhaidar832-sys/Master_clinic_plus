@@ -125,6 +125,16 @@ export async function fetchDoctorWithdrawableBalance(
   return stats.availableBalance;
 }
 
+export async function fetchDoctorWithdrawLimit(
+  supabase: SupabaseClient,
+  doctorId: string
+): Promise<number> {
+  const { fetchDoctorWithdrawableLimit } = await import(
+    "@/lib/services/doctor-wallet"
+  );
+  return fetchDoctorWithdrawableLimit(supabase, doctorId);
+}
+
 export async function notifyAccountantsWithdrawal(
   supabase: SupabaseClient,
   clinicId: string,

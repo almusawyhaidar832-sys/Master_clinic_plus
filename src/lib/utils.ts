@@ -14,6 +14,20 @@ export function formatCurrency(amount: number, locale = "ar-EG"): string {
   }).format(amount);
 }
 
+/** Format number with comma separators: 500000 → "500,000" */
+export function formatNumberInput(value: string | number): string {
+  const str = String(value).replace(/,/g, "");
+  if (!str || str === ".") return str;
+  const [intPart, decPart] = str.split(".");
+  const formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return decPart !== undefined ? `${formatted}.${decPart}` : formatted;
+}
+
+/** Strip commas and keep digits + one decimal point */
+export function parseFormattedNumber(value: string): string {
+  return value.replace(/,/g, "").replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1");
+}
+
 export function formatDate(date: Date | string, locale = "ar-EG"): string {
   const d = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat(locale, {

@@ -2,15 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
-import {
-  fetchDoctorWithdrawableBalance,
-  notifyAccountantsWithdrawal,
-} from "@/lib/services/clinic-stats";
+import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
 import { formatCurrency } from "@/lib/utils";
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import type { Doctor } from "@/types";
 
 export default function DoctorWithdrawPage() {
@@ -20,6 +17,8 @@ export default function DoctorWithdrawPage() {
   const [loading, setLoading] = useState(false);
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [available, setAvailable] = useState(0);
+  const [withdrawLimit, setWithdrawLimit] = useState(0);
+  const [pending, setPending] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -27,8 +26,10 @@ export default function DoctorWithdrawPage() {
       const doc = await getDoctorForCurrentUser(supabase);
       setDoctor(doc);
       if (doc) {
-        const bal = await fetchDoctorWithdrawableBalance(supabase, doc.id);
-        setAvailable(bal);
+        const stats = await fetchDoctorWalletStats(supabase, doc.id);
+        setAvailable(stats.availableBalance);
+        setWithdrawLimit(stats.withdrawableLimit);
+        setPending(stats.pendingAmount);
       }
     }
     load();
@@ -41,8 +42,8 @@ export default function DoctorWithdrawPage() {
       setError("أدخل مبلغاً صحيحاً");
       return;
     }
-    if (value > available) {
-      setError(`المبلغ يتجاوز الرصيد المتاح (${formatCurrency(available)})`);
+    if (value > withdrawLimit) {
+      setError(`المبلغ يتجاوز الحد المتاح (${formatCurrency(withdrawLimit)})`);
       return;
     }
     if (!doctor) {
@@ -51,30 +52,21 @@ export default function DoctorWithdrawPage() {
     }
 
     setLoading(true);
-    const supabase = createClient();
 
-    const { error: insertError } = await supabase
-      .from("doctor_withdrawals")
-      .insert({
-        doctor_id: doctor.id,
-        clinic_id: doctor.clinic_id,
-        amount: value,
-      });
+    const res = await fetch("/api/withdrawals/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: value }),
+    });
+    const json = await res.json();
 
-    if (insertError) {
-      setError("تعذر إرسال الطلب");
-      setLoading(false);
+    setLoading(false);
+
+    if (!res.ok) {
+      setError(json.error || "تعذر إرسال الطلب");
       return;
     }
 
-    await notifyAccountantsWithdrawal(
-      supabase,
-      doctor.clinic_id,
-      doctor.full_name_ar,
-      value
-    );
-
-    setLoading(false);
     setSent(true);
   }
 
@@ -82,8 +74,13 @@ export default function DoctorWithdrawPage() {
     <div className="space-y-4">
       <h2 className="text-lg font-bold text-slate-text">طلب سحب نقدي</h2>
       <p className="text-sm text-slate-muted">
-        المتاح: {formatCurrency(available)}
+        رصيدك: {formatCurrency(available)}
       </p>
+      {pending > 0 && (
+        <p className="text-xs text-amber-600">
+          لديك {formatCurrency(pending)} طلبات معلّقة — تُخصم من الرصيد عند الموافقة فقط
+        </p>
+      )}
 
       {sent ? (
         <Alert variant="success">
@@ -92,15 +89,11 @@ export default function DoctorWithdrawPage() {
       ) : (
         <>
           {error && <Alert variant="error">{error}</Alert>}
-          <Input
+          <CurrencyInput
             label="المبلغ المطلوب"
-            type="number"
-            min="0"
-            step="0.01"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            dir="ltr"
-            className="text-left"
+            onChange={setAmount}
+            placeholder="500,000"
           />
           <Button
             className="w-full"

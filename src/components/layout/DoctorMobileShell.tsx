@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
@@ -9,6 +10,9 @@ import { useModuleNav } from "@/hooks/useModuleNav";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { doctorModuleNav, doctorModuleQuickActions } from "@/config/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { getAuthProfile, getDoctorForCurrentUser } from "@/lib/clinic-context";
+import type { Doctor } from "@/types";
 import {
   Wallet, ArrowDownToLine, Users, Calendar,
   CalendarClock, AlertCircle, FileText, Home,
@@ -40,7 +44,31 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
   const { isDark, toggleTheme } = useTheme();
   const { lang, toggleLang } = useLanguage();
 
-  // Filter bottom nav items by enabled modules
+  const [doctor, setDoctor]       = useState<Doctor | null>(null);
+  const [profileName, setProfileName] = useState<string>("");
+
+  useEffect(() => {
+    async function loadDoctor() {
+      const supabase = createClient();
+      const [doc, authProfile] = await Promise.all([
+        getDoctorForCurrentUser(supabase),
+        getAuthProfile(supabase),
+      ]);
+      setDoctor(doc);
+      setProfileName(authProfile?.full_name ?? "");
+    }
+    loadDoctor();
+  }, []);
+
+  const doctorName =
+    doctor?.full_name_ar?.trim() ||
+    profileName.trim() ||
+    "طبيب";
+
+  const doctorSpecialty =
+    doctor?.specialty_ar?.trim() ||
+    (modulesLoading ? "..." : specialtyLabel);
+
   const filteredNav = useModuleNav(doctorModuleNav);
 
   return (
@@ -57,9 +85,9 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
           )}
           <div className="flex-1 min-w-0">
             <p className="truncate text-xs opacity-90">
-              {modulesLoading ? "..." : specialtyLabel} — {displayName}
+              {doctorSpecialty} — {displayName}
             </p>
-            <h1 className="text-base font-bold">{displayName}</h1>
+            <h1 className="truncate text-base font-bold">{doctorName}</h1>
           </div>
           {/* Controls */}
           <div className="flex items-center gap-1">

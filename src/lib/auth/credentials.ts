@@ -30,6 +30,16 @@ export function usernameToAuthEmail(username: string): string {
 }
 
 /**
+ * Resolve login identifier → Supabase Auth email.
+ * Same pattern used when admin creates accounts via /api/admin/create-user.
+ */
+export function resolveAuthEmail(usernameOrEmail: string): string {
+  const trimmed = usernameOrEmail.trim();
+  if (trimmed.includes("@")) return trimmed;
+  return usernameToAuthEmail(trimmed);
+}
+
+/**
  * Resolve Supabase Auth email from username field.
  * Supports: real email, profiles.username → auth.users, or @masterclinic.local pattern.
  */
@@ -94,9 +104,15 @@ export async function signInWithUsername(
     return { ok: false, error: "تم الدخول لكن تعذر تحميل الملف الشخصي" };
   }
 
+  if (!profile?.role) {
+    // Auth succeeded but profile row is missing or role is null.
+    // Return a sentinel so the caller can fall back to server-side routing.
+    return { ok: true, role: "__unknown__" };
+  }
+
   return {
     ok: true,
-    role: profile?.role ?? "accountant",
+    role: profile.role,
   };
 }
 

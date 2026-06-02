@@ -7,26 +7,29 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile } from "@/lib/clinic-context";
+import { fetchWithdrawalsWithDoctors } from "@/lib/withdrawals/client";
+import {
+  resolveCanManageWithdrawals,
+  updateWithdrawalStatusClient,
+} from "@/lib/withdrawals/update-status-client";
 import { formatCurrency } from "@/lib/utils";
 import type { DoctorWithdrawal } from "@/types";
 
 export default function AdminWithdrawalsPage() {
   const [items, setItems] = useState<DoctorWithdrawal[]>([]);
   const [filter, setFilter] = useState<"pending" | "all">("pending");
+  const [message, setMessage] = useState<string | null>(null);
+  const [canManage, setCanManage] = useState(false);
 
   const load = useCallback(async () => {
     const supabase = createClient();
-    let query = supabase
-      .from("doctor_withdrawals")
-      .select("*, doctor:doctors!doctor_id(full_name_ar)")
-      .order("requested_at", { ascending: false });
-
-    if (filter === "pending") {
-      query = query.eq("status", "pending");
-    }
-
-    const { data } = await query;
-    setItems((data as DoctorWithdrawal[]) || []);
+    const profile = await getAuthProfile(supabase);
+    setCanManage(await resolveCanManageWithdrawals(supabase));
+    const { items: rows } = await fetchWithdrawalsWithDoctors(supabase, {
+      status: filter,
+      clinicId: profile?.clinic_id,
+    });
+    setItems(rows);
   }, [filter]);
 
   useEffect(() => {
@@ -37,16 +40,33 @@ export default function AdminWithdrawalsPage() {
     id: string,
     status: "approved" | "paid" | "rejected"
   ) {
+    setMessage(null);
     const supabase = createClient();
     const profile = await getAuthProfile(supabase);
-    await supabase
-      .from("doctor_withdrawals")
-      .update({
-        status,
-        processed_at: new Date().toISOString(),
-        processed_by: profile?.id,
-      })
-      .eq("id", id);
+
+    if (!(await resolveCanManageWithdrawals(supabase))) {
+      setMessage("غير مصرح — للمحاسب أو المالك فقط");
+      return;
+    }
+
+    if (!profile) {
+      setMessage("يجب تسجيل الدخول");
+      return;
+    }
+
+    const result = await updateWithdrawalStatusClient(
+      supabase,
+      id,
+      status,
+      profile.id
+    );
+
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+
+    setMessage("تم تحديث الطلب بنجاح");
     load();
   }
 
@@ -83,6 +103,8 @@ export default function AdminWithdrawalsPage() {
         </Button>
       </div>
 
+      {message && <Alert variant="info">{message}</Alert>}
+
       {items.length === 0 ? (
         <Alert variant="info">لا توجد طلبات {filter === "pending" ? "معلّقة" : ""}</Alert>
       ) : (
@@ -102,7 +124,7 @@ export default function AdminWithdrawalsPage() {
                 {new Date(w.requested_at).toLocaleString("ar-EG")} —{" "}
                 {statusLabel[w.status]}
               </p>
-              {w.status === "pending" && (
+              {canManage && w.status === "pending" && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button size="sm" onClick={() => updateStatus(w.id, "approved")}>
                     موافقة

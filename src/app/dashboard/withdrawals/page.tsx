@@ -9,7 +9,13 @@ import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile } from "@/lib/clinic-context";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
+import { fetchWithdrawalsWithDoctors } from "@/lib/withdrawals/client";
+import {
+  resolveCanManageWithdrawals,
+  updateWithdrawalStatusClient,
+} from "@/lib/withdrawals/update-status-client";
 import { formatCurrency } from "@/lib/utils";
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import type { Doctor, DoctorWithdrawal } from "@/types";
 
 export default function WithdrawalsPage() {
@@ -23,38 +29,37 @@ export default function WithdrawalsPage() {
   const [walletPreview, setWalletPreview] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [canManage, setCanManage] = useState(false);
 
   const load = useCallback(async () => {
     const supabase = createClient();
-    let query = supabase
-      .from("doctor_withdrawals")
-      .select("*, doctor:doctors!doctor_id(full_name_ar)")
-      .order("requested_at", { ascending: false });
+    const profile = await getAuthProfile(supabase);
+    setCanManage(await resolveCanManageWithdrawals(supabase));
 
-    if (filter === "pending") {
-      query = query.eq("status", "pending");
+    const { items: rows, error } = await fetchWithdrawalsWithDoctors(supabase, {
+      status: filter,
+      clinicId: profile?.clinic_id,
+    });
+
+    if (error) {
+      setMessage("تعذر تحميل طلبات السحب");
+      setItems([]);
+    } else {
+      setItems(rows);
     }
 
-    const [{ data }, docRes] = await Promise.all([
-      query,
-      supabase.from("doctors").select("*").eq("is_active", true),
-    ]);
-
-    setItems((data as DoctorWithdrawal[]) || []);
-    if (docRes.data) setDoctors(docRes.data as Doctor[]);
+    if (profile?.clinic_id) {
+      const docRes = await supabase
+        .from("doctors")
+        .select("*")
+        .eq("is_active", true)
+        .eq("clinic_id", profile.clinic_id);
+      if (docRes.data) setDoctors(docRes.data as Doctor[]);
+    }
   }, [filter]);
 
   useEffect(() => {
     load();
-    const supabase = createClient();
-    getAuthProfile(supabase).then(async (profile) => {
-      if (!profile) return;
-      await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("recipient_profile_id", profile.id)
-        .eq("link_path", "/dashboard/withdrawals");
-    });
   }, [load]);
 
   useEffect(() => {
@@ -74,19 +79,34 @@ export default function WithdrawalsPage() {
     id: string,
     status: "approved" | "paid" | "rejected"
   ) {
+    setMessage(null);
     const supabase = createClient();
     const profile = await getAuthProfile(supabase);
-    const { error } = await supabase
-      .from("doctor_withdrawals")
-      .update({
-        status,
-        processed_at: new Date().toISOString(),
-        processed_by: profile?.id,
-      })
-      .eq("id", id);
 
-    if (error) setMessage("تعذر تحديث الطلب");
-    else load();
+    if (!(await resolveCanManageWithdrawals(supabase))) {
+      setMessage("غير مصرح — سجّل دخولك من واجهة المحاسب (محاسب أو مالك)");
+      return;
+    }
+
+    if (!profile) {
+      setMessage("يجب تسجيل الدخول");
+      return;
+    }
+
+    const result = await updateWithdrawalStatusClient(
+      supabase,
+      id,
+      status,
+      profile.id
+    );
+
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+
+    setMessage("تم تحديث الطلب بنجاح");
+    load();
   }
 
   async function recordCashWithdrawal(e: React.FormEvent) {
@@ -99,28 +119,23 @@ export default function WithdrawalsPage() {
     }
 
     setLoading(true);
-    const supabase = createClient();
-    const profile = await getAuthProfile(supabase);
-    const doctor = doctors.find((d) => d.id === cashDoctorId);
 
-    const { error } = await supabase.from("doctor_withdrawals").insert({
-      clinic_id: doctor?.clinic_id,
-      doctor_id: cashDoctorId,
-      amount,
-      status: "paid",
-      source: "accountant_cash",
-      processed_at: new Date().toISOString(),
-      processed_by: profile?.id,
-      notes: cashNotes || "دفع نقدي — محاسب",
+    const res = await fetch("/api/withdrawals/record-cash", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        doctor_id: cashDoctorId,
+        amount,
+        notes: cashNotes || undefined,
+      }),
     });
+    const json = await res.json();
 
     setLoading(false);
 
-    if (error) {
-      const msg = error.message.includes("withdrawal_exceeds_balance")
-        ? "المبلغ أكبر من رصيد الطبيب المتاح"
-        : "تعذر تسجيل السحب";
-      setMessage(msg);
+    if (!res.ok) {
+      setMessage(json.error || "تعذر تسجيل السحب");
       return;
     }
 
@@ -167,7 +182,12 @@ export default function WithdrawalsPage() {
           >
             الكل
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setShowCashForm((v) => !v)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowCashForm((v) => !v)}
+            disabled={!canManage}
+          >
             دفع نقدي للطبيب
           </Button>
         </div>
@@ -189,16 +209,12 @@ export default function WithdrawalsPage() {
               placeholder="اختر الطبيب"
               required
             />
-            <Input
+            <CurrencyInput
               label="المبلغ"
-              type="number"
-              min="0"
-              step="0.01"
               value={cashAmount}
-              onChange={(e) => setCashAmount(e.target.value)}
+              onChange={setCashAmount}
+              placeholder="500,000"
               required
-              dir="ltr"
-              className="text-left"
             />
             {walletPreview !== null && cashDoctorId && (
               <div className="sm:col-span-2 rounded-lg bg-primary/5 p-3 text-sm">
@@ -244,7 +260,7 @@ export default function WithdrawalsPage() {
                   {w.source && ` · ${sourceLabel[w.source] ?? w.source}`}
                 </p>
               </div>
-              {w.status === "pending" && (
+              {canManage && w.status === "pending" && (
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" onClick={() => updateStatus(w.id, "approved")}>
                     موافقة
@@ -265,7 +281,7 @@ export default function WithdrawalsPage() {
                   </Button>
                 </div>
               )}
-              {w.status === "approved" && (
+              {canManage && w.status === "approved" && (
                 <Button size="sm" onClick={() => updateStatus(w.id, "paid")}>
                   تأكيد الدفع
                 </Button>

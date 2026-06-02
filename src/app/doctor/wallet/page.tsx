@@ -110,8 +110,8 @@ export default function DoctorWalletPage() {
       </Link>
 
       <p className="text-xs text-slate-muted text-center leading-relaxed">
-        السحب يُخصم من محفظتك فقط ولا يؤثر على أرباح العيادة. المحاسب يمكنه أيضاً
-        تسجيل دفع نقدي مباشر.
+        طلب السحب لا يخصم من رصيدك — يُخصم عند موافقة المحاسب أو الدفع.
+        المحاسب يمكنه أيضاً تسجيل دفع نقدي مباشر.
       </p>
     </div>
   );

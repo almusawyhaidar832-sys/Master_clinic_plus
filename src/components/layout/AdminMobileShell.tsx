@@ -10,14 +10,16 @@ import {
   Stethoscope,
   Wallet,
   FileText,
+  Users,
 } from "lucide-react";
 
 const adminNav = [
-  { href: "/admin", label: "الرئيسية", icon: Home },
-  { href: "/admin/profits", label: "الأرباح", icon: TrendingUp },
-  { href: "/admin/doctors", label: "الأطباء", icon: Stethoscope },
-  { href: "/admin/withdrawals", label: "السحب", icon: Wallet },
-  { href: "/admin/report", label: "التقرير", icon: FileText },
+  { href: "/admin",           label: "الرئيسية", icon: Home        },
+  { href: "/admin/profits",   label: "الأرباح",  icon: TrendingUp  },
+  { href: "/admin/doctors",   label: "الأطباء",  icon: Stethoscope },
+  { href: "/admin/team",      label: "الفريق",   icon: Users       },
+  { href: "/admin/withdrawals",label: "السحب",   icon: Wallet      },
+  { href: "/admin/report",    label: "التقرير",  icon: FileText    },
 ];
 
 interface AdminMobileShellProps {

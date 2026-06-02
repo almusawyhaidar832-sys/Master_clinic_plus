@@ -20,21 +20,22 @@ export default function NewDoctorPage() {
   const router = useRouter();
   const { clinicId, clinicName, loading: clinicLoading, missingClinic } = useActiveClinicId();
 
-  const [fullName,      setFullName]      = useState("");
-  const [specialty,     setSpecialty]     = useState("");
-  const [phone,         setPhone]         = useState("");
-  const [percentage,    setPercentage]    = useState("50");
-  const [materialsShare,setMaterialsShare]= useState("0");
-  const [username,      setUsername]      = useState("");
-  const [password,      setPassword]      = useState("");
-  const [showPass,      setShowPass]      = useState(false);
-  const [saving,        setSaving]        = useState(false);
-  const [error,         setError]         = useState("");
-  const [success,       setSuccess]       = useState(false);
+  const [fullName,       setFullName]       = useState("");
+  const [specialty,      setSpecialty]      = useState("");
+  const [phone,          setPhone]          = useState("");
+  const [percentage,     setPercentage]     = useState("50");
+  const [materialsShare, setMaterialsShare] = useState("0");
+  const [username,       setUsername]       = useState("");
+  const [password,       setPassword]       = useState("");
+  const [showPass,       setShowPass]       = useState(false);
+  const [saving,         setSaving]         = useState(false);
+  const [error,          setError]          = useState("");
+  const [createdUsername, setCreatedUsername] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setCreatedUsername(null);
 
     if (!fullName.trim()) {
       setError("يرجى إدخال اسم الطبيب");
@@ -47,37 +48,53 @@ export default function NewDoctorPage() {
 
     setSaving(true);
 
-    // إذا أدخل username وpassword → أنشئ حساب دخول للطبيب
+    // مع username + password → حساب دخول كامل للطبيب
     if (username.trim() && password) {
+      const cleanUsername = username.trim().toLowerCase().replace(/\s/g, "").replace(/[^a-z0-9._-]/g, "");
+
+      if (cleanUsername.length < 3) {
+        setError("اسم المستخدم: 3 أحرف إنجليزية على الأقل (مثل dr_ahmed)");
+        setSaving(false);
+        return;
+      }
       if (password.length < 6) {
         setError("كلمة مرور الطبيب يجب أن تكون 6 أحرف على الأقل");
         setSaving(false);
         return;
       }
+
       const res = await fetch("/api/admin/create-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: username.trim(),
+          username:        cleanUsername,
           password,
-          full_name: fullName.trim(),
-          role: "doctor",
-          phone: phone.trim() || undefined,
+          full_name:       fullName.trim(),
+          role:            "doctor",
+          phone:           phone.trim() || null,
+          specialty_ar:    specialty.trim() || null,
+          percentage,
+          materials_share: materialsShare,
         }),
       });
+
       const json = await res.json();
+      setSaving(false);
+
       if (!res.ok) {
         setError(json.error ?? "تعذر إنشاء حساب الطبيب");
-        setSaving(false);
         return;
       }
-      // Doctor record created by API — done
-      setSuccess(true);
-      setSaving(false);
+
+      setCreatedUsername(json.username ?? cleanUsername);
+      setTimeout(() => {
+        router.push("/dashboard/doctors");
+        router.refresh();
+      }, 2500);
       return;
     }
 
-    // بدون username → أضف الطبيب بدون حساب دخول
+    // بدون username → طبيب بدون حساب دخول
     const supabase = createClient();
     const { error: insertError } = await supabase.from("doctors").insert({
       clinic_id:       clinicId,
@@ -102,12 +119,13 @@ export default function NewDoctorPage() {
       return;
     }
 
-    setSuccess(true);
+    setCreatedUsername(null);
     setTimeout(() => {
       router.push("/dashboard/doctors");
       router.refresh();
     }, 1200);
   }
+
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
@@ -118,16 +136,12 @@ export default function NewDoctorPage() {
         </Button>
       </Link>
 
-      {/* Clinic status — only show error when truly missing */}
       {clinicLoading && (
         <div className="h-8 animate-pulse rounded-lg bg-slate-100" />
       )}
       {!clinicLoading && missingClinic && (
         <Alert variant="error">
-          لا توجد عيادة في قاعدة البيانات. أنشئ عيادة أولاً في Supabase:
-          <code className="mt-1 block text-xs font-mono bg-white/60 rounded px-2 py-1">
-            INSERT INTO public.clinics (name, name_ar) VALUES ('Clinic', 'العيادة');
-          </code>
+          لا توجد عيادة في قاعدة البيانات. أنشئ عيادة أولاً.
         </Alert>
       )}
       {!clinicLoading && clinicId && (
@@ -143,14 +157,20 @@ export default function NewDoctorPage() {
         <CardHeader>
           <CardTitle>إضافة طبيب جديد</CardTitle>
           <p className="text-sm text-slate-muted">
-            يجب اختيار النسب من القوائم — لا يُسمح بالكتابة اليدوية
+            أدخل بيانات الطبيب + username وكلمة مرور — يدخل فوراً من بوابة «تطبيق الطبيب»
           </p>
         </CardHeader>
 
-        {success ? (
-          <div className="flex flex-col items-center gap-3 py-6 text-center">
+        {createdUsername ? (
+          <div className="flex flex-col items-center gap-3 py-6 text-center px-4">
             <CheckCircle2 className="h-12 w-12 text-primary" />
-            <p className="text-lg font-semibold text-slate-text">تم حفظ الطبيب بنجاح!</p>
+            <p className="text-lg font-semibold text-slate-text">تم إنشاء الطبيب بنجاح!</p>
+            <div className="w-full rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-right space-y-1">
+              <p className="font-bold text-emerald-800">بيانات دخول الطبيب:</p>
+              <p>البوابة: <strong>تطبيق الطبيب</strong></p>
+              <p>اسم المستخدم: <strong dir="ltr" className="font-mono text-primary">{createdUsername}</strong></p>
+              <p>كلمة المرور: <strong>نفس التي أدخلتها</strong></p>
+            </div>
             <p className="text-sm text-slate-muted">جاري الانتقال لقائمة الأطباء...</p>
           </div>
         ) : (
@@ -170,7 +190,7 @@ export default function NewDoctorPage() {
               label="التخصص"
               value={specialty}
               onChange={(e) => setSpecialty(e.target.value)}
-              placeholder="مثال: أسنان عام، تقويم، أطفال..."
+              placeholder="مثال: أسنان عام، تقويم..."
             />
 
             <Input
@@ -179,7 +199,7 @@ export default function NewDoctorPage() {
               onChange={(e) => setPhone(e.target.value)}
               dir="ltr"
               className="text-left"
-              placeholder="+201xxxxxxxxx"
+              placeholder="07xxxxxxxx"
             />
 
             <Select
@@ -200,49 +220,49 @@ export default function NewDoctorPage() {
               required
             />
 
-            <div className="rounded-lg border border-slate-border bg-surface px-4 py-3 text-xs text-slate-muted leading-relaxed">
-              مثال: عملية بـ 1000 د.ع — الطبيب يأخذ {percentage}% ={" "}
-              <strong className="text-primary">
-                {(1000 * Number(percentage)) / 100} د.ع
-              </strong>
-              {Number(materialsShare) > 0 && (
-                <> · يتحمل {materialsShare}% من تكلفة المواد</>
-              )}
-            </div>
-
-            {/* حساب الدخول للطبيب */}
             <div className="rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-4 space-y-3">
               <div className="flex items-center gap-2 text-sm font-bold text-primary">
                 <KeyRound className="h-4 w-4" />
-                حساب دخول الطبيب (اختياري)
+                حساب دخول الطبيب
               </div>
               <p className="text-xs text-slate-500">
-                إذا أردت أن يدخل الطبيب لتطبيقه الخاص، أدخل له username وكلمة مرور
+                أدخل username وكلمة مرور — يُحفظان تلقائياً ويدخل الطبيب من بوابة «تطبيق الطبيب»
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">اسم المستخدم</label>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    اسم المستخدم <span className="text-red-500">*</span>
+                  </label>
                   <input
                     value={username}
                     onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
                     placeholder="dr_ahmed"
+                    required
+                    minLength={3}
                     dir="ltr"
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-left focus:border-primary focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">كلمة المرور</label>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">
+                    كلمة المرور <span className="text-red-500">*</span>
+                  </label>
                   <div className="relative">
                     <input
                       type={showPass ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="6 أحرف على الأقل"
+                      required
+                      minLength={6}
                       dir="ltr"
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-left focus:border-primary focus:outline-none"
                     />
-                    <button type="button" onClick={() => setShowPass(!showPass)}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400">
+                    <button
+                      type="button"
+                      onClick={() => setShowPass(!showPass)}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"
+                    >
                       {showPass ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                     </button>
                   </div>
@@ -250,7 +270,7 @@ export default function NewDoctorPage() {
               </div>
               {username && password && (
                 <p className="text-xs text-emerald-600 font-medium">
-                  ✓ الطبيب سيدخل بـ <span dir="ltr">{username}</span> من صفحة الدخول
+                  ✓ الطبيب سيدخل بـ <span dir="ltr">{username}</span> من بوابة «تطبيق الطبيب»
                 </p>
               )}
             </div>
@@ -260,7 +280,7 @@ export default function NewDoctorPage() {
               className="w-full"
               disabled={saving || clinicLoading || missingClinic}
             >
-              {saving ? "جاري الحفظ..." : "حفظ الطبيب"}
+              {saving ? "جاري الحفظ..." : "حفظ الطبيب وإنشاء حسابه"}
             </Button>
           </form>
         )}

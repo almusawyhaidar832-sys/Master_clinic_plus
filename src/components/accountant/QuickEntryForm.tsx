@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Select } from "@/components/ui/Select";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
@@ -270,6 +270,15 @@ export function QuickEntryForm({
     }
 
     setMessage({ type: "success", text: "✓ تم حفظ الجلسة بنجاح" });
+
+    if (op?.id) {
+      await fetch("/api/notifications/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: "new_operation", id: op.id }),
+      });
+    }
+
     // Reset non-patient fields (keep patient selected for next session)
     setOperationName("");
     setTotalAmount("");
@@ -418,39 +427,27 @@ export function QuickEntryForm({
         </div>
 
         {/* Amounts */}
-        <Input
+        <CurrencyInput
           label="المبلغ الإجمالي *"
-          type="number"
-          min="0"
-          step="0.01"
           value={totalAmount}
-          onChange={(e) => setTotalAmount(e.target.value)}
+          onChange={setTotalAmount}
+          placeholder="500,000"
           required
-          dir="ltr"
-          className="text-left"
         />
 
-        <Input
+        <CurrencyInput
           label="المبلغ المدفوع *"
-          type="number"
-          min="0"
-          step="0.01"
           value={paidAmount}
-          onChange={(e) => setPaidAmount(e.target.value)}
+          onChange={setPaidAmount}
+          placeholder="0"
           required
-          dir="ltr"
-          className="text-left"
         />
 
-        <Input
+        <CurrencyInput
           label="تكلفة المواد / المعمل"
-          type="number"
-          min="0"
-          step="0.01"
           value={materialsCost}
-          onChange={(e) => setMaterialsCost(e.target.value)}
-          dir="ltr"
-          className="text-left"
+          onChange={setMaterialsCost}
+          placeholder="0"
         />
 
         <label className="flex items-center gap-2 text-sm text-slate-text">

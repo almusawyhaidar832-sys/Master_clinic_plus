@@ -90,7 +90,7 @@ export function Header({
 
         {/* Notifications */}
         <Link
-          href="/dashboard/withdrawals"
+          href="/dashboard/notifications"
           className="relative rounded-lg p-2 text-slate-muted hover:bg-surface"
           aria-label="الإشعارات"
         >

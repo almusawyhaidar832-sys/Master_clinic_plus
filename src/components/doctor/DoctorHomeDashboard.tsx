@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { getDoctorForCurrentUser } from "@/lib/clinic-context";
-import { getCurrentUser } from "@/lib/supabase/auth-helpers";
+import { getDoctorForCurrentUser, getAuthProfile } from "@/lib/clinic-context";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
 import { fetchUnreadNotificationCount } from "@/lib/services/clinic-stats";
 import { formatCurrency, todayISO } from "@/lib/utils";
@@ -13,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { Bell, TrendingUp, Wallet, ArrowDownToLine } from "lucide-react";
 
 export function DoctorHomeDashboard() {
+  const [doctorName, setDoctorName] = useState("");
+  const [specialty, setSpecialty]   = useState("");
   const [wallet, setWallet] = useState<{
     availableBalance: number;
     totalEarnings: number;
@@ -24,11 +25,13 @@ export function DoctorHomeDashboard() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const user = await getCurrentUser(supabase);
-      if (!user) return;
-
       const doctor = await getDoctorForCurrentUser(supabase);
       if (!doctor) return;
+
+      const profile = await getAuthProfile(supabase);
+
+      setDoctorName(doctor.full_name_ar);
+      setSpecialty(doctor.specialty_ar ?? "");
 
       const [stats, opsRes, notifCount] = await Promise.all([
         fetchDoctorWalletStats(supabase, doctor.id),
@@ -37,7 +40,9 @@ export function DoctorHomeDashboard() {
           .select("id", { count: "exact", head: true })
           .eq("doctor_id", doctor.id)
           .eq("operation_date", todayISO()),
-        fetchUnreadNotificationCount(supabase, user.id),
+        profile
+          ? fetchUnreadNotificationCount(supabase, profile.id)
+          : Promise.resolve(0),
       ]);
 
       setWallet(stats);
@@ -49,6 +54,16 @@ export function DoctorHomeDashboard() {
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {doctorName && (
+        <div className="rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
+          <p className="text-xs text-slate-500">مرحباً</p>
+          <p className="text-lg font-bold text-slate-text">{doctorName}</p>
+          {specialty && (
+            <p className="text-xs text-primary">{specialty}</p>
+          )}
+        </div>
+      )}
+
       <div className="rounded-2xl bg-gradient-to-br from-primary to-primary-700 p-5 text-white shadow-premium">
         <div className="flex items-start justify-between">
           <div>
