@@ -39,6 +39,14 @@ html.dark {
     @apply bg-surface font-arabic text-slate-text antialiased transition-colors duration-200;
   }
 
+  /* English (Latin) numerals for inputs and amounts — DB-safe */
+  input,
+  textarea,
+  .tabular-nums,
+  [data-numeric="true"] {
+    font-variant-numeric: lining-nums tabular-nums;
+  }
+
   input,
   select,
   textarea {

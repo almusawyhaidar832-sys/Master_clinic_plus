@@ -35,6 +35,8 @@ interface SidebarProps {
   items: NavItem[];
   onSignOut?: () => void;
   clinicName?: string;
+  staffName?: string;
+  staffLabel?: string;
   clinicLogoUrl?: string | null;
 }
 
@@ -42,6 +44,8 @@ export function Sidebar({
   items,
   onSignOut,
   clinicName,
+  staffName,
+  staffLabel,
   clinicLogoUrl,
 }: SidebarProps) {
   const pathname = usePathname();
@@ -68,7 +72,14 @@ export function Sidebar({
             <p className="truncate font-semibold text-slate-text leading-tight">
               {clinicName || APP_NAME}
             </p>
-            <p className="text-xs text-slate-muted">{t("appTagline")}</p>
+            {staffName ? (
+              <p className="truncate text-xs font-medium text-primary">
+                {staffLabel ? `${staffLabel}: ` : ""}
+                {staffName}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-muted">{t("appTagline")}</p>
+            )}
           </div>
         </Link>
       </div>

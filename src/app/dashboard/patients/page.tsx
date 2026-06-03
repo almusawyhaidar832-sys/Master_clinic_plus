@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
-import type { Patient } from "@/types";
+import { computeOutstandingDebtFromOperations } from "@/lib/services/patient-treatment-cases";
+import type { Patient, PatientOperation } from "@/types";
 import { Search, UserPlus, FileText } from "lucide-react";
 
 interface PatientWithStats extends Patient {
@@ -42,19 +43,23 @@ export default function PatientsSearchPage() {
 
     // Load debt summary per patient
     const ids = patients.map((p) => p.id);
-    let debts: { patient_id: string; remaining_debt: number }[] = [];
+    const debtMap: Record<string, number> = {};
     if (ids.length > 0) {
       const { data: opData } = await supabase
         .from("patient_operations")
-        .select("patient_id, remaining_debt")
+        .select("*")
         .in("patient_id", ids)
-        .gt("remaining_debt", 0);
-      debts = (opData as { patient_id: string; remaining_debt: number }[]) || [];
-    }
-
-    const debtMap: Record<string, number> = {};
-    for (const row of debts) {
-      debtMap[row.patient_id] = (debtMap[row.patient_id] ?? 0) + Number(row.remaining_debt ?? 0);
+        .order("created_at", { ascending: true });
+      const byPatient = new Map<string, PatientOperation[]>();
+      for (const op of (opData as PatientOperation[]) || []) {
+        const list = byPatient.get(op.patient_id) ?? [];
+        list.push(op);
+        byPatient.set(op.patient_id, list);
+      }
+      for (const pid of ids) {
+        const ops = byPatient.get(pid) ?? [];
+        debtMap[pid] = computeOutstandingDebtFromOperations(ops, pid);
+      }
     }
 
     setResults(

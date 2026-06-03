@@ -1,0 +1,122 @@
+-- Notification trigger text: Iraqi Dinar (د.ع) instead of EGP (ج.م)
+
+CREATE OR REPLACE FUNCTION public.notify_staff_on_withdrawal_request()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_doctor_name TEXT;
+BEGIN
+  IF NEW.source IS DISTINCT FROM 'doctor_request' AND TG_OP = 'INSERT' THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT full_name_ar INTO v_doctor_name
+  FROM public.doctors WHERE id = NEW.doctor_id;
+
+  INSERT INTO public.notifications (clinic_id, recipient_profile_id, title_ar, body_ar, link_path)
+  SELECT
+    NEW.clinic_id,
+    p.id,
+    'طلب سحب من طبيب',
+    'طلب ' || COALESCE(v_doctor_name, 'طبيب') || ' سحب مبلغ ' || NEW.amount::text || ' د.ع',
+    '/dashboard/withdrawals'
+  FROM public.profiles p
+  WHERE p.clinic_id = NEW.clinic_id
+    AND p.role IN ('accountant', 'super_admin')
+    AND p.is_active = TRUE;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.notify_doctor_on_withdrawal_status()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_profile_id UUID;
+  v_title TEXT;
+  v_body  TEXT;
+BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.status IS NOT DISTINCT FROM NEW.status THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' AND NEW.status NOT IN ('approved', 'paid', 'rejected') THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.status NOT IN ('approved', 'paid', 'rejected') THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT profile_id INTO v_profile_id
+  FROM public.doctors WHERE id = NEW.doctor_id;
+
+  IF v_profile_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  v_title := CASE NEW.status
+    WHEN 'approved' THEN 'تمت الموافقة على طلب السحب'
+    WHEN 'paid'     THEN 'تم صرف مبلغ السحب'
+    WHEN 'rejected' THEN 'تم رفض طلب السحب'
+    ELSE 'تحديث طلب السحب'
+  END;
+
+  v_body := CASE NEW.status
+    WHEN 'paid' THEN 'تم سحب ' || NEW.amount::text || ' د.ع من محفظتك'
+    ELSE v_title || ' — ' || NEW.amount::text || ' د.ع'
+  END;
+
+  INSERT INTO public.notifications (clinic_id, recipient_profile_id, title_ar, body_ar, link_path)
+  VALUES (NEW.clinic_id, v_profile_id, v_title, v_body, '/doctor/wallet');
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.notify_doctor_on_new_operation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_profile_id UUID;
+  v_patient_name TEXT;
+  v_op_name TEXT;
+BEGIN
+  SELECT profile_id INTO v_profile_id
+  FROM public.doctors WHERE id = NEW.doctor_id;
+
+  IF v_profile_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT full_name_ar INTO v_patient_name
+  FROM public.patients WHERE id = NEW.patient_id;
+
+  v_op_name := COALESCE(
+    NEW.operation_name_ar,
+    (SELECT name_ar FROM public.operation_types WHERE id = NEW.operation_type_id LIMIT 1),
+    'جلسة'
+  );
+
+  INSERT INTO public.notifications (clinic_id, recipient_profile_id, title_ar, body_ar, link_path)
+  VALUES (
+    NEW.clinic_id,
+    v_profile_id,
+    'مراجع / جلسة جديدة',
+    COALESCE(v_patient_name, 'مريض') || ' — ' || v_op_name || ' — ' || NEW.total_amount::text || ' د.ع',
+    '/doctor/patients'
+  );
+
+  RETURN NEW;
+END;
+$$;

@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { computeWalletStats } from "@/lib/services/doctor-wallet";
+import {
+  computeWalletStats,
+  fetchDoctorTotalEarnings,
+} from "@/lib/services/doctor-wallet";
 
 /** Max amount available for a new withdrawal (reserves pending requests) */
 export async function computeDoctorWithdrawableLimit(
@@ -14,22 +17,14 @@ export async function computeDoctorWalletBreakdown(
   admin: SupabaseClient,
   doctorId: string
 ) {
-  const [opsRes, wdsRes] = await Promise.all([
-    admin
-      .from("patient_operations")
-      .select("doctor_share_amount")
-      .eq("doctor_id", doctorId),
+  const [totalEarnings, wdsRes] = await Promise.all([
+    fetchDoctorTotalEarnings(admin, doctorId),
     admin
       .from("doctor_withdrawals")
       .select("amount, status")
       .eq("doctor_id", doctorId)
       .neq("status", "rejected"),
   ]);
-
-  const totalEarnings = (opsRes.data ?? []).reduce(
-    (s, r) => s + Number(r.doctor_share_amount ?? 0),
-    0
-  );
 
   return computeWalletStats(totalEarnings, wdsRes.data ?? []);
 }

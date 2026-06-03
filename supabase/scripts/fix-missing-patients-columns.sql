@@ -1,0 +1,4 @@
+-- انسخ والصق محتوى الملف التالي في Supabase → SQL Editor ثم Run:
+--   supabase/migrations/20260603170000_patients_previous_total_fix.sql
+--
+-- (ملف SQL Editor لا يدعم \i — افتح الملف وانسخه كاملاً)

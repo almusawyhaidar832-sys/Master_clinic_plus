@@ -1,0 +1,4 @@
+-- بعد تصفير الرواتب: الراتب المدفوع يبقى مخصوماً من ربح العيادة
+-- شغّل في Supabase → SQL Editor الملف الكامل:
+--   supabase/scripts/fix-executive-review-fees.sql
+-- (أو migrations/20260603250000_executive_salaries_persist_after_reset.sql)

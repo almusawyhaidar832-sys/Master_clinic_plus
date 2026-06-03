@@ -2,7 +2,11 @@
 
 import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
-import { parseFormattedNumber, formatNumberInput } from "@/lib/utils";
+import {
+  parseFormattedNumber,
+  formatNumberInput,
+  toAsciiDigits,
+} from "@/lib/utils";
 
 export interface CurrencyInputProps {
   label?: string;
@@ -12,6 +16,8 @@ export interface CurrencyInputProps {
   placeholder?: string;
   className?: string;
   min?: number;
+  readOnly?: boolean;
+  disabled?: boolean;
 }
 
 /**
@@ -20,10 +26,21 @@ export interface CurrencyInputProps {
  */
 export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
   function CurrencyInput(
-    { label, value, onChange, required, placeholder, className, min = 0 },
+    {
+      label,
+      value,
+      onChange,
+      required,
+      placeholder,
+      className,
+      min = 0,
+      readOnly,
+      disabled,
+    },
     ref
   ) {
     const displayValue = value ? formatNumberInput(value) : "";
+    const locked = readOnly || disabled;
 
     return (
       <div className="w-full space-y-1.5">
@@ -37,17 +54,29 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
           type="text"
           inputMode="decimal"
           dir="ltr"
-          required={required}
+          data-numeric="true"
+          required={required && !locked}
+          readOnly={readOnly}
+          disabled={disabled}
           placeholder={placeholder}
           value={displayValue}
+          onPaste={(e) => {
+            if (locked) return;
+            e.preventDefault();
+            const text = e.clipboardData.getData("text");
+            const raw = parseFormattedNumber(text);
+            if (raw === "" || !isNaN(Number(raw))) onChange(raw);
+          }}
           onChange={(e) => {
-            const raw = parseFormattedNumber(e.target.value);
+            if (locked) return;
+            const raw = parseFormattedNumber(toAsciiDigits(e.target.value));
             if (raw === "" || !isNaN(Number(raw))) {
               onChange(raw);
             }
           }}
           className={cn(
-            "flex h-10 w-full rounded-lg border border-slate-border bg-surface-card px-3 py-2 text-sm text-slate-text text-left placeholder:text-slate-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20",
+            "tabular-nums flex h-10 w-full rounded-lg border border-slate-border bg-surface-card px-3 py-2 text-sm text-slate-text text-left placeholder:text-slate-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20",
+            locked && "cursor-default bg-surface text-slate-muted",
             className
           )}
         />

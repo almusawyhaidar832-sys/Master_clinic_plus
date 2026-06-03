@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -10,7 +10,13 @@ import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import type { Doctor, Patient, PatientOperation, MedicalLog, Treatment } from "@/types";
-import { ArrowRight, FileText } from "lucide-react";
+import { AddSessionClinicalPanel } from "@/components/clinical/AddSessionClinicalPanel";
+import { SessionClinicalView } from "@/components/clinical/SessionClinicalView";
+import { QuickEntryForm } from "@/components/accountant/QuickEntryForm";
+import { fetchPatientClinicalRecords } from "@/lib/clinical/fetch-patient-clinical";
+import type { ClinicalByOperationId } from "@/lib/clinical/types";
+import { opName } from "@/types";
+import { ArrowRight, FileText, Plus, X } from "lucide-react";
 
 export default function DoctorPatientDetailPage() {
   const params = useParams();
@@ -22,6 +28,23 @@ export default function DoctorPatientDetailPage() {
   const [newLog, setNewLog] = useState("");
   const [saving, setSaving] = useState(false);
   const [doctor, setDoctor] = useState<Doctor | null>(null);
+  const [showSessionForm, setShowSessionForm] = useState(false);
+  const [clinicalByOp, setClinicalByOp] = useState<ClinicalByOperationId>({});
+
+  const reloadOperations = useCallback(async () => {
+    const supabase = createClient();
+    const doc = await getDoctorForCurrentUser(supabase);
+    let opsQuery = supabase
+      .from("patient_operations")
+      .select("*")
+      .eq("patient_id", id)
+      .order("operation_date", { ascending: false });
+    if (doc) opsQuery = opsQuery.eq("doctor_id", doc.id);
+    const { data } = await opsQuery;
+    setOperations((data as PatientOperation[]) || []);
+    const clinical = await fetchPatientClinicalRecords(id);
+    setClinicalByOp(clinical);
+  }, [id]);
 
   useEffect(() => {
     async function load() {
@@ -55,6 +78,8 @@ export default function DoctorPatientDetailPage() {
       setOperations((oRes.data as PatientOperation[]) || []);
       setLogs((lRes.data as MedicalLog[]) || []);
       setTreatments((tRes.data as Treatment[]) || []);
+      const clinical = await fetchPatientClinicalRecords(id);
+      setClinicalByOp(clinical);
     }
     if (id) load();
   }, [id]);
@@ -106,13 +131,45 @@ export default function DoctorPatientDetailPage() {
             </p>
           )}
         </CardHeader>
-        <Link href={`/doctor/statement?patientId=${id}`}>
-          <Button variant="outline" size="sm" className="w-full">
-            <FileText className="h-4 w-4" />
-            كشف حساب ومشاركة
+        <div className="flex flex-col gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            className="w-full"
+            onClick={() => setShowSessionForm((v) => !v)}
+          >
+            {showSessionForm ? (
+              <>
+                <X className="h-4 w-4" />
+                إغلاق إدخال الجلسة
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4" />
+                إدخال جلسة (سجل بصري)
+              </>
+            )}
           </Button>
-        </Link>
+          <Link href={`/doctor/statement?patientId=${id}`}>
+            <Button variant="outline" size="sm" className="w-full">
+              <FileText className="h-4 w-4" />
+              كشف حساب ومشاركة
+            </Button>
+          </Link>
+        </div>
       </Card>
+
+      {showSessionForm && doctor && (
+        <QuickEntryForm
+          defaultPatientId={id}
+          defaultPatientName={patient.full_name_ar}
+          lockDoctorId={doctor.id}
+          onSuccess={() => {
+            setShowSessionForm(false);
+            reloadOperations();
+          }}
+        />
+      )}
 
       {treatments.length > 0 && (
         <Card>
@@ -131,21 +188,34 @@ export default function DoctorPatientDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">سجل مالي</CardTitle>
+          <CardTitle className="text-base">سجل الجلسات</CardTitle>
         </CardHeader>
         {operations.length === 0 ? (
           <p className="text-sm text-slate-muted">لا توجد عمليات</p>
         ) : (
-          <ul className="space-y-2 text-sm">
+          <ul className="space-y-3 text-sm">
             {operations.map((op) => (
-              <li key={op.id} className="flex justify-between border-b py-2">
-                <span>
-                  {op.operation_type || op.operation_name_ar || "—"}
-                  {op.operation_date ? ` — ${formatDate(op.operation_date)}` : ""}
-                </span>
-                <span className="font-medium text-primary">
-                  {formatCurrency(op.doctor_share_amount ?? op.paid_amount)}
-                </span>
+              <li
+                key={op.id}
+                className="rounded-lg border border-slate-border p-3"
+              >
+                <div className="flex justify-between gap-2">
+                  <span className="font-medium">
+                    {opName(op)}
+                    {op.operation_date
+                      ? ` — ${formatDate(op.operation_date)}`
+                      : ""}
+                  </span>
+                  <span className="font-medium text-primary shrink-0">
+                    {formatCurrency(op.doctor_share_amount ?? op.paid_amount)}
+                  </span>
+                </div>
+                <SessionClinicalView data={clinicalByOp[op.id]} />
+                <AddSessionClinicalPanel
+                  operationId={op.id}
+                  existing={clinicalByOp[op.id]}
+                  onSaved={reloadOperations}
+                />
               </li>
             ))}
           </ul>

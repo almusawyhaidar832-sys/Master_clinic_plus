@@ -11,8 +11,12 @@ import { useRouter } from "next/navigation";
 interface DashboardShellProps {
   children: React.ReactNode;
   navItems: NavItem[];
+  /** Logged-in staff name (accountant / owner) */
   title: string;
   subtitle?: string;
+  /** Clinic name in sidebar */
+  clinicName?: string;
+  staffLabel?: string;
   clinicLogoUrl?: string | null;
   notificationCount?: number;
 }
@@ -22,9 +26,12 @@ export function DashboardShell({
   navItems,
   title,
   subtitle,
+  clinicName,
+  staffLabel,
   clinicLogoUrl,
   notificationCount,
 }: DashboardShellProps) {
+  const sidebarTitle = clinicName || title;
   const [mobileOpen, setMobileOpen] = useState(false);
   const router = useRouter();
 
@@ -40,7 +47,9 @@ export function DashboardShell({
       <Sidebar
         items={navItems}
         onSignOut={handleSignOut}
-        clinicName={title}
+        clinicName={sidebarTitle}
+        staffName={title}
+        staffLabel={staffLabel}
         clinicLogoUrl={clinicLogoUrl}
       />
 
@@ -56,11 +65,13 @@ export function DashboardShell({
         }`}
       >
         <Sidebar
-        items={navItems}
-        onSignOut={handleSignOut}
-        clinicName={title}
-        clinicLogoUrl={clinicLogoUrl}
-      />
+          items={navItems}
+          onSignOut={handleSignOut}
+          clinicName={sidebarTitle}
+          staffName={title}
+          staffLabel={staffLabel}
+          clinicLogoUrl={clinicLogoUrl}
+        />
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">

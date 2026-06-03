@@ -30,36 +30,9 @@ ALTER TABLE public.patient_operations
   ADD COLUMN IF NOT EXISTS operation_date      DATE NOT NULL DEFAULT CURRENT_DATE;
 
 -- ============================================================
--- STEP 3: Create the correct trigger (uses correct column names)
+-- STEP 3: Treatment-level split (see migration 20260603130000)
 -- ============================================================
-CREATE OR REPLACE FUNCTION public.calculate_operation_shares()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  doc_pct   NUMERIC := 0.5;
-  mat_share NUMERIC := 0;
-  doc_gross NUMERIC;
-BEGIN
-  -- Get doctor's percentage agreement
-  SELECT
-    (d.percentage::TEXT)::NUMERIC / 100,
-    (d.materials_share::TEXT)::NUMERIC / 100
-  INTO doc_pct, mat_share
-  FROM public.doctors d
-  WHERE d.id = NEW.doctor_id;
-
-  -- Calculate shares
-  doc_gross                := NEW.total_amount * doc_pct;
-  NEW.doctor_share_amount  := doc_gross - (COALESCE(NEW.materials_cost, 0) * mat_share);
-  NEW.clinic_share_amount  := NEW.total_amount - NEW.doctor_share_amount;
-  NEW.remaining_debt       := GREATEST(0, NEW.total_amount - NEW.paid_amount);
-
-  RETURN NEW;
-END;
-$$;
+-- Run: supabase/migrations/20260603130000_patient_treatment_financial_plan.sql
 
 CREATE TRIGGER trg_calculate_operation_shares
   BEFORE INSERT OR UPDATE ON public.patient_operations

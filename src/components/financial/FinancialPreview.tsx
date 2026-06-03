@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { calculateDoctorShare } from "@/lib/finance";
+import { calculateDoctorShare, splitTreatmentAndReviewFee } from "@/lib/finance";
 import { formatCurrency } from "@/lib/utils";
 import type { Doctor, DoctorPercentage, MaterialsCostShare } from "@/types";
 
@@ -11,6 +11,9 @@ interface FinancialPreviewProps {
   doctor: Doctor | null;
   reviewFee?: number;
   className?: string;
+  /** When set, split was already calculated on the treatment total */
+  lockedSplit?: { doctorShare: number; clinicShare: number; agreedTotal: number };
+  isPaymentSession?: boolean;
 }
 
 export function FinancialPreview({
@@ -19,40 +22,69 @@ export function FinancialPreview({
   doctor,
   reviewFee = 0,
   className = "",
+  lockedSplit,
+  isPaymentSession = false,
 }: FinancialPreviewProps) {
   const preview = useMemo(() => {
-    if (!doctor || totalAmount <= 0) return null;
+    if (!doctor) return null;
 
-    const grossTotal = totalAmount + reviewFee;
-    const { doctorShare, clinicShare } = calculateDoctorShare(
-      grossTotal,
-      doctor.percentage as DoctorPercentage,
+    if (lockedSplit && lockedSplit.agreedTotal > 0) {
+      const pct = Number(doctor.percentage);
+      const matPct = Number(doctor.materials_share);
+      const doctorGross = lockedSplit.agreedTotal * (pct / 100);
+      const doctorMaterials = materialsCost * (matPct / 100);
+      const clinicMaterials = materialsCost - doctorMaterials;
+      return {
+        grossTotal: lockedSplit.agreedTotal,
+        doctorGross,
+        doctorMaterials,
+        clinicMaterials,
+        doctorShare: lockedSplit.doctorShare,
+        clinicShare: lockedSplit.clinicShare,
+        locked: true,
+      };
+    }
+
+    if (totalAmount <= 0 && reviewFee <= 0) return null;
+
+    const split = splitTreatmentAndReviewFee(
+      totalAmount,
+      reviewFee,
       materialsCost,
-      doctor.materials_share as MaterialsCostShare
+      {
+        percentage: doctor.percentage as DoctorPercentage,
+        materials_share: doctor.materials_share as MaterialsCostShare,
+      }
     );
+    if (!split) return null;
 
     const pct = Number(doctor.percentage);
     const matPct = Number(doctor.materials_share);
-    const doctorGross = grossTotal * (pct / 100);
+    const doctorGross = totalAmount * (pct / 100);
     const doctorMaterials = materialsCost * (matPct / 100);
     const clinicMaterials = materialsCost - doctorMaterials;
 
     return {
-      grossTotal,
+      grossTotal: split.agreedTotal,
+      treatmentTotal: totalAmount,
       doctorGross,
       doctorMaterials,
       clinicMaterials,
-      doctorShare,
-      clinicShare,
+      doctorShare: split.doctorShare,
+      clinicShare: split.clinicShare,
+      reviewFeeClinicOnly: reviewFee,
+      locked: false,
     };
-  }, [totalAmount, materialsCost, doctor, reviewFee]);
+  }, [totalAmount, materialsCost, doctor, reviewFee, lockedSplit]);
 
   if (!preview) {
     return (
       <div
         className={`rounded-xl border border-dashed border-slate-border bg-surface p-4 text-sm text-slate-muted ${className}`}
       >
-        اختر الطبيب وأدخل المبلغ لمعاينة التوزيع المالي مباشرة
+        {isPaymentSession
+          ? "جلسة متابعة — حصة الطبيب والعيادة محسوبة مرة واحدة على السعر النهائي (لا تُعاد كل جلسة)"
+          : "اختر الطبيب — التوزيع يُحسب مرة واحدة على (السعر الكلي − الخصم)"}
       </div>
     );
   }
@@ -61,6 +93,11 @@ export function FinancialPreview({
     <div
       className={`grid gap-3 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-surface p-4 sm:grid-cols-2 ${className}`}
     >
+      {preview.locked && (
+        <p className="sm:col-span-2 text-xs font-medium text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
+          التوزيع على السعر النهائي {formatCurrency(preview.grossTotal)} — جلسة الدفع لا تعيد حساب الحصص
+        </p>
+      )}
       <div className="space-y-2">
         <p className="text-xs font-semibold text-primary">حصة الطبيب</p>
         <div className="space-y-1 text-sm">
@@ -68,6 +105,18 @@ export function FinancialPreview({
             <span className="text-slate-muted">إجمالي العملية</span>
             <span className="font-medium">{formatCurrency(preview.grossTotal)}</span>
           </div>
+          {reviewFee > 0 && (
+            <>
+              <div className="flex justify-between text-slate-muted">
+                <span>سعر العلاج (يُقسّم)</span>
+                <span>{formatCurrency(totalAmount)}</span>
+              </div>
+              <div className="flex justify-between text-teal-800">
+                <span>كشفية مراجع (للعيادة فقط)</span>
+                <span>+{formatCurrency(reviewFee)}</span>
+              </div>
+            </>
+          )}
           <div className="flex justify-between">
             <span className="text-slate-muted">حصة أولية ({doctor?.percentage}%)</span>
             <span>{formatCurrency(preview.doctorGross)}</span>

@@ -65,6 +65,36 @@ export interface Patient {
   full_name_ar: string;
   phone: string | null;
   notes: string | null;
+  /** Last session total — used for follow-up visits */
+  previous_total?: number | null;
+  agreed_total?: number | null;
+  doctor_share_total?: number | null;
+  clinic_share_total?: number | null;
+  total_paid?: number | null;
+  financial_locked?: boolean | null;
+  original_agreed_total?: number | null;
+  discount_total?: number | null;
+  treatment_status?: "active" | "completed" | null;
+}
+
+export interface OperationToothRecord {
+  id: string;
+  operation_id: string;
+  clinic_id: string;
+  tooth_number: number;
+  procedure_ar: string;
+  note: string | null;
+  created_at?: string;
+}
+
+export interface OperationXrayImage {
+  id: string;
+  operation_id: string;
+  clinic_id: string;
+  storage_path: string;
+  file_name: string | null;
+  mime_type: string | null;
+  created_at?: string;
 }
 
 export interface PatientOperation {
@@ -86,6 +116,7 @@ export interface PatientOperation {
   clinic_share_amount?: number;
   notes?: string | null;
   is_review_statement?: boolean;
+  session_kind?: "plan" | "payment";
   created_at?: string;
   patient?: Patient | { full_name_ar: string };
   doctor?: Doctor | { full_name_ar: string };

@@ -18,6 +18,7 @@ export function DashboardLayoutClient({
 }) {
   const [notificationCount, setNotificationCount] = useState(0);
   const [userRole, setUserRole] = useState<string>("accountant");
+  const [staffName, setStaffName] = useState<string>("");
   const { displayName, profile } = useClinicProfile();
   const { specialtyLabel } = useClinicModules();
 
@@ -39,6 +40,11 @@ export function DashboardLayoutClient({
       const authProfile = await getAuthProfile(supabase);
       if (!authProfile) return;
       setUserRole(authProfile.role);
+      setStaffName(
+        authProfile.full_name?.trim() ||
+          authProfile.username?.trim() ||
+          ""
+      );
       const count = await fetchUnreadNotificationCount(supabase, authProfile.id);
       setNotificationCount(count);
     }
@@ -47,12 +53,22 @@ export function DashboardLayoutClient({
     return () => clearInterval(interval);
   }, []);
 
+  const isOwner = userRole === "super_admin";
+  const headerTitle =
+    staffName ||
+    (isOwner ? "مدير العيادة" : "المحاسب");
+  const headerSubtitle = isOwner
+    ? `${displayName} — لوحة الإدارة`
+    : `${displayName} — لوحة المحاسب${specialtyLabel ? ` · ${specialtyLabel}` : ""}`;
+
   return (
     <DashboardShell
       navItems={navItems}
-      title={displayName}
-      subtitle={`لوحة المحاسب — ${specialtyLabel}`}
+      title={headerTitle}
+      subtitle={headerSubtitle}
       clinicLogoUrl={profile?.logo_url}
+      clinicName={displayName}
+      staffLabel={isOwner ? "المالك" : "المحاسب"}
       notificationCount={notificationCount}
     >
       {children}

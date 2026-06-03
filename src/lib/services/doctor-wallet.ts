@@ -48,6 +48,47 @@ export function computeWalletStats(
   };
 }
 
+/** Earnings: once per treatment plan on patient, not per payment session */
+export async function fetchDoctorTotalEarnings(
+  supabase: SupabaseClient,
+  doctorId: string
+): Promise<number> {
+  const { data: planOps } = await supabase
+    .from("patient_operations")
+    .select("patient_id")
+    .eq("doctor_id", doctorId)
+    .eq("session_kind", "plan");
+
+  const planPatientIds = new Set(
+    (planOps ?? []).map((r) => r.patient_id as string)
+  );
+
+  let total = 0;
+
+  if (planPatientIds.size > 0) {
+    const { data: pts } = await supabase
+      .from("patients")
+      .select("doctor_share_total")
+      .in("id", [...planPatientIds]);
+    total += (pts ?? []).reduce(
+      (s, p) => s + Number(p.doctor_share_total ?? 0),
+      0
+    );
+  }
+
+  const { data: legacyOps } = await supabase
+    .from("patient_operations")
+    .select("patient_id, doctor_share_amount")
+    .eq("doctor_id", doctorId);
+
+  for (const op of legacyOps ?? []) {
+    if (planPatientIds.has(op.patient_id as string)) continue;
+    total += Number(op.doctor_share_amount ?? 0);
+  }
+
+  return total;
+}
+
 export async function fetchDoctorWalletStats(
   supabase: SupabaseClient,
   doctorId: string
@@ -74,22 +115,14 @@ export async function fetchDoctorWalletStats(
     };
   }
 
-  const [opsRes, withdrawalsRes] = await Promise.all([
-    supabase
-      .from("patient_operations")
-      .select("doctor_share_amount")
-      .eq("doctor_id", doctorId),
+  const [totalEarnings, withdrawalsRes] = await Promise.all([
+    fetchDoctorTotalEarnings(supabase, doctorId),
     supabase
       .from("doctor_withdrawals")
       .select("amount, status")
       .eq("doctor_id", doctorId)
       .neq("status", "rejected"),
   ]);
-
-  const totalEarnings = (opsRes.data ?? []).reduce(
-    (s, r) => s + Number(r.doctor_share_amount ?? 0),
-    0
-  );
 
   return computeWalletStats(totalEarnings, withdrawalsRes.data ?? []);
 }

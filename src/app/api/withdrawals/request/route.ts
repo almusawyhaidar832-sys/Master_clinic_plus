@@ -8,6 +8,7 @@ import {
 import {
   notifyWithdrawalRequest,
 } from "@/lib/notifications/server";
+import { formatCurrency } from "@/lib/utils";
 
 /** POST — doctor requests withdrawal */
 export async function POST(req: NextRequest) {
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
     const limit = await computeDoctorWithdrawableLimit(admin, doctor.id);
     if (amount > limit + 0.001) {
       return NextResponse.json(
-        { error: `المبلغ يتجاوز الحد المتاح (${limit} ج.م)` },
+        { error: `المبلغ يتجاوز الحد المتاح (${formatCurrency(limit)})` },
         { status: 400 }
       );
     }

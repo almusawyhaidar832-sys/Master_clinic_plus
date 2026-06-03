@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calculateClinicProfit } from "@/lib/finance";
-import { todayISO } from "@/lib/utils";
+import {
+  fetchOutstandingDebts,
+  fetchTreatmentLevelShares,
+} from "@/lib/services/clinic-financial-aggregate";
+import { formatCurrency, todayISO } from "@/lib/utils";
 
 export interface TodaySummary {
   operationsCount: number;
@@ -45,46 +49,27 @@ export async function fetchTodaySummary(
 export async function fetchClinicProfitStats(
   supabase: SupabaseClient
 ): Promise<ClinicProfitStats> {
-  const [
-    opsRes,
-    expensesRes,
-    salariesRes,
-    debtsRes,
-  ] = await Promise.all([
-    supabase
-      .from("patient_operations")
-      .select("paid_amount, remaining_debt, clinic_share_amount, doctor_share_amount"),
-    supabase.from("expenses").select("amount"),
-    supabase
-      .from("salary_slips")
-      .select("net_payout")
-      .eq("status", "paid"),
-    supabase
-      .from("patient_operations")
-      .select("remaining_debt")
-      .gt("remaining_debt", 0),
-  ]);
+  const [opsRes, expensesRes, salariesRes, shares, outstandingDebts] =
+    await Promise.all([
+      supabase.from("patient_operations").select("paid_amount"),
+      supabase.from("expenses").select("amount"),
+      supabase
+        .from("salary_slips")
+        .select("net_payout")
+        .eq("status", "paid"),
+      fetchTreatmentLevelShares(supabase),
+      fetchOutstandingDebts(supabase),
+    ]);
 
   const ops = opsRes.data ?? [];
   const cashInflow = ops.reduce((s, r) => s + Number(r.paid_amount ?? 0), 0);
-  const clinicShareTotal = ops.reduce(
-    (s, r) => s + Number(r.clinic_share_amount ?? 0),
-    0
-  );
-  const doctorShareTotal = ops.reduce(
-    (s, r) => s + Number(r.doctor_share_amount ?? 0),
-    0
-  );
+  const { clinicShareTotal, doctorShareTotal } = shares;
   const totalExpenses = (expensesRes.data ?? []).reduce(
     (s, r) => s + Number(r.amount ?? 0),
     0
   );
   const totalSalariesPaid = (salariesRes.data ?? []).reduce(
     (s, r) => s + Number(r.net_payout ?? 0),
-    0
-  );
-  const outstandingDebts = (debtsRes.data ?? []).reduce(
-    (s, r) => s + Number(r.remaining_debt ?? 0),
     0
   );
 
@@ -154,7 +139,7 @@ export async function notifyAccountantsWithdrawal(
       clinic_id: clinicId,
       recipient_profile_id: a.id,
       title_ar: "طلب سحب من طبيب",
-      body_ar: `طلب ${doctorName} سحب مبلغ ${amount} ج.م`,
+      body_ar: `طلب ${doctorName} سحب مبلغ ${formatCurrency(amount)}`,
       link_path: "/dashboard/withdrawals",
     }))
   );

@@ -230,7 +230,7 @@ export default function ClinicSettingsPage() {
                 </label>
                 {reviewFeeEnabled && (
                   <Input
-                    label="مبلغ الكشفية الافتراضي (ج.م)"
+                    label="مبلغ الكشفية الافتراضي (د.ع)"
                     type="number"
                     min="0"
                     value={reviewFeeAmount}

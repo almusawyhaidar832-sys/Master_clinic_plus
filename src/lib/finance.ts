@@ -20,6 +20,38 @@ export function calculateDoctorShare(
 }
 
 /**
+ * العلاج يُقسّم حسب نسبة الطبيب — الكشفية كاملة لصافي ربح العيادة (لا تدخل محفظة الطبيب).
+ */
+export function splitTreatmentAndReviewFee(
+  treatmentFinal: number,
+  reviewFee: number,
+  materialsCost: number,
+  doctor: { percentage: DoctorPercentage; materials_share: MaterialsCostShare } | null
+): { doctorShare: number; clinicShare: number; agreedTotal: number } | null {
+  const treatment = Math.max(0, treatmentFinal);
+  const review = Math.max(0, reviewFee);
+  if (treatment <= 0 && review <= 0) return null;
+  if (!doctor || treatment <= 0) {
+    return {
+      doctorShare: 0,
+      clinicShare: Math.round(review * 100) / 100,
+      agreedTotal: Math.round((treatment + review) * 100) / 100,
+    };
+  }
+  const split = calculateDoctorShare(
+    treatment,
+    doctor.percentage,
+    materialsCost,
+    doctor.materials_share
+  );
+  return {
+    doctorShare: split.doctorShare,
+    clinicShare: Math.round((split.clinicShare + review) * 100) / 100,
+    agreedTotal: Math.round((treatment + review) * 100) / 100,
+  };
+}
+
+/**
  * Net clinic profit — doctor withdrawals do NOT reduce clinic profit.
  * Doctor wallet is separate from clinic earnings.
  */

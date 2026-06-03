@@ -8,12 +8,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
+import {
+  fetchPaidSalariesForDisplay,
+  fetchPaidSalariesForProfitDeduction,
+  fetchReviewFeesInPeriod,
+  mergeExecutiveDashboardMetrics,
+} from "@/lib/services/executive-snapshot";
 import { cn } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, Minus,
   DollarSign, Wallet, Receipt, Users,
   UserPlus, Star, Package, AlertCircle,
-  ArrowUpRight, ListOrdered,
+  ArrowUpRight, ListOrdered, UserCog,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -27,6 +34,8 @@ interface Snapshot {
   clinic_shares: number;
   materials_cost: number;
   expenses: number;
+  salaries_paid: number;
+  review_fees: number;
   withdrawals_paid: number;
   net_profit: number;
   operation_count: number;
@@ -51,7 +60,10 @@ type Period = "today" | "week" | "month" | "custom";
 // Helpers
 // ─────────────────────────────────────────────
 function fmt(n: number) {
-  return new Intl.NumberFormat("ar-IQ", { maximumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat("en-US", {
+    numberingSystem: "latn",
+    maximumFractionDigits: 0,
+  }).format(n);
 }
 
 function GrowthBadge({ pct }: { pct: number | null }) {
@@ -117,8 +129,17 @@ function NetProfitCard({ snap }: { snap: Snapshot }) {
   const rows = [
     { label: "إجمالي الإيرادات",        amount: snap.revenue,       color: "text-emerald-600", sign: "+" },
     { label: "حصص الأطباء (محافظ)",     amount: -snap.doctor_shares, color: "text-red-500",    sign: "−" },
+    ...(snap.review_fees > 0
+      ? [{
+          label: "كشفيات مراجع (ربح العيادة)",
+          amount: snap.review_fees,
+          color: "text-emerald-600",
+          sign: "+",
+        }]
+      : []),
     { label: "تكلفة المواد المستهلكة",  amount: -snap.materials_cost,color: "text-orange-500", sign: "−" },
     { label: "المصروفات العامة",         amount: -snap.expenses,      color: "text-red-500",    sign: "−" },
+    { label: "رواتب موظفين (مُسلَّمة)",  amount: -(snap.salaries_paid ?? 0), color: "text-red-500", sign: "−" },
   ];
 
   const profitColor = snap.net_profit >= 0 ? "text-emerald-600" : "text-red-600";
@@ -162,8 +183,12 @@ function SmartAlerts({ snap }: { snap: Snapshot }) {
   if (snap.revenue_growth !== null && snap.revenue_growth < -10)
     alerts.push({ msg: `الإيرادات انخفضت ${Math.abs(snap.revenue_growth)}% مقارنة بالفترة السابقة`, type: "danger" });
 
+  const salariesPaid = snap.salaries_paid ?? 0;
   if (snap.expenses > snap.clinic_shares * 0.7)
     alerts.push({ msg: `المصروفات تجاوزت 70% من حصة العيادة — راجع بنود الصرف`, type: "warn" });
+
+  if (salariesPaid > 0 && salariesPaid > snap.clinic_shares * 0.5)
+    alerts.push({ msg: `الرواتب المدفوعة (${fmt(salariesPaid)}) مرتفعة — راجع قسائم الشهر`, type: "warn" });
 
   if (snap.new_patients === 0)
     alerts.push({ msg: "لا مرضى جدد في هذه الفترة — فكّر بحملة تسويقية", type: "info" });
@@ -266,10 +291,10 @@ function TopServicesCard({ services }: { services: TopPerformers["top_services"]
 // ─────────────────────────────────────────────
 export function ExecutiveDashboard() {
   const supabase = createClient();
+  const { clinicId, loading: clinicLoading } = useActiveClinicId();
   const [period, setPeriod] = useState<Period>("month");
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [top, setTop]   = useState<TopPerformers | null>(null);
-  const [clinicId, setClinicId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // date range
@@ -295,35 +320,46 @@ export function ExecutiveDashboard() {
     }
   }, [period]);
 
-  // load clinic_id once
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
-      supabase.from("profiles").select("clinic_id").eq("id", user.id).single()
-        .then(({ data }) => setClinicId(data?.clinic_id ?? null));
-    });
-  }, [supabase]);
-
   const fetchData = useCallback(async () => {
     if (!clinicId) return;
     setLoading(true);
     const { from, to } = getRange();
 
-    const [snapRes, topRes] = await Promise.all([
+    const [snapRes, topRes, salariesDisplay, salariesDeducted, reviewFees] =
+      await Promise.all([
       supabase.rpc("get_clinic_financial_snapshot", {
         p_clinic_id: clinicId, p_from: from, p_to: to,
       }),
       supabase.rpc("get_top_performers", {
-        p_clinic_id: clinicId, p_from: from, p_to: to,
+        p_clinic_id: clinicId, p_from: from, to,
       }),
+      fetchPaidSalariesForDisplay(supabase, clinicId, from, to),
+      fetchPaidSalariesForProfitDeduction(supabase, clinicId, from, to),
+      fetchReviewFeesInPeriod(supabase, clinicId, from, to),
     ]);
 
-    if (snapRes.data) setSnap(snapRes.data as Snapshot);
-    if (topRes.data)  setTop(topRes.data as TopPerformers);
+    if (snapRes.data) {
+      const raw = snapRes.data as Snapshot;
+      setSnap(
+        mergeExecutiveDashboardMetrics(raw, {
+          salariesPaid: salariesDisplay,
+          salariesDeductedFromProfit: salariesDeducted,
+          reviewFees: reviewFees.total,
+        })
+      );
+    }
+    if (topRes.data) setTop(topRes.data as TopPerformers);
     setLoading(false);
   }, [clinicId, getRange, supabase]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    if (clinicLoading || clinicId === undefined) return;
+    if (!clinicId) {
+      setLoading(false);
+      return;
+    }
+    fetchData();
+  }, [fetchData, clinicLoading, clinicId]);
 
   const PERIODS = [
     { key: "today" as Period, label: "اليوم"    },
@@ -357,7 +393,7 @@ export function ExecutiveDashboard() {
 
       {loading || !snap ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
+          {Array.from({ length: 10 }).map((_, i) => (
             <div key={i} className="h-28 animate-pulse rounded-2xl bg-slate-100" />
           ))}
         </div>
@@ -391,8 +427,27 @@ export function ExecutiveDashboard() {
             <KpiCard
               label="المصروفات"
               value={`${fmt(snap.expenses)} د.ع`}
+              sub={
+                (snap.salaries_paid ?? 0) > 0
+                  ? `رواتب مُسلَّمة: ${fmt(snap.salaries_paid ?? 0)}`
+                  : undefined
+              }
               icon={Wallet}
               color="bg-red-100 text-red-500"
+            />
+            <KpiCard
+              label="رواتب مُسلَّمة"
+              value={`${fmt(snap.salaries_paid ?? 0)} د.ع`}
+              sub="تُصفَّر بعد تصفير شهر الرواتب — الربح يبقى مخصوماً"
+              icon={UserCog}
+              color="bg-rose-100 text-rose-600"
+            />
+            <KpiCard
+              label="كشفيات مراجع"
+              value={`${fmt(snap.review_fees ?? 0)} د.ع`}
+              sub="تُضاف عند تسجيل الجلسة — للعيادة فقط"
+              icon={Receipt}
+              color="bg-teal-100 text-teal-700"
             />
             <KpiCard
               label="المرضى المُعالَجون"

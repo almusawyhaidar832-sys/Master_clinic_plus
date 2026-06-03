@@ -4,6 +4,7 @@ import type { ClinicProfile } from "@/types/clinic-profile";
 import type { MedicalLog, Patient, PatientOperation } from "@/types";
 import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
+import { computeOutstandingDebtFromOperations } from "@/lib/services/patient-treatment-cases";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface PatientStatementDocumentProps {
@@ -20,10 +21,7 @@ export function PatientStatementDocument({
   clinic,
 }: PatientStatementDocumentProps) {
   const totalPaid = operations.reduce((s, o) => s + o.paid_amount, 0);
-  const totalDebt = operations.reduce(
-    (s, o) => s + (o.remaining_debt ?? Math.max(0, o.total_amount - o.paid_amount)),
-    0
-  );
+  const totalDebt = computeOutstandingDebtFromOperations(operations);
 
   return (
     <div

@@ -26,10 +26,12 @@ export const USER_ROLE_LABELS: Record<string, string> = {
   doctor: "طبيب",
 };
 
-export const STAFF_SLOTS = 7;
-
 export const APP_NAME = "ماستر كلينك بلس";
 export const APP_NAME_EN = "Master Clinic Plus";
+
+/** Iraqi Dinar — ISO code for APIs/Intl; Arabic label in UI */
+export const CURRENCY_CODE = "IQD";
+export const CURRENCY_SYMBOL_AR = "د.ع";
 
 export const DEVELOPER = {
   nameAr:   "حيدر حازم الموسوي",

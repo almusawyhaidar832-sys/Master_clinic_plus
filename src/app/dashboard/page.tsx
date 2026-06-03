@@ -31,7 +31,7 @@ const quickLinks = [
   {
     href: "/dashboard/expenses",
     title: "المصروفات والرواتب",
-    desc: "مصروفات مصنّفة + 7 موظفين",
+    desc: "مصروفات مصنّفة + رواتب موظفين",
     icon: Receipt,
     color: "bg-purple-50 text-purple-600",
   },
