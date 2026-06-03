@@ -6,6 +6,7 @@ import {
   notifyWithdrawalStatus,
   notifyDoctorNewOperation,
 } from "@/lib/notifications/server";
+import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 
 /**
  * POST /api/notifications/dispatch
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser(supabase);
     if (!user) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
     }

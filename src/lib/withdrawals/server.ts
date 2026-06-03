@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { translateDbError } from "@/lib/db-errors";
 import {
   computeWalletStats,
   fetchDoctorTotalEarnings,
@@ -89,7 +90,9 @@ export async function insertWithdrawal(
   }
 
   if (result.error || !result.data) {
-    throw new Error(result.error?.message ?? "تعذر تسجيل السحب");
+    throw new Error(
+      translateDbError(result.error?.message ?? "تعذر تسجيل السحب")
+    );
   }
 
   return { id: result.data.id as string };

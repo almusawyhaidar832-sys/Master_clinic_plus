@@ -13,9 +13,11 @@ import {
   fetchPaidSalariesForDisplay,
   fetchPaidSalariesForProfitDeduction,
   fetchReviewFeesInPeriod,
+  fetchPeriodVisitorDebt,
   mergeExecutiveDashboardMetrics,
+  type ExecutiveSnapshotCore,
 } from "@/lib/services/executive-snapshot";
-import { cn } from "@/lib/utils";
+import { cn, localDateISO, todayISO } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, Minus,
   DollarSign, Wallet, Receipt, Users,
@@ -299,10 +301,8 @@ export function ExecutiveDashboard() {
 
   // date range
   const getRange = useCallback(() => {
+    const todayStr = todayISO();
     const today = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    const todayStr = fmt(today);
 
     switch (period) {
       case "today":
@@ -310,12 +310,12 @@ export function ExecutiveDashboard() {
       case "week": {
         const w = new Date(today);
         w.setDate(today.getDate() - 6);
-        return { from: fmt(w), to: todayStr };
+        return { from: localDateISO(w), to: todayStr };
       }
       case "month":
       default: {
         const m = new Date(today.getFullYear(), today.getMonth(), 1);
-        return { from: fmt(m), to: todayStr };
+        return { from: localDateISO(m), to: todayStr };
       }
     }
   }, [period]);
@@ -325,29 +325,62 @@ export function ExecutiveDashboard() {
     setLoading(true);
     const { from, to } = getRange();
 
-    const [snapRes, topRes, salariesDisplay, salariesDeducted, reviewFees] =
+    const [snapRes, topRes, salariesDisplay, salariesDeducted, reviewFees, visitorDebt] =
       await Promise.all([
       supabase.rpc("get_clinic_financial_snapshot", {
         p_clinic_id: clinicId, p_from: from, p_to: to,
       }),
       supabase.rpc("get_top_performers", {
-        p_clinic_id: clinicId, p_from: from, to,
+        p_clinic_id: clinicId,
+        p_from: from,
+        p_to: to,
       }),
       fetchPaidSalariesForDisplay(supabase, clinicId, from, to),
       fetchPaidSalariesForProfitDeduction(supabase, clinicId, from, to),
       fetchReviewFeesInPeriod(supabase, clinicId, from, to),
+      fetchPeriodVisitorDebt(supabase, clinicId, from, to),
     ]);
 
-    if (snapRes.data) {
-      const raw = snapRes.data as Snapshot;
-      setSnap(
-        mergeExecutiveDashboardMetrics(raw, {
-          salariesPaid: salariesDisplay,
-          salariesDeductedFromProfit: salariesDeducted,
-          reviewFees: reviewFees.total,
-        })
-      );
-    }
+    const baseSnap: Snapshot = snapRes.data
+      ? (mergeExecutiveDashboardMetrics(
+          snapRes.data as unknown as ExecutiveSnapshotCore,
+          {
+            salariesPaid: salariesDisplay,
+            salariesDeductedFromProfit: salariesDeducted,
+            reviewFees: reviewFees.total,
+          }
+        ) as unknown as Snapshot)
+      : {
+          revenue: 0,
+          collected: 0,
+          debt: 0,
+          doctor_shares: 0,
+          clinic_shares: 0,
+          materials_cost: 0,
+          expenses: 0,
+          salaries_paid: salariesDisplay,
+          review_fees: reviewFees.total,
+          withdrawals_paid: 0,
+          net_profit: 0,
+          operation_count: 0,
+          patient_count: visitorDebt.visitorCount,
+          new_patients: 0,
+          prev_revenue: 0,
+          prev_expenses: 0,
+          revenue_growth: null,
+          period_from: from,
+          period_to: to,
+        };
+
+    setSnap({
+      ...baseSnap,
+      debt: visitorDebt.debt,
+      patient_count:
+        visitorDebt.visitorCount > 0
+          ? visitorDebt.visitorCount
+          : baseSnap.patient_count,
+    });
+
     if (topRes.data) setTop(topRes.data as TopPerformers);
     setLoading(false);
   }, [clinicId, getRange, supabase]);
@@ -418,9 +451,13 @@ export function ExecutiveDashboard() {
               growth={snap.revenue_growth}
             />
             <KpiCard
-              label="ديون المرضى"
+              label="ديون المراجعين"
               value={`${fmt(snap.debt)} د.ع`}
-              sub={snap.debt > 0 ? "⚠ متأخرات" : "✓ لا ديون"}
+              sub={
+                snap.debt > 0
+                  ? `ذمة ${snap.patient_count} مراجع في الفترة`
+                  : "لا ذمة لمراجعي هذه الفترة"
+              }
               icon={Receipt}
               color="bg-amber-100 text-amber-600"
             />

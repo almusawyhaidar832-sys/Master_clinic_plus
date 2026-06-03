@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 import { cn } from "@/lib/utils";
 import {
   UserPlus, Users, Stethoscope, UserCog,
@@ -60,7 +61,7 @@ export default function UsersPage() {
   const loadUsers = useCallback(async () => {
     setLoading(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser(supabase);
     if (!user) {
       setLoading(false);
       return;

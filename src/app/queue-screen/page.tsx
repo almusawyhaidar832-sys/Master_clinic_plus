@@ -6,7 +6,7 @@
  * URL: /queue-screen?clinic=<clinic_id>
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -32,7 +32,7 @@ function announce(text: string) {
   window.speechSynthesis.speak(utt);
 }
 
-export default function QueueScreen() {
+function QueueScreenContent() {
   const params = useSearchParams();
   const clinicId = params.get("clinic");
   const supabase = createClient();
@@ -251,5 +251,19 @@ export default function QueueScreen() {
         Master Clinic Plus — نظام إدارة العيادات الذكي
       </footer>
     </div>
+  );
+}
+
+export default function QueueScreenPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-slate-900 text-white">
+          جارٍ تحميل شاشة الانتظار...
+        </div>
+      }
+    >
+      <QueueScreenContent />
+    </Suspense>
   );
 }

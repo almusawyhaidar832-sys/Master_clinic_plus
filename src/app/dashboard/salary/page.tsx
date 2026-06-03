@@ -7,6 +7,7 @@ import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Select } from "@/components/ui/Select";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
+import { translateDbError } from "@/lib/db-errors";
 import {
   calculateSalaryNet,
   formatCurrency,
@@ -294,7 +295,7 @@ export default function SalaryPage() {
     });
     setSaving(false);
     if (error) {
-      showMessage(`تعذر الحفظ: ${error.message}`, false);
+      showMessage(`تعذر الحفظ: ${translateDbError(error.message)}`, false);
       return;
     }
     showMessage("تم تسجيل الحركة", true);
@@ -327,7 +328,7 @@ export default function SalaryPage() {
       is_active: true,
     });
     if (error) {
-      showMessage(`تعذر إضافة الموظف: ${error.message}`, false);
+      showMessage(`تعذر إضافة الموظف: ${translateDbError(error.message)}`, false);
     } else {
       setNewStaffName("");
       setNewStaffJob("");
@@ -381,7 +382,7 @@ export default function SalaryPage() {
 
     if (fetchErr) {
       setSaving(false);
-      showMessage(`تعذر إنشاء القسيمة: ${fetchErr.message}`, false);
+      showMessage(`تعذر إنشاء القسيمة: ${translateDbError(fetchErr.message)}`, false);
       return;
     }
 
@@ -406,7 +407,7 @@ export default function SalaryPage() {
 
     setSaving(false);
     if (error) {
-      showMessage(`تعذر إنشاء القسيمة: ${error.message}`, false);
+      showMessage(`تعذر إنشاء القسيمة: ${translateDbError(error.message)}`, false);
       return;
     }
     showMessage("تم إنشاء قسيمة الراتب", true);
@@ -421,7 +422,7 @@ export default function SalaryPage() {
       .update({ status: "paid", paid_at: paidAt })
       .eq("id", slipId);
     if (error) {
-      showMessage(`تعذر تأكيد الصرف: ${error.message}`, false);
+      showMessage(`تعذر تأكيد الصرف: ${translateDbError(error.message)}`, false);
       return;
     }
     showMessage("تم تأكيد الصرف — يُخصم من ربح العيادة في لوحة التحكم", true);
@@ -485,7 +486,7 @@ export default function SalaryPage() {
       .update({ base_salary: newSalary })
       .eq("id", staffMember.id);
     if (error) {
-      showMessage(`تعذر تعديل الراتب: ${error.message}`, false);
+      showMessage(`تعذر تعديل الراتب: ${translateDbError(error.message)}`, false);
     } else {
       showMessage(`تم تعديل راتب ${staffMember.full_name_ar}`, true);
       loadStaff();

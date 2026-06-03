@@ -70,7 +70,7 @@ export function PatientStatementDocument({
           <tbody>
             {operations.map((op) => (
               <tr key={op.id} className="border-b border-slate-border/40">
-                <td className="py-1">{formatDate(op.operation_date)}</td>
+                <td className="py-1">{formatDate(op.operation_date ?? "")}</td>
                 <td className="py-1 font-medium text-primary">
                   {formatDoctorDisplayName(
                     (op.doctor as { full_name_ar: string })?.full_name_ar

@@ -202,7 +202,7 @@ export function MasterReportDocument({
             <tbody>
               {report.monthOperations.slice(0, 50).map((op, i) => (
                 <tr key={i} className="border-b border-slate-border/40">
-                  <td className="py-0.5">{formatDate(op.operation_date)}</td>
+                  <td className="py-0.5">{formatDate(op.operation_date ?? "")}</td>
                   <td className="py-0.5">{op.patientName}</td>
                   <td className="py-0.5 font-medium text-primary">
                     {op.doctorName}

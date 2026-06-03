@@ -1,5 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database.types";
+import type { AppSupabaseClient } from "@/lib/supabase/app-client";
 import {
   portalIdFromPath,
   type AuthPortalId,
@@ -11,7 +10,7 @@ import { createBrowserAuthClient } from "@/lib/supabase/create-auth-client";
  * Each portal (/doctor, /dashboard, /admin) uses its own auth storage key
  * so two accounts can stay signed in on the same browser.
  */
-export function createClient(): SupabaseClient<Database> {
+export function createClient(): AppSupabaseClient {
   const portalId =
     typeof window !== "undefined"
       ? portalIdFromPath(window.location.pathname)
@@ -22,6 +21,6 @@ export function createClient(): SupabaseClient<Database> {
 /** Use on login forms so the session is stored under the correct portal key */
 export function createClientForPortal(
   portalId: AuthPortalId
-): SupabaseClient<Database> {
+): AppSupabaseClient {
   return createBrowserAuthClient(portalId);
 }

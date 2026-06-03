@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile } from "@/lib/clinic-context";
-import { signOutUser } from "@/lib/supabase/auth-helpers";
+import { onAuthStateChange, signOutUser } from "@/lib/supabase/auth-helpers";
 import {
   getAuthPortalForPath,
   isRoleAllowedForPath,
@@ -54,7 +54,7 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
+    } = onAuthStateChange(supabase, () => {
       enforce();
     });
 

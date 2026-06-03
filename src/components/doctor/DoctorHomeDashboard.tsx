@@ -7,7 +7,7 @@ import { getDoctorForCurrentUser, getAuthProfile } from "@/lib/clinic-context";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
 import { fetchUnreadNotificationCount } from "@/lib/services/clinic-stats";
 import { formatCurrency, todayISO } from "@/lib/utils";
-import { doctorQuickActions } from "@/components/layout/DoctorMobileShell";
+import { doctorQuickActions, QUICK_ACTION_ICON_MAP } from "@/components/layout/DoctorMobileShell";
 import { cn } from "@/lib/utils";
 import { Bell, TrendingUp, Wallet, ArrowDownToLine } from "lucide-react";
 
@@ -130,7 +130,9 @@ export function DoctorHomeDashboard() {
 
       <p className="text-sm text-slate-muted">المهام</p>
       <div className="grid gap-3">
-        {doctorQuickActions.map(({ href, label, icon: Icon, desc }) => (
+        {doctorQuickActions.map(({ href, label, icon, desc }) => {
+          const Icon = QUICK_ACTION_ICON_MAP[icon] ?? Wallet;
+          return (
           <Link
             key={href}
             href={href}
@@ -143,10 +145,11 @@ export function DoctorHomeDashboard() {
             </div>
             <div>
               <p className="font-semibold text-slate-text">{label}</p>
-              <p className="text-xs text-slate-muted">{desc}</p>
+              <p className="text-xs text-slate-muted">{desc ?? ""}</p>
             </div>
           </Link>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FaTooth } from "react-icons/fa";
 import { createClientForPortal } from "@/lib/supabase/client";
+import { signInWithPassword, signOutUser } from "@/lib/supabase/auth-helpers";
 import { resolveAuthEmail } from "@/lib/auth/credentials";
 import { isRoleAllowedForPath, loginPortalToAuthPortalId } from "@/lib/auth/portal-access";
 import { getAuthProfile } from "@/lib/clinic-context";
@@ -116,10 +117,11 @@ function PortalCard({ portal }: { portal: Portal }) {
       const supabase = createClientForPortal(authPortal);
       const email = resolveAuthEmail(username.trim());
 
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      const { data, error: signInError } = await signInWithPassword(
+        supabase,
         email,
-        password,
-      });
+        password
+      );
 
       if (signInError || !data.user) {
         setError("اسم المستخدم أو كلمة المرور غير صحيحة");
@@ -129,7 +131,7 @@ function PortalCard({ portal }: { portal: Portal }) {
 
       const profile = await getAuthProfile(supabase);
       if (!profile || !isRoleAllowedForPath(profile.role, portal.destination)) {
-        await supabase.auth.signOut();
+        await signOutUser(supabase);
         setError("هذا الحساب لا يناسب هذه البوابة — استخدم بوابة الدخول الصحيحة لدورك");
         setLoading(false);
         return;

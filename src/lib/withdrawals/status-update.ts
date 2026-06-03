@@ -63,11 +63,13 @@ export async function applyWithdrawalStatusUpdate(
       }
     }
 
+    const err = result.error;
     return {
-      error: {
-        ...result.error,
-        message: `عمود processed_by غير موجود في قاعدة البيانات. ${PROCESSED_BY_MIGRATION_HINT}`,
-      },
+      error: err
+        ? Object.assign(err, {
+            message: `عمود processed_by غير موجود في قاعدة البيانات. ${PROCESSED_BY_MIGRATION_HINT}`,
+          })
+        : null,
     };
   }
 

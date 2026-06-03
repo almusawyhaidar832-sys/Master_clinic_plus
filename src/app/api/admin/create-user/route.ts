@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { usernameToAuthEmail } from "@/lib/auth/credentials";
+import { getCurrentUser, getAuthAdmin } from "@/lib/supabase/auth-helpers";
 
 /**
  * POST /api/admin/create-user
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    const { data: { user } } = await sessionClient.auth.getUser();
+    const user = await getCurrentUser(sessionClient);
     if (!user) {
       return NextResponse.json({ error: "يجب تسجيل الدخول أولاً" }, { status: 401 });
     }
@@ -159,7 +160,7 @@ export async function POST(req: NextRequest) {
     const authEmail = usernameToAuthEmail(safeUsername);
 
     // ── Step 8: create auth user ───────────────────────────────────────────
-    const { data: authData, error: authError } = await admin.auth.admin.createUser({
+    const { data: authData, error: authError } = await getAuthAdmin(admin).createUser({
       email:         authEmail,
       password,
       email_confirm: true,
@@ -211,14 +212,14 @@ export async function POST(req: NextRequest) {
           .insert(profilePayload);
 
         if (profileErr2) {
-          await admin.auth.admin.deleteUser(authData.user.id);
+          await getAuthAdmin(admin).deleteUser(authData.user.id);
           return NextResponse.json(
             { error: `تعذر حفظ الملف الشخصي: ${profileErr2.message}` },
             { status: 500 }
           );
         }
       } else {
-        await admin.auth.admin.deleteUser(authData.user.id);
+        await getAuthAdmin(admin).deleteUser(authData.user.id);
         return NextResponse.json(
           { error: `تعذر حفظ الملف الشخصي: ${profileErr.message}` },
           { status: 500 }
@@ -247,7 +248,7 @@ export async function POST(req: NextRequest) {
       });
 
       if (doctorErr) {
-        await admin.auth.admin.deleteUser(authData.user.id);
+        await getAuthAdmin(admin).deleteUser(authData.user.id);
         await admin.from("profiles").delete().eq("id", authData.user.id);
         return NextResponse.json(
           { error: `تعذر حفظ بيانات الطبيب: ${doctorErr.message}` },

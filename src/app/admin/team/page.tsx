@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 import { cn } from "@/lib/utils";
 import {
   UserPlus, UserCog, Users, CheckCircle2,
@@ -51,7 +52,7 @@ export default function AdminTeamPage() {
   const loadTeam = useCallback(async () => {
     setLoading(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser(supabase);
     if (!user) {
       setLoading(false);
       return;

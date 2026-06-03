@@ -1,5 +1,207 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchClosedPayrollMonths } from "@/lib/services/salary-payroll";
+import {
+  computeOutstandingDebtFromOperations,
+} from "@/lib/services/patient-treatment-cases";
+import { fetchPatientFinancialPlan } from "@/lib/services/patient-financial-plan";
+import { localDateISO, localPeriodUtcBounds } from "@/lib/utils";
+import { opDebt, type PatientOperation } from "@/types";
+
+function num(v: unknown): number {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function opInLocalPeriod(
+  op: { operation_date?: string | null; created_at?: string | null },
+  from: string,
+  to: string
+): boolean {
+  const opDate = op.operation_date?.slice(0, 10);
+  if (opDate && opDate >= from && opDate <= to) return true;
+  if (op.created_at) {
+    const local = localDateISO(new Date(op.created_at));
+    if (local >= from && local <= to) return true;
+  }
+  return false;
+}
+
+function caseRowDebt(row: {
+  case_price?: number | null;
+  discount_total?: number | null;
+  final_price?: number | null;
+  total_paid?: number | null;
+}): number {
+  const casePrice = num(row.case_price);
+  const discount = num(row.discount_total);
+  const finalPrice =
+    num(row.final_price) || Math.max(0, casePrice - discount);
+  return Math.max(0, finalPrice - num(row.total_paid));
+}
+
+/** مراجعون الفترة — تاريخ العملية أو وقت الإنشاء (تقويم محلي) */
+async function collectPeriodVisitorPatientIds(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<string[]> {
+  const ids = new Set<string>();
+  const { startIso, endIso } = localPeriodUtcBounds(from, to);
+
+  const [byOpDate, byCreated, casesRes] = await Promise.all([
+    supabase
+      .from("patient_operations")
+      .select("patient_id")
+      .eq("clinic_id", clinicId)
+      .gte("operation_date", from)
+      .lte("operation_date", to),
+    supabase
+      .from("patient_operations")
+      .select("patient_id, operation_date, created_at")
+      .eq("clinic_id", clinicId)
+      .gte("created_at", startIso)
+      .lte("created_at", endIso),
+    supabase
+      .from("patient_treatment_cases")
+      .select("patient_id, created_at")
+      .eq("clinic_id", clinicId)
+      .gte("created_at", startIso)
+      .lte("created_at", endIso),
+  ]);
+
+  for (const row of byOpDate.data ?? []) {
+    if (row.patient_id) ids.add(row.patient_id as string);
+  }
+  for (const row of byCreated.data ?? []) {
+    if (
+      row.patient_id &&
+      opInLocalPeriod(
+        {
+          operation_date: row.operation_date as string | null,
+          created_at: row.created_at as string,
+        },
+        from,
+        to
+      )
+    ) {
+      ids.add(row.patient_id as string);
+    }
+  }
+  for (const row of casesRes.data ?? []) {
+    if (
+      row.patient_id &&
+      opInLocalPeriod(
+        { created_at: row.created_at as string, operation_date: null },
+        from,
+        to
+      )
+    ) {
+      ids.add(row.patient_id as string);
+    }
+  }
+
+  return [...ids];
+}
+
+/**
+ * ذمة المراجعين الذين زاروا خلال الفترة (وليس جمع remaining_debt لجلسات اليوم فقط).
+ * يطابق get_clinic_financial_snapshot + حالات العلاج.
+ */
+async function sumVisitorOutstandingDebt(
+  supabase: SupabaseClient,
+  clinicId: string,
+  patientIds: string[]
+): Promise<number> {
+  if (patientIds.length === 0) return 0;
+
+  const [patientsRes, casesRes, opsRes] = await Promise.all([
+    supabase
+      .from("patients")
+      .select("id, agreed_total, total_paid")
+      .eq("clinic_id", clinicId)
+      .in("id", patientIds),
+    supabase
+      .from("patient_treatment_cases")
+      .select(
+        "patient_id, case_price, discount_total, final_price, total_paid"
+      )
+      .eq("clinic_id", clinicId)
+      .in("patient_id", patientIds),
+    supabase
+      .from("patient_operations")
+      .select(
+        "patient_id, remaining_debt, total_amount, paid_amount, session_kind"
+      )
+      .eq("clinic_id", clinicId)
+      .in("patient_id", patientIds),
+  ]);
+
+  const patientById = new Map(
+    (patientsRes.data ?? []).map((p) => [p.id as string, p])
+  );
+  const casesByPatient = new Map<string, typeof casesRes.data>();
+  for (const row of casesRes.data ?? []) {
+    const pid = row.patient_id as string;
+    const list = casesByPatient.get(pid) ?? [];
+    list.push(row);
+    casesByPatient.set(pid, list);
+  }
+  const opsByPatient = new Map<string, PatientOperation[]>();
+  for (const row of opsRes.data ?? []) {
+    const pid = row.patient_id as string;
+    const list = opsByPatient.get(pid) ?? [];
+    list.push(row as PatientOperation);
+    opsByPatient.set(pid, list);
+  }
+
+  let total = 0;
+  const needsPlan: string[] = [];
+
+  for (const pid of patientIds) {
+    const p = patientById.get(pid);
+    const agreed = num(p?.agreed_total);
+    if (agreed > 0) {
+      total += Math.max(0, agreed - num(p?.total_paid));
+      continue;
+    }
+
+    const caseRows = casesByPatient.get(pid) ?? [];
+    let caseDebt = 0;
+    for (const row of caseRows) {
+      caseDebt += caseRowDebt(row);
+    }
+    if (caseDebt > 0.001) {
+      total += caseDebt;
+      continue;
+    }
+
+    const ops = opsByPatient.get(pid) ?? [];
+    if (ops.length) {
+      const inferred = computeOutstandingDebtFromOperations(ops, pid);
+      if (inferred > 0.001) {
+        total += inferred;
+        continue;
+      }
+      const maxOp = ops.reduce((m, op) => Math.max(m, opDebt(op)), 0);
+      if (maxOp > 0.001) {
+        total += maxOp;
+        continue;
+      }
+    }
+
+    needsPlan.push(pid);
+  }
+
+  for (const pid of needsPlan) {
+    const plan = await fetchPatientFinancialPlan(supabase, pid);
+    if (plan.remaining_balance > 0) {
+      total += plan.remaining_balance;
+    }
+  }
+
+  return Math.round(total * 100) / 100;
+}
 
 /** YYYY-MM from ISO date YYYY-MM-DD */
 function monthKeysBetween(from: string, to: string): Set<string> {
@@ -134,6 +336,89 @@ export async function fetchReviewFeesInPeriod(
     }
   }
   return { total, count };
+}
+
+/** جلب كل جلسات الفترة (تاريخ العملية + وقت الإنشاء + توسيع لليوم) */
+export async function loadOperationsInPeriod(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<PatientOperation[]> {
+  const seen = new Map<string, PatientOperation>();
+
+  const addRows = (rows: PatientOperation[] | null) => {
+    for (const op of rows ?? []) {
+      if (!opInLocalPeriod(op, from, to)) continue;
+      const key = op.id || `${op.patient_id}-${op.created_at ?? op.operation_date}`;
+      if (!seen.has(key)) seen.set(key, op);
+    }
+  };
+
+  const { data: byOpDate } = await supabase
+    .from("patient_operations")
+    .select("*")
+    .eq("clinic_id", clinicId)
+    .gte("operation_date", from)
+    .lte("operation_date", to);
+  addRows((byOpDate ?? []) as PatientOperation[]);
+
+  const fromMs = new Date(`${from}T12:00:00`).getTime();
+  const toMs = new Date(`${to}T12:00:00`).getTime();
+  const daySpan = Math.max(0, (toMs - fromMs) / 86400000);
+
+  if (daySpan <= 7) {
+    const lookback = new Date(fromMs);
+    lookback.setDate(lookback.getDate() - 14);
+    const { data: recent } = await supabase
+      .from("patient_operations")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .gte("created_at", lookback.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(800);
+    addRows((recent ?? []) as PatientOperation[]);
+  }
+
+  if (seen.size === 0 && from === to) {
+    const monthFrom = `${from.slice(0, 7)}-01`;
+    const { data: monthOps } = await supabase
+      .from("patient_operations")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .gte("operation_date", monthFrom)
+      .lte("operation_date", to);
+    addRows((monthOps ?? []) as PatientOperation[]);
+  }
+
+  return [...seen.values()];
+}
+
+/** ديون المراجعين الذين زاروا خلال الفترة (ذمتهم الكاملة، ليس جلسات اليوم فقط) */
+export async function fetchPeriodVisitorDebt(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<{ debt: number; visitorCount: number }> {
+  const patientIds = await collectPeriodVisitorPatientIds(
+    supabase,
+    clinicId,
+    from,
+    to
+  );
+
+  if (patientIds.length === 0) {
+    return { debt: 0, visitorCount: 0 };
+  }
+
+  const debt = await sumVisitorOutstandingDebt(
+    supabase,
+    clinicId,
+    patientIds
+  );
+
+  return { debt, visitorCount: patientIds.length };
 }
 
 export interface ExecutiveSnapshotCore {

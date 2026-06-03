@@ -1,6 +1,7 @@
 import { createBrowserClient, createServerClient } from "@supabase/ssr";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import type { AppSupabaseClient } from "@/lib/supabase/app-client";
+import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 import {
   allAuthStorageKeys,
   authStorageKeyForPortal,
@@ -14,11 +15,11 @@ type CookieStore = {
   ) => void;
 };
 
-const browserClients = new Map<string, SupabaseClient<Database>>();
+const browserClients = new Map<string, AppSupabaseClient>();
 
 export function createBrowserAuthClient(
   portalId: AuthPortalId | "default" = "default"
-): SupabaseClient<Database> {
+): AppSupabaseClient {
   const storageKey = authStorageKeyForPortal(portalId);
   const cached = browserClients.get(storageKey);
   if (cached) return cached;
@@ -30,16 +31,16 @@ export function createBrowserAuthClient(
       isSingleton: false,
       cookieOptions: { name: storageKey },
     }
-  ) as SupabaseClient<Database>;
+  );
 
-  browserClients.set(storageKey, client);
-  return client;
+  browserClients.set(storageKey, client as unknown as AppSupabaseClient);
+  return client as unknown as AppSupabaseClient;
 }
 
 export function createServerAuthClient(
   cookieStore: CookieStore,
   portalId: AuthPortalId | "default" = "default"
-): SupabaseClient<Database> {
+): AppSupabaseClient {
   const storageKey = authStorageKeyForPortal(portalId);
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -48,13 +49,13 @@ export function createServerAuthClient(
       cookieOptions: { name: storageKey },
       cookies: cookieStore,
     }
-  ) as SupabaseClient<Database>;
+  ) as unknown as AppSupabaseClient;
 }
 
 /** API routes: find whichever portal session cookie is active */
 export async function createServerAuthClientFromAnySession(
   cookieStore: CookieStore
-): Promise<SupabaseClient<Database>> {
+): Promise<AppSupabaseClient> {
   for (const storageKey of allAuthStorageKeys()) {
     const client = createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -63,12 +64,10 @@ export async function createServerAuthClientFromAnySession(
         cookieOptions: { name: storageKey },
         cookies: cookieStore,
       }
-    ) as SupabaseClient<Database>;
+    );
 
-    const {
-      data: { user },
-    } = await client.auth.getUser();
-    if (user) return client;
+    const user = await getCurrentUser(client as unknown as AppSupabaseClient);
+    if (user) return client as unknown as AppSupabaseClient;
   }
 
   return createServerAuthClient(cookieStore, "default");

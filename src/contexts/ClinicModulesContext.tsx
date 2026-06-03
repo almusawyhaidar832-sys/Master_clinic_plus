@@ -21,6 +21,7 @@ import {
   type ReactNode,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 import {
   type ClinicModuleKey,
   type ClinicSettings,
@@ -64,9 +65,7 @@ export function ClinicModulesProvider({ children }: { children: ReactNode }) {
       const supabase = createClient();
 
       // Fetch the current user's clinic_id via profile
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser(supabase);
 
       if (!user) {
         setSettings(null);

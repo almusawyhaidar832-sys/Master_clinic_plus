@@ -75,6 +75,8 @@ export interface Database {
           full_name_ar: string;
           phone: string | null;
           notes: string | null;
+          doctor_share_total?: number | null;
+          previous_total?: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -138,11 +140,12 @@ export interface Database {
           clinic_share_amount: number;
           review_fee_amount: number;
           is_review_statement: boolean;
+          session_kind?: "plan" | "payment" | "discount" | string | null;
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["patient_operations"]["Row"],
           "id" | "remaining_debt" | "doctor_share_amount" | "clinic_share_amount" | "created_at"
-        > & { id?: string };
+        > & { id?: string; session_kind?: "plan" | "payment" | "discount" | null };
         Update: Partial<Database["public"]["Tables"]["patient_operations"]["Insert"]>;
       };
 
@@ -233,6 +236,136 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["transactions"]["Insert"]>;
       };
+
+      salary_entries: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          staff_id: string;
+          entry_type: "advance" | "deduction" | "absence";
+          amount: number;
+          entry_date: string;
+          notes_ar: string | null;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["salary_entries"]["Row"], "id" | "created_at"> & {
+          id?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["salary_entries"]["Insert"]>;
+      };
+
+      salary_slips: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          staff_id: string;
+          month_year: string;
+          base_salary: number;
+          total_advances: number;
+          total_deductions: number;
+          net_payout: number;
+          status: "draft" | "paid";
+          paid_at: string | null;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["salary_slips"]["Row"], "id" | "created_at"> & {
+          id?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["salary_slips"]["Insert"]>;
+      };
+
+      patient_queue: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          doctor_id: string;
+          patient_id: string | null;
+          patient_name: string | null;
+          patient_phone: string | null;
+          ticket_number: number;
+          status: "waiting" | "called" | "in_progress" | "done" | "cancelled";
+          source: "walk_in" | "appointment" | "online";
+          appointment_id: string | null;
+          notes: string | null;
+          queue_date: string;
+          called_at: string | null;
+          entered_at: string | null;
+          done_at: string | null;
+          created_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["patient_queue"]["Row"],
+          "id" | "created_at" | "ticket_number"
+        > & { id?: string; ticket_number?: number };
+        Update: Partial<Database["public"]["Tables"]["patient_queue"]["Insert"]>;
+      };
+
+      clinic_settings: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          specialty: string;
+          enabled_modules: Json;
+          module_config: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["clinic_settings"]["Row"], "id" | "created_at" | "updated_at"> & {
+          id?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["clinic_settings"]["Insert"]>;
+      };
+
+      schedule_locks: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          doctor_id: string;
+          lock_date: string;
+          start_time: string;
+          end_time: string;
+          reason_ar: string | null;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["schedule_locks"]["Row"], "id" | "created_at"> & {
+          id?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["schedule_locks"]["Insert"]>;
+      };
+
+      medical_logs: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          patient_id: string;
+          doctor_id: string | null;
+          title_ar: string;
+          body_ar: string | null;
+          log_date: string;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["medical_logs"]["Row"], "id" | "created_at"> & {
+          id?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["medical_logs"]["Insert"]>;
+      };
+
+      expense_categories: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          name_ar: string;
+          color: string;
+          icon: string;
+          is_active: boolean;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["expense_categories"]["Row"], "id" | "created_at"> & {
+          id?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["expense_categories"]["Insert"]>;
+      };
     };
 
     Functions: {
@@ -243,6 +376,19 @@ export interface Database {
       get_email_for_username: { Args: { p_username: string }; Returns: string | null };
       link_profile_to_first_clinic: { Args: Record<never, never>; Returns: string };
       seed_default_operation_types: { Args: { p_clinic_id: string }; Returns: void };
+      seed_clinic_settings: { Args: { p_clinic_id: string; p_specialty?: string }; Returns: void };
+      get_clinic_financial_snapshot: {
+        Args: { p_clinic_id: string; p_from?: string; p_to?: string };
+        Returns: Json;
+      };
+      get_top_performers: {
+        Args: { p_clinic_id: string; p_from?: string; p_to?: string; p_limit?: number };
+        Returns: Json;
+      };
+      get_queue_stats: { Args: { p_clinic_id: string; p_date?: string }; Returns: Json };
     };
+    Views: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
 }

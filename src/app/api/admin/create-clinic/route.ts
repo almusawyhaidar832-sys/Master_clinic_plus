@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { getCurrentUser, getAuthAdmin } from "@/lib/supabase/auth-helpers";
 
 /**
  * POST /api/admin/create-clinic
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
       { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
     );
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser(supabase);
     if (!user) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
     const { data: caller } = await supabase
@@ -86,11 +87,11 @@ export async function POST(req: NextRequest) {
     await admin.rpc("seed_clinic_settings", {
       p_clinic_id: clinic.id,
       p_specialty: specialty || "dental",
-    }).catch(() => null); // non-fatal
+    });
 
     // ── 3. إنشاء حساب Auth ──
     const fakeEmail = `${admin_username}@clinic.internal`;
-    const { data: authData, error: authErr } = await admin.auth.admin.createUser({
+    const { data: authData, error: authErr } = await getAuthAdmin(admin).createUser({
       email: fakeEmail,
       password: admin_password,
       email_confirm: true,
@@ -114,7 +115,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (profileErr) {
-      await admin.auth.admin.deleteUser(authData.user.id);
+      await getAuthAdmin(admin).deleteUser(authData.user.id);
       await admin.from("clinics").delete().eq("id", clinic.id);
       return NextResponse.json({ error: `فشل الملف الشخصي: ${profileErr.message}` }, { status: 500 });
     }

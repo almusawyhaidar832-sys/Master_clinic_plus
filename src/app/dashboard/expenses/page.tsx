@@ -197,7 +197,11 @@ export default function ExpensesPage() {
                       ? "text-white shadow-sm ring-2 ring-offset-1"
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                   )}
-                  style={categoryId === c.id ? { backgroundColor: c.color, ringColor: c.color } : {}}
+                  style={
+                    categoryId === c.id
+                      ? { backgroundColor: c.color, boxShadow: `0 0 0 2px ${c.color}` }
+                      : undefined
+                  }
                 >
                   {c.name_ar}
                 </button>

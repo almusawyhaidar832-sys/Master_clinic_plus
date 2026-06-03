@@ -6,7 +6,7 @@ import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Select } from "@/components/ui/Select";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, todayISO } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveClinicId } from "@/lib/clinic-context";
 import { FinancialPreview } from "@/components/financial/FinancialPreview";
@@ -425,6 +425,12 @@ export function QuickEntryForm({
       }
     }
 
+    if (!patientId) {
+      setMessage({ type: "error", text: "اختر المريض أو أدخل اسمه" });
+      setLoading(false);
+      return;
+    }
+
     const pickedCase = treatmentCases.find((c) => c.id === selectedCaseId);
     let activePlan = pickedCase
       ? caseToFinancialPlan(pickedCase)
@@ -549,6 +555,7 @@ export function QuickEntryForm({
         clinic_id: activeClinic.clinicId,
         patient_id: patientId,
         doctor_id: doctorId,
+        operation_date: todayISO(),
         session_kind: sessionKind,
         ...fields,
       };
@@ -556,7 +563,7 @@ export function QuickEntryForm({
         { key: "operation_type", val: opLabel },
         { key: "operation_name_ar", val: opLabel },
       ];
-      let op: PatientOperation | null = null;
+      const op: PatientOperation | null = null;
       let err: { message: string } | null = null;
 
       for (const { key, val } of opColCandidates) {

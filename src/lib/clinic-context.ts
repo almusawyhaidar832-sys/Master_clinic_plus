@@ -60,6 +60,12 @@ export interface ActiveClinicResult {
 export async function getActiveClinicId(
   supabase: SupabaseClient
 ): Promise<ActiveClinicResult | null> {
+  // 0. Auto-link profile to first clinic when missing (fixes RLS for salary/queue/etc.)
+  const profileBefore = await getAuthProfile(supabase);
+  if (profileBefore && !profileBefore.clinic_id) {
+    await supabase.rpc("link_profile_to_first_clinic");
+  }
+
   // 1. Try profile clinic_id
   const profile = await getAuthProfile(supabase);
   if (profile?.clinic_id) {

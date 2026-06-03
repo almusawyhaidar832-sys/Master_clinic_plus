@@ -116,7 +116,7 @@ export interface PatientOperation {
   clinic_share_amount?: number;
   notes?: string | null;
   is_review_statement?: boolean;
-  session_kind?: "plan" | "payment";
+  session_kind?: "plan" | "payment" | "discount";
   created_at?: string;
   patient?: Patient | { full_name_ar: string };
   doctor?: Doctor | { full_name_ar: string };

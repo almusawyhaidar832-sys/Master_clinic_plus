@@ -93,8 +93,26 @@ export function formatTime(time: string): string {
   return `${h12}:${m} ${suffix}`;
 }
 
+/** Calendar date in the user's local timezone (not UTC) */
+export function localDateISO(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function todayISO(): string {
-  return new Date().toISOString().split("T")[0];
+  return localDateISO();
+}
+
+/** Local calendar day(s) as UTC instants for Supabase `created_at` filters */
+export function localPeriodUtcBounds(
+  from: string,
+  to: string
+): { startIso: string; endIso: string } {
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T23:59:59.999`);
+  return { startIso: start.toISOString(), endIso: end.toISOString() };
 }
 
 export function currentMonthYear(): string {

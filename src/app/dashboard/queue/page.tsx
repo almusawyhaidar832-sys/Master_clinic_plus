@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
+import { translateDbError } from "@/lib/db-errors";
 import { cn } from "@/lib/utils";
+import { Alert } from "@/components/ui/Alert";
 import {
   Users, Clock, CheckCircle2, UserCheck, Plus, Volume2,
   RefreshCw, Monitor, Phone, X, ChevronRight,
@@ -180,10 +183,12 @@ function StatCard({ label, value, icon: Icon, color }: {
 // ─────────────────────────────────────────────
 export default function QueuePage() {
   const supabase = createClient();
+  const { clinicId, loading: clinicLoading } = useActiveClinicId();
   const [queue, setQueue]     = useState<QueueEntry[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [stats, setStats]     = useState<QueueStats>({ waiting: 0, called: 0, in_progress: 0, done: 0, total: 0 });
   const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [filterDoctor, setFilterDoctor] = useState<string>("all");
@@ -191,9 +196,15 @@ export default function QueuePage() {
 
   // ── fetch ──
   const fetchQueue = useCallback(async () => {
+    if (!clinicId) {
+      setLoading(false);
+      return;
+    }
+
+    setPageError(null);
     const today = new Date().toISOString().split("T")[0];
 
-    const [{ data: qData }, { data: dData }] = await Promise.all([
+    const [qRes, dRes] = await Promise.all([
       supabase
         .from("patient_queue")
         .select(`
@@ -202,6 +213,7 @@ export default function QueuePage() {
           doctor:doctors(full_name_ar),
           patient:patients(full_name_ar)
         `)
+        .eq("clinic_id", clinicId)
         .eq("queue_date", today)
         .neq("status", "cancelled")
         .order("ticket_number", { ascending: true }),
@@ -209,14 +221,23 @@ export default function QueuePage() {
       supabase
         .from("doctors")
         .select("id, full_name_ar, specialty_ar")
+        .eq("clinic_id", clinicId)
         .eq("is_active", true),
     ]);
 
-    const rows = (qData ?? []) as unknown as QueueEntry[];
-    setQueue(rows);
-    setDoctors((dData ?? []) as Doctor[]);
+    const rows = qRes.error
+      ? []
+      : ((qRes.data ?? []) as unknown as QueueEntry[]);
 
-    // compute stats
+    if (qRes.error) {
+      setPageError(translateDbError(qRes.error.message));
+    }
+    setQueue(rows);
+
+    if (!dRes.error) {
+      setDoctors((dRes.data ?? []) as Doctor[]);
+    }
+
     setStats({
       waiting:     rows.filter((r) => r.status === "waiting").length,
       called:      rows.filter((r) => r.status === "called").length,
@@ -226,10 +247,12 @@ export default function QueuePage() {
     });
 
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, clinicId]);
 
   // ── realtime ──
   useEffect(() => {
+    if (clinicLoading || !clinicId) return;
+
     fetchQueue();
 
     const channel = supabase
@@ -241,7 +264,7 @@ export default function QueuePage() {
 
     channelRef.current = channel;
     return () => { supabase.removeChannel(channel); };
-  }, [fetchQueue, supabase]);
+  }, [fetchQueue, supabase, clinicId, clinicLoading]);
 
   // ── advance status ──
   const advanceStatus = async (entry: QueueEntry) => {
@@ -278,7 +301,12 @@ export default function QueuePage() {
 
   // ── add to queue ──
   const addToQueue = async (data: { doctor_id: string; patient_name: string; patient_phone: string }) => {
-    await supabase.from("patient_queue").insert({
+    if (!clinicId) {
+      setPageError("لا توجد عيادة نشطة — أعد تسجيل الدخول");
+      return;
+    }
+    const { error } = await supabase.from("patient_queue").insert({
+      clinic_id:    clinicId,
       doctor_id:    data.doctor_id,
       patient_name: data.patient_name || null,
       patient_phone: data.patient_phone || null,
@@ -286,6 +314,11 @@ export default function QueuePage() {
       status:       "waiting",
       source:       "walk_in",
     });
+    if (error) {
+      setPageError(translateDbError(error.message));
+      return;
+    }
+    setShowAdd(false);
     fetchQueue();
   };
 
@@ -296,7 +329,7 @@ export default function QueuePage() {
   const activeEntries = filtered.filter((e) => e.status !== "done");
   const doneEntries   = filtered.filter((e) => e.status === "done");
 
-  if (loading) {
+  if (loading || clinicLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
@@ -304,8 +337,20 @@ export default function QueuePage() {
     );
   }
 
+  if (!clinicId) {
+    return (
+      <Alert variant="error">
+        لا توجد عيادة مربوطة بحسابك. من Supabase SQL Editor شغّل: SELECT public.link_profile_to_first_clinic();
+      </Alert>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
+
+      {pageError && (
+        <Alert variant="error">{pageError}</Alert>
+      )}
 
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">

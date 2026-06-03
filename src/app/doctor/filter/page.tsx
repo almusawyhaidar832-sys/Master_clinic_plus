@@ -119,7 +119,7 @@ export default function DoctorFilterPage() {
                       {op.operation_type || op.operation_name_ar || "—"}
                       <br />
                       <span className="text-xs text-slate-muted">
-                        {formatDate(op.operation_date)}
+                        {formatDate(op.operation_date ?? "")}
                       </span>
                     </span>
                     <span className="font-medium text-primary">

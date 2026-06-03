@@ -1,12 +1,13 @@
 import { cookies } from "next/headers";
 import { createServerAuthClientFromAnySession } from "@/lib/supabase/create-auth-client";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 
 export async function createApiSessionClient() {
   const cookieStore = await cookies();
   return createServerAuthClientFromAnySession({
     getAll: () => cookieStore.getAll(),
-    setAll: (cookiesToSet) => {
+    setAll: (cookiesToSet: { name: string; value: string; options?: object }[]) => {
       try {
         cookiesToSet.forEach(({ name, value, options }) =>
           cookieStore.set(name, value, options)
@@ -20,10 +21,7 @@ export async function createApiSessionClient() {
 
 export async function getApiSessionUser() {
   const supabase = await createApiSessionClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
+  return getCurrentUser(supabase);
 }
 
 export async function getApiCallerProfile() {

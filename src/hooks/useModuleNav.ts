@@ -18,6 +18,7 @@ export interface ModuleNavItem {
   href: string;
   label: string;
   icon: string;
+  desc?: string;
   /** If set, this nav item is hidden when the module is disabled */
   requiredModule?: ClinicModuleKey;
   /** Restrict to specific roles */

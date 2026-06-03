@@ -80,7 +80,7 @@ async function inferPlanFromOperations(
     remaining = Math.max(0, num(last.total_amount) - num(last.paid_amount));
   }
 
-  let finalPrice =
+  const finalPrice =
     patientRow && num(patientRow.agreed_total) > 0
       ? num(patientRow.agreed_total)
       : casePrice > 0

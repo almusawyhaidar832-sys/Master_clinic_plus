@@ -4,6 +4,11 @@ import {
   fetchOutstandingDebts,
   fetchTreatmentLevelShares,
 } from "@/lib/services/clinic-financial-aggregate";
+import {
+  fetchPeriodVisitorDebt,
+  loadOperationsInPeriod,
+} from "@/lib/services/executive-snapshot";
+import { getActiveClinicId } from "@/lib/clinic-context";
 import { formatCurrency, todayISO } from "@/lib/utils";
 
 export interface TodaySummary {
@@ -30,19 +35,24 @@ export async function fetchTodaySummary(
   supabase: SupabaseClient
 ): Promise<TodaySummary> {
   const today = todayISO();
-  const { data } = await supabase
-    .from("patient_operations")
-    .select("paid_amount, remaining_debt")
-    .eq("operation_date", today);
+  const active = await getActiveClinicId(supabase);
 
-  const rows = data ?? [];
+  if (!active?.clinicId) {
+    return { operationsCount: 0, totalRemainingDebt: 0, totalCollected: 0 };
+  }
+
+  const [visitorResult, operations] = await Promise.all([
+    fetchPeriodVisitorDebt(supabase, active.clinicId, today, today),
+    loadOperationsInPeriod(supabase, active.clinicId, today, today),
+  ]);
+
   return {
-    operationsCount: rows.length,
-    totalRemainingDebt: rows.reduce(
-      (s, r) => s + Number(r.remaining_debt ?? 0),
+    operationsCount: operations.length,
+    totalRemainingDebt: visitorResult.debt,
+    totalCollected: operations.reduce(
+      (s, op) => s + Number(op.paid_amount ?? 0),
       0
     ),
-    totalCollected: rows.reduce((s, r) => s + Number(r.paid_amount ?? 0), 0),
   };
 }
 

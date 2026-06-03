@@ -8,6 +8,7 @@ import {
   insertWithdrawal,
 } from "@/lib/withdrawals/server";
 import { notifyWithdrawalStatus } from "@/lib/notifications/server";
+import { translateDbError } from "@/lib/db-errors";
 
 /** POST — accountant records direct cash payment to doctor */
 export async function POST(req: NextRequest) {
@@ -57,8 +58,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
     console.error("[withdrawals/record-cash]", err);
+    const msg = err instanceof Error ? err.message : "تعذر تسجيل السحب";
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "تعذر تسجيل السحب" },
+      { error: translateDbError(msg) },
       { status: 500 }
     );
   }

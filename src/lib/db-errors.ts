@@ -1,0 +1,20 @@
+/** Map Postgres / Supabase errors to Arabic messages for the UI */
+export function translateDbError(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("withdrawal_exceeds_balance")) {
+    return "المبلغ أكبر من رصيد الطبيب المتاح";
+  }
+  if (m.includes("access denied")) {
+    return "غير مصرح — تأكد من ربط حسابك بالعيادة";
+  }
+  if (m.includes("clinic_id required")) {
+    return "حسابك غير مربوط بعيادة — أعد تسجيل الدخول بعد ربط العيادة";
+  }
+  if (m.includes("relation") && m.includes("patient_queue")) {
+    return "جدول غرفة الانتظار غير موجود — شغّل APPLY_ALL_FIXES.sql في Supabase";
+  }
+  if (m.includes("permission denied") || m.includes("policy")) {
+    return "صلاحيات غير كافية — سجّل دخولك كمحاسب أو مدير";
+  }
+  return message;
+}

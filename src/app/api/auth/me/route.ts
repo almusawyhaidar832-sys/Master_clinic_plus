@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 
 /**
  * GET /api/auth/me
@@ -20,7 +21,7 @@ export async function GET() {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser(supabase);
 
   if (!user) {
     return NextResponse.json({ authenticated: false, user: null, profile: null });

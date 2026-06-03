@@ -27,3 +27,47 @@ export async function getSession(supabase: SupabaseClient) {
   };
   return auth.getSession();
 }
+
+export async function signInWithPassword(
+  supabase: SupabaseClient,
+  email: string,
+  password: string
+) {
+  const auth = supabase.auth as {
+    signInWithPassword: (opts: {
+      email: string;
+      password: string;
+    }) => Promise<{
+      data: { user: AuthUser | null; session: unknown };
+      error: { message: string } | null;
+    }>;
+  };
+  return auth.signInWithPassword({ email, password });
+}
+
+/** Service-role admin API (createUser, deleteUser, …) */
+export function getAuthAdmin(supabase: SupabaseClient) {
+  return (
+    supabase.auth as {
+      admin: {
+        createUser: (opts: Record<string, unknown>) => Promise<{
+          data: { user: AuthUser | null };
+          error: { message: string } | null;
+        }>;
+        deleteUser: (id: string) => Promise<{ error: { message: string } | null }>;
+      };
+    }
+  ).admin;
+}
+
+export function onAuthStateChange(
+  supabase: SupabaseClient,
+  callback: (event: string, session: unknown) => void
+) {
+  const auth = supabase.auth as {
+    onAuthStateChange: (
+      cb: (event: string, session: unknown) => void
+    ) => { data: { subscription: { unsubscribe: () => void } } };
+  };
+  return auth.onAuthStateChange(callback);
+}
