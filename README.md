@@ -71,9 +71,13 @@ npm run dev
 - افتح `/doctor` من الجوال → «إضافة إلى الشاشة الرئيسية».
 - `manifest.json` + `sw.js` يخزنان الصفحات الأساسية و`localStorage` للرصيد وقائمة المرضى.
 
-## WhatsApp
+## WhatsApp (Evolution API — مجاني)
 
-اربط جسراً (Evolution API أو مشابه) عبر `WHATSAPP_API_URL`. واجهة المسح: `/dashboard/whatsapp`.
+1. انشر Evolution API على [Railway](https://railway.com/deploy/evolution-api-lite-version) أو Render أو Docker (`deploy/evolution-api`).
+2. املأ `.env.local` من `.env.local.example` (`WHATSAPP_API_URL`, `WHATSAPP_API_KEY`, `WHATSAPP_INSTANCE_NAME`).
+3. افتح `/dashboard/whatsapp` → **عرض رمز QR** → امسح من جوال العيادة.
+
+دليل كامل: [docs/WHATSAPP_EVOLUTION_SETUP.md](docs/WHATSAPP_EVOLUTION_SETUP.md)
 
 ## الأدوار
 

@@ -9,7 +9,10 @@ import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 import { computeOutstandingDebtFromOperations } from "@/lib/services/patient-treatment-cases";
 import type { Patient, PatientOperation } from "@/types";
-import { Search, UserPlus, FileText } from "lucide-react";
+import { Search, FileText } from "lucide-react";
+import { AddPatientForm } from "@/components/patients/AddPatientForm";
+import { WhatsAppTestButton } from "@/components/patients/WhatsAppTestButton";
+import { getPatientDisplayPhone } from "@/lib/phone";
 
 interface PatientWithStats extends Patient {
   visit_count?: number;
@@ -101,11 +104,13 @@ export default function PatientsSearchPage() {
         />
       </div>
 
-      {/* Quick add via ledger */}
+      <AddPatientForm />
+
+      <WhatsAppTestButton />
+
       <Link href="/dashboard/ledger">
         <Button variant="outline" size="sm">
-          <UserPlus className="h-4 w-4" />
-          تسجيل مريض جديد (من صفحة الإدخال السريع)
+          تسجيل جلسة (الإدخال السريع)
         </Button>
       </Link>
 
@@ -135,9 +140,9 @@ export default function PatientsSearchPage() {
                   </div>
                   <div>
                     <p className="font-semibold text-slate-text">{p.full_name_ar}</p>
-                    {p.phone && (
+                    {getPatientDisplayPhone(p) && (
                       <p className="text-xs text-slate-muted" dir="ltr">
-                        {p.phone}
+                        {getPatientDisplayPhone(p)}
                       </p>
                     )}
                   </div>

@@ -64,6 +64,8 @@ export interface Patient {
   clinic_id: string;
   full_name_ar: string;
   phone: string | null;
+  /** رقم هاتف المراجع — مرجع الواتساب (+964...) */
+  phone_number?: string | null;
   notes: string | null;
   /** Last session total — used for follow-up visits */
   previous_total?: number | null;

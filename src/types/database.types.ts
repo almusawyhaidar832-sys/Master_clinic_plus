@@ -74,6 +74,7 @@ export interface Database {
           clinic_id: string;
           full_name_ar: string;
           phone: string | null;
+          phone_number: string | null;
           notes: string | null;
           doctor_share_total?: number | null;
           previous_total?: number | null;

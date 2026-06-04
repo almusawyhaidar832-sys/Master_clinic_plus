@@ -1,28 +1,64 @@
 import { NextResponse } from "next/server";
+import { getWhatsAppConfig } from "@/lib/whatsapp/config";
+import { fetchEvolutionQr } from "@/lib/whatsapp/evolution-client";
 
+/**
+ * GET /api/whatsapp/qr
+ * يجلب QR من Evolution API ويعيد base64 جاهزاً لـ <img src="..." />
+ * لا يُخزَّن QR في Supabase — يُعرض مباشرة من الجسر (يُحدَّث كل ~20 ثانية).
+ */
 export async function GET() {
-  const apiUrl = process.env.WHATSAPP_API_URL;
+  const cfg = getWhatsAppConfig();
 
-  if (!apiUrl) {
+  if (!cfg.configured) {
     return NextResponse.json({
       linked: false,
       qr: null,
-      message: "لم يتم تكوين WHATSAPP_API_URL",
+      state: "unknown",
+      message:
+        "أضف WHATSAPP_API_URL و WHATSAPP_API_KEY في .env.local — راجع docs/WHATSAPP_EVOLUTION_SETUP.md",
     });
   }
 
+  if (cfg.provider === "legacy") {
+    try {
+      const res = await fetch(`${cfg.baseUrl}/instance/qr`, {
+        headers: { Authorization: `Bearer ${cfg.apiKey}` },
+      });
+      const data = await res.json();
+      return NextResponse.json({
+        linked: data.status === "connected",
+        qr: data.qr || data.base64,
+        state: data.status,
+        provider: "legacy",
+      });
+    } catch (e) {
+      console.error("[whatsapp/qr] legacy_bridge_error", e);
+      return NextResponse.json({
+        linked: false,
+        qr: null,
+        message: "تعذر الاتصال بالجسر",
+      });
+    }
+  }
+
   try {
-    const res = await fetch(`${apiUrl}/instance/qr`, {
-      headers: {
-        Authorization: `Bearer ${process.env.WHATSAPP_API_SECRET}`,
-      },
-    });
-    const data = await res.json();
+    const result = await fetchEvolutionQr();
     return NextResponse.json({
-      linked: data.status === "connected",
-      qr: data.qr || data.base64,
+      linked: result.linked,
+      qr: result.qrImageSrc,
+      state: result.connectionState,
+      instanceName: cfg.instanceName,
+      error: result.error,
+      provider: "evolution",
     });
-  } catch {
-    return NextResponse.json({ linked: false, qr: null });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[whatsapp/qr] evolution_error", msg);
+    return NextResponse.json({
+      linked: false,
+      qr: null,
+      message: msg,
+    });
   }
 }

@@ -47,3 +47,11 @@ export function paymentReceiptMessage(params: {
 
 نقدّر ثقتكم بنا ونتمنى لكم دوام الصحة والعافية.`;
 }
+
+/** رسالة تجريبية — اختبار ربط WhatsApp API */
+export function testNotificationMessage(clinicName: string): string {
+  return `🔔 رسالة تجريبية من ${clinicName}
+
+هذه رسالة اختبار من نظام Master Clinic Plus.
+إذا وصلتك، فربط الواتساب يعمل بشكل صحيح.`;
+}

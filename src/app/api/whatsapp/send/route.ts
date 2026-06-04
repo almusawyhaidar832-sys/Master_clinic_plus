@@ -6,6 +6,7 @@ import {
   appointmentConfirmationMessage,
   paymentReceiptMessage,
 } from "@/lib/whatsapp";
+import { deliverWhatsAppMessage } from "@/lib/whatsapp/send-message";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -14,6 +15,10 @@ export async function POST(request: NextRequest) {
     phone: string;
     payload: Record<string, string>;
   };
+
+  if (!phone?.trim()) {
+    return NextResponse.json({ error: "رقم الهاتف مطلوب" }, { status: 400 });
+  }
 
   const supabase = await createClient();
   const clinic = await fetchClinicProfile(supabase);
@@ -39,28 +44,34 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "نوع غير مدعوم" }, { status: 400 });
   }
 
-  const apiUrl = process.env.WHATSAPP_API_URL;
   const clinicId = clinic?.id ?? (await getClinicIdFromProfile(supabase));
-
-  await supabase.from("whatsapp_messages").insert({
-    clinic_id: clinicId,
-    message_type: type,
-    recipient_phone: phone,
-    message_body_ar: messageBody,
-    status: apiUrl ? "sent" : "pending",
-    sent_at: apiUrl ? new Date().toISOString() : null,
-  });
-
-  if (apiUrl) {
-    await fetch(`${apiUrl}/message/send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.WHATSAPP_API_SECRET}`,
-      },
-      body: JSON.stringify({ phone, message: messageBody }),
-    });
+  if (!clinicId) {
+    return NextResponse.json({ error: "لا توجد عيادة" }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true, message: messageBody });
+  const outcome = await deliverWhatsAppMessage(supabase, {
+    clinicId,
+    rawPhone: phone,
+    messageBody,
+    messageType: type,
+  });
+
+  if (!outcome.ok && outcome.configured) {
+    return NextResponse.json(
+      {
+        error: "فشل إرسال الواتساب",
+        providerError: outcome.providerError,
+        normalizedPhone: outcome.normalizedPhone,
+      },
+      { status: 502 }
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    message: messageBody,
+    status: outcome.status,
+    normalizedPhone: outcome.normalizedPhone,
+    configured: outcome.configured,
+  });
 }

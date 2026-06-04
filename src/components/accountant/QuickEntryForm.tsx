@@ -43,6 +43,11 @@ import {
 import { fetchPatientPrimaryDoctor } from "@/lib/services/patient-primary-doctor";
 import { TreatmentCasePicker } from "@/components/accountant/TreatmentCasePicker";
 import type { Doctor, Patient, PatientOperation } from "@/types";
+import {
+  getPatientDisplayPhone,
+  patientPhoneColumns,
+  validatePatientPhone,
+} from "@/lib/phone";
 
 /** Common dental procedure suggestions — user can also type freely */
 const DENTAL_SUGGESTIONS = [
@@ -85,6 +90,7 @@ export function QuickEntryForm({
 
   // Patient search state
   const [patientQuery, setPatientQuery] = useState(defaultPatientName ?? "");
+  const [patientPhone, setPatientPhone] = useState("");
   const [patientSuggestions, setPatientSuggestions] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
     defaultPatientId ?? null
@@ -257,7 +263,7 @@ export function QuickEntryForm({
       const supabase = createClient();
       const { data } = await supabase
         .from("patients")
-        .select("id, full_name_ar, phone")
+        .select("id, full_name_ar, phone, phone_number")
         .ilike("full_name_ar", `%${q}%`)
         .limit(8);
       const rows = (data as Patient[]) || [];
@@ -400,7 +406,6 @@ export function QuickEntryForm({
         setLoading(false);
         return;
       }
-      // Check exact match first
       const { data: existing } = await supabase
         .from("patients")
         .select("id")
@@ -411,9 +416,19 @@ export function QuickEntryForm({
       if (existing?.id) {
         patientId = existing.id;
       } else {
+        const phoneCheck = validatePatientPhone(patientPhone);
+        if (!phoneCheck.ok) {
+          setMessage({ type: "error", text: phoneCheck.message });
+          setLoading(false);
+          return;
+        }
         const { data: newP, error: pErr } = await supabase
           .from("patients")
-          .insert({ full_name_ar: name, clinic_id: activeClinic.clinicId })
+          .insert({
+            full_name_ar: name,
+            clinic_id: activeClinic.clinicId,
+            ...patientPhoneColumns(phoneCheck.normalized),
+          })
           .select("id")
           .single();
         if (pErr || !newP) {
@@ -839,16 +854,19 @@ export function QuickEntryForm({
     if (paid > 0) {
       const { data: patientRow } = await supabase
         .from("patients")
-        .select("full_name_ar, phone")
+        .select("full_name_ar, phone, phone_number")
         .eq("id", patientId!)
         .single();
-      if (patientRow?.phone) {
+      const waPhone = patientRow
+        ? getPatientDisplayPhone(patientRow as Patient)
+        : null;
+      if (waPhone && patientRow) {
         await fetch("/api/whatsapp/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "payment_receipt",
-            phone: patientRow.phone,
+            phone: waPhone,
             payload: {
               patientName: patientRow.full_name_ar,
               paidAmount: formatCurrency(paid),
@@ -920,6 +938,7 @@ export function QuickEntryForm({
               onChange={(e) => {
                 setPatientQuery(e.target.value);
                 setSelectedPatientId(null);
+                setPatientPhone("");
               }}
               onFocus={() => patientSuggestions.length > 0 && setShowSuggestions(true)}
               placeholder={
@@ -936,6 +955,7 @@ export function QuickEntryForm({
                 onClick={() => {
                   setSelectedPatientId(null);
                   setPatientQuery("");
+                  setPatientPhone("");
                 }}
                 className="text-xs text-slate-muted hover:text-debt-text px-2"
               >
@@ -954,13 +974,14 @@ export function QuickEntryForm({
                   onClick={() => {
                     setSelectedPatientId(p.id);
                     setPatientQuery(p.full_name_ar);
+                    setPatientPhone(getPatientDisplayPhone(p) ?? "");
                     setShowSuggestions(false);
                   }}
                 >
                   <span className="font-medium">{p.full_name_ar}</span>
-                  {p.phone && (
+                  {getPatientDisplayPhone(p) && (
                     <span className="text-xs text-slate-muted" dir="ltr">
-                      {p.phone}
+                      {getPatientDisplayPhone(p)}
                     </span>
                   )}
                   <span className="mr-auto text-[10px] rounded-full bg-primary/10 text-primary px-2">
@@ -971,6 +992,32 @@ export function QuickEntryForm({
             </div>
           )}
         </div>
+        )}
+
+        {formSchema.showPatientSearch && !selectedPatientId && (
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-slate-text">
+              رقم هاتف المراجع <span className="text-debt-text">*</span>
+            </label>
+            <input
+              type="tel"
+              dir="ltr"
+              required
+              className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm text-slate-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              value={patientPhone}
+              onChange={(e) => setPatientPhone(e.target.value)}
+              placeholder="07XX XXX XXXX أو +9647XXXXXXXXX"
+            />
+            <p className="mt-1 text-xs text-slate-muted">
+              يُحفظ بصيغة +964 — يُستخدم لإشعارات الواتساب لاحقاً
+            </p>
+          </div>
+        )}
+
+        {formSchema.showPatientSearch && selectedPatientId && patientPhone && (
+          <div className="sm:col-span-2 text-sm text-slate-muted" dir="ltr">
+            هاتف المراجع: {patientPhone}
+          </div>
         )}
 
         {formSchema.showAssignedDoctor && assignedDoctor && (

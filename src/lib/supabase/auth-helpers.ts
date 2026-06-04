@@ -15,8 +15,10 @@ export async function getCurrentUser(
 }
 
 export async function signOutUser(supabase: SupabaseClient): Promise<void> {
-  const auth = supabase.auth as { signOut: () => Promise<void> };
-  await auth.signOut();
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error("[auth] signOut failed:", error.message);
+  }
 }
 
 export async function getSession(supabase: SupabaseClient) {

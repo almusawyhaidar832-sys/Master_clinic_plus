@@ -20,6 +20,7 @@ import { PatientSessionsByCase } from "@/components/patients/PatientSessionsByCa
 import { fetchPatientClinicalRecords } from "@/lib/clinical/fetch-patient-clinical";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
 import type { Patient, PatientOperation } from "@/types";
+import { getPatientDisplayPhone } from "@/lib/phone";
 import { ArrowRight, Plus, X } from "lucide-react";
 
 export default function PatientProfilePage() {
@@ -96,9 +97,9 @@ export default function PatientProfilePage() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <CardTitle>{patient.full_name_ar}</CardTitle>
-              {patient.phone && (
+              {getPatientDisplayPhone(patient) && (
                 <p className="text-sm text-slate-muted" dir="ltr">
-                  {patient.phone}
+                  📱 {getPatientDisplayPhone(patient)}
                 </p>
               )}
               {patient.notes && (

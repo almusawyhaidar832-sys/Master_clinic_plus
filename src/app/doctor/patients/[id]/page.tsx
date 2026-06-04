@@ -16,6 +16,7 @@ import { QuickEntryForm } from "@/components/accountant/QuickEntryForm";
 import { fetchPatientClinicalRecords } from "@/lib/clinical/fetch-patient-clinical";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
 import { opName } from "@/types";
+import { getPatientDisplayPhone } from "@/lib/phone";
 import { ArrowRight, FileText, Plus, X } from "lucide-react";
 
 export default function DoctorPatientDetailPage() {
@@ -125,9 +126,9 @@ export default function DoctorPatientDetailPage() {
       <Card>
         <CardHeader>
           <CardTitle>{patient.full_name_ar}</CardTitle>
-          {patient.phone && (
+          {getPatientDisplayPhone(patient) && (
             <p dir="ltr" className="text-sm text-slate-muted">
-              {patient.phone}
+              {getPatientDisplayPhone(patient)}
             </p>
           )}
         </CardHeader>
