@@ -32,9 +32,18 @@ export const accountantModuleNav: ModuleNavItem[] = [
   { href: "/dashboard/settings",    label: "ملف العيادة",         icon: "dashboard"    },
 ];
 
+/** المالك فقط — ليس للمحاسب */
+export const ownerProfileNavItem: ModuleNavItem = {
+  href: "/dashboard/profile",
+  label: "الملف الشخصي",
+  icon: "userCog",
+  roles: ["super_admin"],
+};
+
 /** Super admin sees all + platform admin link */
 export const superAdminModuleNav: ModuleNavItem[] = [
   ...accountantModuleNav,
+  ownerProfileNavItem,
   {
     href: "/admin",
     label: "لوحة المالك (جوال)",
@@ -51,6 +60,7 @@ export const doctorModuleNav: ModuleNavItem[] = [
   { href: "/doctor/wallet",    label: "المحفظة",     icon: "wallet",      requiredModule: "doctor_wallet"  },
   { href: "/doctor/patients",  label: "المرضى",      icon: "users",       requiredModule: "patients"       },
   { href: "/doctor/schedule",  label: "المواعيد",    icon: "calendarClock",requiredModule: "appointments"  },
+  { href: "/doctor/profile",   label: "حسابي",       icon: "userCog"      },
 ];
 
 // Doctor quick actions — shown on home screen grid

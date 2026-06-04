@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { getClinicIdFromProfile } from "@/lib/clinic-context";
-import { fetchClinicProfile, getClinicDisplayName } from "@/lib/services/clinic-profile";
-import { getApiCallerProfile } from "@/lib/auth/api-session";
+import {
+  createApiSessionClient,
+  getApiCallerProfile,
+} from "@/lib/auth/api-session";
 import { validatePatientPhone } from "@/lib/phone";
 import { testNotificationMessage } from "@/lib/whatsapp";
+import {
+  resolveWhatsAppClinic,
+  whatsappNoClinicError,
+} from "@/lib/whatsapp/resolve-clinic";
 import { deliverWhatsAppMessage } from "@/lib/whatsapp/send-message";
 
 /**
@@ -25,7 +29,7 @@ export async function POST(request: NextRequest) {
     /* empty body ok */
   }
 
-  const supabase = await createClient();
+  const supabase = await createApiSessionClient();
   const { data: profileRow } = await supabase
     .from("profiles")
     .select("phone")
@@ -53,13 +57,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: validated.message }, { status: 400 });
   }
 
-  const clinic = await fetchClinicProfile(supabase);
-  const clinicId = clinic?.id ?? (await getClinicIdFromProfile(supabase));
-  if (!clinicId) {
-    return NextResponse.json({ error: "لا توجد عيادة" }, { status: 400 });
+  const resolved = await resolveWhatsAppClinic(supabase, profile.clinic_id);
+  if (!resolved) {
+    const err = whatsappNoClinicError();
+    return NextResponse.json(err, { status: 400 });
   }
 
-  const clinicName = getClinicDisplayName(clinic);
+  const { clinicId, clinicName } = resolved;
   const messageBody = testNotificationMessage(clinicName);
 
   const outcome = await deliverWhatsAppMessage(supabase, {

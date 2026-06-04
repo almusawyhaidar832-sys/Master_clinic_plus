@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { APP_NAME, DEVELOPER } from "@/lib/constants";
+import { DeveloperFooterLink } from "@/components/layout/DeveloperFooterLink";
 import type { NavItem } from "@/types";
 import {
   LayoutDashboard, Users, Stethoscope, Wallet, Receipt,
@@ -129,6 +130,7 @@ export function Sidebar({
           <p className="text-[9px] text-slate-muted/70 mt-0.5">
             {DEVELOPER.roleAr} · {DEVELOPER.year}
           </p>
+          <DeveloperFooterLink />
         </div>
       </div>
     </aside>

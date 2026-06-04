@@ -15,12 +15,15 @@ import { SessionClinicalView } from "@/components/clinical/SessionClinicalView";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
 import { hasClinicalData } from "@/lib/clinical/types";
 import { opName, type PatientOperation } from "@/types";
+import { SessionEditDialog } from "@/components/sessions/SessionEditDialog";
 
 interface PatientSessionsByCaseProps {
   operations: PatientOperation[];
   treatmentCases: PatientTreatmentCase[];
   clinicalByOp: ClinicalByOperationId;
   onClinicalSaved: () => void;
+  /** محاسب / طبيب / مالك — يظهر زر تعديل السجل */
+  allowEdit?: boolean;
 }
 
 function sessionDateLabel(op: PatientOperation): string {
@@ -41,10 +44,12 @@ function SessionRow({
   op,
   clinical,
   onClinicalSaved,
+  allowEdit,
 }: {
   op: PatientOperation;
   clinical?: ClinicalByOperationId[string];
   onClinicalSaved: () => void;
+  allowEdit?: boolean;
 }) {
   const opWithDoctor = op as PatientOperation & {
     doctor?: { full_name_ar: string };
@@ -95,6 +100,9 @@ function SessionRow({
           existing={clinical}
           onSaved={onClinicalSaved}
         />
+        {allowEdit && (
+          <SessionEditDialog operation={op} onSaved={onClinicalSaved} />
+        )}
       </div>
     </div>
   );
@@ -106,12 +114,14 @@ function CaseAccordion({
   onToggle,
   clinicalByOp,
   onClinicalSaved,
+  allowEdit,
 }: {
   group: TreatmentCaseSessionGroup;
   expanded: boolean;
   onToggle: () => void;
   clinicalByOp: ClinicalByOperationId;
   onClinicalSaved: () => void;
+  allowEdit?: boolean;
 }) {
   const complete = group.caseInfo
     ? isTreatmentCaseComplete(group.caseInfo)
@@ -179,6 +189,7 @@ function CaseAccordion({
               op={op}
               clinical={clinicalByOp[op.id]}
               onClinicalSaved={onClinicalSaved}
+              allowEdit={allowEdit}
             />
           ))}
         </div>
@@ -192,6 +203,7 @@ export function PatientSessionsByCase({
   treatmentCases,
   clinicalByOp,
   onClinicalSaved,
+  allowEdit = false,
 }: PatientSessionsByCaseProps) {
   const groups = useMemo(
     () => groupOperationsByTreatmentCase(operations, treatmentCases),
@@ -229,6 +241,7 @@ export function PatientSessionsByCase({
           }
           clinicalByOp={clinicalByOp}
           onClinicalSaved={onClinicalSaved}
+          allowEdit={allowEdit}
         />
       ))}
     </div>

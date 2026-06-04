@@ -105,6 +105,11 @@ WHATSAPP_TEST_PHONE=07XXXXXXXXX
 
 ## 4) اختبار الإرسال
 
+**ملاحظة:** لا يوجد حالياً Webhook لاستقبال رسائل واردة من Evolution. خطأ «لا توجد عيادة» يأتي من مسار **الإرسال** (`POST /api/whatsapp/test`) عندما لا يُعثر على `clinic_id` لحسابك — وليس من بحث برقم واتساب في قاعدة البيانات.
+
+إذا ظهر الخطأ بعد التحديث: من Supabase نفّذ `SELECT public.link_profile_to_first_clinic();` ثم أعد تسجيل الدخول.
+
+
 - من **ملفات المرضى** → **اختبار الإشعار**
 - أو من Supabase/logs ابحث عن `[whatsapp]`
 
@@ -125,8 +130,8 @@ curl -X POST "https://YOUR-EVOLUTION/message/sendText/master_clinic" \
 
 | المسار | الوظيفة |
 |--------|---------|
-| `GET /api/whatsapp/qr` | إنشاء/الاتصال بالـ instance + إرجاع QR base64 |
-| `GET /api/whatsapp/status` | حالة الاتصال + تحديث `clinics.whatsapp_linked` |
+| `GET /api/whatsapp/qr` | QR فقط عندما الجلسة **ليست** `open` (لا يستدعي `/connect` أثناء الاتصال) |
+| `GET /api/whatsapp/status` | حالة موحّدة من `connectionState` + `fetchInstances` + تحديث `whatsapp_linked` |
 | `POST /api/whatsapp/send` | إيصال دفع / تأكيد موعد |
 | `POST /api/whatsapp/test` | رسالة تجريبية |
 
@@ -134,19 +139,57 @@ curl -X POST "https://YOUR-EVOLUTION/message/sendText/master_clinic" \
 
 ---
 
-## 6) استكشاف الأخطاء
+## 6) خطأ «Couldn't link device» على الجوال
+
+1. في التطبيق: **QR جديد (بعد خطأ الربط)** ثم امسح خلال **20 ثانية**.
+2. احذف جهازاً قديماً من واتساب → الأجهزة المرتبطة (الحد 4 أجهزة).
+3. على **Railway (Evolution)**:
+   - `CONFIG_SESSION_PHONE_VERSION=` **فارغ** (لا تثبت رقم إصدار قديم).
+   - `SERVER_URL=https://evolution-api-production-xxxx.up.railway.app` (نفس الرابط العام).
+   - حدّث Docker image إلى `evoapicloud/evolution-api:v2.3.6` أو أحدث.
+   - أعد **Deploy** ثم جرّب QR جديداً.
+4. انتظر حتى يظهر «متصل» في الصفحة قبل إغلاقها.
+
+---
+
+## 7) استكشاف الأخطاء
 
 | المشكلة | الحل |
 |---------|------|
 | لا يظهر QR | تحقق من `WHATSAPP_API_URL` و `WHATSAPP_API_KEY`؛ افتح `/instance/connect/master_clinic` في المتصفح مع header `apikey` |
 | QR يختفي بسرعة | اضغط «عرض رمز QR» مرة أخرى — Baileys يحدّث كل ~20 ثانية |
+| **متصل على الجوال لكن الموقع يعود «غير متصل»** | انظر القسم 8 أدناه — غالباً ليس Webhooks |
 | الرسالة لا تصل | تأكد `connectionState` = `open`؛ راجع logs Evolution |
 | `401` | مفتاح `apikey` خاطئ |
 | Render ينام | استخدم Railway أو خطة مدفوعة / UptimeRobot ping |
 
 ---
 
-## 7) أمان
+## 8) «متصل» على الجوال ثم يختفي في الموقع
+
+التطبيق **لا يعتمد على Webhooks** من Evolution — يستخدم **polling** كل 4–30 ثانية على `/api/whatsapp/status`. إعداد Webhooks في Evolution اختياري ولا يحل هذا السلوك وحده.
+
+### سبب شائع (تم إصلاحه في الكود)
+
+استدعاء `GET /instance/connect/{instance}` بينما الجلسة **مفتوحة** (`open`) يعيد QR جديد وقد يقطع الربط. الصفحة كانت تُحدّث QR كل 15 ثانية حتى بعد الاتصال.
+
+### خطوات فحص يدوية
+
+1. **من المتصفح (بعد تسجيل الدخول للعيادة):**
+   - افتح `GET /api/whatsapp/status` — يجب أن يبقى `"linked": true` و `"state": "open"`.
+2. **مباشرة على Evolution (curl):**
+   ```bash
+   curl -s "https://YOUR-EVOLUTION/instance/connectionState/master_clinic" -H "apikey: YOUR_KEY"
+   curl -s "https://YOUR-EVOLUTION/instance/fetchInstances" -H "apikey: YOUR_KEY"
+   ```
+   إذا `connectionState` = `open` لكن الموقع يعرض غير متصل → المشكلة في Next.js/المتغيرات وليس الهاتف.
+3. **Railway → Evolution logs:** ابحث عن `Log out instance` أو `401` — يعني أن أحدهم استدعى logout/restart أو `/connect` بشكل متكرر.
+4. **لا تضغط «QR جديد»** إلا لإعادة الربط عمداً — الزر يستدعي logout.
+5. **Next.js على Railway:** نفس `WHATSAPP_API_URL` و `WHATSAPP_API_KEY` كما في Evolution، ثم Redeploy.
+
+---
+
+## 9) أمان
 
 - لا تضع `WHATSAPP_API_KEY` في كود الواجهة (Client) — فقط في Server `.env`
 - استخدم HTTPS على Evolution و Next.js

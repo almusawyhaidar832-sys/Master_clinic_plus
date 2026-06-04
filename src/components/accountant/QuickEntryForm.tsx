@@ -788,11 +788,6 @@ export function QuickEntryForm({
         }
       }
 
-      await fetch("/api/notifications/dispatch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event: "new_operation", id: op.id }),
-      });
     }
 
     setSelectedPatientId(patientId!);
@@ -820,6 +815,18 @@ export function QuickEntryForm({
       : financialPlan ?? emptyPlan;
 
     const justCompleted = isTreatmentCaseComplete(snap);
+
+    if (op?.id) {
+      await fetch("/api/automation/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event: "session_saved",
+          operationId: op.id,
+          treatmentCompleted: justCompleted,
+        }),
+      });
+    }
 
     let successText: string;
     if (justCompleted) {
@@ -850,32 +857,6 @@ export function QuickEntryForm({
     setClinical(EMPTY_CLINICAL_DRAFT);
     onSuccess?.(op as PatientOperation);
 
-    // Optional WhatsApp receipt
-    if (paid > 0) {
-      const { data: patientRow } = await supabase
-        .from("patients")
-        .select("full_name_ar, phone, phone_number")
-        .eq("id", patientId!)
-        .single();
-      const waPhone = patientRow
-        ? getPatientDisplayPhone(patientRow as Patient)
-        : null;
-      if (waPhone && patientRow) {
-        await fetch("/api/whatsapp/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "payment_receipt",
-            phone: waPhone,
-            payload: {
-              patientName: patientRow.full_name_ar,
-              paidAmount: formatCurrency(paid),
-              doctorName: selectedDoctor?.full_name_ar ?? "",
-            },
-          }),
-        });
-      }
-    }
   }
 
   return (

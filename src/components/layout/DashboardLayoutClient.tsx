@@ -9,7 +9,8 @@ import { getAuthProfile } from "@/lib/clinic-context";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicModules } from "@/contexts/ClinicModulesContext";
 import { useModuleNav } from "@/hooks/useModuleNav";
-import type { NavItem } from "@/types";
+import { DeveloperImpersonationBanner } from "@/components/developer/DeveloperImpersonationBanner";
+import type { NavItem, UserRole } from "@/types";
 
 export function DashboardLayoutClient({
   children,
@@ -27,12 +28,18 @@ export function DashboardLayoutClient({
   const filteredModuleNav = useModuleNav(baseNav);
 
   // Convert to NavItem shape that DashboardShell / Sidebar expects
-  const navItems: NavItem[] = filteredModuleNav.map((i) => ({
-    href: i.href,
-    label: i.label,
-    icon: i.icon,
-    roles: i.roles,
-  }));
+  const navItems: NavItem[] = filteredModuleNav
+    .filter(
+      (i) =>
+        !i.roles?.length ||
+        i.roles.includes(userRole as UserRole)
+    )
+    .map((i) => ({
+      href: i.href,
+      label: i.label,
+      icon: i.icon,
+      roles: i.roles,
+    }));
 
   useEffect(() => {
     async function load() {
@@ -71,6 +78,7 @@ export function DashboardLayoutClient({
       staffLabel={isOwner ? "المالك" : "المحاسب"}
       notificationCount={notificationCount}
     >
+      <DeveloperImpersonationBanner />
       {children}
     </DashboardShell>
   );

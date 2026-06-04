@@ -35,9 +35,10 @@ export function WhatsAppTestButton() {
         const detail = data.providerError
           ? ` — ${data.providerError}`
           : "";
+        const hint = data.hint ? `\n${data.hint}` : "";
         setResult({
           type: "error",
-          text: (data.error ?? "فشل الإرسال") + detail,
+          text: (data.error ?? "فشل الإرسال") + detail + hint,
         });
         return;
       }

@@ -18,6 +18,10 @@ export default function WhatsAppSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [instanceName, setInstanceName] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const qrRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [bridgeConfigured, setBridgeConfigured] = useState<boolean | null>(
+    null
+  );
   const [messages, setMessages] = useState<
     {
       id: string;
@@ -28,19 +32,19 @@ export default function WhatsAppSettingsPage() {
     }[]
   >([]);
 
-  const loadStatus = useCallback(async () => {
+  /** سجل الرسائل فقط — حالة الربط تُحدَّث من Evolution API وليس من DB (تجنّب الوميض). */
+  const loadMessageLog = useCallback(async () => {
     const supabase = createClient();
     const clinicId = await getClinicIdFromProfile(supabase);
     if (!clinicId) return;
 
     const { data: clinic } = await supabase
       .from("clinics")
-      .select("whatsapp_linked, whatsapp_session_id")
+      .select("whatsapp_session_id")
       .eq("id", clinicId)
       .maybeSingle();
-    if (clinic) {
-      setLinked(!!clinic.whatsapp_linked);
-      setInstanceName(clinic.whatsapp_session_id as string | null);
+    if (clinic?.whatsapp_session_id) {
+      setInstanceName(clinic.whatsapp_session_id as string);
     }
 
     const { data: logs } = await supabase
@@ -51,10 +55,13 @@ export default function WhatsAppSettingsPage() {
     setMessages(logs ?? []);
   }, []);
 
-  const checkConnection = useCallback(async () => {
+  const checkConnection = useCallback(async (): Promise<boolean | null> => {
     try {
       const res = await fetch("/api/whatsapp/status");
       const data = await res.json();
+      if (typeof data.configured === "boolean") {
+        setBridgeConfigured(data.configured);
+      }
       const state = (data.state as ConnState) ?? "unknown";
       setConnState(state);
       if (data.linked) {
@@ -63,27 +70,54 @@ export default function WhatsAppSettingsPage() {
         if (data.instanceName) setInstanceName(data.instanceName);
         return true;
       }
+      if (state === "connecting") {
+        return false;
+      }
       setLinked(false);
       return false;
     } catch {
-      return false;
+      return null;
+    }
+  }, []);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (qrRefreshRef.current) {
+      clearInterval(qrRefreshRef.current);
+      qrRefreshRef.current = null;
     }
   }, []);
 
   const fetchQr = useCallback(async () => {
+    const status = await checkConnection();
+    if (status === true) {
+      stopPolling();
+      return;
+    }
+    if (status === null) {
+      setError("تعذر قراءة حالة الاتصال — أعد المحاولة");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/whatsapp/qr");
       const data = await res.json();
 
+      if (typeof data.configured === "boolean") {
+        setBridgeConfigured(data.configured);
+      }
       if (data.instanceName) setInstanceName(data.instanceName);
 
       if (data.linked) {
         setLinked(true);
         setQrImage(null);
         setConnState("open");
-        await loadStatus();
+        stopPolling();
         setLoading(false);
         return;
       }
@@ -112,29 +146,79 @@ export default function WhatsAppSettingsPage() {
       setError("تعذر الاتصال بجسر الواتساب — تحقق من WHATSAPP_API_URL");
     }
     setLoading(false);
-    await loadStatus();
-  }, [loadStatus]);
+  }, [checkConnection, stopPolling]);
+
+  const startLinkedKeepalive = useCallback(() => {
+    stopPolling();
+    pollRef.current = setInterval(() => {
+      void checkConnection();
+    }, 30000);
+  }, [checkConnection, stopPolling]);
 
   const startScan = useCallback(async () => {
+    stopPolling();
     await fetchQr();
-    if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       const ok = await checkConnection();
-      if (ok && pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-        await loadStatus();
+      if (ok) {
+        stopPolling();
+        startLinkedKeepalive();
+        void loadMessageLog();
       }
     }, 4000);
-  }, [fetchQr, checkConnection, loadStatus]);
+    qrRefreshRef.current = setInterval(async () => {
+      const ok = await checkConnection();
+      if (ok) {
+        stopPolling();
+        startLinkedKeepalive();
+        return;
+      }
+      void fetchQr();
+    }, 15000);
+  }, [
+    fetchQr,
+    checkConnection,
+    loadMessageLog,
+    stopPolling,
+    startLinkedKeepalive,
+  ]);
+
+  const restartSession = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    stopPolling();
+    try {
+      const res = await fetch("/api/whatsapp/restart", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message ?? "تعذر إعادة ضبط الجلسة");
+        setLoading(false);
+        return;
+      }
+      if (data.qr) {
+        const src =
+          typeof data.qr === "string" && data.qr.startsWith("data:")
+            ? data.qr
+            : `data:image/png;base64,${data.qr}`;
+        setQrImage(src);
+        setConnState("connecting");
+      }
+      setLinked(false);
+      await startScan();
+    } catch {
+      setError("تعذر الاتصال بالجسر");
+    }
+    setLoading(false);
+  }, [startScan, stopPolling]);
 
   useEffect(() => {
-    loadStatus();
-    checkConnection();
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [loadStatus, checkConnection]);
+    void loadMessageLog();
+    void checkConnection().then((connected) => {
+      if (connected) startLinkedKeepalive();
+      else void startScan();
+    });
+    return () => stopPolling();
+  }, [loadMessageLog, checkConnection, startScan, startLinkedKeepalive, stopPolling]);
 
   const typeLabels: Record<string, string> = {
     appointment_confirmation: "تأكيد موعد",
@@ -202,14 +286,18 @@ export default function WhatsAppSettingsPage() {
               </div>
             )}
             <p className="text-xs text-slate-muted max-w-xs">
-              WhatsApp → الأجهزة المرتبطة → ربط جهاز → امسح الرمز. يُحدَّث
-              تلقائياً كل بضع ثوانٍ.
+              واتساب → الإعدادات → الأجهزة المرتبطة → ربط جهاز. يتجدد الرمز
+              كل 15 ثانية — امسح خلال 20 ثانية.
             </p>
           </div>
         )}
 
         <div className="flex flex-col gap-2 px-4 pb-4">
-          <Button onClick={startScan} disabled={loading} className="w-full">
+          <Button
+            onClick={linked ? restartSession : startScan}
+            disabled={loading}
+            className="w-full"
+          >
             {loading ? (
               <>
                 <RefreshCw className="h-4 w-4 animate-spin" />
@@ -229,7 +317,47 @@ export default function WhatsAppSettingsPage() {
           >
             تحديث حالة الاتصال
           </Button>
+          {!linked && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={restartSession}
+              disabled={loading}
+              className="text-amber-800 border-amber-300"
+            >
+              QR جديد (بعد خطأ الربط)
+            </Button>
+          )}
         </div>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            خطأ «Couldn&apos;t link device» على الجوال؟
+          </CardTitle>
+        </CardHeader>
+        <ul className="list-disc space-y-2 pr-5 text-sm text-slate-muted">
+          <li>
+            اضغط <strong>QR جديد (بعد خطأ الربط)</strong> ثم امسح فوراً — لا
+            تنتظر دقيقة.
+          </li>
+          <li>
+            على الجوال: احذف جهازاً قديماً من «الأجهزة المرتبطة» إن وصلت
+            للحد (4 أجهزة).
+          </li>
+          <li>حدّث تطبيق واتساب من المتجر، واستخدم نفس شبكة Wi‑Fi أو 4G مستقرة.</li>
+          <li>
+            في Railway (مشروع Evolution): اترك{" "}
+            <code dir="ltr">CONFIG_SESSION_PHONE_VERSION</code> فارغاً، وحدّث
+            الصورة إلى <code dir="ltr">evoapicloud/evolution-api:v2.3.6</code>{" "}
+            أو أحدث.
+          </li>
+          <li>
+            تأكد <code dir="ltr">SERVER_URL</code> في Evolution = نفس رابط
+            Railway العام للجسر.
+          </li>
+        </ul>
       </Card>
 
       <Card>
@@ -274,13 +402,30 @@ export default function WhatsAppSettingsPage() {
         </Card>
       )}
 
-      <Alert variant="info">
-        <strong>متغيرات البيئة في Next.js:</strong>
-        <br />
-        WHATSAPP_API_URL، WHATSAPP_API_KEY، WHATSAPP_INSTANCE_NAME
-        <br />
-        دليل النشر: <code className="text-xs">docs/WHATSAPP_EVOLUTION_SETUP.md</code>
-      </Alert>
+      {bridgeConfigured === false && (
+        <Alert variant="error">
+          <strong>الجسر غير مُضبّط على سيرفر التطبيق.</strong>
+          <br />
+          إذا تفتح الموقع من Railway: ادخل مشروع Next.js → Variables وأضف
+          WHATSAPP_API_URL و WHATSAPP_API_KEY (نفس قيم Evolution) ثم Redeploy.
+          <br />
+          محلياً: ضعها في <code className="text-xs">.env.local</code> وأعد{" "}
+          <code className="text-xs">npm run dev</code>.
+        </Alert>
+      )}
+
+      {bridgeConfigured === true && !qrImage && !linked && !loading && (
+        <Alert variant="info">
+          اضغط «عرض رمز QR» إذا لم يظهر الرمز تلقائياً. تأكد أن سيرفر Evolution
+          على Railway يعمل (الرابط ينتهي بـ .up.railway.app).
+        </Alert>
+      )}
+
+      {bridgeConfigured === true && (
+        <p className="text-center text-xs text-emerald-700">
+          ✓ متغيرات الواتساب مُحمّلة — الجسر: {instanceName ?? "master_clinic"}
+        </p>
+      )}
     </div>
   );
 }

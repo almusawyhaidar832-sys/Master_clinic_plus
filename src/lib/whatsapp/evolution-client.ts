@@ -1,5 +1,6 @@
 import { digitsOnly } from "@/lib/phone";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
+import { resolveWhatsAppInstanceName } from "@/lib/whatsapp/resolve-instance";
 
 export type EvolutionConnectionState = "open" | "close" | "connecting" | "unknown";
 
@@ -86,52 +87,134 @@ export function parseConnectionState(data: unknown): EvolutionConnectionState {
       : d;
 
   const raw = String(
-    inst.state ?? inst.status ?? d.state ?? d.status ?? ""
+    inst.state ??
+      inst.status ??
+      inst.connectionStatus ??
+      d.state ??
+      d.status ??
+      ""
   ).toLowerCase();
 
   if (raw === "open" || raw === "connected") return "open";
-  if (raw === "connecting" || raw === "qrcode" || raw === "qr") return "connecting";
+  if (raw === "connecting" || raw === "qrcode" || raw === "qr") {
+    return "connecting";
+  }
   if (raw === "close" || raw === "closed" || raw === "disconnected") {
     return "close";
   }
   return "unknown";
 }
 
-export async function fetchEvolutionConnectionState(): Promise<{
+export type EvolutionSessionSnapshot = {
+  linked: boolean;
   state: EvolutionConnectionState;
-  data: unknown;
-}> {
-  const { instanceName } = getWhatsAppConfig();
-  const res = await evolutionFetch(
-    `/instance/connectionState/${encodeURIComponent(instanceName)}`,
-    { method: "GET" }
-  );
+  connectionStateData: unknown;
+  instanceListData: unknown;
+};
+
+/**
+ * حالة الجلسة الموحّدة — لا نستدعي /connect إذا كانت open (يقطع الجلسة على الهاتف).
+ */
+export async function resolveEvolutionSession(
+  instanceOverride?: string
+): Promise<EvolutionSessionSnapshot> {
+  const instanceName =
+    instanceOverride?.trim() ||
+    (await resolveWhatsAppInstanceName());
+
+  const [stateRes, listRes] = await Promise.all([
+    evolutionFetch(
+      `/instance/connectionState/${encodeURIComponent(instanceName)}`,
+      { method: "GET" }
+    ),
+    evolutionFetch("/instance/fetchInstances", { method: "GET" }),
+  ]);
+
+  const stateFromEndpoint = stateRes.ok
+    ? parseConnectionState(stateRes.data)
+    : "unknown";
+
+  const rows = listRes.ok ? parseInstanceList(listRes.data) : [];
+  const row = rows.find(
+    (i) => i.name === instanceName || i.instanceName === instanceName
+  ) as { connectionStatus?: string; name?: string } | undefined;
+
+  const stateFromList = row?.connectionStatus
+    ? parseConnectionState({ connectionStatus: row.connectionStatus })
+    : "unknown";
+
+  const linked = stateFromEndpoint === "open" || stateFromList === "open";
+
+  let state: EvolutionConnectionState = "unknown";
+  if (linked) state = "open";
+  else if (stateFromEndpoint !== "unknown") state = stateFromEndpoint;
+  else state = stateFromList;
+
   return {
-    state: res.ok ? parseConnectionState(res.data) : "unknown",
-    data: res.data,
+    linked,
+    state,
+    connectionStateData: stateRes.data,
+    instanceListData: listRes.data,
   };
 }
 
+export async function fetchEvolutionConnectionState(): Promise<{
+  state: EvolutionConnectionState;
+  data: unknown;
+  linked: boolean;
+}> {
+  const session = await resolveEvolutionSession();
+  return {
+    state: session.state,
+    data: session.connectionStateData,
+    linked: session.linked,
+  };
+}
+
+function parseInstanceList(data: unknown): { name?: string; instanceName?: string }[] {
+  if (Array.isArray(data)) return data as { name?: string; instanceName?: string }[];
+  if (data && typeof data === "object") {
+    const d = data as Record<string, unknown>;
+    for (const key of ["instances", "data", "value", "response"]) {
+      if (Array.isArray(d[key])) {
+        return d[key] as { name?: string; instanceName?: string }[];
+      }
+    }
+  }
+  return [];
+}
+
+function instanceExists(
+  rows: { name?: string; instanceName?: string }[],
+  instanceName: string
+): boolean {
+  return rows.some(
+    (i) => i.name === instanceName || i.instanceName === instanceName
+  );
+}
+
 /** إنشاء Instance إن لم يكن موجوداً (WHATSAPP-BAILEYS) */
-export async function ensureEvolutionInstance(): Promise<void> {
-  const { instanceName } = getWhatsAppConfig();
+export async function ensureEvolutionInstanceNamed(instanceName: string): Promise<{
+  ok: boolean;
+  created: boolean;
+  qrFromCreate: string | null;
+  error?: string;
+}> {
+  const name = instanceName.trim();
+  if (!name) {
+    return { ok: false, created: false, qrFromCreate: null, error: "instance_name_required" };
+  }
 
-  const list = await evolutionFetch("/instance/fetchInstances", {
-    method: "GET",
-  });
+  const list = await evolutionFetch("/instance/fetchInstances", { method: "GET" });
 
-  if (list.ok && Array.isArray(list.data)) {
-    const exists = (list.data as { name?: string; instanceName?: string }[]).some(
-      (i) =>
-        i.name === instanceName || i.instanceName === instanceName
-    );
-    if (exists) return;
+  if (list.ok && instanceExists(parseInstanceList(list.data), name)) {
+    return { ok: true, created: false, qrFromCreate: null };
   }
 
   const created = await evolutionFetch("/instance/create", {
     method: "POST",
     body: JSON.stringify({
-      instanceName,
+      instanceName: name,
       integration: "WHATSAPP-BAILEYS",
       qrcode: true,
     }),
@@ -145,14 +228,81 @@ export async function ensureEvolutionInstance(): Promise<void> {
         ? String((created.data as { message: string }).message)
         : created.text;
     if (!/already|exist/i.test(msg)) {
-      console.error(LOG, "create_instance_failed", msg);
+      console.error(LOG, "create_instance_failed", name, msg);
+      return { ok: false, created: false, qrFromCreate: null, error: msg };
     }
+    return { ok: true, created: false, qrFromCreate: null };
   }
+
+  return {
+    ok: true,
+    created: true,
+    qrFromCreate: extractQrImageSrc(created.data),
+  };
+}
+
+export async function ensureEvolutionInstance(): Promise<{
+  created: boolean;
+  qrFromCreate: string | null;
+}> {
+  const { instanceName } = getWhatsAppConfig();
+  const result = await ensureEvolutionInstanceNamed(instanceName);
+  return { created: result.created, qrFromCreate: result.qrFromCreate };
+}
+
+/**
+ * إعادة ضبط الجلسة — يحل QR منتهي أو "Couldn't link device".
+ * logout ثم connect برمز جديد.
+ */
+/** إعادة تهيئة instance محدد (logout + إعادة إنشاء) */
+export async function restartEvolutionInstanceNamed(
+  instanceName: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { configured } = getWhatsAppConfig();
+  if (!configured) {
+    return { ok: false, error: "whatsapp_not_configured" };
+  }
+
+  const name = instanceName.trim();
+  if (!name) return { ok: false, error: "instance_name_required" };
+
+  await evolutionFetch(
+    `/instance/logout/${encodeURIComponent(name)}`,
+    { method: "DELETE" }
+  );
+
+  await new Promise((r) => setTimeout(r, 1500));
+
+  const ensured = await ensureEvolutionInstanceNamed(name);
+  return { ok: ensured.ok, error: ensured.error };
+}
+
+export async function restartEvolutionInstance(): Promise<EvolutionQrResult> {
+  const { configured } = getWhatsAppConfig();
+  const instanceName = await resolveWhatsAppInstanceName();
+  if (!configured) {
+    return {
+      linked: false,
+      connectionState: "unknown",
+      qrImageSrc: null,
+      error: "لم يُضبط WHATSAPP_API_URL أو WHATSAPP_API_KEY",
+    };
+  }
+
+  await evolutionFetch(
+    `/instance/logout/${encodeURIComponent(instanceName)}`,
+    { method: "DELETE" }
+  );
+
+  await new Promise((r) => setTimeout(r, 1500));
+
+  return fetchEvolutionQr();
 }
 
 /** جلب QR للعرض في واجهة «ربط واتساب» */
 export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
-  const { instanceName, configured } = getWhatsAppConfig();
+  const { configured } = getWhatsAppConfig();
+  const instanceName = await resolveWhatsAppInstanceName();
   if (!configured) {
     return {
       linked: false,
@@ -164,13 +314,13 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
 
   await ensureEvolutionInstance();
 
-  const stateRes = await fetchEvolutionConnectionState();
-  if (stateRes.state === "open") {
+  const session = await resolveEvolutionSession();
+  if (session.linked) {
     return {
       linked: true,
       connectionState: "open",
       qrImageSrc: null,
-      raw: stateRes.data,
+      raw: session.connectionStateData,
     };
   }
 
@@ -180,9 +330,19 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
   );
 
   if (!connect.ok) {
+    const ensured = await ensureEvolutionInstance();
+    const fallbackQr = ensured.qrFromCreate;
+    if (fallbackQr) {
+      return {
+        linked: false,
+        connectionState: "connecting",
+        qrImageSrc: fallbackQr,
+        raw: connect.data,
+      };
+    }
     return {
       linked: false,
-      connectionState: stateRes.state,
+      connectionState: session.state,
       qrImageSrc: null,
       error: connect.text.slice(0, 300) || `HTTP ${connect.status}`,
       raw: connect.data,
@@ -195,7 +355,7 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
   return {
     linked: connectionState === "open",
     connectionState:
-      connectionState === "unknown" ? stateRes.state : connectionState,
+      connectionState === "unknown" ? session.state : connectionState,
     qrImageSrc,
     raw: connect.data,
   };
@@ -206,7 +366,8 @@ export async function sendEvolutionText(
   rawPhone: string,
   text: string
 ): Promise<{ ok: boolean; status: number; error?: string; data?: unknown }> {
-  const { instanceName, configured } = getWhatsAppConfig();
+  const { configured } = getWhatsAppConfig();
+  const instanceName = await resolveWhatsAppInstanceName();
   if (!configured) {
     return { ok: false, status: 0, error: "whatsapp_not_configured" };
   }

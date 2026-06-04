@@ -4,8 +4,7 @@ import { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import type { NavItem } from "@/types";
-import { createClient } from "@/lib/supabase/client";
-import { signOutUser } from "@/lib/supabase/auth-helpers";
+import { logoutFromCurrentPortal } from "@/lib/auth/logout-portal";
 import { useRouter } from "next/navigation";
 
 interface DashboardShellProps {
@@ -36,10 +35,7 @@ export function DashboardShell({
   const router = useRouter();
 
   async function handleSignOut() {
-    const supabase = createClient();
-    await signOutUser(supabase);
-    router.push("/login");
-    router.refresh();
+    await logoutFromCurrentPortal(router);
   }
 
   return (

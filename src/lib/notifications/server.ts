@@ -198,3 +198,71 @@ export async function notifyDoctorNewOperation(operationId: string) {
     link_path: "/doctor/patients",
   }]);
 }
+
+/** دفعة أو جلسة من المحاسب — إشعار فوري للطبيب مع التفاصيل */
+export async function notifyDoctorSessionPayment(
+  operationId: string,
+  extra?: { teethSummary?: string; remainingBalance?: number }
+) {
+  const admin = adminClient();
+
+  const { data: op, error } = await admin
+    .from("patient_operations")
+    .select(
+      "id, clinic_id, doctor_id, paid_amount, remaining_debt, total_amount, operation_name_ar, operation_type, patient_id, session_kind"
+    )
+    .eq("id", operationId)
+    .maybeSingle();
+
+  if (error || !op) throw new Error("operation not found");
+
+  const [{ data: doctor }, { data: patient }] = await Promise.all([
+    admin
+      .from("doctors")
+      .select("full_name_ar, profile_id")
+      .eq("id", op.doctor_id)
+      .maybeSingle(),
+    admin
+      .from("patients")
+      .select("full_name_ar, agreed_total, total_paid")
+      .eq("id", op.patient_id)
+      .maybeSingle(),
+  ]);
+
+  const profileId =
+    doctor?.profile_id ??
+    (await resolveDoctorProfileId(admin, op.doctor_id, op.clinic_id));
+  if (!profileId) return;
+
+  const patientName = patient?.full_name_ar ?? "مراجع";
+  const opLabel = op.operation_name_ar ?? op.operation_type ?? "جلسة";
+  const paid = Number(op.paid_amount ?? 0);
+  const agreed = Number(patient?.agreed_total ?? 0);
+  const totalPaid = Number(patient?.total_paid ?? 0);
+  const remaining =
+    extra?.remainingBalance ??
+    (agreed > 0
+      ? Math.max(0, agreed - totalPaid)
+      : Math.max(0, Number(op.remaining_debt ?? 0)));
+
+  const teethLine = extra?.teethSummary?.trim()
+    ? `\n🦷 ${extra.teethSummary.trim()}`
+    : "";
+
+  const bodyParts = [
+    patientName,
+    paid > 0 ? `دفع ${formatCurrency(paid)}` : null,
+    `متبقي ${formatCurrency(remaining)}`,
+    opLabel,
+  ].filter(Boolean);
+
+  await insertNotifications([
+    {
+      clinic_id: op.clinic_id,
+      recipient_profile_id: profileId,
+      title_ar: "دفعة / جلسة مراجع",
+      body_ar: `${bodyParts.join(" — ")}${teethLine}`,
+      link_path: `/doctor/patients/${op.patient_id}`,
+    },
+  ]);
+}

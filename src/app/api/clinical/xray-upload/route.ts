@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { runXrayUploadedAutomation } from "@/lib/automation/run";
 
 const BUCKET = "clinical-xrays";
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -98,6 +99,10 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    void runXrayUploadedAutomation(operationId, storagePath, file.name).catch(
+      (e) => console.error("[xray-upload] automation", e)
+    );
 
     return NextResponse.json({ success: true, path: storagePath });
   } catch (err) {

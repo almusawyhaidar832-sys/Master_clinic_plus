@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { PatientStatementDocument } from "@/components/doctor/PatientStatementDocument";
 import { ReportActions } from "@/components/reports/ReportActions";
+import { downloadPatientStatementPdf } from "@/lib/reports/pdf-export";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { createClient } from "@/lib/supabase/client";
 import type { Patient, PatientOperation, MedicalLog } from "@/types";
@@ -25,6 +26,7 @@ function StatementContent() {
     (MedicalLog & { doctor?: { full_name_ar: string } })[]
   >([]);
   const [generated, setGenerated] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
     async function loadPatients() {
@@ -96,6 +98,28 @@ function StatementContent() {
           <ReportActions
             shareTitle={`كشف حساب ${patient.full_name_ar} — ${displayName}`}
             printTargetId="patient-statement-print"
+            pdfLoading={pdfLoading}
+            onExportPdf={async () => {
+              setPdfLoading(true);
+              try {
+                await downloadPatientStatementPdf({
+                  clinicName: displayName,
+                  patientName: patient.full_name_ar,
+                  periodLabel: "كشف حساب كامل",
+                  generatedAt: new Date().toLocaleString("ar-IQ"),
+                  operations,
+                  agreedTotal: patient.agreed_total ?? undefined,
+                  totalPaid: patient.total_paid ?? undefined,
+                  remaining: Math.max(
+                    0,
+                    Number(patient.agreed_total ?? 0) -
+                      Number(patient.total_paid ?? 0)
+                  ),
+                });
+              } finally {
+                setPdfLoading(false);
+              }
+            }}
           />
           <PatientStatementDocument
             patient={patient}

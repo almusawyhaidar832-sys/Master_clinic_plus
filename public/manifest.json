@@ -1,14 +1,16 @@
 {
-  "name": "ماستر كلينك بلس — تطبيق الطبيب",
-  "short_name": "MC+ طبيب",
-  "description": "محفظة، مواعيد، ومرضى — بدون متجر تطبيقات",
-  "start_url": "/doctor",
+  "name": "ماستر كلينك بلس",
+  "short_name": "MC+",
+  "description": "نظام إدارة العيادات — طبيب، إدارة، وحجوزات",
+  "start_url": "/login?source=pwa",
+  "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#f8fafc",
   "theme_color": "#14b8a6",
   "lang": "ar",
   "dir": "rtl",
+  "categories": ["medical", "business"],
   "icons": [
     {
       "src": "/icon",
@@ -20,7 +22,39 @@
       "src": "/apple-icon",
       "sizes": "180x180",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon/192",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon/512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "تسجيل الدخول",
+      "short_name": "دخول",
+      "url": "/login",
+      "icons": [{ "src": "/pwa-icon/192", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "تطبيق الطبيب",
+      "short_name": "طبيب",
+      "url": "/doctor",
+      "icons": [{ "src": "/pwa-icon/192", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "لوحة الإدارة",
+      "short_name": "إدارة",
+      "url": "/admin",
+      "icons": [{ "src": "/pwa-icon/192", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

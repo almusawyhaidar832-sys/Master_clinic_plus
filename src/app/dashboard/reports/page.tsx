@@ -7,6 +7,8 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { MasterReportDocument } from "@/components/reports/MasterReportDocument";
 import { ReportActions } from "@/components/reports/ReportActions";
+import { downloadClinicReportPdf } from "@/lib/reports/pdf-export";
+import { formatCurrency } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import {
   fetchAccountantClinicReport,
@@ -21,6 +23,7 @@ export default function AccountantReportsPage() {
   const [report, setReport] = useState<MasterClinicReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const periodOptions = getReportPeriodOptions();
 
@@ -118,6 +121,38 @@ export default function AccountantReportsPage() {
           </Alert>
           <ReportActions
             shareTitle={`تقرير العيادة — ${report.clinicName} — ${report.periodLabel}`}
+            pdfLoading={pdfLoading}
+            onExportPdf={async () => {
+              setPdfLoading(true);
+              try {
+                const s = report.summary;
+                await downloadClinicReportPdf({
+                  clinicName: report.clinicName,
+                  periodLabel: report.periodLabel,
+                  generatedAt: new Date().toLocaleString("ar-IQ"),
+                  title: "تقرير العيادة الشامل",
+                  rows: [
+                    { label: "إجمالي الإيرادات", value: formatCurrency(s.totalRevenue) },
+                    { label: "حصة العيادة", value: formatCurrency(s.totalClinicShare) },
+                    { label: "مصروفات عامة", value: formatCurrency(s.generalExpenses) },
+                    { label: "رواتب وسلف", value: formatCurrency(s.staffSalaries) },
+                    { label: "صرف أطباء", value: formatCurrency(s.doctorPayouts) },
+                    { label: "ديون مفتوحة", value: formatCurrency(s.outstandingDebts) },
+                    { label: "صافي الربح", value: formatCurrency(s.netProfit) },
+                    {
+                      label: "مقبوضات اليوم",
+                      value: formatCurrency(report.today.totalCollected),
+                    },
+                    {
+                      label: "عمليات الشهر",
+                      value: String(report.month.operationsCount),
+                    },
+                  ],
+                });
+              } finally {
+                setPdfLoading(false);
+              }
+            }}
           />
           <MasterReportDocument
             report={report}

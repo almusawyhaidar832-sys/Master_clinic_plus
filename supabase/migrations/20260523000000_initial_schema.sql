@@ -1,5 +1,10 @@
 -- Master Clinic Plus — Initial Multi-Tenant Schema
 -- Run via: supabase db push (or paste in Supabase SQL Editor)
+--
+-- ⚠️ إذا ظهر: type "user_role" already exists
+--    لا تُعد تشغيل هذا الملف — استخدم بدلاً منه:
+--    supabase/scripts/bootstrap_initial_schema_safe.sql
+--    ثم supabase/scripts/fix-apply-tenant-rls.sql
 
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

@@ -84,6 +84,19 @@ html.dark {
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0);
   }
+
+  /* أهداف لمس ≥ 44px — WCAG / iOS HIG */
+  .touch-target {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+    touch-action: manipulation;
+  }
+
+  .touch-input {
+    min-height: 3rem;
+    font-size: 1rem;
+    touch-action: manipulation;
+  }
 }
 
 @media print {

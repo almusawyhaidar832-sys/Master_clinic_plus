@@ -1,5 +1,4 @@
 import { DoctorMobileShell } from "@/components/layout/DoctorMobileShell";
-import { PWARegister } from "@/components/doctor/PWARegister";
 import { AppProviders } from "@/components/providers/AppProviders";
 
 export const metadata = {
@@ -13,7 +12,6 @@ export default function DoctorLayout({
 }) {
   return (
     <AppProviders>
-      <PWARegister />
       <DoctorMobileShell>{children}</DoctorMobileShell>
     </AppProviders>
   );

@@ -34,6 +34,18 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       if (!profile) {
+        try {
+          const devRes = await fetch("/api/developer/session");
+          if (devRes.ok) {
+            const dev = await devRes.json();
+            if (dev.actingClinicId) {
+              setReady(true);
+              return;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
         setReady(true);
         return;
       }

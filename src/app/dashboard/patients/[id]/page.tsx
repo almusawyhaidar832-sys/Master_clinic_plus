@@ -216,6 +216,7 @@ export default function PatientProfilePage() {
             treatmentCases={treatmentCases}
             clinicalByOp={clinicalByOp}
             onClinicalSaved={loadOperations}
+            allowEdit
           />
         )}
       </div>

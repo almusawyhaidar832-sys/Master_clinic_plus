@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     const { error: profileErr } = await admin.from("profiles").insert({
       id:        authData.user.id,
       clinic_id: clinic.id,
-      role:      "accountant",
+      role:      "super_admin",
       full_name: admin_full_name,
       username:  admin_username,
       is_active: true,

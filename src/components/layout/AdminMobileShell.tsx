@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { logoutFromCurrentPortal } from "@/lib/auth/logout-portal";
 import { cn } from "@/lib/utils";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import {
@@ -11,6 +12,8 @@ import {
   Wallet,
   FileText,
   Users,
+  UserCog,
+  LogOut,
 } from "lucide-react";
 
 const adminNav = [
@@ -20,6 +23,7 @@ const adminNav = [
   { href: "/admin/team",      label: "الفريق",   icon: Users       },
   { href: "/admin/withdrawals",label: "السحب",   icon: Wallet      },
   { href: "/admin/report",    label: "التقرير",  icon: FileText    },
+  { href: "/admin/profile",   label: "حسابي",    icon: UserCog     },
 ];
 
 interface AdminMobileShellProps {
@@ -32,6 +36,7 @@ export function AdminMobileShell({
   notificationCount = 0,
 }: AdminMobileShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { displayName, profile } = useClinicProfile();
 
   return (
@@ -54,17 +59,38 @@ export function AdminMobileShell({
               </h1>
             </div>
           </div>
-          <Link
-            href="/admin/withdrawals"
-            className="relative rounded-lg bg-white/10 p-2"
-          >
-            <Wallet className="h-5 w-5" />
-            {notificationCount > 0 && (
-              <span className="absolute -left-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold">
-                {notificationCount > 9 ? "9+" : notificationCount}
-              </span>
-            )}
-          </Link>
+          <div className="flex items-center gap-1">
+            <Link
+              href="/admin/profile"
+              className="touch-target inline-flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20"
+              title="الملف الشخصي — كلمة المرور"
+              aria-label="الملف الشخصي"
+            >
+              <UserCog className="h-5 w-5" />
+            </Link>
+            <Link
+              href="/admin/withdrawals"
+              className="touch-target relative inline-flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20"
+              title="طلبات السحب"
+              aria-label="طلبات السحب"
+            >
+              <Wallet className="h-5 w-5" />
+              {notificationCount > 0 && (
+                <span className="absolute -left-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold">
+                  {notificationCount > 9 ? "9+" : notificationCount}
+                </span>
+              )}
+            </Link>
+            <button
+              type="button"
+              onClick={() => void logoutFromCurrentPortal(router)}
+              className="touch-target inline-flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20"
+              title="تسجيل الخروج"
+              aria-label="تسجيل الخروج"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -81,7 +107,7 @@ export function AdminMobileShell({
                 key={href}
                 href={href}
                 className={cn(
-                  "flex min-w-[3rem] flex-col items-center gap-0.5 rounded-lg px-2 py-1 text-[9px] font-medium sm:text-[10px]",
+                  "touch-target flex min-w-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-2 text-[9px] font-medium sm:text-[10px]",
                   active ? "text-primary" : "text-slate-muted"
                 )}
               >

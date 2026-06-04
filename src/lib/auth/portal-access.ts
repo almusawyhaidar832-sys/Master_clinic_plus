@@ -57,14 +57,36 @@ export function getAuthPortalForPath(pathname: string): AuthPortal | null {
   return id ? AUTH_PORTALS[id] : null;
 }
 
+/** مسارات تعديل كلمة مرور الحساب — ليست إعدادات العيادة */
+export function isProfileSettingsPath(pathname: string): boolean {
+  return (
+    pathname === "/doctor/profile" ||
+    pathname === "/admin/profile" ||
+    pathname === "/dashboard/profile"
+  );
+}
+
+/** المدير (super_admin) والطبيب فقط — المحاسب ممنوع */
+export function canRoleChangeOwnPassword(
+  role: string | null | undefined
+): boolean {
+  const normalized = normalizeRole(role);
+  return normalized === "doctor" || normalized === "super_admin";
+}
+
 export function isRoleAllowedForPath(
   role: string | null | undefined,
   pathname: string
 ): boolean {
-  const portal = getAuthPortalForPath(pathname);
-  if (!portal) return true;
   const normalized = normalizeRole(role);
   if (!normalized) return false;
+
+  if (isProfileSettingsPath(pathname)) {
+    return canRoleChangeOwnPassword(normalized);
+  }
+
+  const portal = getAuthPortalForPath(pathname);
+  if (!portal) return true;
   return portal.allowedRoles.includes(normalized);
 }
 

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { APP_NAME } from "@/lib/constants";
+import { PWAProvider } from "@/components/pwa/PWAProvider";
 
 const notoArabic = Noto_Sans_Arabic({
   subsets: ["arabic"],
@@ -29,7 +30,9 @@ export const viewport: Viewport = {
   themeColor: "#14b8a6",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -39,7 +42,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl" className={notoArabic.variable}>
-      <body className="min-h-screen">{children}</body>
+      <body className="min-h-screen">
+        {children}
+        <PWAProvider />
+      </body>
     </html>
   );
 }

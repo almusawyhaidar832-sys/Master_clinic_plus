@@ -15,8 +15,9 @@ export async function GET() {
       linked: false,
       qr: null,
       state: "unknown",
+      configured: false,
       message:
-        "أضف WHATSAPP_API_URL و WHATSAPP_API_KEY في .env.local — راجع docs/WHATSAPP_EVOLUTION_SETUP.md",
+        "لم تُحمَّل WHATSAPP_API_URL أو WHATSAPP_API_KEY — أضفها في .env.local (محلياً) أو Variables في Railway (إنتاج) ثم أعد النشر.",
     });
   }
 
@@ -49,6 +50,7 @@ export async function GET() {
       qr: result.qrImageSrc,
       state: result.connectionState,
       instanceName: cfg.instanceName,
+      configured: true,
       error: result.error,
       provider: "evolution",
     });

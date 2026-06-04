@@ -10,6 +10,7 @@ import { isRoleAllowedForPath, loginPortalToAuthPortalId } from "@/lib/auth/port
 import { getAuthProfile } from "@/lib/clinic-context";
 import { Eye, EyeOff } from "lucide-react";
 import { DEVELOPER } from "@/lib/constants";
+import { DeveloperFooterLink } from "@/components/layout/DeveloperFooterLink";
 
 /**
  * Each portal has a fixed destination path.
@@ -88,7 +89,7 @@ function PortalCard({ portal }: { portal: Portal }) {
         </div>
         <a
           href="/booking"
-          className={`mt-auto flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-bold text-white transition-colors ${portal.btnColor}`}
+          className={`touch-target mt-auto flex w-full items-center justify-center rounded-xl py-3 text-base font-bold text-white transition-colors ${portal.btnColor}`}
         >
           فتح بوابة الحجز
         </a>
@@ -171,7 +172,7 @@ function PortalCard({ portal }: { portal: Portal }) {
           disabled={loading}
           required
           dir="ltr"
-          className="w-full rounded-xl border border-white bg-white/80 px-3 py-2.5 text-sm text-left placeholder:text-slate-400 focus:border-slate-300 focus:outline-none disabled:opacity-60"
+          className="touch-input w-full rounded-xl border border-white bg-white/80 px-4 py-3 text-base text-left placeholder:text-slate-400 focus:border-slate-300 focus:outline-none disabled:opacity-60"
         />
 
         <div className="relative">
@@ -183,12 +184,12 @@ function PortalCard({ portal }: { portal: Portal }) {
             disabled={loading}
             required
             dir="ltr"
-            className="w-full rounded-xl border border-white bg-white/80 px-3 py-2.5 text-sm text-left placeholder:text-slate-400 focus:border-slate-300 focus:outline-none disabled:opacity-60"
+            className="touch-input w-full rounded-xl border border-white bg-white/80 px-4 py-3 pr-12 text-base text-left placeholder:text-slate-400 focus:border-slate-300 focus:outline-none disabled:opacity-60"
           />
           <button
             type="button"
             onClick={() => setShowPass(!showPass)}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            className="touch-target absolute left-1 top-1/2 -translate-y-1/2 text-slate-400"
           >
             {showPass ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </button>
@@ -197,7 +198,7 @@ function PortalCard({ portal }: { portal: Portal }) {
         <button
           type="submit"
           disabled={loading}
-          className={`flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-bold text-white transition-colors disabled:opacity-60 ${portal.btnColor}`}
+          className={`touch-target flex w-full items-center justify-center rounded-xl py-3 text-base font-bold text-white transition-colors disabled:opacity-60 ${portal.btnColor}`}
         >
           {loading ? (
             <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -217,7 +218,7 @@ function LoginPageContent() {
   const mismatch = searchParams.get("reason") === "role_mismatch";
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+    <div className="safe-top safe-bottom min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden">
       <div className="pointer-events-none absolute right-[-10%] top-[-10%] h-[500px] w-[500px] rounded-full bg-teal-500/5 blur-3xl" />
       <div className="pointer-events-none absolute bottom-[-10%] left-[-10%] h-[400px] w-[400px] rounded-full bg-cyan-500/5 blur-3xl" />
 
@@ -258,6 +259,10 @@ function LoginPageContent() {
             </div>
           </div>
         </div>
+
+        <footer className="mt-6 flex min-h-[2rem] items-center justify-center pb-6">
+          <DeveloperFooterLink />
+        </footer>
 
       </div>
     </div>

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { getClinicIdFromProfile } from "@/lib/clinic-context";
+import { createApiSessionClient, getApiCallerProfile } from "@/lib/auth/api-session";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
-import { fetchEvolutionConnectionState } from "@/lib/whatsapp/evolution-client";
+import { resolveEvolutionSession } from "@/lib/whatsapp/evolution-client";
+import { resolveWhatsAppClinic } from "@/lib/whatsapp/resolve-clinic";
 
 /** GET /api/whatsapp/status — حالة الاتصال + تحديث whatsapp_linked في العيادة */
 export async function GET() {
@@ -11,7 +11,9 @@ export async function GET() {
     return NextResponse.json({
       linked: false,
       state: "unknown",
-      message: "لم يُضبط جسر الواتساب في البيئة",
+      configured: false,
+      message:
+        "أضف WHATSAPP_API_URL و WHATSAPP_API_KEY في Railway Variables أو .env.local",
     });
   }
 
@@ -29,23 +31,34 @@ export async function GET() {
     }
   }
 
-  const { state, data } = await fetchEvolutionConnectionState();
-  const linked = state === "open";
-  await syncClinicLinked(linked, cfg.instanceName);
+  const session = await resolveEvolutionSession();
+  await syncClinicLinked(session.linked, cfg.instanceName);
 
   return NextResponse.json({
-    linked,
-    state,
+    linked: session.linked,
+    state: session.state,
+    configured: true,
     instanceName: cfg.instanceName,
-    raw: process.env.NODE_ENV === "development" ? data : undefined,
+    raw:
+      process.env.NODE_ENV === "development"
+        ? {
+            connectionState: session.connectionStateData,
+            instances: session.instanceListData,
+          }
+        : undefined,
   });
 }
 
 async function syncClinicLinked(linked: boolean, instanceName: string) {
   try {
-    const supabase = await createClient();
-    const clinicId = await getClinicIdFromProfile(supabase);
-    if (!clinicId) return;
+    const profile = await getApiCallerProfile();
+    if (!profile) return;
+
+    const supabase = await createApiSessionClient();
+    const resolved = await resolveWhatsAppClinic(supabase, profile.clinic_id);
+    if (!resolved) return;
+
+    const { clinicId } = resolved;
 
     await supabase
       .from("clinics")

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { logoutFromCurrentPortal } from "@/lib/auth/logout-portal";
 import { cn } from "@/lib/utils";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicModules } from "@/contexts/ClinicModulesContext";
@@ -17,6 +18,7 @@ import {
   Wallet, ArrowDownToLine, Users, Calendar,
   CalendarClock, AlertCircle, FileText, Home,
   Smile, FilePen, Activity, Sun, Moon, Languages,
+  UserCog, LogOut,
 } from "lucide-react";
 
 /** Maps icon string keys → Lucide components for the bottom nav */
@@ -32,6 +34,7 @@ const NAV_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> 
   smile:           Smile,
   filePen:         FilePen,
   activity:        Activity,
+  userCog:         UserCog,
 };
 
 /** Maps icon string keys for quick actions */
@@ -39,6 +42,7 @@ export const QUICK_ACTION_ICON_MAP = NAV_ICON_MAP;
 
 export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { displayName, profile } = useClinicProfile();
   const { specialtyLabel, loading: modulesLoading } = useClinicModules();
   const { isDark, toggleTheme } = useTheme();
@@ -91,17 +95,36 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
           </div>
           {/* Controls */}
           <div className="flex items-center gap-1">
+            <Link
+              href="/doctor/profile"
+              className="touch-target inline-flex items-center justify-center rounded-lg text-white/90 hover:bg-white/10"
+              title="الملف الشخصي — كلمة المرور"
+              aria-label="الملف الشخصي"
+            >
+              <UserCog className="h-5 w-5" />
+            </Link>
+            <button
+              type="button"
+              onClick={() => void logoutFromCurrentPortal(router)}
+              className="touch-target inline-flex items-center justify-center rounded-lg text-white/90 hover:bg-white/10"
+              title="تسجيل الخروج"
+              aria-label="تسجيل الخروج"
+            >
+              <LogOut className="h-5 w-5" />
+            </button>
             <button
               onClick={toggleLang}
-              className="rounded-lg p-1.5 text-white/80 hover:bg-white/10"
+              className="touch-target inline-flex items-center justify-center rounded-lg text-white/80 hover:bg-white/10"
               title={lang === "ar" ? "EN" : "عر"}
+              aria-label="تغيير اللغة"
             >
-              <Languages className="h-4 w-4" />
+              <Languages className="h-5 w-5" />
             </button>
             <button
               onClick={toggleTheme}
-              className="rounded-lg p-1.5 text-white/80 hover:bg-white/10"
+              className="touch-target inline-flex items-center justify-center rounded-lg text-white/80 hover:bg-white/10"
               title={isDark ? "Light" : "Dark"}
+              aria-label="تغيير المظهر"
             >
               {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
@@ -121,7 +144,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
                 key={href}
                 href={href}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium transition-colors",
+                  "touch-target flex min-w-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-2 text-[10px] font-medium transition-colors",
                   active ? "text-primary" : "text-slate-muted"
                 )}
               >
