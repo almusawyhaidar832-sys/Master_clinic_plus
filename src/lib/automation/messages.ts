@@ -11,10 +11,97 @@ export function treatmentStatusAr(
   return "متابعة";
 }
 
+export type SessionWhatsAppKind = "first" | "follow_up" | "completed";
+
+export function resolveSessionWhatsAppKind(
+  sessionNumber: number,
+  treatmentCompleted: boolean
+): SessionWhatsAppKind {
+  if (treatmentCompleted) return "completed";
+  if (sessionNumber <= 1) return "first";
+  return "follow_up";
+}
+
+export function patientSessionWhatsAppMessage(params: {
+  clinic?: ClinicProfile | null;
+  clinicName?: string;
+  patientName: string;
+  doctorName: string;
+  sessionNumber: number;
+  paidThisSession: number;
+  remainingBalance: number;
+  treatmentStatus: string;
+  procedureLabel: string;
+  teethSummary?: string;
+  kind: SessionWhatsAppKind;
+}): string {
+  const clinicName =
+    params.clinicName ?? getClinicDisplayName(params.clinic ?? null);
+  const paid = formatCurrency(Math.max(0, params.paidThisSession));
+  const remaining = formatCurrency(Math.max(0, params.remainingBalance));
+  const doctorLine = params.doctorName.trim() || "فريقنا الطبي";
+
+  const teethBlock = params.teethSummary
+    ? `\n\n🦷 تفاصيل إضافية:\n${params.teethSummary}`
+    : "";
+
+  const summary = `ملخص زيارتك:
+• الإجراء: ${params.procedureLabel}
+• الحالة: ${params.treatmentStatus}
+• المبلغ المدفوع: ${paid}
+• المبلغ المتبقي (الذمة): ${remaining}${teethBlock}`;
+
+  const footer = `نحن نهتم لأدق التفاصيل في علاجك، ونتمنى لك دوام الصحة والشفاء العاجل. ابتسامتك هي نجاحنا!
+
+مع تحيات فريق ${clinicName} الطبي.`;
+
+  if (params.kind === "completed") {
+    return `🎉 *تم إكمال العلاج بنجاح*
+
+أهلاً بك يا ${params.patientName} في ${clinicName}.
+
+يسعدنا إبلاغك بأنه قد *اكتملت خطتك العلاجية بالكامل* تحت إشراف الدكتور/ة: ${doctorLine}.
+
+لا توجد ذمة متبقية على هذه الحالة — شكراً لثقتكم ولمتابعتكم معنا حتى النهاية.
+
+${summary}
+
+${footer}`;
+  }
+
+  if (params.kind === "first") {
+    return `أهلاً بك يا ${params.patientName} في ${clinicName}.
+
+يسعدنا جداً أن نكون جزءاً من رحلتك نحو ابتسامة صحية وجميلة!
+
+تم *إكمال الجلسة الأولى* بنجاح تحت إشراف الدكتور/ة: ${doctorLine}.
+
+سنوافيكم برسالة بعد كل جلسة حتى اكتمال العلاج بالكامل.
+
+${summary}
+
+نحن بانتظاركم في الجلسة القادمة لمتابعة خطتكم العلاجية.
+
+${footer}`;
+  }
+
+  return `أهلاً بك يا ${params.patientName} في ${clinicName}.
+
+تم *إكمال الجلسة رقم ${params.sessionNumber}* بنجاح تحت إشراف الدكتور/ة: ${doctorLine}.
+
+نحن بانتظارك في الجلسة القادمة لمتابعة باقي خطتك العلاجية.
+
+${summary}
+
+${footer}`;
+}
+
+/** @deprecated استخدم patientSessionWhatsAppMessage */
 export function sessionUpdateWhatsAppMessage(params: {
   clinic?: ClinicProfile | null;
   clinicName?: string;
   patientName: string;
+  doctorName: string;
   sessionNumber: number;
   paidThisSession: number;
   remainingBalance: number;
@@ -23,37 +110,11 @@ export function sessionUpdateWhatsAppMessage(params: {
   teethSummary?: string;
   treatmentCompleted?: boolean;
 }): string {
-  const clinicName =
-    params.clinicName ?? getClinicDisplayName(params.clinic ?? null);
-  const paid =
-    params.paidThisSession > 0
-      ? formatCurrency(params.paidThisSession)
-      : "—";
-  const remaining = formatCurrency(Math.max(0, params.remainingBalance));
-  const teethBlock = params.teethSummary
-    ? `\n🦷 مخطط الأسنان:\n${params.teethSummary}`
-    : "";
-
-  const header = params.treatmentCompleted
-    ? `🎉 عزيزنا/عزيزتنا ${params.patientName}
-
-✅ *تم إكمال الخطة العلاجية بنجاح*
-
-نتمنى لكم دوام الصحة والعافية — يسعدنا رؤيتكم دائماً في ${clinicName}.
-`
-    : `عزيزنا/عزيزتنا ${params.patientName}،
-
-🏥 *${clinicName}*
-`;
-
-  return `${header}
-📋 الجلسة رقم: ${params.sessionNumber}
-💊 الحالة العلاجية: ${params.treatmentStatus}
-💰 المدفوع (هذه الجلسة): ${paid}
-📊 المتبقي على الذمة: ${remaining}
-📝 الإجراء: ${params.procedureLabel}${teethBlock}
-
-للاستفسار ردّوا على هذه الرسالة. شكراً لثقتكم بنا.`;
+  const kind = resolveSessionWhatsAppKind(
+    params.sessionNumber,
+    Boolean(params.treatmentCompleted)
+  );
+  return patientSessionWhatsAppMessage({ ...params, kind });
 }
 
 export function xrayLinkWhatsAppMessage(params: {

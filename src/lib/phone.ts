@@ -1,5 +1,7 @@
 /** Iraq mobile — used for WhatsApp and patient records */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 export const IRAQ_COUNTRY_CODE = "964";
 
 export function digitsOnly(input: string): string {
@@ -68,4 +70,52 @@ export function getPatientDisplayPhone(patient: {
   phone_number?: string | null;
 }): string | null {
   return patient.phone_number ?? patient.phone ?? null;
+}
+
+/** حفظ رقم المراجع قبل إرسال واتساب — يُحدّث السجل إن وُجد رقم في النموذج */
+export async function ensurePatientPhoneOnRecord(
+  supabase: SupabaseClient,
+  patientId: string,
+  formPhone: string
+): Promise<
+  | { ok: true; phone: string }
+  | { ok: false; reason: "missing" | "invalid"; message: string }
+> {
+  const trimmed = formPhone.trim();
+
+  if (trimmed) {
+    const check = validatePatientPhone(trimmed);
+    if (!check.ok) {
+      return { ok: false, reason: "invalid", message: check.message };
+    }
+    const { error } = await supabase
+      .from("patients")
+      .update(patientPhoneColumns(check.normalized))
+      .eq("id", patientId);
+    if (error) {
+      return {
+        ok: false,
+        reason: "invalid",
+        message: error.message || "تعذر حفظ رقم الهاتف",
+      };
+    }
+    return { ok: true, phone: check.normalized };
+  }
+
+  const { data } = await supabase
+    .from("patients")
+    .select("phone, phone_number")
+    .eq("id", patientId)
+    .maybeSingle();
+
+  const existing = getPatientDisplayPhone(data ?? {});
+  if (existing?.trim()) {
+    return { ok: true, phone: existing.trim() };
+  }
+
+  return {
+    ok: false,
+    reason: "missing",
+    message: "أدخل رقم جوال المراجع لإرسال واتساب تلقائياً",
+  };
 }

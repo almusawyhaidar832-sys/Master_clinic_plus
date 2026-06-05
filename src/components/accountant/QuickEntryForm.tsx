@@ -24,6 +24,7 @@ import {
   isCaseFullySettled,
   isTreatmentCaseClosed,
   isTreatmentCaseComplete,
+  FINANCIAL_EPSILON,
   previewTreatmentSplitWithReview,
   resolveSessionKind,
   saveFirstSessionPlanFallback,
@@ -44,6 +45,7 @@ import { fetchPatientPrimaryDoctor } from "@/lib/services/patient-primary-doctor
 import { TreatmentCasePicker } from "@/components/accountant/TreatmentCasePicker";
 import type { Doctor, Patient, PatientOperation } from "@/types";
 import {
+  ensurePatientPhoneOnRecord,
   getPatientDisplayPhone,
   patientPhoneColumns,
   validatePatientPhone,
@@ -335,6 +337,28 @@ export function QuickEntryForm({
   }, [selectedPatientId, forceNewPlan]);
 
   useEffect(() => {
+    if (!selectedPatientId) {
+      setPatientPhone("");
+      return;
+    }
+    let cancelled = false;
+    async function loadPatientPhone() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("patients")
+        .select("phone, phone_number")
+        .eq("id", selectedPatientId)
+        .maybeSingle();
+      if (cancelled) return;
+      setPatientPhone(getPatientDisplayPhone(data ?? {}) ?? "");
+    }
+    void loadPatientPhone();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPatientId]);
+
+  useEffect(() => {
     if (isFollowUpSession) {
       setTotalAmount("");
       setDiscountAmount("");
@@ -454,6 +478,17 @@ export function QuickEntryForm({
     const additionalDiscount = parseFloat(additionalDiscountAmount) || 0;
     const entryMode =
       forceNewPlan || !selectedCaseId ? "plan" : "payment";
+
+    const phoneReady = await ensurePatientPhoneOnRecord(
+      supabase,
+      patientId,
+      patientPhone
+    );
+    if (!phoneReady.ok) {
+      setMessage({ type: "error", text: phoneReady.message });
+      setLoading(false);
+      return;
+    }
 
     if (
       (pickedCase
@@ -589,8 +624,11 @@ export function QuickEntryForm({
           .select("*")
           .single();
 
-        if (!result.error) {
-          return { op: result.data as PatientOperation, error: null };
+        if (!result.error && result.data) {
+          const row = result.data as PatientOperation;
+          if (row.id) {
+            return { op: row, error: null };
+          }
         }
 
         const msg = result.error.message;
@@ -608,7 +646,7 @@ export function QuickEntryForm({
             .insert(stripped)
             .select("*")
             .single();
-          if (!retry.error) {
+          if (!retry.error && retry.data?.id) {
             return { op: retry.data as PatientOperation, error: null };
           }
         }
@@ -752,9 +790,8 @@ export function QuickEntryForm({
       });
     }
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       const msg = error.message ?? "";
       let display = `تعذر حفظ العملية: ${msg}`;
 
@@ -773,21 +810,17 @@ export function QuickEntryForm({
       return;
     }
 
-    if (op?.id) {
-      const hasClinical =
-        clinical.xrayFiles.length > 0 ||
-        Object.keys(clinical.teeth).length > 0;
-      if (hasClinical) {
-        const clinicalRes = await saveSessionClinicalRecords(op.id, clinical);
-        if (!clinicalRes.ok) {
-          setMessage({
-            type: "error",
-            text: `تم حفظ الجلسة لكن: ${clinicalRes.error}`,
-          });
-          return;
-        }
-      }
-
+    let operationIdForNotify = op?.id as string | undefined;
+    if (!operationIdForNotify) {
+      const { data: latestOp } = await supabase
+        .from("patient_operations")
+        .select("id")
+        .eq("patient_id", patientId)
+        .eq("clinic_id", activeClinic.clinicId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      operationIdForNotify = latestOp?.id as string | undefined;
     }
 
     setSelectedPatientId(patientId!);
@@ -814,19 +847,92 @@ export function QuickEntryForm({
       ? caseToFinancialPlan(updatedCase)
       : financialPlan ?? emptyPlan;
 
-    const justCompleted = isTreatmentCaseComplete(snap);
+    const justCompleted =
+      hasTreatmentPlan(snap) &&
+      snap.final_price > FINANCIAL_EPSILON &&
+      snap.remaining_balance <= FINANCIAL_EPSILON;
 
-    if (op?.id) {
-      await fetch("/api/automation/dispatch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          event: "session_saved",
-          operationId: op.id,
-          treatmentCompleted: justCompleted,
-        }),
-      });
+    let whatsappNote = "";
+    if (operationIdForNotify) {
+      try {
+        const waRes = await fetch(
+          `/api/operations/${operationIdForNotify}/whatsapp-notify`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ treatmentCompleted: justCompleted }),
+          }
+        );
+        void fetch("/api/automation/dispatch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            event: "session_saved",
+            operationId: operationIdForNotify,
+            treatmentCompleted: justCompleted,
+            skipPatientWhatsApp: true,
+          }),
+        });
+
+        const waData = (await waRes.json()) as {
+          whatsapp?: {
+            sent?: boolean;
+            skipped?: string;
+            pending?: boolean;
+            errors?: string[];
+          };
+          error?: string;
+        };
+        const wa = waData.whatsapp;
+
+        if (!waRes.ok) {
+          whatsappNote = ` — واتساب: ${waData.error ?? "فشل الطلب"}`;
+        } else if (waData.error && !wa?.sent) {
+          whatsappNote = ` — واتساب: ${waData.error}`;
+        } else if (wa?.sent) {
+          whatsappNote = justCompleted
+            ? " — تم إرسال واتساب: *اكتمال العلاج* ✓"
+            : " — تم إرسال واتساب للمراجع (هذه الجلسة) ✓";
+        } else if (wa?.skipped === "no_patient_phone") {
+          whatsappNote =
+            " — لم يُرسل واتساب: أضف رقم جوال المراجع في الحقل أعلاه.";
+        } else if (wa?.pending) {
+          whatsappNote =
+            " — واتساب غير مضبوط (WHATSAPP_* في .env.local).";
+        } else if (wa?.errors?.includes("operation_context_load_failed")) {
+          whatsappNote =
+            " — تعذر قراءة الجلسة للواتساب (أعد تشغيل npm run dev وجرب مرة أخرى).";
+        } else if (wa?.errors?.length) {
+          whatsappNote = ` — تعذر إرسال واتساب: ${wa.errors[0]}`;
+        } else if (!wa?.sent) {
+          whatsappNote = " — لم يُرسل واتساب (تحقق من السجلات).";
+        }
+      } catch {
+        whatsappNote = " — تعذر تشغيل إرسال واتساب تلقائياً.";
+      }
     }
+
+    if (operationIdForNotify) {
+      const hasClinical =
+        clinical.xrayFiles.length > 0 ||
+        Object.keys(clinical.teeth).length > 0;
+      if (hasClinical) {
+        const clinicalRes = await saveSessionClinicalRecords(
+          operationIdForNotify,
+          clinical
+        );
+        if (!clinicalRes.ok) {
+          setLoading(false);
+          setMessage({
+            type: "error",
+            text: `تم حفظ الجلسة وإرسال الواتساب لكن: ${clinicalRes.error}`,
+          });
+          return;
+        }
+      }
+    }
+
+    setLoading(false);
 
     let successText: string;
     if (justCompleted) {
@@ -845,7 +951,7 @@ export function QuickEntryForm({
       if (paid > 0) parts.push(`دفعة ${formatCurrency(paid)}`);
       successText = `✓ ${parts.join(" — ")} — الذمة ${formatCurrency(snap.remaining_balance)}`;
     }
-    setMessage({ type: "success", text: successText });
+    setMessage({ type: "success", text: successText + whatsappNote });
 
     setOperationName("");
     setTotalAmount("");
@@ -995,9 +1101,31 @@ export function QuickEntryForm({
           </div>
         )}
 
-        {formSchema.showPatientSearch && selectedPatientId && patientPhone && (
-          <div className="sm:col-span-2 text-sm text-slate-muted" dir="ltr">
-            هاتف المراجع: {patientPhone}
+        {selectedPatientId && (
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-slate-text">
+              رقم واتساب المراجع{" "}
+              <span className="text-debt-text">*</span>
+              <span className="font-normal text-slate-muted">
+                {" "}
+                (للإشعار التلقائي بعد الجلسة)
+              </span>
+            </label>
+            <input
+              type="tel"
+              dir="ltr"
+              required
+              className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm text-slate-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              value={patientPhone}
+              onChange={(e) => setPatientPhone(e.target.value)}
+              placeholder="07XX XXX XXXX"
+            />
+            {!patientPhone.trim() && isFollowUpSession && (
+              <p className="mt-1 text-xs text-amber-700">
+                بدون رقم لن تُرسل رسالة واتساب — اختبار الإرسال يستخدم رقمك أنت
+                فقط.
+              </p>
+            )}
           </div>
         )}
 

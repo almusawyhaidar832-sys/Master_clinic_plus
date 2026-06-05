@@ -7,11 +7,13 @@ import {
   notifyDoctorSessionPayment,
 } from "@/lib/notifications/server";
 import {
-  sessionUpdateWhatsAppMessage,
+  patientSessionWhatsAppMessage,
+  resolveSessionWhatsAppKind,
   xrayLinkWhatsAppMessage,
   treatmentStatusAr,
   doctorPaymentAlertMessage,
 } from "@/lib/automation/messages";
+import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { loadSessionAutomationContext } from "@/lib/automation/session-context";
 
 const LOG = "[automation]";
@@ -26,46 +28,29 @@ export type SessionSavedOptions = {
 export async function runSessionSavedAutomation(
   operationId: string,
   options: SessionSavedOptions = {}
-): Promise<{ ok: boolean; errors: string[] }> {
+): Promise<{
+  ok: boolean;
+  errors: string[];
+  whatsapp: Awaited<ReturnType<typeof sendPatientSessionWhatsApp>>;
+}> {
   const errors: string[] = [];
   const ctx = await loadSessionAutomationContext(operationId);
   if (!ctx) {
-    return { ok: false, errors: ["operation_not_found"] };
+    return {
+      ok: false,
+      errors: ["operation_not_found"],
+      whatsapp: { sent: false, skipped: "operation_not_found", errors: ["operation_not_found"] },
+    };
   }
 
   const admin = getAdminClient();
-  const clinicProfile = await fetchClinicProfile(admin, ctx.clinicId);
 
-  const completed =
-    options.treatmentCompleted === true ||
-    ctx.treatmentStatus === "completed" ||
-    ctx.remainingBalance <= 0;
-
-  const statusLabel = treatmentStatusAr(ctx.treatmentStatus, ctx.remainingBalance);
-
-  if (!options.skipPatientWhatsApp && ctx.patientPhone) {
-    const body = sessionUpdateWhatsAppMessage({
-      clinic: clinicProfile,
-      patientName: ctx.patientName,
-      sessionNumber: ctx.sessionNumber,
-      paidThisSession: ctx.paidAmount,
-      remainingBalance: ctx.remainingBalance,
-      treatmentStatus: statusLabel,
-      procedureLabel: ctx.procedureLabel,
-      teethSummary: ctx.teethSummary || undefined,
-      treatmentCompleted: completed,
-    });
-
-    const waType = completed ? "treatment_completed" : "session_update";
-    const wa = await deliverWhatsAppMessage(admin, {
-      clinicId: ctx.clinicId,
-      rawPhone: ctx.patientPhone,
-      messageBody: body,
-      messageType: waType,
-    });
-    if (!wa.ok && wa.configured) {
-      errors.push(`patient_wa:${wa.providerError ?? wa.status}`);
-    }
+  const patientWa = await sendPatientSessionWhatsApp(operationId, {
+    treatmentCompleted: options.treatmentCompleted,
+    skipPatientWhatsApp: options.skipPatientWhatsApp,
+  });
+  if (!patientWa.sent && patientWa.errors.length) {
+    errors.push(`patient_wa:${patientWa.errors.join(",")}`);
   }
 
   try {
@@ -99,7 +84,73 @@ export async function runSessionSavedAutomation(
     }
   }
 
-  return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors, whatsapp: patientWa };
+}
+
+/** إرسال واتساب للمراجع بعد حفظ جلسة — يُستدعى من الواجهة أو API */
+export async function sendPatientSessionWhatsApp(
+  operationId: string,
+  options: SessionSavedOptions = {}
+): Promise<{
+  sent: boolean;
+  skipped?: string;
+  pending?: boolean;
+  errors: string[];
+}> {
+  const ctx = await loadSessionAutomationContext(operationId);
+  if (!ctx) {
+    return { sent: false, skipped: "operation_not_found", errors: ["operation_not_found"] };
+  }
+  if (options.skipPatientWhatsApp) {
+    return { sent: false, skipped: "skipped_by_option", errors: [] };
+  }
+  if (!ctx.patientPhone?.trim()) {
+    return { sent: false, skipped: "no_patient_phone", errors: [] };
+  }
+
+  const admin = getAdminClient();
+  const clinicProfile = await fetchClinicProfile(admin, ctx.clinicId);
+  // اكتمال العلاج فقط عندما الذمة = 0 (لا نعتمد على علامة الواجهة وحدها)
+  const completed = ctx.remainingBalance <= FINANCIAL_EPSILON;
+  const statusLabel = treatmentStatusAr(ctx.treatmentStatus, ctx.remainingBalance);
+  const kind = resolveSessionWhatsAppKind(ctx.sessionNumber, completed);
+
+  const body = patientSessionWhatsAppMessage({
+    clinic: clinicProfile,
+    patientName: ctx.patientName,
+    doctorName: ctx.doctorName,
+    sessionNumber: ctx.sessionNumber,
+    paidThisSession: ctx.paidAmount,
+    remainingBalance: ctx.remainingBalance,
+    treatmentStatus: statusLabel,
+    procedureLabel: ctx.procedureLabel,
+    teethSummary: ctx.teethSummary || undefined,
+    kind,
+  });
+
+  const waType =
+    kind === "completed"
+      ? "treatment_completed"
+      : kind === "first"
+        ? "session_started"
+        : "session_update";
+  const wa = await deliverWhatsAppMessage(admin, {
+    clinicId: ctx.clinicId,
+    rawPhone: ctx.patientPhone,
+    messageBody: body,
+    messageType: waType,
+  });
+
+  if (!wa.configured) {
+    return { sent: false, pending: true, errors: ["whatsapp_not_configured"] };
+  }
+  if (!wa.ok) {
+    return {
+      sent: false,
+      errors: [wa.providerError ?? wa.status],
+    };
+  }
+  return { sent: wa.status === "sent", pending: wa.status === "pending", errors: [] };
 }
 
 const XRAY_BUCKET = "clinical-xrays";

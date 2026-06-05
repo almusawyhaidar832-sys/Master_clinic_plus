@@ -27,14 +27,21 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { event, operationId, treatmentCompleted, storagePath, fileName } =
-      body as {
-        event: string;
-        operationId?: string;
-        treatmentCompleted?: boolean;
-        storagePath?: string;
-        fileName?: string | null;
-      };
+    const {
+      event,
+      operationId,
+      treatmentCompleted,
+      storagePath,
+      fileName,
+      skipPatientWhatsApp,
+    } = body as {
+      event: string;
+      operationId?: string;
+      treatmentCompleted?: boolean;
+      storagePath?: string;
+      fileName?: string | null;
+      skipPatientWhatsApp?: boolean;
+    };
 
     if (!event || !operationId) {
       return NextResponse.json(
@@ -47,11 +54,13 @@ export async function POST(req: NextRequest) {
       case "session_saved": {
         const result = await runSessionSavedAutomation(operationId, {
           treatmentCompleted: Boolean(treatmentCompleted),
+          skipPatientWhatsApp: Boolean(skipPatientWhatsApp),
         });
         return NextResponse.json({
           success: true,
           ok: result.ok,
           errors: result.errors,
+          whatsapp: result.whatsapp,
         });
       }
       case "xray_uploaded": {

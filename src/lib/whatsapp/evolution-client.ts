@@ -1,6 +1,9 @@
 import { digitsOnly } from "@/lib/phone";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
-import { resolveWhatsAppInstanceName } from "@/lib/whatsapp/resolve-instance";
+import {
+  resolveWhatsAppInstanceForClinic,
+  resolveWhatsAppInstanceName,
+} from "@/lib/whatsapp/resolve-instance";
 
 export type EvolutionConnectionState = "open" | "close" | "connecting" | "unknown";
 
@@ -312,9 +315,9 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
     };
   }
 
-  await ensureEvolutionInstance();
+  await ensureEvolutionInstanceNamed(instanceName);
 
-  const session = await resolveEvolutionSession();
+  const session = await resolveEvolutionSession(instanceName);
   if (session.linked) {
     return {
       linked: true,
@@ -330,7 +333,7 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
   );
 
   if (!connect.ok) {
-    const ensured = await ensureEvolutionInstance();
+    const ensured = await ensureEvolutionInstanceNamed(instanceName);
     const fallbackQr = ensured.qrFromCreate;
     if (fallbackQr) {
       return {
@@ -352,6 +355,27 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
   const qrImageSrc = extractQrImageSrc(connect.data);
   const connectionState = parseConnectionState(connect.data);
 
+  if (!qrImageSrc && connectionState === "open") {
+    return {
+      linked: true,
+      connectionState: "open",
+      qrImageSrc: null,
+      raw: connect.data,
+    };
+  }
+
+  if (!qrImageSrc && !session.linked) {
+    return {
+      linked: false,
+      connectionState:
+        connectionState === "unknown" ? session.state : connectionState,
+      qrImageSrc: null,
+      error:
+        "لم يُرجع Evolution رمز QR — اضغط «QR جديد (بعد خطأ الربط)» أو «إعادة الربط»",
+      raw: connect.data,
+    };
+  }
+
   return {
     linked: connectionState === "open",
     connectionState:
@@ -364,10 +388,15 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
 /** إرسال نص عبر Evolution — الرقم بدون + */
 export async function sendEvolutionText(
   rawPhone: string,
-  text: string
+  text: string,
+  options?: { clinicId?: string; instanceName?: string }
 ): Promise<{ ok: boolean; status: number; error?: string; data?: unknown }> {
   const { configured } = getWhatsAppConfig();
-  const instanceName = await resolveWhatsAppInstanceName();
+  const instanceName =
+    options?.instanceName?.trim() ||
+    (options?.clinicId
+      ? await resolveWhatsAppInstanceForClinic(options.clinicId)
+      : await resolveWhatsAppInstanceName());
   if (!configured) {
     return { ok: false, status: 0, error: "whatsapp_not_configured" };
   }

@@ -3,6 +3,7 @@ import { createApiSessionClient, getApiCallerProfile } from "@/lib/auth/api-sess
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
 import { resolveEvolutionSession } from "@/lib/whatsapp/evolution-client";
 import { resolveWhatsAppClinic } from "@/lib/whatsapp/resolve-clinic";
+import { resolveWhatsAppInstanceName } from "@/lib/whatsapp/resolve-instance";
 
 /** GET /api/whatsapp/status — حالة الاتصال + تحديث whatsapp_linked في العيادة */
 export async function GET() {
@@ -31,14 +32,15 @@ export async function GET() {
     }
   }
 
-  const session = await resolveEvolutionSession();
-  await syncClinicLinked(session.linked, cfg.instanceName);
+  const instanceName = await resolveWhatsAppInstanceName();
+  const session = await resolveEvolutionSession(instanceName);
+  await syncClinicLinked(session.linked, instanceName);
 
   return NextResponse.json({
     linked: session.linked,
     state: session.state,
     configured: true,
-    instanceName: cfg.instanceName,
+    instanceName,
     raw:
       process.env.NODE_ENV === "development"
         ? {
@@ -64,7 +66,7 @@ async function syncClinicLinked(linked: boolean, instanceName: string) {
       .from("clinics")
       .update({
         whatsapp_linked: linked,
-        whatsapp_session_id: linked ? instanceName : null,
+        whatsapp_session_id: instanceName,
       })
       .eq("id", clinicId);
   } catch (e) {

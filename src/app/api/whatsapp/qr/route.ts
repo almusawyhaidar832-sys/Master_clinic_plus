@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
 import { fetchEvolutionQr } from "@/lib/whatsapp/evolution-client";
+import { resolveWhatsAppInstanceName } from "@/lib/whatsapp/resolve-instance";
 
 /**
  * GET /api/whatsapp/qr
@@ -44,12 +45,13 @@ export async function GET() {
   }
 
   try {
+    const instanceName = await resolveWhatsAppInstanceName();
     const result = await fetchEvolutionQr();
     return NextResponse.json({
       linked: result.linked,
       qr: result.qrImageSrc,
       state: result.connectionState,
-      instanceName: cfg.instanceName,
+      instanceName,
       configured: true,
       error: result.error,
       provider: "evolution",

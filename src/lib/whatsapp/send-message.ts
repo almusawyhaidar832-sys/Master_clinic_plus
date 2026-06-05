@@ -68,7 +68,9 @@ export async function deliverWhatsAppMessage(
 
   try {
     if (cfg.provider === "evolution") {
-      const evo = await sendEvolutionText(normalizedPhone, params.messageBody);
+      const evo = await sendEvolutionText(normalizedPhone, params.messageBody, {
+        clinicId: params.clinicId,
+      });
       providerStatus = evo.status;
       if (!evo.ok) {
         providerError = evo.error ?? `HTTP ${evo.status}`;

@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { opName } from "@/types";
 import { getPatientDisplayPhone } from "@/lib/phone";
@@ -39,30 +40,91 @@ function formatTeethSummary(
     .join("\n");
 }
 
-export async function loadSessionAutomationContext(
-  operationId: string
-): Promise<SessionAutomationContext | null> {
-  const admin = getAdminClient();
+type OpRow = {
+  id: string;
+  clinic_id: string;
+  patient_id: string;
+  doctor_id: string;
+  paid_amount?: number | null;
+  remaining_debt?: number | null;
+  total_amount?: number | null;
+  session_kind?: string | null;
+  created_at?: string | null;
+  operation_name_ar?: string | null;
+  treatment_case_id?: string | null;
+};
 
-  const { data: op, error } = await admin
+async function fetchOperationForAutomation(
+  client: SupabaseClient,
+  operationId: string
+): Promise<OpRow | null> {
+  // لا يوجد عمود operation_type في DB — الاسم في operation_name_ar فقط
+  const selects = [
+    "id, clinic_id, patient_id, doctor_id, paid_amount, remaining_debt, total_amount, session_kind, created_at, operation_name_ar, treatment_case_id",
+    "id, clinic_id, patient_id, doctor_id, paid_amount, remaining_debt, total_amount, created_at, operation_name_ar",
+    "id, clinic_id, patient_id, doctor_id, paid_amount, total_amount, created_at, operation_name_ar",
+    "id, clinic_id, patient_id, doctor_id, paid_amount, total_amount, created_at",
+  ];
+
+  for (const sel of selects) {
+    const { data, error } = await client
+      .from("patient_operations")
+      .select(sel)
+      .eq("id", operationId)
+      .maybeSingle();
+    if (!error && data) return data as OpRow;
+  }
+
+  const wildcard = await client
     .from("patient_operations")
-    .select(
-      "id, clinic_id, patient_id, doctor_id, paid_amount, remaining_debt, total_amount, session_kind, created_at, operation_name_ar, operation_type"
-    )
+    .select("*")
     .eq("id", operationId)
     .maybeSingle();
 
-  if (error || !op) return null;
+  if (!wildcard.error && wildcard.data) {
+    return wildcard.data as OpRow;
+  }
+
+  console.error(
+    "[session-context] fetch op failed",
+    operationId,
+    wildcard.error?.message
+  );
+  return null;
+}
+
+export async function loadSessionAutomationContext(
+  operationId: string,
+  userClient?: SupabaseClient
+): Promise<SessionAutomationContext | null> {
+  const admin = getAdminClient();
+  let op = await fetchOperationForAutomation(admin, operationId);
+  if (!op && userClient) {
+    op = await fetchOperationForAutomation(userClient, operationId);
+  }
+  if (!op) return null;
+
+  let patientRes = await admin
+    .from("patients")
+    .select(
+      "full_name_ar, phone, phone_number, treatment_status, agreed_total, total_paid"
+    )
+    .eq("id", op.patient_id)
+    .maybeSingle();
+
+  if (patientRes.error) {
+    patientRes = await admin
+      .from("patients")
+      .select(
+        "full_name_ar, phone, treatment_status, agreed_total, total_paid"
+      )
+      .eq("id", op.patient_id)
+      .maybeSingle();
+  }
 
   const [{ data: patient }, { data: doctor }, { data: clinic }, { data: allOps }] =
     await Promise.all([
-      admin
-        .from("patients")
-        .select(
-          "full_name_ar, phone, phone_number, treatment_status, agreed_total, total_paid"
-        )
-        .eq("id", op.patient_id)
-        .maybeSingle(),
+      Promise.resolve(patientRes),
       admin
         .from("doctors")
         .select("full_name_ar, phone, profile_id")
@@ -92,13 +154,36 @@ export async function loadSessionAutomationContext(
   const totalPaid = Number(patient?.total_paid ?? 0);
   const remainingFromPatient =
     agreed > 0 ? Math.max(0, agreed - totalPaid) : undefined;
-  const remainingBalance =
-    remainingFromPatient ??
-    Math.max(
-      0,
-      Number(op.remaining_debt ?? 0) ||
-        Number(op.total_amount ?? 0) - Number(op.paid_amount ?? 0)
-    );
+  const remainingFromOp = Math.max(
+    0,
+    Number(op.remaining_debt ?? 0) ||
+      Number(op.total_amount ?? 0) - Number(op.paid_amount ?? 0)
+  );
+
+  let remainingBalance =
+    remainingFromPatient ?? remainingFromOp;
+
+  const caseId = op.treatment_case_id;
+  if (caseId) {
+    const caseRes = await admin
+      .from("patient_treatment_cases")
+      .select("final_price, total_paid, case_price, discount_total")
+      .eq("id", caseId)
+      .maybeSingle();
+    const caseRow = caseRes.error ? null : caseRes.data;
+    if (caseRow) {
+      const finalPrice =
+        Number(caseRow.final_price ?? 0) ||
+        Math.max(
+          0,
+          Number(caseRow.case_price ?? 0) - Number(caseRow.discount_total ?? 0)
+        );
+      remainingBalance = Math.max(
+        0,
+        finalPrice - Number(caseRow.total_paid ?? 0)
+      );
+    }
+  }
 
   return {
     operationId: op.id,
