@@ -1,60 +1,126 @@
-import { treatmentNameKey } from "@/lib/services/patient-treatment-cases";
-import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
+import {
+  isPersistedTreatmentCaseId,
+  treatmentNameKey,
+  type PatientTreatmentCase,
+} from "@/lib/services/patient-treatment-cases";
 import { isTreatmentCaseComplete } from "@/lib/services/patient-financial-plan";
-import { opName, type PatientOperation } from "@/types";
+import {
+  operationLabelForCase,
+  opName,
+  type PatientOperation,
+} from "@/types";
 
-/** اسم الحالة من العملية (بدون لاحقة خصم إضافي) */
+/** مفتاح تجميع الجلسات حسب اسم الحالة */
 export function operationCaseKey(op: PatientOperation): string {
-  const raw = opName(op).trim();
-  const base = raw.replace(/\s*—\s*خصم.*$/i, "").trim() || raw;
-  return treatmentNameKey(base);
+  return treatmentNameKey(operationLabelForCase(op));
 }
 
 export interface TreatmentCaseSessionGroup {
   key: string;
   treatmentName: string;
+  /** UUID من patient_treatment_cases عند التوفر */
+  caseId: string | null;
   caseInfo: PatientTreatmentCase | null;
   sessions: PatientOperation[];
   sessionCount: number;
+}
+
+/** ربط الجلسة بالحالة — treatment_case_id أولاً (حالتان بنفس الاسم منفصلتان) */
+function resolveGroupKeyForOp(
+  op: PatientOperation,
+  casesByNameCount: Map<string, number>
+): { key: string; caseId: string | null } {
+  const linked = op.treatment_case_id?.trim();
+  if (linked && isPersistedTreatmentCaseId(linked)) {
+    return { key: `case:${linked}`, caseId: linked };
+  }
+  const nameKey = operationCaseKey(op);
+  if ((casesByNameCount.get(nameKey) ?? 0) <= 1) {
+    return { key: `name:${nameKey}`, caseId: null };
+  }
+  return { key: `orphan:${op.id}`, caseId: null };
 }
 
 export function groupOperationsByTreatmentCase(
   operations: PatientOperation[],
   treatmentCases: PatientTreatmentCase[]
 ): TreatmentCaseSessionGroup[] {
+  const caseById = new Map<string, PatientTreatmentCase>();
   const caseByKey = new Map<string, PatientTreatmentCase>();
+  const casesByNameCount = new Map<string, number>();
   for (const c of treatmentCases) {
-    caseByKey.set(treatmentNameKey(c.treatment_name_ar), c);
+    if (isPersistedTreatmentCaseId(c.id)) {
+      caseById.set(c.id, c);
+    }
+    const nk = treatmentNameKey(c.treatment_name_ar);
+    casesByNameCount.set(nk, (casesByNameCount.get(nk) ?? 0) + 1);
+    if ((casesByNameCount.get(nk) ?? 0) <= 1 && !caseByKey.has(nk)) {
+      caseByKey.set(nk, c);
+    } else if ((casesByNameCount.get(nk) ?? 0) > 1) {
+      caseByKey.delete(nk);
+    }
   }
 
-  const byKey = new Map<string, PatientOperation[]>();
+  const byGroup = new Map<
+    string,
+    { caseId: string | null; sessions: PatientOperation[] }
+  >();
+
   for (const op of operations) {
-    const key = operationCaseKey(op);
-    const list = byKey.get(key) ?? [];
-    list.push(op);
-    byKey.set(key, list);
+    const { key: gKey, caseId: resolvedId } = resolveGroupKeyForOp(
+      op,
+      casesByNameCount
+    );
+    const bucket = byGroup.get(gKey) ?? {
+      caseId: resolvedId,
+      sessions: [],
+    };
+    if (resolvedId && !bucket.caseId) bucket.caseId = resolvedId;
+    bucket.sessions.push(op);
+    byGroup.set(gKey, bucket);
   }
 
   const groups: TreatmentCaseSessionGroup[] = [];
 
-  for (const [key, sessions] of byKey.entries()) {
-    const sorted = [...sessions].sort((a, b) => {
+  for (const [key, bucket] of byGroup.entries()) {
+    const sorted = [...bucket.sessions].sort((a, b) => {
       const ta = a.created_at ?? a.operation_date ?? "";
       const tb = b.created_at ?? b.operation_date ?? "";
       return tb.localeCompare(ta);
     });
 
-    const caseInfo = caseByKey.get(key) ?? null;
+    let caseInfo: PatientTreatmentCase | null = null;
+    if (bucket.caseId && caseById.has(bucket.caseId)) {
+      caseInfo = caseById.get(bucket.caseId)!;
+    }
+    if (!caseInfo) {
+      const nameKey = key.startsWith("name:")
+        ? key.slice(5)
+        : operationCaseKey(sorted[0]);
+      caseInfo = caseByKey.get(nameKey) ?? null;
+    }
+
     const planOp = sorted.find(
       (o) => o.session_kind === "plan" || Number(o.total_amount) > 0
     );
     const treatmentName =
       caseInfo?.treatment_name_ar ??
-      (planOp ? opName(planOp).replace(/\s*—\s*خصم.*$/i, "").trim() : opName(sorted[0]));
+      (planOp
+        ? opName(planOp).replace(/\s*—\s*خصم.*$/i, "").trim()
+        : opName(sorted[0]));
+
+    const resolvedCaseId =
+      (caseInfo && isPersistedTreatmentCaseId(caseInfo.id)
+        ? caseInfo.id
+        : null) ??
+      (bucket.caseId && isPersistedTreatmentCaseId(bucket.caseId)
+        ? bucket.caseId
+        : null);
 
     groups.push({
       key,
       treatmentName,
+      caseId: resolvedCaseId,
       caseInfo,
       sessions: sorted,
       sessionCount: sorted.length,

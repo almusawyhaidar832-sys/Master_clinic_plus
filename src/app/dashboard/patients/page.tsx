@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 import { computeOutstandingDebtFromOperations } from "@/lib/services/patient-treatment-cases";
+import { searchPatientsByQuery } from "@/lib/services/patient-search";
 import type { Patient, PatientOperation } from "@/types";
 import { Search, FileText } from "lucide-react";
 import { AddPatientForm } from "@/components/patients/AddPatientForm";
@@ -24,44 +25,58 @@ export default function PatientsSearchPage() {
   const [results, setResults] = useState<PatientWithStats[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const search = useCallback(async (q: string) => {
-    if (!q.trim()) {
+    const trimmed = q.trim();
+    if (trimmed.length < 2) {
       setResults([]);
       setSearched(false);
+      setSearchError(null);
       return;
     }
+
     setLoading(true);
     setSearched(true);
+    setSearchError(null);
+
     const supabase = createClient();
-    const { data } = await supabase
-      .from("patients")
-      .select("*")
-      .ilike("full_name_ar", `%${q.trim()}%`)
-      .order("full_name_ar")
-      .limit(30);
+    const { patients, error } = await searchPatientsByQuery(supabase, trimmed, {
+      limit: 30,
+      minLength: 2,
+    });
 
-    const patients = (data as Patient[]) || [];
+    if (error) {
+      setResults([]);
+      setSearchError(error);
+      setLoading(false);
+      return;
+    }
 
-    // Load debt summary per patient
     const ids = patients.map((p) => p.id);
     const debtMap: Record<string, number> = {};
+
     if (ids.length > 0) {
-      const { data: opData } = await supabase
+      const { data: opData, error: opErr } = await supabase
         .from("patient_operations")
-        .select("*")
+        .select(
+          "id, patient_id, total_amount, paid_amount, remaining_debt, operation_name_ar, operation_type, treatment_case_id, created_at, operation_date"
+        )
         .in("patient_id", ids)
         .order("created_at", { ascending: true });
-      const byPatient = new Map<string, PatientOperation[]>();
-      for (const op of (opData as PatientOperation[]) || []) {
-        const list = byPatient.get(op.patient_id) ?? [];
-        list.push(op);
-        byPatient.set(op.patient_id, list);
-      }
-      for (const pid of ids) {
-        const ops = byPatient.get(pid) ?? [];
-        debtMap[pid] = computeOutstandingDebtFromOperations(ops, pid);
+
+      if (!opErr && opData) {
+        const byPatient = new Map<string, PatientOperation[]>();
+        for (const op of opData as PatientOperation[]) {
+          const list = byPatient.get(op.patient_id) ?? [];
+          list.push(op);
+          byPatient.set(op.patient_id, list);
+        }
+        for (const pid of ids) {
+          const ops = byPatient.get(pid) ?? [];
+          debtMap[pid] = computeOutstandingDebtFromOperations(ops, pid);
+        }
       }
     }
 
@@ -69,14 +84,13 @@ export default function PatientsSearchPage() {
       patients.map((p) => ({
         ...p,
         total_debt: debtMap[p.id] ?? 0,
-      }))
+      })) as PatientWithStats[]
     );
     setLoading(false);
   }, []);
 
-  // Debounced search
   useEffect(() => {
-    const t = setTimeout(() => search(query), 350);
+    const t = setTimeout(() => search(query), 280);
     return () => clearTimeout(t);
   }, [query, search]);
 
@@ -88,10 +102,11 @@ export default function PatientsSearchPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-slate-text">ملفات المرضى</h2>
-        <p className="text-slate-muted">ابحث عن مريض لعرض ملفه أو إضافة جلسة جديدة</p>
+        <p className="text-slate-muted">
+          اكتب حرفين من الاسم — تظهر النتائج فوراً
+        </p>
       </div>
 
-      {/* Search box */}
       <div className="relative">
         <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-muted" />
         <input
@@ -101,20 +116,10 @@ export default function PatientsSearchPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="اكتب اسم المريض للبحث..."
+          autoComplete="off"
         />
       </div>
 
-      <AddPatientForm />
-
-      <WhatsAppTestButton />
-
-      <Link href="/dashboard/ledger">
-        <Button variant="outline" size="sm">
-          تسجيل جلسة (الإدخال السريع)
-        </Button>
-      </Link>
-
-      {/* Results */}
       {loading && (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
@@ -123,14 +128,23 @@ export default function PatientsSearchPage() {
         </div>
       )}
 
-      {!loading && searched && results.length === 0 && (
+      {searchError && (
+        <Alert variant="error">
+          تعذر البحث: {searchError}
+        </Alert>
+      )}
+
+      {!loading && searched && results.length === 0 && !searchError && (
         <Alert variant="info">
-          لا يوجد مريض بهذا الاسم. سيُنشأ تلقائياً عند أول تسجيل جلسة.
+          لا يوجد مراجع بهذا الاسم في عيادتك. يمكنك إضافته من النموذج أدناه.
         </Alert>
       )}
 
       {!loading && results.length > 0 && (
         <div className="space-y-2">
+          <p className="text-xs font-medium text-primary">
+            {results.length} نتيجة
+          </p>
           {results.map((p) => (
             <Link key={p.id} href={`/dashboard/patients/${p.id}`}>
               <Card className="flex cursor-pointer items-center justify-between gap-4 transition-shadow hover:shadow-premium active:scale-[0.99]">
@@ -161,11 +175,21 @@ export default function PatientsSearchPage() {
         </div>
       )}
 
-      {!searched && (
-        <p className="text-center text-sm text-slate-muted py-8">
-          ابدأ بكتابة الاسم للبحث في قاعدة البيانات
+      {!searched && query.trim().length < 2 && (
+        <p className="text-center text-sm text-slate-muted py-4">
+          ابدأ بكتابة حرفين على الأقل من اسم المراجع
         </p>
       )}
+
+      <AddPatientForm />
+
+      <WhatsAppTestButton />
+
+      <Link href="/dashboard/ledger">
+        <Button variant="outline" size="sm">
+          تسجيل جلسة (الإدخال السريع)
+        </Button>
+      </Link>
     </div>
   );
 }

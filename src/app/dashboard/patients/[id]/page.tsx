@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -11,11 +11,19 @@ import { formatCurrency } from "@/lib/utils";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
 import { QuickEntryForm } from "@/components/accountant/QuickEntryForm";
-import { isTreatmentCaseComplete } from "@/lib/services/patient-financial-plan";
 import {
-  computeOutstandingDebtFromOperations,
-  inferTreatmentCasesFromOperations,
+  computedCaseRemaining,
+  FINANCIAL_EPSILON,
+  isTreatmentCaseSettledForPicker,
+} from "@/lib/services/patient-financial-plan";
+import {
+  computeOutstandingDebtFromTreatmentCases,
+  fetchPatientTreatmentCases,
+  isPersistedTreatmentCaseId,
+  treatmentCaseDisplayLabel,
+  type PatientTreatmentCase,
 } from "@/lib/services/patient-treatment-cases";
+import { getActiveClinicId } from "@/lib/clinic-context";
 import { PatientSessionsByCase } from "@/components/patients/PatientSessionsByCase";
 import { fetchPatientClinicalRecords } from "@/lib/clinical/fetch-patient-clinical";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
@@ -31,6 +39,54 @@ export default function PatientProfilePage() {
   const [operations, setOperations] = useState<PatientOperation[]>([]);
   const [clinicalByOp, setClinicalByOp] = useState<ClinicalByOperationId>({});
   const [showAddSession, setShowAddSession] = useState(false);
+  const [treatmentCases, setTreatmentCases] = useState<PatientTreatmentCase[]>(
+    []
+  );
+  const [continueCaseId, setContinueCaseId] = useState<string | null>(null);
+  const [newCasePrefillName, setNewCasePrefillName] = useState<string | null>(
+    null
+  );
+  const sessionFormRef = useRef<HTMLDivElement>(null);
+  const continueFormRef = useRef<HTMLDivElement>(null);
+
+  const continueCase = useMemo(
+    () => treatmentCases.find((c) => c.id === continueCaseId) ?? null,
+    [treatmentCases, continueCaseId]
+  );
+
+  const openContinueCase = useCallback(
+    (caseId: string) => {
+      const c = treatmentCases.find((x) => x.id === caseId);
+      if (c && isTreatmentCaseSettledForPicker(c)) {
+        setNewCasePrefillName(c.treatment_name_ar);
+        setContinueCaseId(null);
+        setShowAddSession(true);
+        requestAnimationFrame(() => {
+          sessionFormRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        });
+        return;
+      }
+      setNewCasePrefillName(null);
+      setContinueCaseId(caseId);
+      setShowAddSession(false);
+      requestAnimationFrame(() => {
+        continueFormRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    },
+    [treatmentCases]
+  );
+
+  const closeSessionForms = useCallback(() => {
+    setShowAddSession(false);
+    setContinueCaseId(null);
+    setNewCasePrefillName(null);
+  }, []);
 
   const loadOperations = useCallback(async () => {
     const supabase = createClient();
@@ -46,6 +102,42 @@ export default function PatientProfilePage() {
     }
   }, [id]);
 
+  const loadTreatmentCases = useCallback(async () => {
+    const supabase = createClient();
+    const clinic = await getActiveClinicId(supabase);
+    const cases = await fetchPatientTreatmentCases(supabase, id, clinic?.clinicId);
+    setTreatmentCases(cases);
+  }, [id]);
+
+  const handleSessionSaved = useCallback(
+    async (op: PatientOperation, opts?: { wasNewPlan?: boolean }) => {
+      await Promise.all([loadOperations(), loadTreatmentCases()]);
+      const linkedCaseId = op.treatment_case_id?.trim();
+      const isNewPlan =
+        opts?.wasNewPlan ||
+        op.session_kind === "plan" ||
+        Number(op.total_amount) > 0;
+      if (
+        isNewPlan &&
+        linkedCaseId &&
+        isPersistedTreatmentCaseId(linkedCaseId)
+      ) {
+        setShowAddSession(false);
+        setNewCasePrefillName(null);
+        setContinueCaseId(linkedCaseId);
+        requestAnimationFrame(() => {
+          continueFormRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        });
+        return;
+      }
+      closeSessionForms();
+    },
+    [loadOperations, loadTreatmentCases, closeSessionForms]
+  );
+
   useEffect(() => {
     async function load() {
       const supabase = createClient();
@@ -55,19 +147,14 @@ export default function PatientProfilePage() {
         .eq("id", id)
         .maybeSingle();
       if (pRes) setPatient(pRes as Patient);
-      await loadOperations();
+      await Promise.all([loadOperations(), loadTreatmentCases()]);
     }
     if (id) load();
-  }, [id, loadOperations]);
-
-  const treatmentCases = useMemo(
-    () => inferTreatmentCasesFromOperations(operations, id),
-    [operations, id]
-  );
+  }, [id, loadOperations, loadTreatmentCases]);
 
   const totalDebt = useMemo(
-    () => computeOutstandingDebtFromOperations(operations, id),
-    [operations, id]
+    () => computeOutstandingDebtFromTreatmentCases(treatmentCases),
+    [treatmentCases]
   );
   const totalPaid = operations.reduce((s, o) => s + o.paid_amount, 0);
   const totalBilled = operations.reduce((s, o) => s + o.total_amount, 0);
@@ -108,10 +195,17 @@ export default function PatientProfilePage() {
             </div>
             <Button
               size="sm"
-              onClick={() => setShowAddSession((v) => !v)}
-              variant={showAddSession ? "outline" : "primary"}
+              onClick={() => {
+                if (showAddSession || continueCaseId) {
+                  closeSessionForms();
+                } else {
+                  setNewCasePrefillName(null);
+                  setShowAddSession(true);
+                }
+              }}
+              variant={showAddSession || continueCaseId ? "outline" : "primary"}
             >
-              {showAddSession ? (
+              {showAddSession || continueCaseId ? (
                 <>
                   <X className="h-4 w-4" />
                   إغلاق
@@ -131,7 +225,7 @@ export default function PatientProfilePage() {
             <p className="text-lg font-bold text-slate-text">
               {operations.length}
             </p>
-            <p className="text-xs text-slate-muted">جلسة</p>
+            <p className="text-xs text-slate-muted">إجمالي الجلسات (كل الحالات)</p>
           </div>
           <div className="rounded-lg bg-surface p-3 text-center">
             <p className="text-lg font-bold text-primary">
@@ -159,41 +253,70 @@ export default function PatientProfilePage() {
               ملخص الحالات
             </p>
             <ul className="flex flex-wrap gap-2">
-              {treatmentCases.map((c) => (
-                <li
-                  key={c.id}
-                  className="rounded-full border border-slate-border bg-surface/80 px-3 py-1 text-xs"
-                >
-                  <span className="font-medium text-slate-text">
-                    {c.treatment_name_ar}
-                  </span>
-                  {" — "}
-                  {isTreatmentCaseComplete(c) ? (
-                    <span className="text-emerald-700 font-semibold">مكتمل</span>
-                  ) : (
-                    <span className="text-debt-text font-semibold tabular-nums">
-                      متبقي {formatCurrency(c.remaining_balance)}
-                    </span>
-                  )}
-                </li>
-              ))}
+              {treatmentCases.map((c) => {
+                const remaining = computedCaseRemaining(c);
+                const hasDebt = remaining > FINANCIAL_EPSILON;
+                const settled =
+                  !hasDebt && isTreatmentCaseSettledForPicker(c);
+                return (
+                  <li key={c.id}>
+                    {hasDebt ? (
+                      <button
+                        type="button"
+                        onClick={() => openContinueCase(c.id)}
+                        className="rounded-full border border-primary/40 bg-primary/5 px-3 py-1 text-xs hover:bg-primary/10"
+                      >
+                        <span className="font-medium text-slate-text">
+                          {treatmentCaseDisplayLabel(c, treatmentCases)}
+                        </span>
+                        {" — "}
+                        <span className="text-debt-text font-semibold tabular-nums">
+                          متبقي {formatCurrency(remaining)}
+                        </span>
+                        <span className="text-primary font-semibold mr-1">
+                          · متابعة
+                        </span>
+                      </button>
+                    ) : (
+                      <span className="inline-block rounded-full border border-slate-border bg-surface/80 px-3 py-1 text-xs">
+                        <span className="font-medium text-slate-text">
+                          {treatmentCaseDisplayLabel(c, treatmentCases)}
+                        </span>
+                        {" — "}
+                        {settled ? (
+                          <span className="text-emerald-700 font-semibold">مكتمل</span>
+                        ) : (
+                          <span className="text-slate-muted">—</span>
+                        )}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
       </Card>
 
-      {showAddSession && (
-        <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-4">
+      {showAddSession && !continueCaseId && (
+        <div
+          ref={sessionFormRef}
+          id="session-entry-form"
+          className="rounded-xl border-2 border-primary/20 bg-primary/5 p-4 scroll-mt-4"
+        >
           <p className="mb-3 text-sm font-semibold text-primary">
             إضافة جلسة جديدة للمريض: {patient.full_name_ar}
           </p>
           <QuickEntryForm
+            key={`${id}-new-${newCasePrefillName ?? "generic"}`}
             defaultPatientId={id}
             defaultPatientName={patient.full_name_ar}
-            onSuccess={() => {
-              loadOperations();
-              setShowAddSession(false);
-            }}
+            defaultPatientPhone={getPatientDisplayPhone(patient) ?? undefined}
+            prefetchedCases={treatmentCases}
+            defaultForceNewPlan
+            defaultNewCaseTreatmentName={newCasePrefillName ?? undefined}
+            onTreatmentCasesChanged={setTreatmentCases}
+            onSuccess={(op) => handleSessionSaved(op, { wasNewPlan: true })}
           />
         </div>
       )}
@@ -212,12 +335,61 @@ export default function PatientProfilePage() {
           <Alert variant="info">لا توجد جلسات مسجّلة لهذا المريض</Alert>
         ) : (
           <PatientSessionsByCase
+            patientId={id}
             operations={operations}
             treatmentCases={treatmentCases}
             clinicalByOp={clinicalByOp}
             onClinicalSaved={loadOperations}
+            onContinueCase={openContinueCase}
             allowEdit
           />
+        )}
+
+        {continueCaseId && (
+          <div
+            ref={continueFormRef}
+            id="continue-case-form"
+            className="mt-4 rounded-xl border-2 border-primary bg-primary/10 p-4 shadow-sm scroll-mt-4"
+          >
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-lg font-bold text-primary">
+                  متابعة: {continueCase?.treatment_name_ar ?? "حالة العلاج"}
+                </p>
+                {continueCase ? (
+                  <p className="text-sm text-slate-muted mt-1">
+                    السعر الكلي {formatCurrency(continueCase.case_price)} — مدفوع{" "}
+                    {formatCurrency(continueCase.total_paid)} — المتبقي{" "}
+                    <span className="font-bold text-debt-text">
+                      {formatCurrency(continueCase.remaining_balance)}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-muted mt-1 animate-pulse">
+                    جاري تحميل بيانات الحالة...
+                  </p>
+                )}
+                <p className="text-xs text-slate-muted mt-1">
+                  أدخل المبلغ المدفوع في هذه الجلسة ثم اضغط «تسجيل الدفعة»
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={closeSessionForms}>
+                <X className="h-4 w-4" />
+                إلغاء
+              </Button>
+            </div>
+            <QuickEntryForm
+              key={`${id}-continue-${continueCaseId}`}
+              embedded
+              defaultPatientId={id}
+              defaultPatientName={patient.full_name_ar}
+              defaultPatientPhone={getPatientDisplayPhone(patient) ?? undefined}
+              defaultCaseId={continueCaseId}
+              prefetchedCases={treatmentCases}
+              onTreatmentCasesChanged={setTreatmentCases}
+              onSuccess={handleSessionSaved}
+            />
+          </div>
         )}
       </div>
     </div>

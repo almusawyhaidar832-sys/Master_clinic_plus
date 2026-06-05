@@ -5,12 +5,13 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { createClient } from "@/lib/supabase/client";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import {
   DOCTOR_PERCENTAGE_OPTIONS,
   MATERIALS_SHARE_OPTIONS,
 } from "@/lib/constants";
 import type { Doctor } from "@/types";
-import { Plus, RefreshCw, PencilLine, Check, X } from "lucide-react";
+import { Plus, RefreshCw, PencilLine, Check, X, Settings2 } from "lucide-react";
 
 function labelFor(
   options: readonly { value: string; label: string }[],
@@ -26,6 +27,7 @@ interface EditState {
 }
 
 export default function DoctorsPage() {
+  const { clinicId, loading: clinicLoading } = useActiveClinicId();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
@@ -36,15 +38,19 @@ export default function DoctorsPage() {
     setLoading(true);
     const supabase = createClient();
     let q = supabase.from("doctors").select("*").order("full_name_ar");
+    if (clinicId) q = q.eq("clinic_id", clinicId);
     if (!showAll) q = q.eq("is_active", true);
     const { data } = await q;
     setDoctors((data as Doctor[]) || []);
     setLoading(false);
-  }, [showAll]);
+  }, [showAll, clinicId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (clinicLoading) return;
+    void load();
+  }, [load, clinicLoading]);
+
+  const isLoading = clinicLoading || loading;
 
   async function toggleActive(doctor: Doctor) {
     setSaving(doctor.id);
@@ -80,7 +86,7 @@ export default function DoctorsPage() {
         <div>
           <h2 className="text-2xl font-bold text-slate-text">الأطباء</h2>
           <p className="text-slate-muted">
-            {loading
+            {isLoading
               ? "جاري التحميل..."
               : `${doctors.length} طبيب ${showAll ? "(الكل)" : "نشط"}`}
           </p>
@@ -93,8 +99,8 @@ export default function DoctorsPage() {
           >
             {showAll ? "عرض النشطين فقط" : "عرض الكل (شاملاً الموقوفين)"}
           </Button>
-          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
           </Button>
           <Link href="/dashboard/doctors/new">
             <Button>
@@ -106,7 +112,7 @@ export default function DoctorsPage() {
       </div>
 
       {/* Doctors list */}
-      {loading ? (
+      {isLoading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />
@@ -151,10 +157,15 @@ export default function DoctorsPage() {
                     {doc.specialty_ar && (
                       <p className="text-xs text-slate-muted">{doc.specialty_ar}</p>
                     )}
-                    {doc.phone && (
-                      <p className="text-xs text-slate-muted" dir="ltr">
-                        {doc.phone}
-                      </p>
+                    <p className="text-xs text-slate-muted" dir="ltr">
+                      {doc.phone ? (
+                        <>📱 {doc.phone}</>
+                      ) : (
+                        <span className="text-amber-600">بدون رقم واتساب</span>
+                      )}
+                    </p>
+                    {!doc.profile_id && (
+                      <p className="text-xs text-amber-600">بدون حساب دخول</p>
                     )}
                   </div>
 
@@ -209,10 +220,20 @@ export default function DoctorsPage() {
                             {labelFor(MATERIALS_SHARE_OPTIONS, doc.materials_share)}
                           </span>
                         </div>
+                        <Link href={`/dashboard/doctors/${doc.id}`}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            title="تعديل البيانات والهاتف وحساب الدخول"
+                          >
+                            <Settings2 className="h-3.5 w-3.5" />
+                            تعديل
+                          </Button>
+                        </Link>
                         <Button
                           size="sm"
                           variant="ghost"
-                          title="تعديل النسبة"
+                          title="تعديل النسبة سريعاً"
                           onClick={() =>
                             setEditing({
                               id: doc.id,

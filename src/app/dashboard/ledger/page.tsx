@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { QuickEntryForm } from "@/components/accountant/QuickEntryForm";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -17,6 +17,9 @@ type RowWithJoins = PatientOperation & {
 
 export default function LedgerPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const presetPatientId = searchParams.get("patient") ?? undefined;
+  const presetCaseId = searchParams.get("case") ?? undefined;
   const [operations, setOperations] = useState<RowWithJoins[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -131,6 +134,8 @@ export default function LedgerPage() {
       </div>
 
       <QuickEntryForm
+        defaultPatientId={presetPatientId}
+        defaultCaseId={presetCaseId}
         onSuccess={() => {
           loadOperations();
           router.refresh(); // Revalidate Next.js page cache

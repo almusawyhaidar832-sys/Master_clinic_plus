@@ -1,14 +1,35 @@
 import { formatCurrency } from "@/lib/utils";
 import { getClinicDisplayName } from "@/lib/services/clinic-profile";
+import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import type { ClinicProfile } from "@/types/clinic-profile";
 
+const SESSION_ORDINAL_AR: Record<number, string> = {
+  1: "الأولى",
+  2: "الثانية",
+  3: "الثالثة",
+  4: "الرابعة",
+  5: "الخامسة",
+  6: "السادسة",
+  7: "السابعة",
+  8: "الثامنة",
+  9: "التاسعة",
+  10: "العاشرة",
+};
+
+/** حالة العلاج من ذمة الحالة فقط — لا من patients.treatment_status */
 export function treatmentStatusAr(
-  status: string | null | undefined,
-  remaining: number
+  _status: string | null | undefined,
+  remaining: number,
+  caseFinalPrice?: number
 ): string {
-  if (status === "completed" || remaining <= 0) return "مكتملة";
-  if (status === "active") return "قيد العلاج";
-  return "متابعة";
+  const finalP =
+    caseFinalPrice != null && Number.isFinite(caseFinalPrice)
+      ? caseFinalPrice
+      : 0;
+  if (finalP > FINANCIAL_EPSILON && remaining <= FINANCIAL_EPSILON) {
+    return "مكتملة";
+  }
+  return "قيد العلاج";
 }
 
 export type SessionWhatsAppKind = "first" | "follow_up" | "completed";
@@ -22,24 +43,95 @@ export function resolveSessionWhatsAppKind(
   return "follow_up";
 }
 
-export function patientSessionWhatsAppMessage(params: {
+type CaseLinkedOperation = {
+  id: string;
+  treatment_case_id?: string | null;
+};
+
+/**
+ * COUNT(*) WHERE treatment_case_id = caseId
+ * لا يُعدّ كل جلسات المراجع — فقط جلسات هذه الحالة.
+ */
+export function countSessionsByCaseId(
+  operations: CaseLinkedOperation[],
+  caseId: string,
+  currentOperationId?: string
+): number {
+  const cid = caseId.trim();
+  if (!cid) return 1;
+
+  const linked = operations.filter((o) => o.treatment_case_id?.trim() === cid);
+  if (
+    currentOperationId &&
+    !linked.some((o) => o.id === currentOperationId)
+  ) {
+    return Math.max(1, linked.length + 1);
+  }
+  return Math.max(1, linked.length);
+}
+
+/** سطر تقدم الجلسة — رقم الجلسة وإجمالي جلسات هذه الحالة فقط */
+export function sessionProgressLineAr(
+  sessionNumber: number,
+  totalInCase?: number
+): string {
+  const n = Math.max(1, Math.round(sessionNumber));
+  const total = Math.max(n, Math.round(totalInCase ?? n));
+  const ordinal = SESSION_ORDINAL_AR[n];
+  const label = ordinal ? `الجلسة ${ordinal}` : `الجلسة رقم ${n}`;
+  return `تم *إكمال ${label} من أصل ${total}*`;
+}
+
+export type FormattedSessionMessageParams = {
   clinic?: ClinicProfile | null;
   clinicName?: string;
   patientName: string;
   doctorName: string;
-  sessionNumber: number;
+  caseId: string | null;
+  operations: CaseLinkedOperation[];
+  currentOperationId: string;
   paidThisSession: number;
+  /** المتبقي لهذه الحالة تحديداً */
   remainingBalance: number;
   treatmentStatus: string;
   procedureLabel: string;
   teethSummary?: string;
-  kind: SessionWhatsAppKind;
-}): string {
+  /** من استعلام COUNT مباشر قبل الإرسال */
+  sessionCountFromDb?: number;
+  totalSessionsInCase?: number;
+  caseFinalPrice?: number;
+};
+
+/**
+ * بناء رسالة الواتساب:
+ * - العد: COUNT WHERE case_id = الحالة الحالية
+ * - remaining_balance = 0 → اكتمال العلاج
+ * - غير ذلك → الجلسة الأولى / الثانية / رقم X
+ */
+export function getFormattedSessionMessage(
+  params: FormattedSessionMessageParams
+): string {
   const clinicName =
     params.clinicName ?? getClinicDisplayName(params.clinic ?? null);
   const paid = formatCurrency(Math.max(0, params.paidThisSession));
   const remaining = formatCurrency(Math.max(0, params.remainingBalance));
   const doctorLine = params.doctorName.trim() || "فريقنا الطبي";
+  const sessionNumber =
+    params.sessionCountFromDb != null &&
+    Number.isFinite(params.sessionCountFromDb)
+      ? Math.max(1, Math.round(params.sessionCountFromDb))
+      : 1;
+  const totalInCase = Math.max(
+    sessionNumber,
+    Math.round(params.totalSessionsInCase ?? sessionNumber)
+  );
+  const caseFinal =
+    params.caseFinalPrice != null && Number.isFinite(params.caseFinalPrice)
+      ? params.caseFinalPrice
+      : 0;
+  const treatmentCompleted =
+    caseFinal > FINANCIAL_EPSILON &&
+    params.remainingBalance <= FINANCIAL_EPSILON;
 
   const teethBlock = params.teethSummary
     ? `\n\n🦷 تفاصيل إضافية:\n${params.teethSummary}`
@@ -55,7 +147,7 @@ export function patientSessionWhatsAppMessage(params: {
 
 مع تحيات فريق ${clinicName} الطبي.`;
 
-  if (params.kind === "completed") {
+  if (treatmentCompleted) {
     return `🎉 *تم إكمال العلاج بنجاح*
 
 أهلاً بك يا ${params.patientName} في ${clinicName}.
@@ -69,31 +161,55 @@ ${summary}
 ${footer}`;
   }
 
-  if (params.kind === "first") {
-    return `أهلاً بك يا ${params.patientName} في ${clinicName}.
+  const progressLine = sessionProgressLineAr(sessionNumber, totalInCase);
 
-يسعدنا جداً أن نكون جزءاً من رحلتك نحو ابتسامة صحية وجميلة!
+  return `أهلاً بك يا ${params.patientName} في ${clinicName}.
 
-تم *إكمال الجلسة الأولى* بنجاح تحت إشراف الدكتور/ة: ${doctorLine}.
-
-سنوافيكم برسالة بعد كل جلسة حتى اكتمال العلاج بالكامل.
+${progressLine} بنجاح تحت إشراف الدكتور/ة: ${doctorLine}.
 
 ${summary}
 
 نحن بانتظاركم في الجلسة القادمة لمتابعة خطتكم العلاجية.
 
 ${footer}`;
-  }
+}
 
-  return `أهلاً بك يا ${params.patientName} في ${clinicName}.
-
-تم *إكمال الجلسة رقم ${params.sessionNumber}* بنجاح تحت إشراف الدكتور/ة: ${doctorLine}.
-
-نحن بانتظارك في الجلسة القادمة لمتابعة باقي خطتك العلاجية.
-
-${summary}
-
-${footer}`;
+export function patientSessionWhatsAppMessage(params: {
+  clinic?: ClinicProfile | null;
+  clinicName?: string;
+  patientName: string;
+  doctorName: string;
+  sessionNumber: number;
+  totalSessionsInCase: number;
+  paidThisSession: number;
+  remainingBalance: number;
+  treatmentStatus: string;
+  procedureLabel: string;
+  teethSummary?: string;
+  kind: SessionWhatsAppKind;
+  caseId?: string | null;
+  operations?: CaseLinkedOperation[];
+  currentOperationId?: string;
+  sessionCountFromDb?: number;
+  caseFinalPrice?: number;
+}): string {
+  return getFormattedSessionMessage({
+    clinic: params.clinic,
+    clinicName: params.clinicName,
+    patientName: params.patientName,
+    doctorName: params.doctorName,
+    caseId: params.caseId ?? null,
+    operations: params.operations ?? [],
+    currentOperationId: params.currentOperationId ?? "",
+    paidThisSession: params.paidThisSession,
+    remainingBalance: params.remainingBalance,
+    treatmentStatus: params.treatmentStatus,
+    procedureLabel: params.procedureLabel,
+    teethSummary: params.teethSummary,
+    sessionCountFromDb: params.sessionCountFromDb ?? params.sessionNumber,
+    totalSessionsInCase: params.totalSessionsInCase ?? params.sessionNumber,
+    caseFinalPrice: params.caseFinalPrice,
+  });
 }
 
 /** @deprecated استخدم patientSessionWhatsAppMessage */
@@ -103,6 +219,7 @@ export function sessionUpdateWhatsAppMessage(params: {
   patientName: string;
   doctorName: string;
   sessionNumber: number;
+  totalSessionsInCase?: number;
   paidThisSession: number;
   remainingBalance: number;
   treatmentStatus: string;
@@ -114,7 +231,11 @@ export function sessionUpdateWhatsAppMessage(params: {
     params.sessionNumber,
     Boolean(params.treatmentCompleted)
   );
-  return patientSessionWhatsAppMessage({ ...params, kind });
+  return patientSessionWhatsAppMessage({
+    ...params,
+    totalSessionsInCase: params.totalSessionsInCase ?? params.sessionNumber,
+    kind,
+  });
 }
 
 export function xrayLinkWhatsAppMessage(params: {
@@ -122,6 +243,7 @@ export function xrayLinkWhatsAppMessage(params: {
   clinicName?: string;
   patientName: string;
   sessionNumber: number;
+  totalSessionsInCase?: number;
   imageUrl: string;
   fileName?: string | null;
 }): string {
@@ -132,7 +254,7 @@ export function xrayLinkWhatsAppMessage(params: {
   return `عزيزنا/عزيزتنا ${params.patientName}،
 
 🏥 ${clinicName}
-📋 الجلسة رقم ${params.sessionNumber}
+📋 الجلسة رقم ${params.sessionNumber} من أصل ${Math.max(1, params.totalSessionsInCase ?? params.sessionNumber)}
 
 تم رفع صورة أشعة لسجلّكم:${nameLine}
 
@@ -149,12 +271,14 @@ export function doctorPaymentAlertMessage(params: {
   procedureLabel: string;
   teethSummary?: string;
   sessionNumber: number;
+  totalSessionsInCase?: number;
 }): string {
   const teethBlock = params.teethSummary
     ? `\n🦷 الأسنان: ${params.teethSummary}`
     : "";
+  const total = Math.max(1, params.totalSessionsInCase ?? params.sessionNumber);
 
-  return `🔔 دفعة جديدة — جلسة ${params.sessionNumber}
+  return `🔔 دفعة جديدة — جلسة ${params.sessionNumber} من أصل ${total}
 
 👤 ${params.patientName}
 💰 مدفوع: ${formatCurrency(params.paidAmount)}

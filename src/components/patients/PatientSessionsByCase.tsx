@@ -4,26 +4,86 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
-import { isTreatmentCaseComplete } from "@/lib/services/patient-financial-plan";
+import {
+  computedCaseRemaining,
+  FINANCIAL_EPSILON,
+  isTreatmentCaseComplete,
+} from "@/lib/services/patient-financial-plan";
+import Link from "next/link";
+import { sortOpsChronologically } from "@/lib/services/case-session-count";
 import {
   groupOperationsByTreatmentCase,
   type TreatmentCaseSessionGroup,
 } from "@/lib/services/group-operations-by-case";
+import {
+  isPersistedTreatmentCaseId,
+  treatmentCaseDisplayLabel,
+  treatmentNameKey,
+} from "@/lib/services/patient-treatment-cases";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
 import { AddSessionClinicalPanel } from "@/components/clinical/AddSessionClinicalPanel";
 import { SessionClinicalView } from "@/components/clinical/SessionClinicalView";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
 import { hasClinicalData } from "@/lib/clinical/types";
-import { opName, type PatientOperation } from "@/types";
+import type { PatientOperation } from "@/types";
 import { SessionEditDialog } from "@/components/sessions/SessionEditDialog";
 
 interface PatientSessionsByCaseProps {
+  patientId: string;
   operations: PatientOperation[];
   treatmentCases: PatientTreatmentCase[];
   clinicalByOp: ClinicalByOperationId;
   onClinicalSaved: () => void;
+  /** فتح نموذج المتابعة داخل نفس الصفحة */
+  onContinueCase?: (caseId: string) => void;
+  /** مسار الإدخال السريع (افتراضي لوحة المحاسب) */
+  ledgerPath?: string;
   /** محاسب / طبيب / مالك — يظهر زر تعديل السجل */
   allowEdit?: boolean;
+}
+
+function resolveGroupCaseId(
+  group: TreatmentCaseSessionGroup,
+  treatmentCases: PatientTreatmentCase[]
+): string | null {
+  if (group.caseId && isPersistedTreatmentCaseId(group.caseId)) {
+    return group.caseId;
+  }
+  if (
+    group.caseInfo?.id &&
+    isPersistedTreatmentCaseId(group.caseInfo.id)
+  ) {
+    return group.caseInfo.id;
+  }
+  for (const op of group.sessions) {
+    const linked = op.treatment_case_id?.trim();
+    if (linked && isPersistedTreatmentCaseId(linked)) return linked;
+  }
+  const nameKey = treatmentNameKey(group.treatmentName);
+  const nameMatches = treatmentCases.filter(
+    (c) =>
+      isPersistedTreatmentCaseId(c.id) &&
+      treatmentNameKey(c.treatment_name_ar) === nameKey
+  );
+  if (nameMatches.length === 1) return nameMatches[0].id;
+  return null;
+}
+
+function resolveGroupCaseInfo(
+  group: TreatmentCaseSessionGroup,
+  treatmentCases: PatientTreatmentCase[],
+  linkedCaseId: string | null
+): PatientTreatmentCase | null {
+  if (group.caseInfo) return group.caseInfo;
+  if (linkedCaseId) {
+    return treatmentCases.find((c) => c.id === linkedCaseId) ?? null;
+  }
+  const nameKey = treatmentNameKey(group.treatmentName);
+  const nameMatches = treatmentCases.filter(
+    (c) => treatmentNameKey(c.treatment_name_ar) === nameKey
+  );
+  if (nameMatches.length === 1) return nameMatches[0];
+  return null;
 }
 
 function sessionDateLabel(op: PatientOperation): string {
@@ -42,11 +102,23 @@ function sessionKindLabel(op: PatientOperation): string {
 
 function SessionRow({
   op,
+  sessionNumber,
+  totalInCase,
+  caseId,
+  patientId,
+  ledgerPath,
+  onContinueCase,
   clinical,
   onClinicalSaved,
   allowEdit,
 }: {
   op: PatientOperation;
+  sessionNumber: number;
+  totalInCase: number;
+  caseId: string | null;
+  patientId: string;
+  ledgerPath: string;
+  onContinueCase?: (caseId: string) => void;
   clinical?: ClinicalByOperationId[string];
   onClinicalSaved: () => void;
   allowEdit?: boolean;
@@ -56,13 +128,18 @@ function SessionRow({
   };
   const isPlan = op.session_kind === "plan" || Number(op.total_amount) > 0;
   const hasClinical = hasClinicalData(clinical);
+  const linkedCaseId =
+    caseId ??
+    (op.treatment_case_id && isPersistedTreatmentCaseId(op.treatment_case_id)
+      ? op.treatment_case_id
+      : null);
 
   return (
     <div className="rounded-lg border border-slate-border/80 bg-white p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-medium text-primary">
-            {sessionKindLabel(op)}
+            {sessionKindLabel(op)} — جلسة {sessionNumber} من {totalInCase}
           </p>
           <p className="text-sm font-semibold text-slate-text tabular-nums">
             {sessionDateLabel(op)}
@@ -91,6 +168,27 @@ function SessionRow({
         </div>
       </div>
 
+      {isPlan && linkedCaseId && (
+        <div className="mt-2">
+          {onContinueCase ? (
+            <button
+              type="button"
+              className="w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
+              onClick={() => onContinueCase(linkedCaseId)}
+            >
+              متابعة هذه الحالة (فتح ملف / إضافة دفعة)
+            </button>
+          ) : (
+            <Link
+              href={`${ledgerPath}?patient=${encodeURIComponent(patientId)}&case=${encodeURIComponent(linkedCaseId)}`}
+              className="block w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-center text-sm font-semibold text-primary hover:bg-primary/10"
+            >
+              متابعة هذه الحالة (فتح ملف / إضافة دفعة)
+            </Link>
+          )}
+        </div>
+      )}
+
       <div className="mt-2 border-t border-slate-border/50 pt-2">
         {hasClinical && (
           <SessionClinicalView data={clinical} alwaysShow={false} />
@@ -108,10 +206,60 @@ function SessionRow({
   );
 }
 
+function ContinueCaseButton({
+  caseId,
+  onContinueCase,
+  ledgerPath,
+  patientId,
+  compact,
+}: {
+  caseId: string;
+  onContinueCase?: (caseId: string) => void;
+  ledgerPath: string;
+  patientId: string;
+  compact?: boolean;
+}) {
+  if (onContinueCase) {
+    return (
+      <button
+        type="button"
+        className={
+          compact
+            ? "text-xs font-semibold text-primary underline"
+            : "w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
+        }
+        onClick={(e) => {
+          e.stopPropagation();
+          onContinueCase(caseId);
+        }}
+      >
+        متابعة الحالة — إضافة جلسة / دفعة
+      </button>
+    );
+  }
+  return (
+    <Link
+      href={`${ledgerPath}?patient=${encodeURIComponent(patientId)}&case=${encodeURIComponent(caseId)}`}
+      className={
+        compact
+          ? "text-xs font-semibold text-primary underline"
+          : "block w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-center text-sm font-semibold text-primary hover:bg-primary/10"
+      }
+      onClick={(e) => e.stopPropagation()}
+    >
+      متابعة الحالة — إضافة جلسة / دفعة
+    </Link>
+  );
+}
+
 function CaseAccordion({
   group,
   expanded,
   onToggle,
+  patientId,
+  ledgerPath,
+  onContinueCase,
+  treatmentCases,
   clinicalByOp,
   onClinicalSaved,
   allowEdit,
@@ -119,13 +267,22 @@ function CaseAccordion({
   group: TreatmentCaseSessionGroup;
   expanded: boolean;
   onToggle: () => void;
+  patientId: string;
+  ledgerPath: string;
+  onContinueCase?: (caseId: string) => void;
+  treatmentCases: PatientTreatmentCase[];
   clinicalByOp: ClinicalByOperationId;
   onClinicalSaved: () => void;
   allowEdit?: boolean;
 }) {
-  const complete = group.caseInfo
-    ? isTreatmentCaseComplete(group.caseInfo)
-    : false;
+  const linkedCaseId = resolveGroupCaseId(group, treatmentCases);
+  const caseInfo = resolveGroupCaseInfo(group, treatmentCases, linkedCaseId);
+  const remaining = caseInfo ? computedCaseRemaining(caseInfo) : 0;
+  const complete =
+    caseInfo ? isTreatmentCaseComplete(caseInfo) && remaining <= FINANCIAL_EPSILON : false;
+  const canContinue =
+    !!linkedCaseId &&
+    (caseInfo ? remaining > FINANCIAL_EPSILON : true);
 
   return (
     <div
@@ -133,7 +290,7 @@ function CaseAccordion({
         "rounded-xl border overflow-hidden",
         complete
           ? "border-emerald-200 bg-emerald-50/30"
-          : (group.caseInfo?.remaining_balance ?? 0) > 0
+          : remaining > FINANCIAL_EPSILON
             ? "border-debt/40 bg-debt/5"
             : "border-slate-border bg-surface-card"
       )}
@@ -152,46 +309,74 @@ function CaseAccordion({
           />
           <div>
             <p className="font-semibold text-slate-text text-base">
-              {group.treatmentName}
+              {caseInfo
+                ? treatmentCaseDisplayLabel(caseInfo, treatmentCases)
+                : group.treatmentName}
             </p>
             <p className="text-xs text-slate-muted mt-0.5">
               {group.sessionCount} جلسة
-              {group.caseInfo && (
+              {caseInfo && (
                 <>
                   {" "}
-                  · السعر الكلي {formatCurrency(group.caseInfo.case_price)}
+                  · السعر الكلي {formatCurrency(caseInfo.case_price)}
                 </>
               )}
             </p>
           </div>
         </div>
-        <div className="shrink-0 text-left">
+        <div className="shrink-0 text-left flex flex-col items-end gap-1">
           {complete ? (
             <span className="text-xs font-semibold text-emerald-700">
               ✓ مكتمل
             </span>
-          ) : group.caseInfo ? (
+          ) : caseInfo ? (
             <>
               <p className="text-xs text-slate-muted">المتبقي</p>
               <p className="text-lg font-bold text-debt-text tabular-nums">
-                {formatCurrency(group.caseInfo.remaining_balance)}
+                {formatCurrency(remaining)}
               </p>
             </>
           ) : null}
         </div>
       </button>
 
+      {canContinue && linkedCaseId && (
+        <div className="border-t border-primary/20 bg-primary/5 px-3 py-2">
+          <ContinueCaseButton
+            caseId={linkedCaseId}
+            onContinueCase={onContinueCase}
+            ledgerPath={ledgerPath}
+            patientId={patientId}
+          />
+        </div>
+      )}
+
       {expanded && (
         <div className="border-t border-slate-border/60 px-3 pb-3 pt-2 space-y-2 bg-white/60">
-          {group.sessions.map((op) => (
-            <SessionRow
-              key={op.id}
-              op={op}
-              clinical={clinicalByOp[op.id]}
-              onClinicalSaved={onClinicalSaved}
-              allowEdit={allowEdit}
-            />
-          ))}
+          {group.sessions.length === 0 ? (
+            <p className="text-xs text-slate-muted px-2 py-2">
+              لا جلسات مسجّلة بعد — استخدم «متابعة الحالة» أعلاه لإضافة أول جلسة.
+            </p>
+          ) : null}
+          {(() => {
+            const chronological = sortOpsChronologically(group.sessions);
+            const totalInCase = chronological.length;
+            return chronological.map((op, index) => (
+              <SessionRow
+                key={op.id}
+                op={op}
+                sessionNumber={index + 1}
+                totalInCase={totalInCase}
+                caseId={linkedCaseId}
+                patientId={patientId}
+                ledgerPath={ledgerPath}
+                onContinueCase={onContinueCase}
+                clinical={clinicalByOp[op.id]}
+                onClinicalSaved={onClinicalSaved}
+                allowEdit={allowEdit}
+              />
+            ));
+          })()}
         </div>
       )}
     </div>
@@ -199,16 +384,45 @@ function CaseAccordion({
 }
 
 export function PatientSessionsByCase({
+  patientId,
   operations,
   treatmentCases,
   clinicalByOp,
   onClinicalSaved,
+  onContinueCase,
+  ledgerPath = "/dashboard/ledger",
   allowEdit = false,
 }: PatientSessionsByCaseProps) {
-  const groups = useMemo(
-    () => groupOperationsByTreatmentCase(operations, treatmentCases),
-    [operations, treatmentCases]
-  );
+  const groups = useMemo(() => {
+    const base = groupOperationsByTreatmentCase(operations, treatmentCases);
+    const representedCaseIds = new Set(
+      base
+        .map((g) => g.caseId)
+        .filter((id): id is string => !!id && isPersistedTreatmentCaseId(id))
+    );
+    for (const c of treatmentCases) {
+      if (!isPersistedTreatmentCaseId(c.id)) continue;
+      if (representedCaseIds.has(c.id)) continue;
+      if (computedCaseRemaining(c) <= FINANCIAL_EPSILON) continue;
+      base.push({
+        key: `case:${c.id}`,
+        treatmentName: c.treatment_name_ar,
+        caseId: c.id,
+        caseInfo: c,
+        sessions: [],
+        sessionCount: 0,
+      });
+    }
+    return base.sort((a, b) => {
+      const aComplete = a.caseInfo ? isTreatmentCaseComplete(a.caseInfo) : false;
+      const bComplete = b.caseInfo ? isTreatmentCaseComplete(b.caseInfo) : false;
+      if (aComplete !== bComplete) return aComplete ? 1 : -1;
+      const aRem = a.caseInfo ? computedCaseRemaining(a.caseInfo) : 0;
+      const bRem = b.caseInfo ? computedCaseRemaining(b.caseInfo) : 0;
+      if (aRem !== bRem) return bRem - aRem;
+      return a.treatmentName.localeCompare(b.treatmentName, "ar");
+    });
+  }, [operations, treatmentCases]);
 
   const defaultKey = groups.find(
     (g) => g.caseInfo && !isTreatmentCaseComplete(g.caseInfo)
@@ -239,6 +453,10 @@ export function PatientSessionsByCase({
           onToggle={() =>
             setExpandedKey((k) => (k === group.key ? null : group.key))
           }
+          patientId={patientId}
+          ledgerPath={ledgerPath}
+          onContinueCase={onContinueCase}
+          treatmentCases={treatmentCases}
           clinicalByOp={clinicalByOp}
           onClinicalSaved={onClinicalSaved}
           allowEdit={allowEdit}

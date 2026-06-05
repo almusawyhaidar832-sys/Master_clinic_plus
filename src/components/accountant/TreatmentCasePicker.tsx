@@ -3,15 +3,17 @@
 import { formatCurrency } from "@/lib/utils";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
 import {
-  FINANCIAL_EPSILON,
-  isTreatmentCaseComplete,
+  computedCaseRemaining,
+  isTreatmentCaseOpenForPicker,
+  isTreatmentCaseSettledForPicker,
 } from "@/lib/services/patient-financial-plan";
 import { Button } from "@/components/ui/Button";
 
 interface TreatmentCasePickerProps {
   cases: PatientTreatmentCase[];
-  onSelect: (caseId: string) => void;
-  onNewCase: () => void;
+  onSelect: (treatmentCase: PatientTreatmentCase) => void;
+  /** حالة جديدة — يُمرَّر اسم العلاج عند تكرار حالة مكتملة */
+  onNewCase: (prefillTreatmentName?: string) => void;
 }
 
 export function TreatmentCasePicker({
@@ -19,14 +21,9 @@ export function TreatmentCasePicker({
   onSelect,
   onNewCase,
 }: TreatmentCasePickerProps) {
-  const active = cases.filter(
-    (c) =>
-      c.remaining_balance > FINANCIAL_EPSILON ||
-      !isTreatmentCaseComplete(c)
-  );
+  const active = cases.filter((c) => isTreatmentCaseOpenForPicker(c));
   const completed = cases.filter(
-    (c) =>
-      isTreatmentCaseComplete(c) && c.remaining_balance <= FINANCIAL_EPSILON
+    (c) => isTreatmentCaseSettledForPicker(c) && !isTreatmentCaseOpenForPicker(c)
   );
 
   return (
@@ -53,7 +50,7 @@ export function TreatmentCasePicker({
           <button
             key={c.id}
             type="button"
-            onClick={() => onSelect(c.id)}
+            onClick={() => onSelect(c)}
             className="flex w-full items-center justify-between gap-3 rounded-xl border-2 border-primary/30 bg-white px-4 py-3 text-right transition hover:border-primary hover:bg-primary/5"
           >
             <div>
@@ -68,7 +65,7 @@ export function TreatmentCasePicker({
             <div className="text-left shrink-0">
               <p className="text-xs text-slate-muted">المتبقي</p>
               <p className="text-lg font-bold text-debt-text tabular-nums">
-                {formatCurrency(c.remaining_balance)}
+                {formatCurrency(computedCaseRemaining(c))}
               </p>
             </div>
           </button>
@@ -83,10 +80,11 @@ export function TreatmentCasePicker({
               <button
                 key={c.id}
                 type="button"
-                onClick={() => onSelect(c.id)}
-                className="rounded-full border border-slate-border bg-white px-3 py-1 text-xs text-slate-muted hover:border-primary"
+                onClick={() => onNewCase(c.treatment_name_ar)}
+                className="rounded-full border border-slate-border bg-white px-3 py-1 text-xs text-slate-muted hover:border-primary hover:text-primary"
+                title="بدء حالة جديدة بنفس نوع العلاج — سعر كلي جديد"
               >
-                {c.treatment_name_ar} — ✓ مكتمل ({formatCurrency(c.case_price)})
+                {c.treatment_name_ar} — ✓ مكتمل — إجمالي كلي جديد
               </button>
             ))}
           </div>

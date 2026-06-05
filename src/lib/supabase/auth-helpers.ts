@@ -57,6 +57,17 @@ export function getAuthAdmin(supabase: SupabaseClient) {
           error: { message: string } | null;
         }>;
         deleteUser: (id: string) => Promise<{ error: { message: string } | null }>;
+        updateUserById: (
+          id: string,
+          attrs: Record<string, unknown>
+        ) => Promise<{
+          data: { user: AuthUser | null };
+          error: { message: string } | null;
+        }>;
+        getUserById: (id: string) => Promise<{
+          data: { user: (AuthUser & { email?: string }) | null };
+          error: { message: string } | null;
+        }>;
       };
     }
   ).admin;

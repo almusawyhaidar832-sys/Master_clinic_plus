@@ -29,10 +29,12 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  IF NEW.operation_type_id IS NOT NULL THEN
-    SELECT review_fee_amount INTO v_type_fee
-    FROM public.operation_types
-    WHERE id = NEW.operation_type_id;
+  IF COALESCE(TRIM(NEW.operation_name_ar), '') <> '' THEN
+    SELECT ot.review_fee_amount INTO v_type_fee
+    FROM public.operation_types ot
+    WHERE ot.clinic_id = NEW.clinic_id
+      AND lower(trim(ot.name_ar)) = lower(trim(NEW.operation_name_ar))
+    LIMIT 1;
 
     IF v_type_fee IS NOT NULL AND v_type_fee > 0 THEN
       NEW.review_fee_amount := v_type_fee;

@@ -119,6 +119,7 @@ export interface PatientOperation {
   notes?: string | null;
   is_review_statement?: boolean;
   session_kind?: "plan" | "payment" | "discount";
+  treatment_case_id?: string | null;
   created_at?: string;
   patient?: Patient | { full_name_ar: string };
   doctor?: Doctor | { full_name_ar: string };
@@ -127,6 +128,13 @@ export interface PatientOperation {
 /** Get operation display name — works with both operation_type and operation_name_ar columns */
 export function opName(op: PatientOperation): string {
   return op.operation_type || op.operation_name_ar || "عملية";
+}
+
+/** اسم الحالة من الجلسة — يفضّل الاسم العربي لتوحيد الجلسات القديمة والجديدة */
+export function operationLabelForCase(op: PatientOperation): string {
+  const raw = (op.operation_name_ar || op.operation_type || "").trim();
+  const base = raw.replace(/\s*—\s*خصم.*$/i, "").trim();
+  return base || raw || "علاج";
 }
 
 /** Get remaining debt — works whether remaining_debt is a DB column or needs computing */

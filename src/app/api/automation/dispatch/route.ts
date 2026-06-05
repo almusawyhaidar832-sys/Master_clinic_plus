@@ -4,6 +4,7 @@ import {
   runSessionSavedAutomation,
   runXrayUploadedAutomation,
 } from "@/lib/automation/run";
+import type { WhatsAppMessageSnapshot } from "@/lib/automation/session-context";
 
 /**
  * POST /api/automation/dispatch
@@ -34,14 +35,49 @@ export async function POST(req: NextRequest) {
       storagePath,
       fileName,
       skipPatientWhatsApp,
+      treatmentCaseId,
+      messageSnapshot: rawSnapshot,
     } = body as {
       event: string;
       operationId?: string;
       treatmentCompleted?: boolean;
+      treatmentCaseId?: string | null;
+      messageSnapshot?: WhatsAppMessageSnapshot | null;
       storagePath?: string;
       fileName?: string | null;
       skipPatientWhatsApp?: boolean;
     };
+
+    let messageSnapshot: WhatsAppMessageSnapshot | null = null;
+    if (rawSnapshot && typeof rawSnapshot === "object") {
+      const rem = Number(rawSnapshot.remainingBalance);
+      const sn = Number(rawSnapshot.sessionNumber);
+      const total = Number(rawSnapshot.totalSessionsInCase);
+      const paid = Number(rawSnapshot.paidThisSession);
+      const finalP = Number(rawSnapshot.caseFinalPrice);
+      const totalPaid = Number(rawSnapshot.caseTotalPaid);
+      const label = String(rawSnapshot.procedureLabel ?? "").trim();
+      if (
+        label &&
+        (finalP > 0 || rem > 0 || (Number.isFinite(paid) && paid > 0))
+      ) {
+        messageSnapshot = {
+          remainingBalance: Math.max(0, rem),
+          sessionNumber:
+            Number.isFinite(sn) && sn >= 1 ? Math.max(1, Math.round(sn)) : 0,
+          totalSessionsInCase:
+            Number.isFinite(total) && total >= 1
+              ? Math.max(1, Math.round(total))
+              : 0,
+          procedureLabel: label,
+          paidThisSession: Number.isFinite(paid) ? Math.max(0, paid) : 0,
+          caseFinalPrice: Number.isFinite(finalP) ? Math.max(0, finalP) : 0,
+          caseTotalPaid: Number.isFinite(totalPaid)
+            ? Math.max(0, totalPaid)
+            : 0,
+        };
+      }
+    }
 
     if (!event || !operationId) {
       return NextResponse.json(
@@ -55,6 +91,11 @@ export async function POST(req: NextRequest) {
         const result = await runSessionSavedAutomation(operationId, {
           treatmentCompleted: Boolean(treatmentCompleted),
           skipPatientWhatsApp: Boolean(skipPatientWhatsApp),
+          treatmentCaseId:
+            typeof treatmentCaseId === "string" && treatmentCaseId.trim()
+              ? treatmentCaseId.trim()
+              : null,
+          messageSnapshot,
         });
         return NextResponse.json({
           success: true,

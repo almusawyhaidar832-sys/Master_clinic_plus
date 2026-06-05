@@ -4,23 +4,41 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const IRAQ_COUNTRY_CODE = "964";
 
+const ARABIC_INDIC = "٠١٢٣٤٥٦٧٨٩";
+const ARABIC_EASTERN = "۰۱۲۳۴۵۶۷۸۹";
+
+/** تحويل الأرقام العربية/فارسية إلى إنجليزية */
+export function toWesternDigits(input: string): string {
+  return input
+    .replace(/[٠-٩]/g, (ch) => String(ARABIC_INDIC.indexOf(ch)))
+    .replace(/[۰-۹]/g, (ch) => String(ARABIC_EASTERN.indexOf(ch)));
+}
+
 export function digitsOnly(input: string): string {
-  return input.replace(/\D/g, "");
+  return toWesternDigits(input).replace(/\D/g, "");
 }
 
 /**
  * E.164-style for WhatsApp API: +9647XXXXXXXX
- * - Strips spaces/dashes
- * - Local 07... → +9647...
- * - Missing country code → prepends 964
+ * - يزيل المسافات والأصفار الزائدة
+ * - 07... → +9647...
+ * - يتحقق أن الرقم عراقي صالح
  */
 export function normalizePhoneForWhatsApp(raw: string): string {
-  let d = digitsOnly(raw.trim());
+  let d = digitsOnly(String(raw ?? "").trim());
   if (!d) return "";
 
   if (d.startsWith("00")) d = d.slice(2);
+  if (d.startsWith("9640")) d = `964${d.slice(4)}`;
   if (d.startsWith("0")) d = `${IRAQ_COUNTRY_CODE}${d.slice(1)}`;
   else if (!d.startsWith(IRAQ_COUNTRY_CODE)) d = `${IRAQ_COUNTRY_CODE}${d}`;
+
+  const national = d.slice(IRAQ_COUNTRY_CODE.length);
+  if (!national.startsWith("7") || national.length < 9 || national.length > 10) {
+    return "";
+  }
+
+  if (d.length < 12 || d.length > 13) return "";
 
   return `+${d}`;
 }

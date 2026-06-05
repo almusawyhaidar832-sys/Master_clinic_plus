@@ -300,15 +300,42 @@ export function isCaseFullySettled(
   return computePatientDebtRemaining(plan, opts) <= FINANCIAL_EPSILON;
 }
 
+/** المتبقي المحسوب من الأرقام — لا نعتمد على remaining_balance المخزّن فقط */
+export function computedCaseRemaining(plan: PatientFinancialPlan): number {
+  return Math.max(0, plan.final_price - plan.total_paid);
+}
+
 /**
- * علاج مكتمل = سداد كامل ذمة هذه الحالة فقط (لا يعتمد على علامة DB وحدها).
+ * علاج مكتمل = سداد كامل ذمة هذه الحالة (من السعر النهائي − المدفوع).
  */
 export function isTreatmentCaseComplete(
   plan: PatientFinancialPlan
 ): boolean {
   if (plan.final_price <= FINANCIAL_EPSILON) return false;
   if (plan.total_paid <= 0) return false;
-  return plan.remaining_balance <= FINANCIAL_EPSILON;
+  return computedCaseRemaining(plan) <= FINANCIAL_EPSILON;
+}
+
+/** تظهر في قائمة «الطبيب اليوم» — أي حالة عليها ذمة (الحكم من الأرقام لا من status في DB) */
+export function isTreatmentCaseOpenForPicker(
+  plan: PatientFinancialPlan
+): boolean {
+  const rem = computedCaseRemaining(plan);
+  if (rem <= FINANCIAL_EPSILON) return false;
+  return (
+    plan.final_price > FINANCIAL_EPSILON ||
+    plan.total_paid > FINANCIAL_EPSILON ||
+    plan.case_price > FINANCIAL_EPSILON
+  );
+}
+
+/** قسم «حالات مكتملة» — مسددة فعلاً (متبقي ≈ 0) */
+export function isTreatmentCaseSettledForPicker(
+  plan: PatientFinancialPlan
+): boolean {
+  if (plan.final_price <= FINANCIAL_EPSILON) return false;
+  if (plan.total_paid <= FINANCIAL_EPSILON) return false;
+  return computedCaseRemaining(plan) <= FINANCIAL_EPSILON;
 }
 
 export function treatmentStatusFromAmounts(

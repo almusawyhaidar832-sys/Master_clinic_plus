@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizePhoneForWhatsApp } from "@/lib/phone";
+import {
+  normalizePhoneForWhatsApp,
+  validatePatientPhone,
+} from "@/lib/phone";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
 import { sendEvolutionText } from "@/lib/whatsapp/evolution-client";
 
@@ -28,7 +31,11 @@ export async function deliverWhatsAppMessage(
     messageType: string;
   }
 ): Promise<WhatsAppSendOutcome> {
-  const normalizedPhone = normalizePhoneForWhatsApp(params.rawPhone);
+  let normalizedPhone = normalizePhoneForWhatsApp(params.rawPhone);
+  if (!normalizedPhone) {
+    const retry = validatePatientPhone(params.rawPhone);
+    if (retry.ok) normalizedPhone = retry.normalized;
+  }
   if (!normalizedPhone || normalizedPhone.length < 12) {
     const err = "invalid_phone_after_normalize";
     console.error(LOG_PREFIX, params.messageType, err, {

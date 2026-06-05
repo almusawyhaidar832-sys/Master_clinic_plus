@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/Button";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Select } from "@/components/ui/Select";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
-import { formatCurrency, todayISO } from "@/lib/utils";
+import { formatCurrency, parseFormattedNumber, todayISO } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveClinicId } from "@/lib/clinic-context";
 import { FinancialPreview } from "@/components/financial/FinancialPreview";
@@ -36,8 +36,13 @@ import {
 } from "@/lib/services/session-entry-form";
 import {
   caseToFinancialPlan,
-  createTreatmentCase,
+  createTreatmentCaseViaApi,
   fetchPatientTreatmentCases,
+  isPersistedTreatmentCaseId,
+  linkOperationToTreatmentCase,
+  linkUnlinkedCaseOperations,
+  resolveCaseIdForOp,
+  resolvePersistedCaseId,
   syncTreatmentCaseAfterSession,
   type PatientTreatmentCase,
 } from "@/lib/services/patient-treatment-cases";
@@ -73,26 +78,76 @@ const DENTAL_SUGGESTIONS = [
   "تركيب",
 ];
 
+const EMPTY_FINANCIAL_PLAN: PatientFinancialPlan = {
+  case_price: 0,
+  discount_total: 0,
+  final_price: 0,
+  agreed_total: 0,
+  original_agreed_total: 0,
+  doctor_share_total: 0,
+  clinic_share_total: 0,
+  total_paid: 0,
+  remaining_balance: 0,
+  financial_locked: false,
+  treatment_status: "active",
+};
+
+function applyTreatmentCaseSelection(
+  c: PatientTreatmentCase,
+  setters: {
+    setSelectedCaseId: (id: string) => void;
+    setFinancialPlan: (p: PatientFinancialPlan) => void;
+    setOperationName: (n: string) => void;
+    setForceNewPlan: (v: boolean) => void;
+  }
+) {
+  setters.setSelectedCaseId(c.id);
+  setters.setFinancialPlan(caseToFinancialPlan(c));
+  setters.setOperationName(c.treatment_name_ar);
+  setters.setForceNewPlan(false);
+}
+
 interface QuickEntryFormProps {
   /** Pre-selected patient (used from patient file page) */
   defaultPatientId?: string;
   defaultPatientName?: string;
+  /** فتح متابعة حالة محددة (UUID من patient_treatment_cases) */
+  defaultCaseId?: string;
+  /** رقم المراجع — يُحمّل فوراً لإرسال الواتساب */
+  defaultPatientPhone?: string;
+  /** حالات محمّلة مسبقاً — تُفعّل المتابعة فوراً بدون انتظار */
+  prefetchedCases?: PatientTreatmentCase[];
+  /** يبدأ مباشرة بوضع «حالة علاج جديدة» (إجمالي كلي جديد) */
+  defaultForceNewPlan?: boolean;
+  /** اسم العلاج المقترح عند تكرار حالة مكتملة */
+  defaultNewCaseTreatmentName?: string;
   /** Lock doctor (doctor portal session entry) */
   lockDoctorId?: string;
+  /** بدون إطار Card — للتضمين داخل لوحة المتابعة */
+  embedded?: boolean;
   onSuccess?: (operation: PatientOperation) => void;
+  /** تحديث ملخص الحالات في الصفحة الأم فور جلب الحالات */
+  onTreatmentCasesChanged?: (cases: PatientTreatmentCase[]) => void;
 }
 
 export function QuickEntryForm({
   defaultPatientId,
   defaultPatientName,
+  defaultCaseId,
+  defaultPatientPhone,
+  prefetchedCases,
+  defaultForceNewPlan = false,
+  defaultNewCaseTreatmentName,
   lockDoctorId,
+  embedded = false,
   onSuccess,
+  onTreatmentCasesChanged,
 }: QuickEntryFormProps) {
   const listId = "dental-suggestions";
 
   // Patient search state
   const [patientQuery, setPatientQuery] = useState(defaultPatientName ?? "");
-  const [patientPhone, setPatientPhone] = useState("");
+  const [patientPhone, setPatientPhone] = useState(defaultPatientPhone ?? "");
   const [patientSuggestions, setPatientSuggestions] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
     defaultPatientId ?? null
@@ -100,10 +155,23 @@ export function QuickEntryForm({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
+  const initialCase = defaultCaseId
+    ? prefetchedCases?.find((c) => c.id === defaultCaseId)
+    : undefined;
+  const initialCaseIsComplete =
+    !defaultForceNewPlan &&
+    !!initialCase &&
+    isTreatmentCaseComplete(caseToFinancialPlan(initialCase));
+
   // Form fields
   const [doctorId, setDoctorId] = useState(lockDoctorId ?? "");
   const [clinical, setClinical] = useState<SessionClinicalDraft>(EMPTY_CLINICAL_DRAFT);
-  const [operationName, setOperationName] = useState("");
+  const [operationName, setOperationName] = useState(() => {
+    if (defaultForceNewPlan && defaultNewCaseTreatmentName?.trim()) {
+      return defaultNewCaseTreatmentName.trim();
+    }
+    return initialCase ? initialCase.treatment_name_ar : "";
+  });
   const [totalAmount, setTotalAmount] = useState("");
   const [paidAmount, setPaidAmount] = useState("");
   const [discountAmount, setDiscountAmount] = useState("");
@@ -120,31 +188,36 @@ export function QuickEntryForm({
     text: string;
   } | null>(null);
   const [financialPlan, setFinancialPlan] =
-    useState<PatientFinancialPlan | null>(null);
-  const [loadingPlan, setLoadingPlan] = useState(!!defaultPatientId);
-  const [forceNewPlan, setForceNewPlan] = useState(false);
-  const [treatmentCases, setTreatmentCases] = useState<PatientTreatmentCase[]>([]);
-  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+    useState<PatientFinancialPlan | null>(() =>
+      defaultForceNewPlan || initialCaseIsComplete
+        ? EMPTY_FINANCIAL_PLAN
+        : initialCase
+          ? caseToFinancialPlan(initialCase)
+          : null
+    );
+  const [loadingPlan, setLoadingPlan] = useState(
+    () => !!defaultPatientId && !initialCase
+  );
+  const [forceNewPlan, setForceNewPlan] = useState(
+    () => defaultForceNewPlan || initialCaseIsComplete
+  );
+  const [treatmentCases, setTreatmentCases] = useState<PatientTreatmentCase[]>(
+    () => prefetchedCases ?? []
+  );
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(() =>
+    defaultForceNewPlan || initialCaseIsComplete
+      ? null
+      : initialCase?.id ??
+          (defaultCaseId && isPersistedTreatmentCaseId(defaultCaseId)
+            ? defaultCaseId
+            : null)
+  );
   const [assignedDoctor, setAssignedDoctor] = useState<{
     id: string;
     full_name_ar: string;
   } | null>(null);
 
-  const emptyPlan: PatientFinancialPlan = {
-    case_price: 0,
-    discount_total: 0,
-    final_price: 0,
-    agreed_total: 0,
-    original_agreed_total: 0,
-    doctor_share_total: 0,
-    clinic_share_total: 0,
-    total_paid: 0,
-    remaining_balance: 0,
-    financial_locked: false,
-    treatment_status: "active",
-  };
-
-  const plan = financialPlan ?? emptyPlan;
+  const plan = financialPlan ?? EMPTY_FINANCIAL_PLAN;
   const showCasePicker =
     !!selectedPatientId &&
     !loadingPlan &&
@@ -166,16 +239,42 @@ export function QuickEntryForm({
   const selectedCase =
     treatmentCases.find((c) => c.id === selectedCaseId) ?? null;
   const isCaseClosed =
+    !defaultForceNewPlan &&
+    !forceNewPlan &&
+    !loadingPlan &&
     isFollowUpSession &&
+    !!selectedCaseId &&
     (selectedCase
       ? isTreatmentCaseComplete(caseToFinancialPlan(selectedCase))
-      : isTreatmentCaseClosed(plan));
+      : false);
 
-  const casePriceNum = parseFloat(totalAmount) || 0;
-  const discountNum = parseFloat(discountAmount) || 0;
-  const additionalDiscountNum = parseFloat(additionalDiscountAmount) || 0;
-  const paid = parseFloat(paidAmount) || 0;
-  const materials = parseFloat(materialsCost) || 0;
+  const beginNewTreatmentCase = useCallback(
+    (prefillTreatmentName?: string) => {
+      setForceNewPlan(true);
+      setSelectedCaseId(null);
+      setFinancialPlan(EMPTY_FINANCIAL_PLAN);
+      setOperationName(prefillTreatmentName?.trim() ?? "");
+      setTotalAmount("");
+      setPaidAmount("");
+      setDiscountAmount("");
+      setAdditionalDiscountAmount("");
+      setMaterialsCost("");
+      setClinical(EMPTY_CLINICAL_DRAFT);
+      setMessage(null);
+    },
+    []
+  );
+
+  const parseAmount = (raw: string) =>
+    Number(parseFormattedNumber(raw)) || 0;
+
+  const casePriceNum = parseAmount(totalAmount);
+  const discountNum = parseAmount(discountAmount);
+  const additionalDiscountNum = parseAmount(additionalDiscountAmount);
+  const paid = parseAmount(paidAmount);
+  const materials = parseAmount(materialsCost);
+  const phoneInputRequired =
+    !defaultPatientPhone?.trim() && !patientPhone.trim();
 
   const reviewFeeLive =
     isReviewStatement && reviewFeeEnabled && clinicReviewFeeAmount > 0
@@ -253,6 +352,17 @@ export function QuickEntryForm({
     load();
   }, [lockDoctorId]);
 
+  useEffect(() => {
+    if (lockDoctorId || doctorId || doctors.length === 0) return;
+    setDoctorId(doctors[0].id);
+  }, [doctors, doctorId, lockDoctorId]);
+
+  useEffect(() => {
+    if (defaultPatientPhone?.trim()) {
+      setPatientPhone(defaultPatientPhone);
+    }
+  }, [defaultPatientPhone]);
+
   // Patient search autocomplete
   useEffect(() => {
     if (selectedPatientId) return; // already selected
@@ -263,13 +373,14 @@ export function QuickEntryForm({
     }
     const timeout = setTimeout(async () => {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("patients")
-        .select("id, full_name_ar, phone, phone_number")
-        .ilike("full_name_ar", `%${q}%`)
-        .limit(8);
-      const rows = (data as Patient[]) || [];
-      setPatientSuggestions(rows);
+      const { searchPatientsByQuery } = await import(
+        "@/lib/services/patient-search"
+      );
+      const { patients: rows } = await searchPatientsByQuery(supabase, q, {
+        limit: 8,
+        minLength: 2,
+      });
+      setPatientSuggestions(rows as Patient[]);
       if (rows.length === 1 && rows[0].full_name_ar === q) {
         setSelectedPatientId(rows[0].id);
         setShowSuggestions(false);
@@ -290,51 +401,137 @@ export function QuickEntryForm({
         setForceNewPlan(false);
         setAssignedDoctor(null);
         if (!lockDoctorId) setDoctorId("");
-        return;
-      }
-      setLoadingPlan(true);
-      const supabase = createClient();
-      if (!lockDoctorId) {
-        const primaryDoc = await fetchPatientPrimaryDoctor(
-          supabase,
-          selectedPatientId
-        );
-        if (cancelled) return;
-        setAssignedDoctor(primaryDoc);
-        if (primaryDoc) setDoctorId(primaryDoc.id);
-      }
-      const clinic = await getActiveClinicId(supabase);
-      const cases = await fetchPatientTreatmentCases(
-        supabase,
-        selectedPatientId,
-        clinic?.clinicId
-      );
-      if (cancelled) return;
-
-      setTreatmentCases(cases);
-
-      if (forceNewPlan) {
-        setFinancialPlan(emptyPlan);
-        setSelectedCaseId(null);
         setLoadingPlan(false);
         return;
       }
 
-      if (cases.length > 0) {
-        setSelectedCaseId(null);
-        setFinancialPlan(emptyPlan);
-      } else {
-        setSelectedCaseId(null);
-        const legacy = await fetchPatientFinancialPlan(supabase, selectedPatientId);
-        setFinancialPlan(legacy);
+      const hadInstantCase =
+        !!defaultCaseId &&
+        !!treatmentCases.find((c) => c.id === defaultCaseId) &&
+        !!selectedCaseId;
+
+      if (!hadInstantCase) {
+        setLoadingPlan(true);
       }
-      setLoadingPlan(false);
+
+      try {
+        const supabase = createClient();
+        if (!lockDoctorId) {
+          const primaryDoc = await fetchPatientPrimaryDoctor(
+            supabase,
+            selectedPatientId
+          );
+          if (cancelled) return;
+          setAssignedDoctor(primaryDoc);
+          if (primaryDoc) setDoctorId(primaryDoc.id);
+        }
+        const clinic = await getActiveClinicId(supabase);
+        const cases = await fetchPatientTreatmentCases(
+          supabase,
+          selectedPatientId,
+          clinic?.clinicId
+        );
+        if (cancelled) return;
+
+        setTreatmentCases(cases);
+        onTreatmentCasesChanged?.(cases);
+
+        if (forceNewPlan || defaultForceNewPlan) {
+          setForceNewPlan(true);
+          setFinancialPlan(EMPTY_FINANCIAL_PLAN);
+          setSelectedCaseId(null);
+          if (defaultNewCaseTreatmentName?.trim()) {
+            setOperationName(defaultNewCaseTreatmentName.trim());
+          }
+          return;
+        }
+
+        const pickCase = (caseId: string): boolean => {
+          const resolveRow = (): PatientTreatmentCase | undefined => {
+            if (isPersistedTreatmentCaseId(caseId)) {
+              return cases.find((x) => x.id === caseId);
+            }
+            const persisted = resolvePersistedCaseId(cases, caseId);
+            return persisted
+              ? cases.find((x) => x.id === persisted)
+              : undefined;
+          };
+          const c = resolveRow();
+          if (!c) return false;
+          if (isTreatmentCaseComplete(caseToFinancialPlan(c))) {
+            setForceNewPlan(true);
+            setSelectedCaseId(null);
+            setFinancialPlan(EMPTY_FINANCIAL_PLAN);
+            setOperationName(c.treatment_name_ar);
+            return true;
+          }
+          applyTreatmentCaseSelection(c, {
+            setSelectedCaseId,
+            setFinancialPlan,
+            setOperationName,
+            setForceNewPlan,
+          });
+          return true;
+        };
+
+        if (defaultCaseId && pickCase(defaultCaseId)) {
+          return;
+        }
+
+        if (cases.length > 0 && !selectedCaseId) {
+          setFinancialPlan(EMPTY_FINANCIAL_PLAN);
+        } else if (cases.length === 0) {
+          setSelectedCaseId(null);
+          const legacy = await fetchPatientFinancialPlan(
+            supabase,
+            selectedPatientId
+          );
+          if (!cancelled) setFinancialPlan(legacy);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingPlan(false);
+        }
+      }
     }
-    loadCases();
+    void loadCases();
     return () => {
       cancelled = true;
     };
-  }, [selectedPatientId, forceNewPlan]);
+  }, [
+    selectedPatientId,
+    forceNewPlan,
+    defaultForceNewPlan,
+    defaultCaseId,
+    defaultNewCaseTreatmentName,
+  ]);
+
+  useEffect(() => {
+    if (
+      !defaultCaseId ||
+      !selectedPatientId ||
+      treatmentCases.length === 0 ||
+      forceNewPlan ||
+      defaultForceNewPlan
+    ) {
+      return;
+    }
+    if (!isPersistedTreatmentCaseId(defaultCaseId)) return;
+    const c = treatmentCases.find((x) => x.id === defaultCaseId);
+    if (!c) return;
+    if (selectedCaseId !== defaultCaseId) {
+      setSelectedCaseId(defaultCaseId);
+      setFinancialPlan(caseToFinancialPlan(c));
+      setOperationName(c.treatment_name_ar);
+    }
+  }, [
+    defaultCaseId,
+    selectedPatientId,
+    treatmentCases,
+    forceNewPlan,
+    defaultForceNewPlan,
+    selectedCaseId,
+  ]);
 
   useEffect(() => {
     if (!selectedPatientId) {
@@ -413,11 +610,12 @@ export function QuickEntryForm({
     }
 
     setLoading(true);
+
+    try {
     const supabase = createClient();
     const activeClinic = await getActiveClinicId(supabase);
     if (!activeClinic) {
       setMessage({ type: "error", text: "لا توجد عيادة في قاعدة البيانات." });
-      setLoading(false);
       return;
     }
 
@@ -470,12 +668,16 @@ export function QuickEntryForm({
       return;
     }
 
-    const pickedCase = treatmentCases.find((c) => c.id === selectedCaseId);
+    const activeCaseId =
+      resolvePersistedCaseId(treatmentCases, selectedCaseId) ?? selectedCaseId;
+    const pickedCase =
+      treatmentCases.find((c) => c.id === activeCaseId) ??
+      treatmentCases.find((c) => c.id === selectedCaseId);
     let activePlan = pickedCase
       ? caseToFinancialPlan(pickedCase)
       : await fetchPatientFinancialPlan(supabase, patientId);
-    const discount = parseFloat(discountAmount) || 0;
-    const additionalDiscount = parseFloat(additionalDiscountAmount) || 0;
+    const discount = parseAmount(discountAmount);
+    const additionalDiscount = parseAmount(additionalDiscountAmount);
     const entryMode =
       forceNewPlan || !selectedCaseId ? "plan" : "payment";
 
@@ -506,7 +708,7 @@ export function QuickEntryForm({
 
     let casePrice = 0;
     if (entryMode === "plan") {
-      casePrice = parseFloat(totalAmount) || 0;
+      casePrice = parseAmount(totalAmount);
       if (casePrice <= 0) {
         setMessage({
           type: "error",
@@ -591,8 +793,14 @@ export function QuickEntryForm({
       optionalCols.is_review_statement = true;
       if (reviewFeeLive > 0) optionalCols.review_fee_amount = reviewFeeLive;
     }
-    if (selectedCaseId && !selectedCaseId.startsWith("inferred-")) {
-      optionalCols.treatment_case_id = selectedCaseId;
+    if (entryMode !== "plan") {
+      const persistedCaseId = resolvePersistedCaseId(
+        treatmentCases,
+        selectedCaseId
+      );
+      if (persistedCaseId && isPersistedTreatmentCaseId(persistedCaseId)) {
+        optionalCols.treatment_case_id = persistedCaseId;
+      }
     }
 
     const insertSession = async (
@@ -631,7 +839,7 @@ export function QuickEntryForm({
           }
         }
 
-        const msg = result.error.message;
+        const msg = result.error?.message ?? "";
         if (
           msg.includes("session_kind") ||
           msg.includes("discount_amount") ||
@@ -703,6 +911,8 @@ export function QuickEntryForm({
       activePlan = await fetchPatientFinancialPlan(supabase, patientId!);
     }
 
+    let savedCaseIdForWa: string | null = null;
+
     if (!error && entryMode === "plan") {
       const treatmentFinal = computeFinalPrice(casePrice, discount);
       const split = previewTreatmentSplitWithReview(
@@ -713,9 +923,8 @@ export function QuickEntryForm({
       );
 
       let newCaseId: string | undefined;
-      const created = await createTreatmentCase(supabase, {
+      const created = await createTreatmentCaseViaApi({
         patientId: patientId!,
-        clinicId: activeClinic.clinicId,
         treatmentName: operationLabel,
         casePrice,
         discount,
@@ -725,9 +934,16 @@ export function QuickEntryForm({
       });
       if (created.case) {
         newCaseId = created.case.id;
+        savedCaseIdForWa = created.case.id;
         setSelectedCaseId(created.case.id);
-      } else if (created.error && !created.error.includes("patient_treatment_cases")) {
-        console.warn("[QuickEntryForm] createTreatmentCase:", created.error);
+        optionalCols.treatment_case_id = created.case.id;
+      } else {
+        setMessage({
+          type: "error",
+          text: `تعذر إنشاء حالة العلاج الجديدة: ${created.error ?? "خطأ غير معروف"}`,
+        });
+        setLoading(false);
+        return;
       }
 
       const planCols: Record<string, unknown> = {
@@ -774,24 +990,66 @@ export function QuickEntryForm({
       error = res.error;
     }
 
+    if (!error && !op?.id) {
+      error = {
+        message:
+          "تعذر حفظ الجلسة في قاعدة البيانات — تحقق من صلاحيات الحساب أو أعد تشغيل الصفحة",
+      };
+    }
+
+    const persistedCaseIdForLink =
+      entryMode !== "plan"
+        ? resolvePersistedCaseId(treatmentCases, selectedCaseId)
+        : null;
+    let linkedCaseId = savedCaseIdForWa ?? persistedCaseIdForLink;
+    if (!error && op?.id) {
+      if (!linkedCaseId) {
+        const resolved = await resolveCaseIdForOp(supabase, op);
+        linkedCaseId = resolved.caseId;
+      }
+      if (linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)) {
+        await linkOperationToTreatmentCase(supabase, op.id, linkedCaseId);
+        const isNewPlanCase =
+          entryMode === "plan" && Boolean(savedCaseIdForWa);
+        if (!isNewPlanCase) {
+          await linkUnlinkedCaseOperations(
+            supabase,
+            linkedCaseId,
+            patientId!,
+            pickedCase?.treatment_name_ar ?? operationLabel
+          );
+        }
+      }
+    }
+
+    let syncWarning = "";
     if (
       !error &&
       entryMode === "payment" &&
       hasTreatmentPlan(activePlan) &&
       (paid > 0 || additionalDiscount > 0)
     ) {
-      await syncTreatmentCaseAfterSession(supabase, {
+      const sync = await syncTreatmentCaseAfterSession(supabase, {
         patientId: patientId!,
         clinicId: activeClinic.clinicId,
-        treatmentName: operationLabel,
+        treatmentName: pickedCase?.treatment_name_ar ?? operationLabel,
         plan: activePlan,
         paidDelta: paid,
         additionalDiscount,
+        caseId:
+          (linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
+            ? linkedCaseId
+            : null) ??
+          (activeCaseId && isPersistedTreatmentCaseId(activeCaseId)
+            ? activeCaseId
+            : null),
       });
+      if (!sync.ok) {
+        syncWarning = ` — تحذير: ${sync.error ?? "تعذر تحديث ذمة الحالة"}`;
+      }
     }
 
     if (error) {
-      setLoading(false);
       const msg = error.message ?? "";
       let display = `تعذر حفظ العملية: ${msg}`;
 
@@ -810,18 +1068,7 @@ export function QuickEntryForm({
       return;
     }
 
-    let operationIdForNotify = op?.id as string | undefined;
-    if (!operationIdForNotify) {
-      const { data: latestOp } = await supabase
-        .from("patient_operations")
-        .select("id")
-        .eq("patient_id", patientId)
-        .eq("clinic_id", activeClinic.clinicId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      operationIdForNotify = latestOp?.id as string | undefined;
-    }
+    const operationIdForNotify = op!.id;
 
     setSelectedPatientId(patientId!);
 
@@ -831,9 +1078,18 @@ export function QuickEntryForm({
       activeClinic.clinicId
     );
     setTreatmentCases(refreshedCases);
-    const updatedCase = selectedCaseId
-      ? refreshedCases.find((c) => c.id === selectedCaseId)
-      : refreshedCases.find((c) => c.treatment_name_ar === operationLabel);
+    onTreatmentCasesChanged?.(refreshedCases);
+    const waCaseId =
+      savedCaseIdForWa && isPersistedTreatmentCaseId(savedCaseIdForWa)
+        ? savedCaseIdForWa
+        : linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
+          ? linkedCaseId
+          : activeCaseId && isPersistedTreatmentCaseId(activeCaseId)
+            ? activeCaseId
+            : selectedCaseId;
+    const updatedCase = waCaseId
+      ? refreshedCases.find((c) => c.id === waCaseId) ?? null
+      : null;
     if (updatedCase) {
       setFinancialPlan(caseToFinancialPlan(updatedCase));
       setSelectedCaseId(updatedCase.id);
@@ -841,16 +1097,90 @@ export function QuickEntryForm({
       const updatedPlan = await fetchPatientFinancialPlan(supabase, patientId!);
       setFinancialPlan(updatedPlan);
     }
-    setForceNewPlan(false);
-
+    const planFinalForWa =
+      entryMode === "plan" && casePrice > 0
+        ? computeFinalPrice(casePrice, discount)
+        : 0;
     const snap = updatedCase
       ? caseToFinancialPlan(updatedCase)
-      : financialPlan ?? emptyPlan;
+      : planFinalForWa > 0
+        ? {
+            ...EMPTY_FINANCIAL_PLAN,
+            final_price: planFinalForWa,
+            total_paid: paid,
+            remaining_balance: Math.max(0, planFinalForWa - paid),
+          }
+        : financialPlan ?? EMPTY_FINANCIAL_PLAN;
 
     const justCompleted =
-      hasTreatmentPlan(snap) &&
-      snap.final_price > FINANCIAL_EPSILON &&
-      snap.remaining_balance <= FINANCIAL_EPSILON;
+      planFinalForWa > 0
+        ? paid >= planFinalForWa - FINANCIAL_EPSILON
+        : hasTreatmentPlan(snap) &&
+          snap.final_price > FINANCIAL_EPSILON &&
+          snap.total_paid > FINANCIAL_EPSILON &&
+          Math.max(0, snap.final_price - snap.total_paid) <= FINANCIAL_EPSILON;
+
+    setForceNewPlan(false);
+
+    const treatmentCaseIdForWa =
+      savedCaseIdForWa && isPersistedTreatmentCaseId(savedCaseIdForWa)
+        ? savedCaseIdForWa
+        : resolvePersistedCaseId(refreshedCases, linkedCaseId) ??
+          resolvePersistedCaseId(refreshedCases, activeCaseId) ??
+          resolvePersistedCaseId(refreshedCases, updatedCase?.id) ??
+          resolvePersistedCaseId(refreshedCases, selectedCaseId) ??
+          (linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
+            ? linkedCaseId
+            : null);
+
+    let messageSnapshot:
+      | {
+          remainingBalance: number;
+          sessionNumber: number;
+          totalSessionsInCase: number;
+          procedureLabel: string;
+          paidThisSession: number;
+          caseFinalPrice: number;
+          caseTotalPaid: number;
+        }
+      | undefined;
+
+    const waProcedureLabel =
+      updatedCase?.treatment_name_ar ??
+      pickedCase?.treatment_name_ar ??
+      operationLabel;
+    const waFinancial = updatedCase
+      ? caseToFinancialPlan(updatedCase)
+      : hasTreatmentPlan(snap)
+        ? snap
+        : null;
+
+    if (waProcedureLabel.trim()) {
+      const useFormTotals = planFinalForWa > 0 || entryMode === "plan";
+      const finalP = useFormTotals
+        ? planFinalForWa > 0
+          ? planFinalForWa
+          : computeFinalPrice(casePrice, discount)
+        : waFinancial?.final_price ?? 0;
+      const totalPaidCase = useFormTotals
+        ? paid
+        : waFinancial?.total_paid ?? paid;
+      const remaining =
+        finalP > 0
+          ? Math.max(0, finalP - totalPaidCase)
+          : waFinancial?.remaining_balance ?? 0;
+      if (finalP > 0 || remaining > 0 || paid > 0) {
+        messageSnapshot = {
+          remainingBalance: remaining,
+          sessionNumber: entryMode === "plan" ? 1 : 0,
+          totalSessionsInCase: entryMode === "plan" ? 1 : 0,
+          procedureLabel: waProcedureLabel.trim(),
+          paidThisSession: paid,
+          caseFinalPrice: finalP,
+          caseTotalPaid: totalPaidCase,
+        };
+      }
+    }
 
     let whatsappNote = "";
     if (operationIdForNotify) {
@@ -860,7 +1190,15 @@ export function QuickEntryForm({
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ treatmentCompleted: justCompleted }),
+            body: JSON.stringify({
+              treatmentCompleted: justCompleted,
+              treatmentCaseId:
+                treatmentCaseIdForWa ??
+                (linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
+                  ? linkedCaseId
+                  : null),
+              messageSnapshot,
+            }),
           }
         );
         void fetch("/api/automation/dispatch", {
@@ -870,6 +1208,12 @@ export function QuickEntryForm({
             event: "session_saved",
             operationId: operationIdForNotify,
             treatmentCompleted: justCompleted,
+            treatmentCaseId:
+              treatmentCaseIdForWa ??
+              (linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
+                ? linkedCaseId
+                : null),
+            messageSnapshot,
             skipPatientWhatsApp: true,
           }),
         });
@@ -922,7 +1266,6 @@ export function QuickEntryForm({
           clinical
         );
         if (!clinicalRes.ok) {
-          setLoading(false);
           setMessage({
             type: "error",
             text: `تم حفظ الجلسة وإرسال الواتساب لكن: ${clinicalRes.error}`,
@@ -931,8 +1274,6 @@ export function QuickEntryForm({
         }
       }
     }
-
-    setLoading(false);
 
     let successText: string;
     if (justCompleted) {
@@ -951,7 +1292,10 @@ export function QuickEntryForm({
       if (paid > 0) parts.push(`دفعة ${formatCurrency(paid)}`);
       successText = `✓ ${parts.join(" — ")} — الذمة ${formatCurrency(snap.remaining_balance)}`;
     }
-    setMessage({ type: "success", text: successText + whatsappNote });
+    setMessage({
+      type: "success",
+      text: successText + whatsappNote + syncWarning,
+    });
 
     setOperationName("");
     setTotalAmount("");
@@ -961,37 +1305,83 @@ export function QuickEntryForm({
     setMaterialsCost("");
     setNotes("");
     setClinical(EMPTY_CLINICAL_DRAFT);
-    onSuccess?.(op as PatientOperation);
+    onSuccess?.(op!);
 
+    } catch (err) {
+      console.error("[QuickEntryForm] handleSubmit", err);
+      setMessage({
+        type: "error",
+        text:
+          err instanceof Error
+            ? `خطأ غير متوقع: ${err.message}`
+            : "خطأ غير متوقع أثناء الحفظ — أعد المحاولة",
+      });
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          {loadingPlan && selectedPatientId
-            ? "جاري تحميل ملف المريض..."
-            : showCasePicker
-              ? "اختر حالة العلاج"
-              : isFollowUpSession
-                ? `متابعة: ${selectedCase?.treatment_name_ar ?? "حالة"}`
-                : "حالة علاج جديدة"}
-        </CardTitle>
-        {isFollowUpSession && !loadingPlan && (
-          <p className="text-sm text-slate-muted mt-1">
-            السعر والخصم من قاعدة البيانات — أدخل الإجراء والمبلغ المدفوع والملاحظات
-          </p>
-        )}
-      </CardHeader>
+    <Card
+      className={
+        embedded ? "border-0 bg-transparent shadow-none p-0" : undefined
+      }
+    >
+      {!embedded && (
+        <CardHeader>
+          <CardTitle>
+            {loadingPlan && selectedPatientId
+              ? "جاري تحميل ملف المريض..."
+              : showCasePicker
+                ? "اختر حالة العلاج"
+                : isFollowUpSession
+                  ? `متابعة: ${selectedCase?.treatment_name_ar ?? "حالة"}`
+                  : "حالة علاج جديدة"}
+          </CardTitle>
+          {isFollowUpSession && !loadingPlan && (
+            <p className="text-sm text-slate-muted mt-1">
+              السعر والخصم من قاعدة البيانات — أدخل المبلغ المدفوع والملاحظات
+            </p>
+          )}
+        </CardHeader>
+      )}
 
-      <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
+      <form
+        noValidate
+        onSubmit={handleSubmit}
+        className={`grid gap-4 sm:grid-cols-2 ${embedded ? "px-0" : ""}`}
+      >
 
         {isCaseClosed && (
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2 space-y-3">
             <Alert variant="success">
-              تم إكمال العلاج — الحالة مغلقة (لا دين). لبدء حالة جديدة فعّل «إجمالي
-              كلي جديد» أدناه.
+              تم إكمال العلاج — الحالة «
+              {selectedCase?.treatment_name_ar ?? "المختارة"}» مغلقة (لا دين). لبدء
+              نفس نوع العلاج بسعر جديد اضغط الزر أدناه.
             </Alert>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() =>
+                beginNewTreatmentCase(selectedCase?.treatment_name_ar)
+              }
+            >
+              + إجمالي كلي جديد — حالة علاج جديدة
+            </Button>
+          </div>
+        )}
+
+        {forceNewPlan && !showCasePicker && (
+          <div className="sm:col-span-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+            <p className="text-sm font-semibold text-primary">
+              حالة علاج جديدة — أدخل السعر الكلي والمبلغ المدفوع في هذه الجلسة
+            </p>
+            {operationName.trim() && (
+              <p className="text-xs text-slate-muted mt-1">
+                نوع العلاج: {operationName.trim()}
+              </p>
+            )}
           </div>
         )}
 
@@ -1114,13 +1504,18 @@ export function QuickEntryForm({
             <input
               type="tel"
               dir="ltr"
-              required
+              required={phoneInputRequired}
               className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm text-slate-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
               value={patientPhone}
               onChange={(e) => setPatientPhone(e.target.value)}
               placeholder="07XX XXX XXXX"
             />
-            {!patientPhone.trim() && isFollowUpSession && (
+            {defaultPatientPhone?.trim() && embedded && (
+              <p className="mt-1 text-xs text-slate-muted" dir="ltr">
+                الرقم المحفوظ: {defaultPatientPhone}
+              </p>
+            )}
+            {!patientPhone.trim() && !defaultPatientPhone?.trim() && isFollowUpSession && (
               <p className="mt-1 text-xs text-amber-700">
                 بدون رقم لن تُرسل رسالة واتساب — اختبار الإرسال يستخدم رقمك أنت
                 فقط.
@@ -1144,30 +1539,35 @@ export function QuickEntryForm({
         {formSchema.showCasePicker ? (
           <TreatmentCasePicker
             cases={treatmentCases}
-            onSelect={(id) => {
-              const c = treatmentCases.find((x) => x.id === id);
-              if (!c) return;
-              setSelectedCaseId(id);
-              setFinancialPlan(caseToFinancialPlan(c));
-              setOperationName(c.treatment_name_ar);
-              setForceNewPlan(false);
+            onSelect={(c) => {
+              const persisted =
+                isPersistedTreatmentCaseId(c.id)
+                  ? c.id
+                  : resolvePersistedCaseId(treatmentCases, c.id);
+              if (!persisted) return;
+              const row =
+                treatmentCases.find((x) => x.id === persisted) ?? c;
+              applyTreatmentCaseSelection(row, {
+                setSelectedCaseId,
+                setFinancialPlan,
+                setOperationName,
+                setForceNewPlan,
+              });
               setClinical(EMPTY_CLINICAL_DRAFT);
+              setMessage(null);
             }}
-            onNewCase={() => {
-              setForceNewPlan(true);
-              setSelectedCaseId(null);
-              setFinancialPlan(emptyPlan);
-              setOperationName("");
-              setTotalAmount("");
-              setPaidAmount("");
-              setDiscountAmount("");
-              setAdditionalDiscountAmount("");
-              setClinical(EMPTY_CLINICAL_DRAFT);
+            onNewCase={(prefillTreatmentName) => {
+              beginNewTreatmentCase(prefillTreatmentName);
             }}
           />
-        ) : !planUiReady && selectedPatientId ? null : (
+        ) : (
         <>
-        {isFollowUpSession && selectedCase && (
+        {loadingPlan && selectedPatientId && (
+          <p className="sm:col-span-2 text-sm text-slate-muted animate-pulse">
+            جاري تحديث بيانات الحالة...
+          </p>
+        )}
+        {isFollowUpSession && selectedCase && !embedded && (
           <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
             <div>
               <p className="text-xs text-slate-muted">الحالة المختارة</p>
@@ -1180,7 +1580,7 @@ export function QuickEntryForm({
               className="text-sm text-primary hover:underline"
               onClick={() => {
                 setSelectedCaseId(null);
-                setFinancialPlan(emptyPlan);
+                setFinancialPlan(EMPTY_FINANCIAL_PLAN);
                 setForceNewPlan(false);
               }}
             >
@@ -1352,7 +1752,7 @@ export function QuickEntryForm({
               onClick={() => {
                 setSelectedCaseId(null);
                 setForceNewPlan(false);
-                setFinancialPlan(emptyPlan);
+                setFinancialPlan(EMPTY_FINANCIAL_PLAN);
               }}
             >
               ← العودة لاختيار حالة أخرى
@@ -1462,7 +1862,9 @@ export function QuickEntryForm({
           <Button
             type="submit"
             className="w-full sm:w-auto"
-            disabled={loading || isCaseClosed || loadingPlan}
+            disabled={
+              loading || isCaseClosed || (loadingPlan && !selectedCaseId)
+            }
           >
             {loading
               ? "جاري الحفظ..."

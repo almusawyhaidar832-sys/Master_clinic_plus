@@ -13,8 +13,12 @@ import {
   treatmentStatusAr,
   doctorPaymentAlertMessage,
 } from "@/lib/automation/messages";
+import {
+  loadSessionAutomationContext,
+  type WhatsAppMessageSnapshot,
+} from "@/lib/automation/session-context";
+import { resolveWhatsAppSessionMeta } from "@/lib/automation/whatsapp-session";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
-import { loadSessionAutomationContext } from "@/lib/automation/session-context";
 
 const LOG = "[automation]";
 
@@ -22,6 +26,10 @@ export type SessionSavedOptions = {
   treatmentCompleted?: boolean;
   /** عند true لا يُرسل واتساب للمراجع (مثلاً عند التعديل فقط) */
   skipPatientWhatsApp?: boolean;
+  /** معرّف الحالة من الواجهة — لرسالة واتساب دقيقة */
+  treatmentCaseId?: string | null;
+  /** لقطة مالية من الواجهة بعد الحفظ — مصدر الحقيقة للرسالة */
+  messageSnapshot?: WhatsAppMessageSnapshot | null;
 };
 
 /** بعد حفظ جلسة — واتساب للمراجع + إشعار الطبيب */
@@ -34,7 +42,9 @@ export async function runSessionSavedAutomation(
   whatsapp: Awaited<ReturnType<typeof sendPatientSessionWhatsApp>>;
 }> {
   const errors: string[] = [];
-  const ctx = await loadSessionAutomationContext(operationId);
+  const ctx = await loadSessionAutomationContext(operationId, undefined, {
+    treatmentCaseId: options.treatmentCaseId,
+  });
   if (!ctx) {
     return {
       ok: false,
@@ -48,6 +58,8 @@ export async function runSessionSavedAutomation(
   const patientWa = await sendPatientSessionWhatsApp(operationId, {
     treatmentCompleted: options.treatmentCompleted,
     skipPatientWhatsApp: options.skipPatientWhatsApp,
+    treatmentCaseId: options.treatmentCaseId ?? ctx.treatmentCaseId,
+    messageSnapshot: options.messageSnapshot,
   });
   if (!patientWa.sent && patientWa.errors.length) {
     errors.push(`patient_wa:${patientWa.errors.join(",")}`);
@@ -72,6 +84,7 @@ export async function runSessionSavedAutomation(
       procedureLabel: ctx.procedureLabel,
       teethSummary: ctx.teethSummary || undefined,
       sessionNumber: ctx.sessionNumber,
+      totalSessionsInCase: ctx.totalSessionsInCase,
     });
     const waDoc = await deliverWhatsAppMessage(admin, {
       clinicId: ctx.clinicId,
@@ -97,7 +110,9 @@ export async function sendPatientSessionWhatsApp(
   pending?: boolean;
   errors: string[];
 }> {
-  const ctx = await loadSessionAutomationContext(operationId);
+  const ctx = await loadSessionAutomationContext(operationId, undefined, {
+    treatmentCaseId: options.treatmentCaseId,
+  });
   if (!ctx) {
     return { sent: false, skipped: "operation_not_found", errors: ["operation_not_found"] };
   }
@@ -110,30 +125,85 @@ export async function sendPatientSessionWhatsApp(
 
   const admin = getAdminClient();
   const clinicProfile = await fetchClinicProfile(admin, ctx.clinicId);
-  // اكتمال العلاج فقط عندما الذمة = 0 (لا نعتمد على علامة الواجهة وحدها)
-  const completed = ctx.remainingBalance <= FINANCIAL_EPSILON;
-  const statusLabel = treatmentStatusAr(ctx.treatmentStatus, ctx.remainingBalance);
-  const kind = resolveSessionWhatsAppKind(ctx.sessionNumber, completed);
+
+  const explicitCaseId =
+    options.treatmentCaseId?.trim() || ctx.treatmentCaseId?.trim() || null;
+
+  const sessionMeta = await resolveWhatsAppSessionMeta(admin, {
+    operationId: ctx.operationId,
+    patientId: ctx.patientId,
+    treatmentCaseId: explicitCaseId,
+  });
+
+  const snap = options.messageSnapshot;
+  let resolvedCaseId = sessionMeta.caseId ?? explicitCaseId;
+  let sessionNumber = sessionMeta.sessionNumber;
+  let procedureLabel = sessionMeta.procedureLabel;
+  let totalSessionsInCase = sessionMeta.totalSessionsInCase;
+  let remainingBalance = sessionMeta.remainingBalance;
+  let paidThisSession = sessionMeta.paidThisSession;
+  let caseFinalPrice = sessionMeta.caseFinalPrice;
+  let caseTotalPaid = sessionMeta.caseTotalPaid;
+
+  if (snap) {
+    if (snap.procedureLabel.trim()) procedureLabel = snap.procedureLabel.trim();
+    if (Number.isFinite(snap.paidThisSession)) {
+      paidThisSession = Math.max(0, snap.paidThisSession);
+    }
+    if (snap.caseFinalPrice > FINANCIAL_EPSILON) {
+      caseFinalPrice = snap.caseFinalPrice;
+      caseTotalPaid = Math.max(0, snap.caseTotalPaid);
+      remainingBalance = Math.max(0, snap.remainingBalance);
+    } else if (snap.remainingBalance > FINANCIAL_EPSILON) {
+      remainingBalance = snap.remainingBalance;
+    }
+    if (snap.sessionNumber >= 1) {
+      sessionNumber = Math.max(1, Math.round(snap.sessionNumber));
+      totalSessionsInCase =
+        snap.totalSessionsInCase >= 1
+          ? Math.max(sessionNumber, Math.round(snap.totalSessionsInCase))
+          : sessionNumber;
+    }
+  }
+
+  const snapSaysOpen =
+    !!snap &&
+    snap.caseFinalPrice > FINANCIAL_EPSILON &&
+    snap.remainingBalance > FINANCIAL_EPSILON;
+  const completed =
+    !snapSaysOpen &&
+    (options.treatmentCompleted === true ||
+      (caseFinalPrice > FINANCIAL_EPSILON &&
+        caseTotalPaid > FINANCIAL_EPSILON &&
+        remainingBalance <= FINANCIAL_EPSILON));
+
+  const statusLabel = treatmentStatusAr(
+    ctx.treatmentStatus,
+    remainingBalance,
+    caseFinalPrice
+  );
+  const kind = resolveSessionWhatsAppKind(sessionNumber, completed);
 
   const body = patientSessionWhatsAppMessage({
     clinic: clinicProfile,
     patientName: ctx.patientName,
     doctorName: ctx.doctorName,
-    sessionNumber: ctx.sessionNumber,
-    paidThisSession: ctx.paidAmount,
-    remainingBalance: ctx.remainingBalance,
+    sessionNumber,
+    totalSessionsInCase,
+    paidThisSession,
+    remainingBalance,
     treatmentStatus: statusLabel,
-    procedureLabel: ctx.procedureLabel,
+    procedureLabel,
     teethSummary: ctx.teethSummary || undefined,
     kind,
+    caseId: resolvedCaseId,
+    currentOperationId: ctx.operationId,
+    sessionCountFromDb: sessionNumber,
+    caseFinalPrice,
   });
 
   const waType =
-    kind === "completed"
-      ? "treatment_completed"
-      : kind === "first"
-        ? "session_started"
-        : "session_update";
+    kind === "completed" ? "treatment_completed" : "session_update";
   const wa = await deliverWhatsAppMessage(admin, {
     clinicId: ctx.clinicId,
     rawPhone: ctx.patientPhone,
@@ -181,6 +251,7 @@ export async function runXrayUploadedAutomation(
     clinic: clinicProfile,
     patientName: ctx.patientName,
     sessionNumber: ctx.sessionNumber,
+    totalSessionsInCase: ctx.totalSessionsInCase,
     imageUrl: signed.signedUrl,
     fileName,
   });
