@@ -1,7 +1,6 @@
 # Supabase local dev — see https://supabase.com/docs/guides/cli
 
-[project]
-id = "master-clinic-plus"
+project_id = "dvsuscntkmubbinqphdi"
 
 [api]
 enabled = true

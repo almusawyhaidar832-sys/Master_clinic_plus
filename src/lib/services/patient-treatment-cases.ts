@@ -909,7 +909,17 @@ export async function computeCaseBalanceById(
     .eq("id", caseId)
     .maybeSingle();
 
-  if (error || !row) return null;
+  if (error || !row) {
+    if (error) {
+      console.error("[computeCaseBalanceById]", caseId, error.message);
+    } else {
+      console.warn(
+        "[computeCaseBalanceById] case not found or not visible",
+        caseId
+      );
+    }
+    return null;
+  }
 
   const r = row as Record<string, unknown>;
   const treatmentName = String(r.treatment_name_ar ?? "علاج");
@@ -1050,6 +1060,54 @@ export async function syncTreatmentCaseAfterSession(
     completed: status === "completed",
     caseId: created.case.id,
   };
+}
+
+/** مزامنة ذمة الحالة عبر API السيرفر — يتجاوز RLS من المتصفح */
+export async function syncTreatmentCaseAfterSessionViaApi(input: {
+  patientId: string;
+  treatmentName: string;
+  plan: PatientFinancialPlan;
+  paidDelta: number;
+  additionalDiscount?: number;
+  caseId?: string | null;
+}): Promise<{
+  ok: boolean;
+  completed: boolean;
+  caseId?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch("/api/treatment-cases/sync-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const data = (await res.json()) as {
+      ok?: boolean;
+      completed?: boolean;
+      caseId?: string;
+      error?: string;
+    };
+    if (!res.ok) {
+      return {
+        ok: false,
+        completed: false,
+        error: data.error ?? `HTTP ${res.status}`,
+      };
+    }
+    return {
+      ok: Boolean(data.ok),
+      completed: Boolean(data.completed),
+      caseId: data.caseId,
+      error: data.error,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      completed: false,
+      error: e instanceof Error ? e.message : "تعذر الاتصال بالسيرفر",
+    };
+  }
 }
 
 /** ربط جلسة محفوظة بمعرّف الحالة (بعد الإدراج إن حُذف العمود مؤقتاً) */

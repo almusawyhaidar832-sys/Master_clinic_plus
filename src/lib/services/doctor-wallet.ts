@@ -48,45 +48,20 @@ export function computeWalletStats(
   };
 }
 
-/** Earnings: once per treatment plan on patient, not per payment session */
+/** مستحقات الطبيب — من doctor_id و doctor_share_amount لكل جلسة */
 export async function fetchDoctorTotalEarnings(
   supabase: SupabaseClient,
   doctorId: string
 ): Promise<number> {
-  const { data: planOps } = await supabase
+  const { data: ops } = await supabase
     .from("patient_operations")
-    .select("patient_id")
-    .eq("doctor_id", doctorId)
-    .eq("session_kind", "plan");
-
-  const planPatientIds = new Set(
-    (planOps ?? []).map((r) => r.patient_id as string)
-  );
-
-  let total = 0;
-
-  if (planPatientIds.size > 0) {
-    const { data: pts } = await supabase
-      .from("patients")
-      .select("doctor_share_total")
-      .in("id", [...planPatientIds]);
-    total += (pts ?? []).reduce(
-      (s, p) => s + Number(p.doctor_share_total ?? 0),
-      0
-    );
-  }
-
-  const { data: legacyOps } = await supabase
-    .from("patient_operations")
-    .select("patient_id, doctor_share_amount")
+    .select("doctor_share_amount")
     .eq("doctor_id", doctorId);
 
-  for (const op of legacyOps ?? []) {
-    if (planPatientIds.has(op.patient_id as string)) continue;
-    total += Number(op.doctor_share_amount ?? 0);
-  }
-
-  return total;
+  return (ops ?? []).reduce(
+    (s, r) => s + Number(r.doctor_share_amount ?? 0),
+    0
+  );
 }
 
 export async function fetchDoctorWalletStats(

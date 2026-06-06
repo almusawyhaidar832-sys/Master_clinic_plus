@@ -17,6 +17,7 @@ export const accountantModuleNav: ModuleNavItem[] = [
   { href: "/dashboard/queue",       label: "غرفة الانتظار",      icon: "listOrdered", requiredModule: "patient_queue"      },
   { href: "/dashboard/patients",    label: "ملفات المرضى",        icon: "patients",    requiredModule: "patients"           },
   { href: "/dashboard/reports",     label: "تقارير العيادة",      icon: "profits",     requiredModule: "reports"            },
+  { href: "/dashboard/refunds",     label: "إدارة المرتجعات",     icon: "refunds",     requiredModule: "billing"            },
   { href: "/dashboard/doctors",     label: "الأطباء",             icon: "doctors"      },
   { href: "/dashboard/withdrawals", label: "طلبات السحب",         icon: "withdrawals", requiredModule: "doctor_wallet"      },
   { href: "/dashboard/expenses",    label: "المصروفات",           icon: "expenses"     },

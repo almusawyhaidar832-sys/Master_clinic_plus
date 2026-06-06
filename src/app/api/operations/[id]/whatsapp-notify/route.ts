@@ -8,7 +8,7 @@ import {
   loadSessionAutomationContext,
   type WhatsAppMessageSnapshot,
 } from "@/lib/automation/session-context";
-import { sendPatientSessionWhatsApp } from "@/lib/automation/run";
+import { runSessionSavedAutomation } from "@/lib/automation/run";
 
 /** POST — إرسال واتساب المراجع بعد حفظ جلسة (Evolution + instance العيادة) */
 export async function POST(
@@ -92,7 +92,7 @@ export async function POST(
       });
     }
 
-    const result = await sendPatientSessionWhatsApp(id, {
+    const result = await runSessionSavedAutomation(id, {
       treatmentCompleted,
       treatmentCaseId: treatmentCaseId ?? ctx.treatmentCaseId,
       messageSnapshot,
@@ -100,8 +100,8 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      whatsapp: result,
-      messageType: result.sent
+      whatsapp: result.whatsapp,
+      messageType: result.whatsapp.sent
         ? treatmentCompleted
           ? "treatment_completed"
           : "session_update"

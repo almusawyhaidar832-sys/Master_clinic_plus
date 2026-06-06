@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
-import {
-  runSessionSavedAutomation,
-  runXrayUploadedAutomation,
-} from "@/lib/automation/run";
+import { runSessionSavedAutomation } from "@/lib/automation/run";
 import type { WhatsAppMessageSnapshot } from "@/lib/automation/session-context";
 
 /**
@@ -105,20 +102,9 @@ export async function POST(req: NextRequest) {
         });
       }
       case "xray_uploaded": {
-        if (!storagePath) {
-          return NextResponse.json(
-            { error: "storagePath مطلوب" },
-            { status: 400 }
-          );
-        }
-        const result = await runXrayUploadedAutomation(
-          operationId,
-          storagePath,
-          fileName
-        );
         return NextResponse.json({
-          success: result.ok,
-          error: result.error,
+          success: true,
+          skipped: "xray_whatsapp_merged_into_session_saved",
         });
       }
       default:

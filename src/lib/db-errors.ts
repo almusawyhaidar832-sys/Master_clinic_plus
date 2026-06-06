@@ -16,5 +16,8 @@ export function translateDbError(message: string): string {
   if (m.includes("permission denied") || m.includes("policy")) {
     return "صلاحيات غير كافية — سجّل دخولك كمحاسب أو مدير";
   }
+  if (m.includes("patients_total_paid_check")) {
+    return "تعذر الإرجاع — المبلغ يتجاوز المدفوع المسجّل للمراجع";
+  }
   return message;
 }

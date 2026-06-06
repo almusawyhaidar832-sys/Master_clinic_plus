@@ -27,6 +27,9 @@ import type { ClinicalByOperationId } from "@/lib/clinical/types";
 import { hasClinicalData } from "@/lib/clinical/types";
 import type { PatientOperation } from "@/types";
 import { SessionEditDialog } from "@/components/sessions/SessionEditDialog";
+import { SessionRefundModal } from "@/components/sessions/SessionRefundModal";
+import { createClient } from "@/lib/supabase/client";
+import { fetchRefundedTotalForSession } from "@/lib/services/session-refunds";
 
 interface PatientSessionsByCaseProps {
   patientId: string;
@@ -123,11 +126,18 @@ function SessionRow({
   onClinicalSaved: () => void;
   allowEdit?: boolean;
 }) {
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [maxRefundable, setMaxRefundable] = useState(0);
+  const [refundLoading, setRefundLoading] = useState(false);
+
   const opWithDoctor = op as PatientOperation & {
     doctor?: { full_name_ar: string };
   };
   const isPlan = op.session_kind === "plan" || Number(op.total_amount) > 0;
   const hasClinical = hasClinicalData(clinical);
+  const sessionPaid = Number(op.paid_amount ?? 0);
+  const canRefund =
+    !!allowEdit && op.session_kind !== "refund" && sessionPaid > 0;
   const linkedCaseId =
     caseId ??
     (op.treatment_case_id && isPersistedTreatmentCaseId(op.treatment_case_id)
@@ -198,10 +208,45 @@ function SessionRow({
           existing={clinical}
           onSaved={onClinicalSaved}
         />
-        {allowEdit && (
-          <SessionEditDialog operation={op} onSaved={onClinicalSaved} />
-        )}
+        <div className="mt-2 flex flex-wrap gap-2">
+          {canRefund && (
+            <button
+              type="button"
+              disabled={refundLoading}
+              onClick={async () => {
+                setRefundLoading(true);
+                try {
+                  const supabase = createClient();
+                  const refunded = await fetchRefundedTotalForSession(
+                    supabase,
+                    op.id
+                  );
+                  setMaxRefundable(
+                    Math.max(0, Math.round((sessionPaid - refunded) * 100) / 100)
+                  );
+                  setRefundOpen(true);
+                } finally {
+                  setRefundLoading(false);
+                }
+              }}
+              className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+            >
+              {refundLoading ? "جاري التحميل..." : "استرجاع مبلغ"}
+            </button>
+          )}
+          {allowEdit && (
+            <SessionEditDialog operation={op} onSaved={onClinicalSaved} />
+          )}
+        </div>
       </div>
+
+      <SessionRefundModal
+        operation={op}
+        maxRefundable={maxRefundable}
+        open={refundOpen}
+        onClose={() => setRefundOpen(false)}
+        onSaved={onClinicalSaved}
+      />
     </div>
   );
 }

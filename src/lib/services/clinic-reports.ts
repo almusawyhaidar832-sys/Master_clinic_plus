@@ -11,6 +11,7 @@ import {
   fetchTodaySummary,
 } from "@/lib/services/clinic-stats";
 import { currentMonthYear } from "@/lib/utils";
+import { fetchRefundsForReport } from "@/lib/services/session-refunds";
 
 function relationName(
   rel: { full_name_ar: string } | { full_name_ar: string }[] | null | undefined
@@ -87,6 +88,14 @@ export interface MasterClinicReport {
     total_amount: number;
     paid_amount: number;
     remaining_debt: number;
+  }[];
+  refunds: {
+    id: string;
+    patientName: string;
+    amount: number;
+    doctorName: string;
+    date: string;
+    reason: string;
   }[];
 }
 
@@ -220,6 +229,7 @@ export async function fetchMasterClinicReport(
     salaryEntriesRes,
     monthOpsRes,
     monthOpsCountRes,
+    refunds,
   ] = await Promise.all([
     fetchClinicProfitStats(supabase),
     fetchTodaySummary(supabase),
@@ -257,6 +267,7 @@ export async function fetchMasterClinicReport(
       .select("paid_amount, remaining_debt, total_amount")
       .gte("operation_date", start)
       .lte("operation_date", end),
+    fetchRefundsForReport(supabase, start, end),
   ]);
 
   const monthRows = monthOpsCountRes.data ?? [];
@@ -322,6 +333,14 @@ export async function fetchMasterClinicReport(
       amount: Number(e.amount),
       entry_date: e.entry_date,
       notes: e.notes_ar,
+    })),
+    refunds: refunds.map((r) => ({
+      id: r.id,
+      patientName: r.patientName,
+      amount: r.amount,
+      doctorName: formatDoctorDisplayName(r.doctorName),
+      date: r.date,
+      reason: r.reason,
     })),
     monthOperations: (monthOpsRes.data ?? []).map((op) => ({
       operation_date: op.operation_date,

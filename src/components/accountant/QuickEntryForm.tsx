@@ -43,10 +43,13 @@ import {
   linkUnlinkedCaseOperations,
   resolveCaseIdForOp,
   resolvePersistedCaseId,
-  syncTreatmentCaseAfterSession,
+  syncTreatmentCaseAfterSessionViaApi,
   type PatientTreatmentCase,
 } from "@/lib/services/patient-treatment-cases";
-import { fetchPatientPrimaryDoctor } from "@/lib/services/patient-primary-doctor";
+import {
+  fetchCasePrimaryDoctor,
+  fetchPatientPrimaryDoctor,
+} from "@/lib/services/patient-primary-doctor";
 import { TreatmentCasePicker } from "@/components/accountant/TreatmentCasePicker";
 import type { Doctor, Patient, PatientOperation } from "@/types";
 import {
@@ -417,10 +420,13 @@ export function QuickEntryForm({
       try {
         const supabase = createClient();
         if (!lockDoctorId) {
-          const primaryDoc = await fetchPatientPrimaryDoctor(
-            supabase,
-            selectedPatientId
-          );
+          const persistedCaseId =
+            defaultCaseId && isPersistedTreatmentCaseId(defaultCaseId)
+              ? defaultCaseId
+              : null;
+          const primaryDoc = persistedCaseId
+            ? await fetchCasePrimaryDoctor(supabase, persistedCaseId)
+            : await fetchPatientPrimaryDoctor(supabase, selectedPatientId);
           if (cancelled) return;
           setAssignedDoctor(primaryDoc);
           if (primaryDoc) setDoctorId(primaryDoc.id);
@@ -567,6 +573,27 @@ export function QuickEntryForm({
   useEffect(() => {
     setClinical(EMPTY_CLINICAL_DRAFT);
   }, [selectedPatientId, selectedCaseId, forceNewPlan]);
+
+  useEffect(() => {
+    if (lockDoctorId || !selectedPatientId) return;
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const persisted =
+        selectedCaseId && isPersistedTreatmentCaseId(selectedCaseId)
+          ? selectedCaseId
+          : null;
+      const primaryDoc = persisted
+        ? await fetchCasePrimaryDoctor(supabase, persisted)
+        : await fetchPatientPrimaryDoctor(supabase, selectedPatientId);
+      if (cancelled) return;
+      setAssignedDoctor(primaryDoc);
+      if (primaryDoc) setDoctorId(primaryDoc.id);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPatientId, selectedCaseId, lockDoctorId]);
 
   // Close suggestions on outside click
   useEffect(() => {
@@ -1029,9 +1056,8 @@ export function QuickEntryForm({
       hasTreatmentPlan(activePlan) &&
       (paid > 0 || additionalDiscount > 0)
     ) {
-      const sync = await syncTreatmentCaseAfterSession(supabase, {
+      const sync = await syncTreatmentCaseAfterSessionViaApi({
         patientId: patientId!,
-        clinicId: activeClinic.clinicId,
         treatmentName: pickedCase?.treatment_name_ar ?? operationLabel,
         plan: activePlan,
         paidDelta: paid,
@@ -1184,24 +1210,25 @@ export function QuickEntryForm({
 
     let whatsappNote = "";
     if (operationIdForNotify) {
-      try {
-        const waRes = await fetch(
-          `/api/operations/${operationIdForNotify}/whatsapp-notify`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              treatmentCompleted: justCompleted,
-              treatmentCaseId:
-                treatmentCaseIdForWa ??
-                (linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
-                  ? linkedCaseId
-                  : null),
-              messageSnapshot,
-            }),
-          }
+      const hasClinical =
+        clinical.xrayFiles.length > 0 ||
+        Object.keys(clinical.teeth).length > 0;
+      if (hasClinical) {
+        const clinicalRes = await saveSessionClinicalRecords(
+          operationIdForNotify,
+          clinical
         );
-        void fetch("/api/automation/dispatch", {
+        if (!clinicalRes.ok) {
+          setMessage({
+            type: "error",
+            text: `تم حفظ الجلسة لكن: ${clinicalRes.error}`,
+          });
+          return;
+        }
+      }
+
+      try {
+        const waRes = await fetch("/api/automation/dispatch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1214,7 +1241,6 @@ export function QuickEntryForm({
                 ? linkedCaseId
                 : null),
             messageSnapshot,
-            skipPatientWhatsApp: true,
           }),
         });
 
@@ -1253,25 +1279,6 @@ export function QuickEntryForm({
         }
       } catch {
         whatsappNote = " — تعذر تشغيل إرسال واتساب تلقائياً.";
-      }
-    }
-
-    if (operationIdForNotify) {
-      const hasClinical =
-        clinical.xrayFiles.length > 0 ||
-        Object.keys(clinical.teeth).length > 0;
-      if (hasClinical) {
-        const clinicalRes = await saveSessionClinicalRecords(
-          operationIdForNotify,
-          clinical
-        );
-        if (!clinicalRes.ok) {
-          setMessage({
-            type: "error",
-            text: `تم حفظ الجلسة وإرسال الواتساب لكن: ${clinicalRes.error}`,
-          });
-          return;
-        }
       }
     }
 

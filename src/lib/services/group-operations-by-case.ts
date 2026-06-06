@@ -45,6 +45,8 @@ export function groupOperationsByTreatmentCase(
   operations: PatientOperation[],
   treatmentCases: PatientTreatmentCase[]
 ): TreatmentCaseSessionGroup[] {
+  const visibleOps = operations.filter((op) => op.session_kind !== "refund");
+
   const caseById = new Map<string, PatientTreatmentCase>();
   const caseByKey = new Map<string, PatientTreatmentCase>();
   const casesByNameCount = new Map<string, number>();
@@ -66,7 +68,7 @@ export function groupOperationsByTreatmentCase(
     { caseId: string | null; sessions: PatientOperation[] }
   >();
 
-  for (const op of operations) {
+  for (const op of visibleOps) {
     const { key: gKey, caseId: resolvedId } = resolveGroupKeyForOp(
       op,
       casesByNameCount

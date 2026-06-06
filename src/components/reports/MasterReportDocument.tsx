@@ -184,6 +184,36 @@ export function MasterReportDocument({
         </section>
       )}
 
+      {report.refunds.length > 0 && (
+        <section className="mb-6">
+          <h3 className="mb-2 text-sm font-bold">سجل المرتجعات</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-xs sm:text-sm">
+              <thead>
+                <tr className="border-b text-right text-slate-muted">
+                  <th className="py-1">اسم المراجع</th>
+                  <th className="py-1">المبلغ المسترجع</th>
+                  <th className="py-1">الطبيب المتضرر</th>
+                  <th className="py-1">التاريخ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.refunds.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-border/40">
+                    <td className="py-1 font-medium">{r.patientName}</td>
+                    <td className="py-1 font-semibold text-amber-700">
+                      {formatCurrency(r.amount)}
+                    </td>
+                    <td className="py-1 text-primary">{r.doctorName}</td>
+                    <td className="py-1">{formatDate(r.date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {report.monthOperations.length > 0 && (
         <section>
           <h3 className="mb-2 text-sm font-bold">

@@ -9,7 +9,7 @@ import type { NavItem } from "@/types";
 import {
   LayoutDashboard, Users, Stethoscope, Wallet, Receipt,
   UserCog, MessageCircle, TrendingUp, LogOut, FileText,
-  ListOrdered, Package, FilePen, TestTube2, Pill, Globe,
+  ListOrdered, Package, FilePen, TestTube2, Pill, Globe, Undo2,
   type LucideIcon,
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -30,6 +30,7 @@ const iconMap: Record<string, LucideIcon> = {
   testTube:    TestTube2,
   pill:        Pill,
   globe:       Globe,
+  refunds:     Undo2,
 };
 
 interface SidebarProps {

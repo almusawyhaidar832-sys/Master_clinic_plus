@@ -77,6 +77,8 @@ export interface Patient {
   original_agreed_total?: number | null;
   discount_total?: number | null;
   treatment_status?: "active" | "completed" | null;
+  /** الطبيب المعالج للجلسات الجديدة */
+  primary_doctor_id?: string | null;
 }
 
 export interface OperationToothRecord {
@@ -118,7 +120,7 @@ export interface PatientOperation {
   clinic_share_amount?: number;
   notes?: string | null;
   is_review_statement?: boolean;
-  session_kind?: "plan" | "payment" | "discount";
+  session_kind?: "plan" | "payment" | "discount" | "refund";
   treatment_case_id?: string | null;
   created_at?: string;
   patient?: Patient | { full_name_ar: string };

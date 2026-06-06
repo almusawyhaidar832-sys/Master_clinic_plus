@@ -27,8 +27,10 @@ import { getActiveClinicId } from "@/lib/clinic-context";
 import { PatientSessionsByCase } from "@/components/patients/PatientSessionsByCase";
 import { fetchPatientClinicalRecords } from "@/lib/clinical/fetch-patient-clinical";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
-import type { Patient, PatientOperation } from "@/types";
+import type { Doctor, Patient, PatientOperation } from "@/types";
 import { getPatientDisplayPhone } from "@/lib/phone";
+import { TransferDoctorPanel } from "@/components/patients/TransferDoctorPanel";
+import type { PatientPrimaryDoctor } from "@/lib/services/patient-primary-doctor";
 import { ArrowRight, Plus, X } from "lucide-react";
 
 export default function PatientProfilePage() {
@@ -48,6 +50,10 @@ export default function PatientProfilePage() {
   );
   const sessionFormRef = useRef<HTMLDivElement>(null);
   const continueFormRef = useRef<HTMLDivElement>(null);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [caseDoctorKeys, setCaseDoctorKeys] = useState<Record<string, string>>(
+    {}
+  );
 
   const continueCase = useMemo(
     () => treatmentCases.find((c) => c.id === continueCaseId) ?? null,
@@ -141,16 +147,37 @@ export default function PatientProfilePage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
+      const clinic = await getActiveClinicId(supabase);
       const { data: pRes } = await supabase
         .from("patients")
         .select("*")
         .eq("id", id)
         .maybeSingle();
       if (pRes) setPatient(pRes as Patient);
+      if (clinic?.clinicId) {
+        const { data: docRows } = await supabase
+          .from("doctors")
+          .select("*")
+          .eq("clinic_id", clinic.clinicId)
+          .eq("is_active", true)
+          .order("full_name_ar");
+        if (docRows) setDoctors(docRows as Doctor[]);
+      }
       await Promise.all([loadOperations(), loadTreatmentCases()]);
     }
     if (id) load();
   }, [id, loadOperations, loadTreatmentCases]);
+
+  const handleDoctorTransferred = useCallback(
+    (caseId: string, doc: PatientPrimaryDoctor) => {
+      setCaseDoctorKeys((prev) => ({ ...prev, [caseId]: doc.id }));
+    },
+    []
+  );
+
+  const continueFormKey = continueCaseId
+    ? `${id}-continue-${caseDoctorKeys[continueCaseId] ?? "x"}-${continueCaseId}`
+    : "";
 
   const totalDebt = useMemo(
     () => computeOutstandingDebtFromTreatmentCases(treatmentCases),
@@ -245,6 +272,15 @@ export default function PatientProfilePage() {
               {totalDebt > 0 ? "ذمة متبقية" : "لا ذمة"}
             </p>
           </div>
+        </div>
+
+        <div className="px-4 pb-4">
+          <TransferDoctorPanel
+            patientId={id}
+            treatmentCases={treatmentCases}
+            doctors={doctors}
+            onTransferred={handleDoctorTransferred}
+          />
         </div>
 
         {treatmentCases.length > 0 && (
@@ -379,7 +415,7 @@ export default function PatientProfilePage() {
               </Button>
             </div>
             <QuickEntryForm
-              key={`${id}-continue-${continueCaseId}`}
+              key={continueFormKey}
               embedded
               defaultPatientId={id}
               defaultPatientName={patient.full_name_ar}
