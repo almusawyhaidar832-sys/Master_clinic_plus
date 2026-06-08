@@ -17,7 +17,7 @@ export type PatientSearchResult = Pick<
 export async function searchPatientsByQuery(
   supabase: SupabaseClient,
   query: string,
-  opts: { limit?: number; minLength?: number } = {}
+  opts: { limit?: number; minLength?: number; clinicId?: string } = {}
 ): Promise<{ patients: PatientSearchResult[]; error?: string }> {
   const q = query.trim();
   const minLength = opts.minLength ?? 2;
@@ -27,34 +27,27 @@ export async function searchPatientsByQuery(
     return { patients: [] };
   }
 
-  await supabase.rpc("link_profile_to_first_clinic");
-  const activeClinic = await getActiveClinicId(supabase);
+  const activeClinic = opts.clinicId
+    ? { clinicId: opts.clinicId }
+    : await getActiveClinicId(supabase);
 
-  let request = supabase
+  if (!activeClinic?.clinicId) {
+    return {
+      patients: [],
+      error: "حسابك غير مربوط بعيادة — تواصل مع الإدارة",
+    };
+  }
+
+  const { data, error } = await supabase
     .from("patients")
     .select(PATIENT_SEARCH_COLUMNS)
+    .eq("clinic_id", activeClinic.clinicId)
     .ilike("full_name_ar", `%${q}%`)
     .order("full_name_ar")
     .limit(limit);
 
-  if (activeClinic?.clinicId) {
-    request = request.eq("clinic_id", activeClinic.clinicId);
-  }
-
-  const { data, error } = await request;
-
   if (error) {
-    const fallback = await supabase
-      .from("patients")
-      .select("id, clinic_id, full_name_ar, phone, notes")
-      .ilike("full_name_ar", `%${q}%`)
-      .order("full_name_ar")
-      .limit(limit);
-
-    if (fallback.error) {
-      return { patients: [], error: fallback.error.message };
-    }
-    return { patients: (fallback.data as PatientSearchResult[]) ?? [] };
+    return { patients: [], error: error.message };
   }
 
   let patients = (data as PatientSearchResult[]) ?? [];
@@ -62,15 +55,15 @@ export async function searchPatientsByQuery(
   if (patients.length === 0 && /^[\d+\s-]{4,}$/.test(q)) {
     const digits = q.replace(/\D/g, "");
     if (digits.length >= 4) {
-      const phoneReq = supabase
+      const { data: byPhone, error: phoneErr } = await supabase
         .from("patients")
         .select(PATIENT_SEARCH_COLUMNS)
+        .eq("clinic_id", activeClinic.clinicId)
         .or(`phone.ilike.%${digits}%,phone_number.ilike.%${digits}%`)
         .limit(limit);
-      const filtered = activeClinic?.clinicId
-        ? phoneReq.eq("clinic_id", activeClinic.clinicId)
-        : phoneReq;
-      const { data: byPhone } = await filtered;
+      if (phoneErr) {
+        return { patients: [], error: phoneErr.message };
+      }
       patients = (byPhone as PatientSearchResult[]) ?? [];
     }
   }

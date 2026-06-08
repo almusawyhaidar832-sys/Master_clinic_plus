@@ -1,10 +1,18 @@
+import { Suspense } from "react";
+import { BookingPortal } from "./BookingPortal";
+
+function BookingFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-surface">
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-600 border-t-transparent" />
+    </div>
+  );
+}
+
 export default function PatientBookingPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-surface p-6 text-center">
-      <h1 className="text-2xl font-bold text-slate-text">بوابة المريض</h1>
-      <p className="mt-2 max-w-md text-slate-muted">
-        حجز المواعيد عبر الإنترنت — قيد التطوير. تواصل مع العيادة مباشرة حالياً.
-      </p>
-    </div>
+    <Suspense fallback={<BookingFallback />}>
+      <BookingPortal />
+    </Suspense>
   );
 }

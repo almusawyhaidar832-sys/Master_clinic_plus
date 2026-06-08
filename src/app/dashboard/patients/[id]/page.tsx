@@ -53,6 +53,7 @@ export default function PatientProfilePage() {
   const [caseDoctorKeys, setCaseDoctorKeys] = useState<Record<string, string>>(
     {}
   );
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const continueCase = useMemo(
     () => treatmentCases.find((c) => c.id === continueCaseId) ?? null,
@@ -95,10 +96,13 @@ export default function PatientProfilePage() {
 
   const loadOperations = useCallback(async () => {
     const supabase = createClient();
+    const clinic = await getActiveClinicId(supabase);
+    if (!clinic?.clinicId) return;
     const { data } = await supabase
       .from("patient_operations")
       .select("*, doctor:doctors!doctor_id(full_name_ar)")
       .eq("patient_id", id)
+      .eq("clinic_id", clinic.clinicId)
       .order("created_at", { ascending: false });
     if (data) {
       setOperations(data as PatientOperation[]);
@@ -146,12 +150,23 @@ export default function PatientProfilePage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
+      const clinic = await getActiveClinicId(supabase);
+      if (!clinic?.clinicId) {
+        setAccessDenied(true);
+        return;
+      }
       const { data: pRes } = await supabase
         .from("patients")
         .select("*")
         .eq("id", id)
+        .eq("clinic_id", clinic.clinicId)
         .maybeSingle();
-      if (pRes) setPatient(pRes as Patient);
+      if (!pRes) {
+        setAccessDenied(true);
+        return;
+      }
+      setAccessDenied(false);
+      setPatient(pRes as Patient);
       await Promise.all([loadOperations(), loadTreatmentCases()]);
     }
     if (id) load();
@@ -174,6 +189,22 @@ export default function PatientProfilePage() {
   );
   const totalPaid = operations.reduce((s, o) => s + o.paid_amount, 0);
   const totalBilled = operations.reduce((s, o) => s + o.total_amount, 0);
+
+  if (accessDenied) {
+    return (
+      <div className="space-y-4 py-8">
+        <Link href="/dashboard/patients">
+          <Button variant="ghost" size="sm">
+            <ArrowRight className="h-4 w-4" />
+            العودة للبحث
+          </Button>
+        </Link>
+        <Alert variant="warning">
+          هذا المريض غير تابع لعيادتك أو حسابك غير مربوط بعيادة.
+        </Alert>
+      </div>
+    );
+  }
 
   if (!patient) {
     return (

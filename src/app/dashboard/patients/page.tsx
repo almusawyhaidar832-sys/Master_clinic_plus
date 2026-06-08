@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { formatCurrency } from "@/lib/utils";
 import { computeOutstandingDebtFromOperations } from "@/lib/services/patient-treatment-cases";
 import { searchPatientsByQuery } from "@/lib/services/patient-search";
@@ -21,6 +22,7 @@ interface PatientWithStats extends Patient {
 }
 
 export default function PatientsSearchPage() {
+  const { clinicId } = useActiveClinicId();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PatientWithStats[]>([]);
   const [loading, setLoading] = useState(false);
@@ -45,6 +47,7 @@ export default function PatientsSearchPage() {
     const { patients, error } = await searchPatientsByQuery(supabase, trimmed, {
       limit: 30,
       minLength: 2,
+      clinicId: clinicId ?? undefined,
     });
 
     if (error) {
@@ -58,13 +61,15 @@ export default function PatientsSearchPage() {
     const debtMap: Record<string, number> = {};
 
     if (ids.length > 0) {
-      const { data: opData, error: opErr } = await supabase
+      let opQuery = supabase
         .from("patient_operations")
         .select(
           "id, patient_id, total_amount, paid_amount, remaining_debt, operation_name_ar, operation_type, treatment_case_id, created_at, operation_date"
         )
         .in("patient_id", ids)
         .order("created_at", { ascending: true });
+      if (clinicId) opQuery = opQuery.eq("clinic_id", clinicId);
+      const { data: opData, error: opErr } = await opQuery;
 
       if (!opErr && opData) {
         const byPatient = new Map<string, PatientOperation[]>();
@@ -87,7 +92,7 @@ export default function PatientsSearchPage() {
       })) as PatientWithStats[]
     );
     setLoading(false);
-  }, []);
+  }, [clinicId]);
 
   useEffect(() => {
     const t = setTimeout(() => search(query), 280);

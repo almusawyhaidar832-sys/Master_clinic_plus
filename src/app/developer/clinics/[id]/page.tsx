@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowRight, MessageCircle, Users, ExternalLink } from "lucide-react";
+import {
+  ArrowRight,
+  MessageCircle,
+  Users,
+  ExternalLink,
+  Stethoscope,
+} from "lucide-react";
+import { ClinicStaffPanel } from "@/components/developer/ClinicStaffPanel";
 
 type ClinicDetail = {
   id: string;
@@ -13,6 +20,7 @@ type ClinicDetail = {
   address: string | null;
   whatsapp_linked: boolean;
   whatsapp_session_id: string | null;
+  is_active?: boolean;
 };
 
 export default function DeveloperClinicDetailPage() {
@@ -20,11 +28,9 @@ export default function DeveloperClinicDetailPage() {
   const router = useRouter();
   const [clinic, setClinic] = useState<ClinicDetail | null>(null);
   const [patientCount, setPatientCount] = useState(0);
-  const [staff, setStaff] = useState<
-    { id: string; full_name: string | null; username: string | null; role: string }[]
-  >([]);
+  const [doctorCount, setDoctorCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [provisioning, setProvisioning] = useState(false);
   const [entering, setEntering] = useState(false);
 
@@ -37,19 +43,23 @@ export default function DeveloperClinicDetailPage() {
     }
     const data = await res.json();
     if (!res.ok) {
-      setMsg(data.error);
+      setMsg({ ok: false, text: data.error });
       setLoading(false);
       return;
     }
     setClinic(data.clinic);
     setPatientCount(data.patientCount ?? 0);
-    setStaff(data.staff ?? []);
+    setDoctorCount(data.doctorCount ?? 0);
     setLoading(false);
   }, [id, router]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  function onPanelMessage(m: { ok: boolean; text: string }) {
+    setMsg(m);
+  }
 
   async function provisionEvolution() {
     setProvisioning(true);
@@ -59,7 +69,10 @@ export default function DeveloperClinicDetailPage() {
     });
     const data = await res.json();
     setProvisioning(false);
-    setMsg(data.message ?? data.error);
+    setMsg({
+      ok: res.ok,
+      text: data.message ?? data.error ?? "تمت العملية",
+    });
     void load();
   }
 
@@ -68,15 +81,15 @@ export default function DeveloperClinicDetailPage() {
     const res = await fetch("/api/developer/enter-clinic", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clinicId: id, linkProfile: true }),
+      body: JSON.stringify({ clinicId: id, linkProfile: false }),
     });
     const data = await res.json();
     setEntering(false);
     if (!res.ok) {
-      setMsg(data.error);
+      setMsg({ ok: false, text: data.error });
       return;
     }
-    window.location.href = "/dashboard/whatsapp";
+    window.location.href = "/dashboard";
   }
 
   if (loading) {
@@ -86,7 +99,7 @@ export default function DeveloperClinicDetailPage() {
   if (!clinic) {
     return (
       <div className="p-8">
-        <p className="text-red-400">{msg ?? "العيادة غير موجودة"}</p>
+        <p className="text-red-400">{msg?.text ?? "العيادة غير موجودة"}</p>
         <Link href="/developer" className="mt-4 inline-block text-amber-400">
           العودة
         </Link>
@@ -95,7 +108,7 @@ export default function DeveloperClinicDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl p-6">
+    <div className="mx-auto max-w-4xl p-6">
       <Link
         href="/developer"
         className="mb-6 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-white"
@@ -110,24 +123,40 @@ export default function DeveloperClinicDetailPage() {
       <p className="text-xs text-slate-500 mt-1" dir="ltr">
         {clinic.id}
       </p>
-
-      {msg && (
-        <p className="mt-4 rounded-lg bg-slate-800 px-3 py-2 text-sm">{msg}</p>
+      {clinic.is_active === false && (
+        <p className="mt-2 text-sm text-red-400">العيادة معطّلة</p>
       )}
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      {msg && (
+        <p
+          className={`mt-4 rounded-lg px-3 py-2 text-sm ${
+            msg.ok
+              ? "bg-emerald-950/40 text-emerald-300 border border-emerald-800"
+              : "bg-red-950/40 text-red-300 border border-red-800"
+          }`}
+        >
+          {msg.text}
+        </p>
+      )}
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-slate-700 p-4">
           <Users className="h-5 w-5 text-slate-400 mb-2" />
           <p className="text-2xl font-bold">{patientCount}</p>
           <p className="text-xs text-slate-500">مريض</p>
         </div>
         <div className="rounded-xl border border-slate-700 p-4">
+          <Stethoscope className="h-5 w-5 text-slate-400 mb-2" />
+          <p className="text-2xl font-bold">{doctorCount}</p>
+          <p className="text-xs text-slate-500">طبيب</p>
+        </div>
+        <div className="rounded-xl border border-slate-700 p-4">
           <MessageCircle className="h-5 w-5 text-slate-400 mb-2" />
-          <p className="text-sm font-mono" dir="ltr">
+          <p className="text-sm font-mono truncate" dir="ltr">
             {clinic.whatsapp_session_id ?? "—"}
           </p>
           <p className="text-xs text-slate-500 mt-1">
-            {clinic.whatsapp_linked ? "متصل" : "غير مربوط"}
+            {clinic.whatsapp_linked ? "واتساب متصل" : "غير مربوط"}
           </p>
         </div>
       </div>
@@ -139,40 +168,20 @@ export default function DeveloperClinicDetailPage() {
           disabled={provisioning}
           className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-bold hover:bg-emerald-600 disabled:opacity-60"
         >
-          {provisioning ? "..." : "إنشاء/تجهيز Evolution Instance"}
+          {provisioning ? "..." : "تجهيز Evolution / واتساب"}
         </button>
         <button
           type="button"
           onClick={() => void enterDashboard()}
-          disabled={entering}
+          disabled={entering || clinic.is_active === false}
           className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
         >
           <ExternalLink className="h-4 w-4" />
-          {entering ? "..." : "ربط واتساب + لوحة العيادة"}
+          {entering ? "..." : "دخول نيابةً للوحة العيادة"}
         </button>
       </div>
 
-      <section className="mt-8">
-        <h2 className="font-bold mb-3">الطاقم</h2>
-        <ul className="space-y-2 text-sm">
-          {staff.map((s) => (
-            <li
-              key={s.id}
-              className="flex justify-between rounded-lg border border-slate-700 px-3 py-2"
-            >
-              <span>{s.full_name ?? "—"}</span>
-              <span className="text-slate-500">
-                {s.username} · {s.role}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <p className="mt-8 text-xs text-slate-600">
-        مفاتيح Evolution مشتركة من متغيرات السيرفر — كل عيادة لها instance
-        منفصل محفوظ في whatsapp_session_id.
-      </p>
+      <ClinicStaffPanel clinicId={id} onMessage={onPanelMessage} />
     </div>
   );
 }

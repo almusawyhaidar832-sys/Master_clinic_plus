@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  isValidSanitizedUsername,
+  sanitizeUsername,
+  usernameToAuthEmail,
+} from "@/lib/auth/credentials";
 import { getAuthAdmin } from "@/lib/supabase/auth-helpers";
 import { ensureEvolutionInstanceNamed } from "@/lib/whatsapp/evolution-client";
 
@@ -60,10 +65,20 @@ export async function createPlatformClinic(
     return { ok: false, error: "كلمة المرور 6 أحرف على الأقل", status: 400 };
   }
 
+  const safeUsername = sanitizeUsername(admin_username);
+  if (!isValidSanitizedUsername(safeUsername)) {
+    return {
+      ok: false,
+      error:
+        "اسم مستخدم المدير: 3–32 حرفاً إنجليزياً (a-z، أرقام، . _ -) — مثل owner1 أو clinic_admin",
+      status: 400,
+    };
+  }
+
   const { data: existing } = await admin
     .from("profiles")
     .select("id")
-    .eq("username", admin_username)
+    .eq("username", safeUsername)
     .maybeSingle();
 
   if (existing) {
@@ -111,13 +126,13 @@ export async function createPlatformClinic(
       .eq("id", clinic.id);
   }
 
-  const fakeEmail = `${admin_username}@clinic.internal`;
+  const authEmail = usernameToAuthEmail(safeUsername);
   const { data: authData, error: authErr } = await getAuthAdmin(admin).createUser(
     {
-      email: fakeEmail,
+      email: authEmail,
       password: admin_password,
       email_confirm: true,
-      user_metadata: { full_name: admin_full_name, username: admin_username },
+      user_metadata: { full_name: admin_full_name, username: safeUsername },
     }
   );
 
@@ -135,7 +150,7 @@ export async function createPlatformClinic(
     clinic_id: clinic.id,
     role: "super_admin",
     full_name: admin_full_name,
-    username: admin_username,
+    username: safeUsername,
     is_active: true,
   });
 
@@ -157,11 +172,48 @@ export async function createPlatformClinic(
   };
 }
 
-/** حذف عيادة وبياناتها (CASCADE) + حسابات Auth للطاقم */
+export type DeletePlatformClinicResult = {
+  clinic_name?: string;
+  auth_users_deleted?: number;
+  storage_files_deleted?: number;
+  message?: string;
+};
+
+/** حذف عيادة نهائياً — كل البيانات + حسابات الدخول + ملفات الأشعة */
 export async function deletePlatformClinic(
   admin: SupabaseClient,
   clinicId: string
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; details: DeletePlatformClinicResult }
+  | { ok: false; error: string }
+> {
+  const { data: rpcData, error: rpcError } = await admin.rpc(
+    "platform_delete_clinic_completely",
+    { p_clinic_id: clinicId }
+  );
+
+  if (!rpcError && rpcData && typeof rpcData === "object") {
+    const row = rpcData as Record<string, unknown>;
+    if (row.error) {
+      return { ok: false, error: String(row.error) };
+    }
+    if (row.ok) {
+      return {
+        ok: true,
+        details: {
+          clinic_name: String(row.clinic_name ?? ""),
+          auth_users_deleted: Number(row.auth_users_deleted ?? 0),
+          storage_files_deleted: Number(row.storage_files_deleted ?? 0),
+          message: String(row.message ?? "تم حذف العيادة وجميع بياناتها"),
+        },
+      };
+    }
+  }
+
+  if (rpcError && !rpcError.message.includes("platform_delete_clinic_completely")) {
+    console.warn("[deletePlatformClinic] RPC failed, fallback:", rpcError.message);
+  }
+
   const { data: profiles } = await admin
     .from("profiles")
     .select("id")
@@ -175,11 +227,19 @@ export async function deletePlatformClinic(
     }
   }
 
+  await admin.from("session_refunds").delete().eq("clinic_id", clinicId);
+
   const { error } = await admin.from("clinics").delete().eq("id", clinicId);
 
   if (error) {
     return { ok: false, error: error.message };
   }
 
-  return { ok: true };
+  return {
+    ok: true,
+    details: {
+      message: "تم حذف العيادة وجميع بياناتها (وضع احتياطي)",
+      auth_users_deleted: profiles?.length ?? 0,
+    },
+  };
 }

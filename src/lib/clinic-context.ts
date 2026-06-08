@@ -28,12 +28,19 @@ export async function getDoctorForCurrentUser(
   const user = await getCurrentUser(supabase);
   if (!user) return null;
 
-  const { data } = await supabase
+  const profile = await getAuthProfile(supabase);
+
+  let query = supabase
     .from("doctors")
     .select("*")
     .eq("profile_id", user.id)
-    .eq("is_active", true)
-    .maybeSingle();
+    .eq("is_active", true);
+
+  if (profile?.clinic_id) {
+    query = query.eq("clinic_id", profile.clinic_id);
+  }
+
+  const { data } = await query.maybeSingle();
 
   return data as Doctor | null;
 }
@@ -47,59 +54,38 @@ export async function getClinicIdFromProfile(
 }
 
 /**
- * Central clinic resolver — always returns a valid clinic for the current session.
+ * Central clinic resolver — multi-tenant safe.
  * Priority:
- *   1. profiles.clinic_id  (user explicitly linked)
- *   2. First row in clinics table (auto-fallback for single-clinic setups)
+ *   1. Developer acting clinic (impersonation)
+ *   2. profiles.clinic_id only — no fallback to another clinic
  *
- * Returns null only when NO clinic exists in the database at all.
+ * Returns null when the user has no clinic_id (fail closed).
  */
 export async function getActiveClinicId(
   supabase: SupabaseClient
 ): Promise<ActiveClinicResult | null> {
-  // 0. دخول نيابة المطور — أولوية على profile.clinic_id الثابت
   const acting = await fetchDeveloperActingClinic();
   if (acting) return acting;
 
-  // 1. Auto-link profile to first clinic when missing (fixes RLS for salary/queue/etc.)
-  const profileBefore = await getAuthProfile(supabase);
-  if (profileBefore && !profileBefore.clinic_id) {
-    await supabase.rpc("link_profile_to_first_clinic");
-  }
-
-  // 2. Try profile clinic_id
   const profile = await getAuthProfile(supabase);
-  if (profile?.clinic_id) {
-    const { data: clinic } = await supabase
-      .from("clinics")
-      .select("name_ar, name")
-      .eq("id", profile.clinic_id)
-      .maybeSingle();
+  if (!profile?.clinic_id) return null;
 
-    return {
-      clinicId: profile.clinic_id,
-      clinicName:
-        (clinic as { name_ar?: string; name?: string } | null)?.name_ar ||
-        (clinic as { name_ar?: string; name?: string } | null)?.name ||
-        "",
-      source: "profile",
-    };
-  }
-
-  // 3. Fallback: first clinic in the database
-  const { data: firstClinic } = await supabase
+  const { data: clinic } = await supabase
     .from("clinics")
-    .select("id, name_ar, name")
-    .order("created_at", { ascending: true })
-    .limit(1)
+    .select("name_ar, name, is_active")
+    .eq("id", profile.clinic_id)
     .maybeSingle();
 
-  if (!firstClinic) return null;
+  if (!clinic || (clinic as { is_active?: boolean }).is_active === false) {
+    return null;
+  }
 
-  const c = firstClinic as { id: string; name_ar?: string; name?: string };
   return {
-    clinicId: c.id,
-    clinicName: c.name_ar || c.name || "",
-    source: "fallback",
+    clinicId: profile.clinic_id,
+    clinicName:
+      (clinic as { name_ar?: string; name?: string }).name_ar ||
+      (clinic as { name_ar?: string; name?: string }).name ||
+      "",
+    source: "profile",
   };
 }

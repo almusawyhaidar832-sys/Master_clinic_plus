@@ -328,12 +328,17 @@ export function QuickEntryForm({
     async function load() {
       const supabase = createClient();
       const clinic = await getActiveClinicId(supabase);
+      const doctorsQuery = clinic?.clinicId
+        ? supabase
+            .from("doctors")
+            .select("*")
+            .eq("clinic_id", clinic.clinicId)
+            .eq("is_active", true)
+            .order("full_name_ar")
+        : Promise.resolve({ data: [], error: null });
+
       const [docRes, clinicRes] = await Promise.all([
-        supabase
-          .from("doctors")
-          .select("*")
-          .eq("is_active", true)
-          .order("full_name_ar"),
+        doctorsQuery,
         clinic
           ? supabase
               .from("clinics")

@@ -30,6 +30,7 @@ export const accountantModuleNav: ModuleNavItem[] = [
   // Always at bottom
   { href: "/dashboard/users",       label: "المستخدمون",          icon: "userCog"                                          },
   { href: "/dashboard/whatsapp",    label: "واتساب",              icon: "whatsapp",    requiredModule: "whatsapp"           },
+  { href: "/dashboard/booking",     label: "بوابة الحجوزات",      icon: "calendarClock", requiredModule: "online_booking" },
   { href: "/dashboard/settings",    label: "ملف العيادة",         icon: "dashboard"    },
 ];
 

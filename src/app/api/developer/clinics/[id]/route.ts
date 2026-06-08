@@ -31,10 +31,16 @@ export async function GET(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "العيادة غير موجودة" }, { status: 404 });
   }
 
-  const { count: patientCount } = await admin
-    .from("patients")
-    .select("id", { count: "exact", head: true })
-    .eq("clinic_id", id);
+  const [{ count: patientCount }, { count: doctorCount }] = await Promise.all([
+    admin
+      .from("patients")
+      .select("id", { count: "exact", head: true })
+      .eq("clinic_id", id),
+    admin
+      .from("doctors")
+      .select("id", { count: "exact", head: true })
+      .eq("clinic_id", id),
+  ]);
 
   const { data: staff } = await admin
     .from("profiles")
@@ -45,6 +51,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   return NextResponse.json({
     clinic,
     patientCount: patientCount ?? 0,
+    doctorCount: doctorCount ?? 0,
     staff: staff ?? [],
   });
 }
@@ -113,6 +120,14 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
+  const deletedLabel =
+    result.details.clinic_name ||
+    (exists as { name_ar?: string; name?: string }).name_ar ||
+    exists.name;
+  const deleteMessage =
+    result.details.message ??
+    `تم حذف العيادة «${deletedLabel}» نهائياً (مرضى، أطباء، عمليات، واتساب، حسابات الدخول)`;
+
   if (session.actingClinicId === id) {
     const token = await signDeveloperToken({
       email: session.email,
@@ -120,7 +135,8 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     });
     const res = NextResponse.json({
       ok: true,
-      message: `تم حذف العيادة «${(exists as { name_ar?: string; name?: string }).name_ar || exists.name}»`,
+      message: deleteMessage,
+      ...result.details,
     });
     if (token) {
       res.cookies.set(DEVELOPER_COOKIE, token, developerCookieOptions());
@@ -130,6 +146,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
 
   return NextResponse.json({
     ok: true,
-    message: `تم حذف العيادة وجميع بياناتها`,
+    message: deleteMessage,
+    ...result.details,
   });
 }

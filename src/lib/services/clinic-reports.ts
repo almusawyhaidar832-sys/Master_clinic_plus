@@ -130,10 +130,14 @@ export async function fetchDoctorLedgers(
 ): Promise<DoctorLedgerSummary[]> {
   const { start, end } = getMonthBounds(monthYear);
   const periodScoped = Boolean(monthYear);
+  const { getActiveClinicId } = await import("@/lib/clinic-context");
+  const active = await getActiveClinicId(supabase);
+  if (!active?.clinicId) return [];
 
   const { data: doctors } = await supabase
     .from("doctors")
     .select("*")
+    .eq("clinic_id", active.clinicId)
     .eq("is_active", true)
     .order("full_name_ar");
 
@@ -144,6 +148,7 @@ export async function fetchDoctorLedgers(
       let opsQuery = supabase
         .from("patient_operations")
         .select("doctor_share_amount")
+        .eq("clinic_id", active.clinicId)
         .eq("doctor_id", doc.id);
 
       if (periodScoped) {

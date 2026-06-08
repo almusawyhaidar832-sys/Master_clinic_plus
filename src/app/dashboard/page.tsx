@@ -3,7 +3,7 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { ExecutiveDashboard } from "@/components/accountant/ExecutiveDashboard";
 import {
   Users, Stethoscope, Wallet, Receipt,
-  FileText, ListOrdered,
+  FileText, ListOrdered, QrCode,
 } from "lucide-react";
 
 const quickLinks = [
@@ -48,6 +48,13 @@ const quickLinks = [
     desc: "تقرير شامل بنقرة واحدة",
     icon: FileText,
     color: "bg-teal-50 text-teal-700",
+  },
+  {
+    href: "/dashboard/booking",
+    title: "باركود الحجوزات",
+    desc: "عرض وتحميل باركود عيادتك للمرضى",
+    icon: QrCode,
+    color: "bg-emerald-50 text-emerald-600",
   },
 ];
 

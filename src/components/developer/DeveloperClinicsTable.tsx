@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import Link from "next/link";
 import {
   MoreVertical,
   Pencil,
@@ -10,6 +11,7 @@ import {
   RefreshCw,
   ExternalLink,
   MessageCircle,
+  UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
@@ -128,7 +130,7 @@ export function DeveloperClinicsTable({
     const label = c.name_ar || c.name;
     if (
       !confirm(
-        `حذف عيادة «${label}» نهائياً؟\n\nسيتم حذف المرضى والمواعيد والرسائل وجميع البيانات. لا يمكن التراجع.`
+        `حذف عيادة «${label}» نهائياً؟\n\nسيتم حذف: المرضى، الأطباء، العمليات المالية، المواعيد، غرفة الانتظار، الواتساب، ملفات الأشعة، وحسابات الدخول للطاقم.\n\nلا يمكن التراجع — يُوفّر مساحة قاعدة البيانات.`
       )
     ) {
       return;
@@ -182,7 +184,17 @@ export function DeveloperClinicsTable({
               className="fixed inset-0 z-10"
               onClick={() => setOpenMenu(null)}
             />
-            <ul className="absolute left-0 z-20 mt-1 min-w-[200px] rounded-lg border border-slate-600 bg-slate-800 py-1 shadow-xl">
+            <ul className="absolute left-0 z-20 mt-1 min-w-[220px] rounded-lg border border-slate-600 bg-slate-800 py-1 shadow-xl">
+              <li>
+                <Link
+                  href={`/developer/clinics/${c.id}`}
+                  className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-sm text-amber-300 hover:bg-slate-700"
+                  onClick={() => setOpenMenu(null)}
+                >
+                  <UserCog className="h-4 w-4" />
+                  المستخدمون والصلاحيات
+                </Link>
+              </li>
               <li>
                 <button
                   type="button"

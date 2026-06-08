@@ -16,9 +16,7 @@ export interface UseActiveClinicIdState {
 }
 
 /**
- * React hook — resolves the active clinic for the logged-in user.
- * Falls back automatically to the first clinic in the DB if the profile
- * has no clinic_id (handles FK issues and single-clinic setups gracefully).
+ * React hook — resolves the active clinic for the logged-in user (profiles.clinic_id only).
  */
 export function useActiveClinicId(): UseActiveClinicIdState {
   const [state, setState] = useState<UseActiveClinicIdState>({

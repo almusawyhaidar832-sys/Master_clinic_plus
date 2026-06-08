@@ -11,13 +11,16 @@ import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { createClient } from "@/lib/supabase/client";
 import { fetchClinicProfile, updateClinicProfile } from "@/lib/services/clinic-profile";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
-import { Building2, RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { Building2, QrCode, RefreshCw } from "lucide-react";
+import { useClinicModules } from "@/contexts/ClinicModulesContext";
 import type { ClinicProfile } from "@/types/clinic-profile";
 
 export default function ClinicSettingsPage() {
   const router = useRouter();
   const { refresh: refreshContext } = useClinicProfile();
   const { clinicId, loading: clinicLoading, missingClinic } = useActiveClinicId();
+  const { hasModule } = useClinicModules();
 
   const [profile, setProfile] = useState<ClinicProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -266,6 +269,28 @@ export default function ClinicSettingsPage() {
           </form>
         )}
       </Card>
+
+      {hasModule("online_booking") && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <QrCode className="h-5 w-5 text-teal-600" />
+              <CardTitle>بوابة الحجوزات</CardTitle>
+            </div>
+          </CardHeader>
+          <p className="px-4 pb-2 text-sm text-slate-muted">
+            باركود فريد يوجّه المرضى مباشرة لصفحة حجز عيادتك.
+          </p>
+          <div className="p-4 pt-0">
+            <Link href="/dashboard/booking">
+              <Button type="button" variant="outline" className="w-full">
+                <QrCode className="h-4 w-4" />
+                عرض باركود العيادة
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

@@ -57,11 +57,12 @@ export function PlatformAdminLoginForm() {
           <Shield className="h-10 w-10 text-amber-400" />
           <h1 className="text-xl font-bold text-white">بوابة المدير العام</h1>
           <p className="text-sm text-slate-400">
-            المدير العام للمنصة — بريد وكلمة مرور من ملف .env.local
+            المدير العام للمنصة — البريد من ADMIN_EMAIL وكلمة المرور من
+            .env.local (مو باسورد Gmail)
           </p>
-          {emailHint && !email && (
+          {(email || emailHint) && (
             <p className="text-xs text-amber-400/90" dir="ltr">
-              البريد المسجّل: {emailHint}
+              البريد المسجّل: {email || emailHint}
             </p>
           )}
         </div>

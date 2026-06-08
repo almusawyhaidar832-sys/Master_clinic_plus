@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import {
+  isValidSanitizedUsername,
+  sanitizeUsername,
+  usernameToAuthEmail,
+} from "@/lib/auth/credentials";
 import { getCurrentUser, getAuthAdmin } from "@/lib/supabase/auth-helpers";
 
 /**
@@ -46,6 +51,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "كلمة المرور 6 أحرف على الأقل" }, { status: 400 });
     }
 
+    const safeUsername = sanitizeUsername(admin_username);
+    if (!isValidSanitizedUsername(safeUsername)) {
+      return NextResponse.json(
+        {
+          error:
+            "اسم مستخدم المدير: 3–32 حرفاً إنجليزياً (a-z، أرقام، . _ -) — مثل owner1",
+        },
+        { status: 400 }
+      );
+    }
+
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!serviceKey) {
       return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY غير مضبوط" }, { status: 500 });
@@ -61,7 +77,7 @@ export async function POST(req: NextRequest) {
     const { data: existing } = await admin
       .from("profiles")
       .select("id")
-      .eq("username", admin_username)
+      .eq("username", safeUsername)
       .maybeSingle();
 
     if (existing) {
@@ -90,12 +106,12 @@ export async function POST(req: NextRequest) {
     });
 
     // ── 3. إنشاء حساب Auth ──
-    const fakeEmail = `${admin_username}@clinic.internal`;
+    const authEmail = usernameToAuthEmail(safeUsername);
     const { data: authData, error: authErr } = await getAuthAdmin(admin).createUser({
-      email: fakeEmail,
+      email: authEmail,
       password: admin_password,
       email_confirm: true,
-      user_metadata: { full_name: admin_full_name, username: admin_username },
+      user_metadata: { full_name: admin_full_name, username: safeUsername },
     });
 
     if (authErr || !authData.user) {
@@ -110,7 +126,7 @@ export async function POST(req: NextRequest) {
       clinic_id: clinic.id,
       role:      "super_admin",
       full_name: admin_full_name,
-      username:  admin_username,
+      username:  safeUsername,
       is_active: true,
     });
 
@@ -124,7 +140,7 @@ export async function POST(req: NextRequest) {
       success:    true,
       clinic_id:  clinic.id,
       clinic_name: clinic_name_ar || clinic_name,
-      message:    `✓ تم إنشاء عيادة "${clinic_name_ar || clinic_name}" مع حساب المدير "${admin_username}" بنجاح`,
+      message:    `✓ تم إنشاء عيادة "${clinic_name_ar || clinic_name}" مع حساب المدير "${safeUsername}" بنجاح`,
     });
 
   } catch (e) {

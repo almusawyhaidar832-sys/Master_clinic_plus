@@ -43,6 +43,7 @@ export default function DoctorSchedulePage() {
       supabase
         .from("appointments")
         .select("*")
+        .eq("clinic_id", doc.clinic_id)
         .eq("doctor_id", doc.id)
         .gte("appointment_date", today)
         .order("appointment_date")
@@ -50,6 +51,7 @@ export default function DoctorSchedulePage() {
       supabase
         .from("schedule_locks")
         .select("*")
+        .eq("clinic_id", doc.clinic_id)
         .eq("doctor_id", doc.id)
         .gte("lock_date", today),
     ]);
@@ -84,20 +86,24 @@ export default function DoctorSchedulePage() {
   }
 
   async function cancelAppointment(id: string) {
+    if (!doctor) return;
     const supabase = createClient();
     await supabase
       .from("appointments")
       .update({ status: "cancelled" })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("clinic_id", doctor.clinic_id);
     load();
   }
 
   async function confirmAppointment(appointment: Appointment) {
+    if (!doctor) return;
     const supabase = createClient();
     await supabase
       .from("appointments")
       .update({ status: "confirmed" })
-      .eq("id", appointment.id);
+      .eq("id", appointment.id)
+      .eq("clinic_id", doctor.clinic_id);
 
     if (appointment.patient_phone && doctor) {
       await fetch("/api/whatsapp/send", {

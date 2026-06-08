@@ -16,7 +16,7 @@ export type ResolvedWhatsAppClinic = {
 };
 
 const NO_CLINIC_HINT =
-  "اربط حسابك بعيادة: من Supabase SQL Editor نفّذ SELECT public.link_profile_to_first_clinic(); ثم أعد تسجيل الدخول.";
+  "حسابك غير مربوط بعيادة — تواصل مع المدير العام لربط clinic_id في ملفك الشخصي.";
 
 export function whatsappNoClinicError(): { error: string; hint: string } {
   return { error: "لا توجد عيادة", hint: NO_CLINIC_HINT };
@@ -24,7 +24,6 @@ export function whatsappNoClinicError(): { error: string; hint: string } {
 
 /**
  * يحدّد العيادة لمسارات WhatsApp API — يستخدم جلسة المستخدم الصحيحة (أي بوابة)
- * ويربط الملف تلقائياً بأول عيادة عند الحاجة.
  */
 export async function resolveWhatsAppClinic(
   supabase: SupabaseClient,
@@ -42,7 +41,6 @@ export async function resolveWhatsAppClinic(
   }
 
   if (!clinicId) {
-    await supabase.rpc("link_profile_to_first_clinic");
     const active = await getActiveClinicIdServer(supabase);
     clinicId = active?.clinicId ?? null;
   }

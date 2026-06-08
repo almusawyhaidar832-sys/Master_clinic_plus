@@ -59,10 +59,12 @@ export default function DoctorsPage() {
   async function toggleActive(doctor: Doctor) {
     setSaving(doctor.id);
     const supabase = createClient();
-    await supabase
+    let q = supabase
       .from("doctors")
       .update({ is_active: !doctor.is_active })
       .eq("id", doctor.id);
+    if (clinicId) q = q.eq("clinic_id", clinicId);
+    await q;
     setSaving(null);
     load();
   }
@@ -71,13 +73,15 @@ export default function DoctorsPage() {
     if (!editing) return;
     setSaving(editing.id);
     const supabase = createClient();
-    await supabase
+    let q = supabase
       .from("doctors")
       .update({
         percentage: editing.percentage as Doctor["percentage"],
         materials_share: editing.materials_share as Doctor["materials_share"],
       })
       .eq("id", editing.id);
+    if (clinicId) q = q.eq("clinic_id", clinicId);
+    await q;
     setSaving(null);
     setEditing(null);
     load();

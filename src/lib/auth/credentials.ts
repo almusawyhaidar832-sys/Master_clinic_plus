@@ -20,12 +20,22 @@ function authClient(supabase: SupabaseClient) {
   };
 }
 
-/** Internal auth email for username-only accounts */
-export function usernameToAuthEmail(username: string): string {
-  const safe = username
+/** اسم مستخدم آمن لـ Supabase Auth (إنجليزي وأرقام فقط) */
+export function sanitizeUsername(raw: string): string {
+  return raw
     .trim()
     .toLowerCase()
+    .replace(/\s/g, "")
     .replace(/[^a-z0-9._-]/g, "");
+}
+
+export function isValidSanitizedUsername(safe: string): boolean {
+  return safe.length >= 3 && safe.length <= 32;
+}
+
+/** Internal auth email for username-only accounts */
+export function usernameToAuthEmail(username: string): string {
+  const safe = sanitizeUsername(username);
   return `${safe}@masterclinic.local`;
 }
 

@@ -59,16 +59,36 @@ export async function fetchTodaySummary(
 export async function fetchClinicProfitStats(
   supabase: SupabaseClient
 ): Promise<ClinicProfitStats> {
+  const active = await getActiveClinicId(supabase);
+  const clinicId = active?.clinicId;
+
+  if (!clinicId) {
+    return {
+      cashInflow: 0,
+      outstandingDebts: 0,
+      netProfit: 0,
+      clinicShareTotal: 0,
+      doctorShareTotal: 0,
+      totalExpenses: 0,
+      totalSalariesPaid: 0,
+      breakdown: [],
+    };
+  }
+
   const [opsRes, expensesRes, salariesRes, shares, outstandingDebts] =
     await Promise.all([
-      supabase.from("patient_operations").select("paid_amount"),
-      supabase.from("expenses").select("amount"),
+      supabase
+        .from("patient_operations")
+        .select("paid_amount")
+        .eq("clinic_id", clinicId),
+      supabase.from("expenses").select("amount").eq("clinic_id", clinicId),
       supabase
         .from("salary_slips")
         .select("net_payout")
+        .eq("clinic_id", clinicId)
         .eq("status", "paid"),
-      fetchTreatmentLevelShares(supabase),
-      fetchOutstandingDebts(supabase),
+      fetchTreatmentLevelShares(supabase, clinicId),
+      fetchOutstandingDebts(supabase, clinicId),
     ]);
 
   const ops = opsRes.data ?? [];

@@ -8,6 +8,7 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { createClient } from "@/lib/supabase/client";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { opName, opDebt, type PatientOperation } from "@/types";
 
 type RowWithJoins = PatientOperation & {
@@ -20,10 +21,16 @@ export default function LedgerPage() {
   const searchParams = useSearchParams();
   const presetPatientId = searchParams.get("patient") ?? undefined;
   const presetCaseId = searchParams.get("case") ?? undefined;
+  const { clinicId, loading: clinicLoading } = useActiveClinicId();
   const [operations, setOperations] = useState<RowWithJoins[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadOperations = useCallback(async () => {
+    if (!clinicId) {
+      setOperations([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const supabase = createClient();
 
@@ -39,18 +46,19 @@ export default function LedgerPage() {
       .select(
         "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
       )
+      .eq("clinic_id", clinicId)
       .gte("operation_date", todayStart.toISOString().split("T")[0])
       .lte("operation_date", todayEnd.toISOString().split("T")[0])
       .order("created_at", { ascending: false })
       .limit(100);
 
-    // Fallback: if operation_date doesn't exist, query by created_at
     if (!data || data.length === 0) {
       const fallback = await supabase
         .from("patient_operations")
         .select(
           "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
         )
+        .eq("clinic_id", clinicId)
         .gte("created_at", todayStart.toISOString())
         .lte("created_at", todayEnd.toISOString())
         .order("created_at", { ascending: false })
@@ -60,11 +68,12 @@ export default function LedgerPage() {
 
     setOperations((data as RowWithJoins[]) || []);
     setLoading(false);
-  }, []);
+  }, [clinicId]);
 
   useEffect(() => {
+    if (clinicLoading) return;
     loadOperations();
-  }, [loadOperations]);
+  }, [loadOperations, clinicLoading]);
 
   const columns: Column<RowWithJoins>[] = [
     {

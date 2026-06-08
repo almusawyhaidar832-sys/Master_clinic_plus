@@ -10,6 +10,7 @@ import {
   LayoutDashboard, Users, Stethoscope, Wallet, Receipt,
   UserCog, MessageCircle, TrendingUp, LogOut, FileText,
   ListOrdered, Package, FilePen, TestTube2, Pill, Globe, Undo2,
+  CalendarClock,
   type LucideIcon,
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -31,6 +32,7 @@ const iconMap: Record<string, LucideIcon> = {
   pill:        Pill,
   globe:       Globe,
   refunds:     Undo2,
+  calendarClock: CalendarClock,
 };
 
 interface SidebarProps {
@@ -40,6 +42,9 @@ interface SidebarProps {
   staffName?: string;
   staffLabel?: string;
   clinicLogoUrl?: string | null;
+  /** Drawer menu on small screens — must stay visible (desktop sidebar uses hidden lg:flex) */
+  mobile?: boolean;
+  onNavigate?: () => void;
 }
 
 export function Sidebar({
@@ -49,12 +54,19 @@ export function Sidebar({
   staffName,
   staffLabel,
   clinicLogoUrl,
+  mobile = false,
+  onNavigate,
 }: SidebarProps) {
   const pathname = usePathname();
   const { t } = useLanguage();
 
   return (
-    <aside className="hidden w-64 flex-shrink-0 flex-col border-l border-slate-border bg-surface-card lg:flex">
+    <aside
+      className={cn(
+        "w-64 flex-shrink-0 flex-col border-l border-slate-border bg-surface-card",
+        mobile ? "flex h-full" : "hidden lg:flex"
+      )}
+    >
       {/* Logo */}
       <div className="border-b border-slate-border px-6 py-5">
         <Link href="/dashboard" className="flex items-center gap-2">
@@ -95,6 +107,7 @@ export function Sidebar({
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               className={cn(
                 "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
                 active

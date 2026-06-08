@@ -67,6 +67,8 @@ export function DashboardShell({
           staffName={title}
           staffLabel={staffLabel}
           clinicLogoUrl={clinicLogoUrl}
+          mobile
+          onNavigate={() => setMobileOpen(false)}
         />
       </div>
 

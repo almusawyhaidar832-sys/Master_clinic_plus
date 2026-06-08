@@ -37,16 +37,33 @@ export async function POST(request: NextRequest) {
   const emailOk = verifyDeveloperEmailInput(email);
   const passOk = verifyDeveloperPassword(password);
   if (!emailOk || !passOk) {
-    const hint =
-      process.env.NODE_ENV === "development"
-        ? emailOk
-          ? "كلمة المرور لا تطابق ADMIN_PASSWORD أو HASH في .env.local"
-          : `البريد يجب أن يطابق ADMIN_EMAIL (${getPlatformDeveloperEmail() || "غير معرّف"})`
-        : undefined;
+    const expectedEmail = getPlatformDeveloperEmail();
+    const hints: string[] = [];
+    if (process.env.NODE_ENV === "development") {
+      if (!emailOk) {
+        hints.push(
+          `البريد المسجّل في ADMIN_EMAIL: ${expectedEmail || "غير معرّف"}`
+        );
+      }
+      if (!passOk) {
+        hints.push(
+          "كلمة المرور لا تطابق PLATFORM_DEVELOPER_PASSWORD_HASH أو ADMIN_PASSWORD في .env.local"
+        );
+      }
+      if (emailOk && !passOk) {
+        hints.push(
+          "بعد تغيير .env.local أعد تشغيل السيرفر (Ctrl+C ثم npm run dev)"
+        );
+      }
+    }
     return NextResponse.json(
       {
-        error: "بريد أو كلمة مرور غير صحيحة",
-        hint,
+        error: !emailOk
+          ? "البريد غير مطابق لـ ADMIN_EMAIL"
+          : "كلمة المرور غير صحيحة",
+        hint: hints.length > 0 ? hints.join(" — ") : undefined,
+        emailOk,
+        passOk,
       },
       { status: 403 }
     );

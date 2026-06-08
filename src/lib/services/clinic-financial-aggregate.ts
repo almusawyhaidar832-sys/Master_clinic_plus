@@ -5,11 +5,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * Payment sessions have clinic_share_amount = 0 — do not sum them.
  */
 export async function fetchTreatmentLevelShares(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  clinicId: string
 ): Promise<{ clinicShareTotal: number; doctorShareTotal: number }> {
   const { data: patients } = await supabase
     .from("patients")
-    .select("id, agreed_total, clinic_share_total, doctor_share_total");
+    .select("id, agreed_total, clinic_share_total, doctor_share_total")
+    .eq("clinic_id", clinicId);
 
   let clinicShareTotal = 0;
   let doctorShareTotal = 0;
@@ -26,7 +28,8 @@ export async function fetchTreatmentLevelShares(
 
   const { data: legacyOps } = await supabase
     .from("patient_operations")
-    .select("patient_id, clinic_share_amount, doctor_share_amount");
+    .select("patient_id, clinic_share_amount, doctor_share_amount")
+    .eq("clinic_id", clinicId);
 
   for (const op of legacyOps ?? []) {
     const pid = op.patient_id as string;
@@ -39,11 +42,13 @@ export async function fetchTreatmentLevelShares(
 }
 
 export async function fetchOutstandingDebts(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  clinicId: string
 ): Promise<number> {
   const { data: patients } = await supabase
     .from("patients")
-    .select("id, agreed_total, total_paid");
+    .select("id, agreed_total, total_paid")
+    .eq("clinic_id", clinicId);
 
   let debt = 0;
   const patientsWithPlan = new Set<string>();
@@ -59,6 +64,7 @@ export async function fetchOutstandingDebts(
   const { data: legacyOps } = await supabase
     .from("patient_operations")
     .select("patient_id, remaining_debt")
+    .eq("clinic_id", clinicId)
     .gt("remaining_debt", 0);
 
   for (const op of legacyOps ?? []) {

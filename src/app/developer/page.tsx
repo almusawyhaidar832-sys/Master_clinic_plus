@@ -18,6 +18,7 @@ import {
   type DeveloperClinicRow,
 } from "@/components/developer/DeveloperClinicsTable";
 import { Button } from "@/components/ui/Button";
+import { DeveloperToolsPanel } from "@/components/developer/DeveloperToolsPanel";
 
 type PlatformStats = {
   totalClinics: number;
@@ -227,6 +228,8 @@ export default function DeveloperDashboardPage() {
         </div>
       </header>
 
+      <DeveloperToolsPanel onMessage={setMsg} />
+
       {stats && (
         <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
@@ -317,14 +320,22 @@ export default function DeveloperDashboardPage() {
               onChange={(e) => setAdminName(e.target.value)}
               required
             />
-            <input
-              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
-              placeholder="اسم مستخدم المدير"
-              dir="ltr"
-              value={adminUsername}
-              onChange={(e) => setAdminUsername(e.target.value)}
-              required
-            />
+            <div className="space-y-1">
+              <input
+                className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+                placeholder="اسم مستخدم المدير (إنجليزي) — مثل owner1"
+                dir="ltr"
+                autoComplete="off"
+                pattern="[a-zA-Z0-9._-]{3,32}"
+                title="3–32 حرفاً: a-z وأرقام و . _ -"
+                value={adminUsername}
+                onChange={(e) => setAdminUsername(e.target.value)}
+                required
+              />
+              <p className="text-xs text-slate-500">
+                إنجليزي فقط (مو عربي) — يُستخدم لتسجيل دخول مالك العيادة
+              </p>
+            </div>
             <input
               type="password"
               className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white sm:col-span-2"
