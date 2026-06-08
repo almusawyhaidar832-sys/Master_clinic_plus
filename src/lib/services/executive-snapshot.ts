@@ -262,6 +262,59 @@ export async function fetchPaidSalariesForDisplay(
   });
 }
 
+/** أشهر ضمن الفترة (YYYY-MM) */
+export function monthYearsInRange(from: string, to: string): string[] {
+  const result: string[] = [];
+  const start = new Date(`${from}T12:00:00`);
+  const end = new Date(`${to}T12:00:00`);
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+
+  while (cursor <= end) {
+    result.push(
+      `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`
+    );
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return result;
+}
+
+/**
+ * رواتب مُولَّدة (مساعدون + قسائم) — تُخصم من الربح فور التوليد.
+ */
+export async function fetchPayrollAccrualsForProfitDeduction(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<number> {
+  const months = monthYearsInRange(from, to);
+  if (!months.length) return 0;
+
+  const [recordsRes, slipsRes] = await Promise.all([
+    supabase
+      .from("payroll_records")
+      .select("clinic_share_amount, month_year")
+      .eq("clinic_id", clinicId)
+      .in("month_year", months),
+    supabase
+      .from("salary_slips")
+      .select("net_payout, month_year")
+      .eq("clinic_id", clinicId)
+      .in("month_year", months),
+  ]);
+
+  let total = 0;
+  for (const row of recordsRes.data ?? []) {
+    total += Number(row.clinic_share_amount ?? 0);
+  }
+  for (const row of slipsRes.data ?? []) {
+    total += Number(row.net_payout ?? 0);
+  }
+
+  return total;
+}
+
 /**
  * خصم الربح — يبقى حتى بعد التصفير (الراتب المدفوع لا يرجع للربح).
  */

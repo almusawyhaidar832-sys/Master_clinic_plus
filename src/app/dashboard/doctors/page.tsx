@@ -12,6 +12,11 @@ import {
 } from "@/lib/constants";
 import type { Doctor } from "@/types";
 import { doctorPaymentLabel } from "@/lib/services/doctor-payment";
+import {
+  fetchDoctorAccountingBalances,
+  type DoctorAccountingBalance,
+} from "@/lib/services/doctor-accounting-balance";
+import { formatCurrency } from "@/lib/utils";
 import { Plus, RefreshCw, PencilLine, Check, X, Settings2 } from "lucide-react";
 
 function labelFor(
@@ -30,6 +35,9 @@ interface EditState {
 export default function DoctorsPage() {
   const { clinicId, clinicName, loading: clinicLoading } = useActiveClinicId();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [balances, setBalances] = useState<Map<string, DoctorAccountingBalance>>(
+    new Map()
+  );
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
@@ -45,7 +53,17 @@ export default function DoctorsPage() {
       setLoading(false);
       return;
     }
-    setDoctors((data as Doctor[]) || []);
+    const list = (data as Doctor[]) || [];
+    setDoctors(list);
+    if (list.length) {
+      const balanceMap = await fetchDoctorAccountingBalances(
+        supabase,
+        list.map((d) => d.id)
+      );
+      setBalances(balanceMap);
+    } else {
+      setBalances(new Map());
+    }
     setLoading(false);
   }, [clinicId]);
 
@@ -161,6 +179,22 @@ export default function DoctorsPage() {
                     <p className="text-[11px] font-medium text-primary">
                       {doctorPaymentLabel(doc)}
                     </p>
+                    {(() => {
+                      const bal = balances.get(doc.id);
+                      if (!bal) return null;
+                      return (
+                        <p
+                          className={`mt-1 text-sm font-semibold tabular-nums ${
+                            bal.isDebtor ? "text-red-600" : "text-emerald-700"
+                          }`}
+                        >
+                          الرصيد: {formatCurrency(Math.abs(bal.netBalance))}
+                          {bal.isDebtor && (
+                            <span className="mr-1 text-xs font-bold">(مدين)</span>
+                          )}
+                        </p>
+                      );
+                    })()}
                     <p className="text-xs text-slate-muted" dir="ltr">
                       {doc.phone ? (
                         <>📱 {doc.phone}</>

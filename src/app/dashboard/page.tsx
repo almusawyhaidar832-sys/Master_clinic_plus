@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { ExecutiveDashboard } from "@/components/accountant/ExecutiveDashboard";
+import { AccountantAppointmentsPanel } from "@/components/appointments/AccountantAppointmentsPanel";
 import {
   Users, Stethoscope, Wallet, Receipt,
   FileText, ListOrdered, QrCode,
@@ -82,6 +83,9 @@ export default function DashboardPage() {
 
       {/* Executive Dashboard — the killer feature */}
       <ExecutiveDashboard />
+
+      {/* مواعيد مركزية — كل الأطباء + Realtime */}
+      <AccountantAppointmentsPanel />
     </div>
   );
 }

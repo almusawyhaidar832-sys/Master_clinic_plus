@@ -38,16 +38,28 @@ const STATUS_CONFIG: Record<QueueStatus, { label: string; color: string; bg: str
 };
 
 async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...authPortalHeaders("doctor"),
-      ...init?.headers,
-    },
-  });
-  const data = (await res.json()) as T & { error?: string };
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...authPortalHeaders("doctor"),
+        ...init?.headers,
+      },
+    });
+  } catch {
+    throw new Error("تعذر الاتصال بالسيرفر — تأكد أن التطبيق يعمل");
+  }
+
+  let data: T & { error?: string };
+  try {
+    data = (await res.json()) as T & { error?: string };
+  } catch {
+    throw new Error("استجابة غير متوقعة من السيرفر");
+  }
+
   if (!res.ok) {
     throw new Error(translateDbError(data.error ?? "تعذر تنفيذ العملية"));
   }
@@ -156,6 +168,12 @@ export default function DoctorQueuePage() {
         method: "PATCH",
         body: JSON.stringify({ action: "advance" }),
       });
+      if (clinicId) {
+        notifyQueueRefresh({ scope: "clinic", clinicId });
+      }
+      if (doctorId) {
+        notifyQueueRefresh({ scope: "doctor", doctorId });
+      }
       await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : "تعذر إنهاء الكشف");

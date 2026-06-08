@@ -1,7 +1,7 @@
 import type { UserRole } from "@/types";
 
 /** Login card id → internal portal id */
-export type AuthPortalId = "doctor" | "accountant" | "admin";
+export type AuthPortalId = "doctor" | "accountant" | "admin" | "assistant";
 
 export interface AuthPortal {
   id: AuthPortalId;
@@ -29,9 +29,20 @@ export const AUTH_PORTALS: Record<AuthPortalId, AuthPortal> = {
     allowedRoles: ["super_admin"],
     loginPortalId: "admin",
   },
+  assistant: {
+    id: "assistant",
+    pathPrefix: "/assistant",
+    allowedRoles: ["assistant"],
+    loginPortalId: "assistant",
+  },
 };
 
-const PORTAL_ORDER: AuthPortalId[] = ["doctor", "accountant", "admin"];
+const PORTAL_ORDER: AuthPortalId[] = [
+  "doctor",
+  "accountant",
+  "admin",
+  "assistant",
+];
 
 /** Legacy alias in some rows */
 export function normalizeRole(
@@ -41,11 +52,19 @@ export function normalizeRole(
     .trim()
     .toLowerCase();
   if (r === "admin") return "super_admin";
-  if (r === "super_admin" || r === "accountant" || r === "doctor") return r;
+  if (
+    r === "super_admin" ||
+    r === "accountant" ||
+    r === "doctor" ||
+    r === "assistant"
+  ) {
+    return r;
+  }
   return null;
 }
 
 export function portalIdFromPath(pathname: string): AuthPortalId | null {
+  if (pathname.startsWith("/assistant")) return "assistant";
   if (pathname.startsWith("/doctor")) return "doctor";
   if (pathname.startsWith("/admin")) return "admin";
   if (pathname.startsWith("/dashboard")) return "accountant";
@@ -85,6 +104,18 @@ export function isRoleAllowedForPath(
     return canRoleChangeOwnPassword(normalized);
   }
 
+  if (normalized === "assistant") {
+    return (
+      pathname === "/assistant" ||
+      pathname === "/assistant/dashboard" ||
+      pathname.startsWith("/assistant/dashboard/")
+    );
+  }
+
+  if (normalized === "doctor") {
+    return pathname === "/doctor" || pathname.startsWith("/doctor/");
+  }
+
   const portal = getAuthPortalForPath(pathname);
   if (!portal) return true;
   return portal.allowedRoles.includes(normalized);
@@ -96,7 +127,27 @@ export function loginPortalToAuthPortalId(
   if (loginPortalId === "doctor") return "doctor";
   if (loginPortalId === "accountant") return "accountant";
   if (loginPortalId === "admin") return "admin";
+  if (loginPortalId === "assistant") return "assistant";
   return null;
+}
+
+/** Default landing path after login per role */
+export function defaultPathForRole(
+  role: string | null | undefined
+): string {
+  const normalized = normalizeRole(role);
+  switch (normalized) {
+    case "assistant":
+      return "/assistant/dashboard";
+    case "doctor":
+      return "/doctor";
+    case "super_admin":
+      return "/admin";
+    case "accountant":
+      return "/dashboard";
+    default:
+      return "/login";
+  }
 }
 
 function supabaseProjectRef(): string {

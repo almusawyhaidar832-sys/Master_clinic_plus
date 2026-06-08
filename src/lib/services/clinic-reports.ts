@@ -19,6 +19,14 @@ import {
   resolveDoctorPeriodEarned,
 } from "@/lib/services/doctor-payment";
 import type { DoctorPaymentType } from "@/types";
+import {
+  buildAssistantPayrollLines,
+  buildAssistantPayrollLinesFromRecords,
+  computeDoctorMonthlySettlement,
+  doctorShareFromExpense,
+  type DoctorMonthlySettlement,
+} from "@/lib/services/assistant-payroll";
+import { fetchPayrollRecordsForDoctorMonth } from "@/lib/services/assistant-payroll-records";
 
 function relationName(
   rel: { full_name_ar: string } | { full_name_ar: string }[] | null | undefined
@@ -251,23 +259,93 @@ export async function fetchDoctorLedgerDetail(
       .lte("operation_date", end);
   }
 
-  const [summary, opsRes, withdrawalsRes] = await Promise.all([
-    fetchDoctorLedgers(supabase, monthYear).then((list) =>
-      list.find((d) => d.id === doctorId)
+  let expensesQuery = supabase
+    .from("doctor_expenses")
+    .select("*")
+    .eq("doctor_id", doctorId)
+    .order("expense_date", { ascending: false });
+
+  if (periodScoped) {
+    expensesQuery = expensesQuery
+      .gte("expense_date", start)
+      .lte("expense_date", end);
+  }
+
+  const payrollPromise =
+    periodScoped && monthYear
+      ? fetchPayrollRecordsForDoctorMonth(supabase, doctorId, monthYear)
+      : Promise.resolve([]);
+
+  const assistantsFallbackPromise = periodScoped
+    ? Promise.resolve({ data: [] as { id: string; full_name_ar: string; total_salary: number; doctor_share_percentage: number }[] })
+    : supabase
+        .from("assistants")
+        .select("id, full_name_ar, total_salary, doctor_share_percentage")
+        .eq("doctor_id", doctorId)
+        .eq("is_active", true);
+
+  const [summary, opsRes, withdrawalsRes, payrollRes, expensesRes, assistantsFallback] =
+    await Promise.all([
+      fetchDoctorLedgers(supabase, monthYear).then((list) =>
+        list.find((d) => d.id === doctorId)
+      ),
+      opsQuery,
+      supabase
+        .from("doctor_withdrawals")
+        .select("*")
+        .eq("doctor_id", doctorId)
+        .order("requested_at", { ascending: false }),
+      payrollPromise,
+      expensesQuery,
+      assistantsFallbackPromise,
+    ]);
+
+  const operations = opsRes.data ?? [];
+  const totalDoctorIncome = operations.reduce(
+    (s, r) => s + Number(r.doctor_share_amount ?? 0),
+    0
+  );
+
+  const expenseLines = (expensesRes.data ?? []).map((e) => ({
+    id: e.id as string,
+    description: (e.description_ar as string) || "صرفية عيادة",
+    amount: Number(e.amount ?? 0),
+    percentageSplit: Number(e.percentage_split ?? 0),
+    doctorShare: doctorShareFromExpense(
+      Number(e.amount ?? 0),
+      Number(e.percentage_split ?? 0)
     ),
-    opsQuery,
-    supabase
-      .from("doctor_withdrawals")
-      .select("*")
-      .eq("doctor_id", doctorId)
-      .order("requested_at", { ascending: false }),
-  ]);
+    expenseDate: e.expense_date as string,
+  }));
+
+  const assistantLines =
+    payrollRes.length > 0
+      ? buildAssistantPayrollLinesFromRecords(payrollRes)
+      : periodScoped
+        ? []
+        : buildAssistantPayrollLines(
+            (assistantsFallback.data ?? []).map((a) => ({
+              id: a.id as string,
+              full_name_ar: a.full_name_ar as string,
+              total_salary: Number(a.total_salary ?? 0),
+              doctor_share_percentage: Number(a.doctor_share_percentage ?? 0),
+            }))
+          );
+
+  const settlement: DoctorMonthlySettlement | null = periodScoped
+    ? computeDoctorMonthlySettlement(
+        summary?.totalEarned ?? totalDoctorIncome,
+        expenseLines,
+        assistantLines
+      )
+    : null;
 
   return {
     doctor,
     summary,
-    operations: opsRes.data ?? [],
+    operations,
     withdrawals: withdrawalsRes.data ?? [],
+    settlement,
   };
 }
 

@@ -7,20 +7,12 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
-import { formatTime, formatDate, todayISO } from "@/lib/utils";
-import type { Appointment, Doctor, ScheduleLock } from "@/types";
-
-const statusLabels: Record<string, string> = {
-  scheduled: "مجدول",
-  confirmed: "مؤكد",
-  completed: "مكتمل",
-  cancelled: "ملغي",
-  no_show: "لم يحضر",
-};
+import { formatTime, todayISO } from "@/lib/utils";
+import { DoctorAppointmentsPanel } from "@/components/appointments/DoctorAppointmentsPanel";
+import type { Doctor, ScheduleLock } from "@/types";
 
 export default function DoctorSchedulePage() {
   const [doctor, setDoctor] = useState<Doctor | null>(null);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [locks, setLocks] = useState<ScheduleLock[]>([]);
   const [view, setView] = useState<"appointments" | "lock">("appointments");
   const [message, setMessage] = useState<string | null>(null);
@@ -32,36 +24,26 @@ export default function DoctorSchedulePage() {
   const [endTime, setEndTime] = useState("10:30");
   const [lockReason, setLockReason] = useState("");
 
-  const load = useCallback(async () => {
+  const loadLocks = useCallback(async () => {
     const supabase = createClient();
     const doc = await getDoctorForCurrentUser(supabase);
     setDoctor(doc);
     if (!doc) return;
 
     const today = todayISO();
-    const [aRes, lRes] = await Promise.all([
-      supabase
-        .from("appointments")
-        .select("*")
-        .eq("clinic_id", doc.clinic_id)
-        .eq("doctor_id", doc.id)
-        .gte("appointment_date", today)
-        .order("appointment_date")
-        .order("start_time"),
-      supabase
-        .from("schedule_locks")
-        .select("*")
-        .eq("clinic_id", doc.clinic_id)
-        .eq("doctor_id", doc.id)
-        .gte("lock_date", today),
-    ]);
-    setAppointments((aRes.data as Appointment[]) || []);
-    setLocks((lRes.data as ScheduleLock[]) || []);
+    const { data } = await supabase
+      .from("schedule_locks")
+      .select("*")
+      .eq("clinic_id", doc.clinic_id)
+      .eq("doctor_id", doc.id)
+      .gte("lock_date", today);
+
+    setLocks((data as ScheduleLock[]) || []);
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadLocks();
+  }, [loadLocks]);
 
   async function addAppointment(e: React.FormEvent) {
     e.preventDefault();
@@ -77,51 +59,11 @@ export default function DoctorSchedulePage() {
       end_time: endTime,
       status: "scheduled",
     });
-    setMessage(error ? "تعذر الحجز" : "تم إضافة الموعد");
+    setMessage(error ? "تعذر الحجز" : "تم إضافة الموعد — يظهر في الجدول فوراً");
     if (!error) {
       setPatientName("");
       setPatientPhone("");
-      load();
     }
-  }
-
-  async function cancelAppointment(id: string) {
-    if (!doctor) return;
-    const supabase = createClient();
-    await supabase
-      .from("appointments")
-      .update({ status: "cancelled" })
-      .eq("id", id)
-      .eq("clinic_id", doctor.clinic_id);
-    load();
-  }
-
-  async function confirmAppointment(appointment: Appointment) {
-    if (!doctor) return;
-    const supabase = createClient();
-    await supabase
-      .from("appointments")
-      .update({ status: "confirmed" })
-      .eq("id", appointment.id)
-      .eq("clinic_id", doctor.clinic_id);
-
-    if (appointment.patient_phone && doctor) {
-      await fetch("/api/whatsapp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "appointment_confirmation",
-          phone: appointment.patient_phone,
-          payload: {
-            patientName: appointment.patient_name_ar ?? "عميلنا",
-            date: formatDate(appointment.appointment_date),
-            time: formatTime(appointment.start_time),
-            doctorName: doctor.full_name_ar,
-          },
-        }),
-      });
-    }
-    load();
   }
 
   async function addLock(e: React.FormEvent) {
@@ -134,16 +76,13 @@ export default function DoctorSchedulePage() {
       lock_date: date,
       start_time: startTime,
       end_time: endTime,
-      reason_ar: lockReason || "غير متاح",
+      reason_ar: lockReason || "محجوز",
     });
-    setMessage(error ? "تعذر قفل الفترة" : "تم قفل الفترة");
-    if (!error) load();
-  }
-
-  if (!doctor) {
-    return (
-      <Alert variant="warning">يجب ربط حسابك بسجل طبيب لإدارة المواعيد</Alert>
-    );
+    setMessage(error ? "تعذر قفل الوقت" : "تم قفل الفترة");
+    if (!error) {
+      setLockReason("");
+      loadLocks();
+    }
   }
 
   return (
@@ -221,45 +160,7 @@ export default function DoctorSchedulePage() {
             </form>
           </Card>
 
-          <div className="space-y-2">
-            <h3 className="font-semibold text-sm">المواعيد القادمة</h3>
-            {appointments.length === 0 ? (
-              <p className="text-sm text-slate-muted">لا توجد مواعيد</p>
-            ) : (
-              appointments.map((a) => (
-                <Card key={a.id} className="p-3">
-                  <p className="font-medium">{a.patient_name_ar}</p>
-                  <p className="text-xs text-slate-muted">
-                    {a.appointment_date} — {formatTime(a.start_time)} -{" "}
-                    {formatTime(a.end_time)}
-                  </p>
-                  <p className="text-xs text-primary">
-                    {statusLabels[a.status] ?? a.status}
-                  </p>
-                  {a.status !== "cancelled" && (
-                    <div className="mt-2 flex gap-2">
-                      {a.status === "scheduled" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => confirmAppointment(a)}
-                        >
-                          تأكيد
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => cancelAppointment(a.id)}
-                      >
-                        إلغاء
-                      </Button>
-                    </div>
-                  )}
-                </Card>
-              ))
-            )}
-          </div>
+          <DoctorAppointmentsPanel />
         </>
       ) : (
         <Card>

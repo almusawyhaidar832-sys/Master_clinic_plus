@@ -9,6 +9,8 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { formatCurrency, formatDate, todayISO } from "@/lib/utils";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
+import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
 import type { Expense } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -71,20 +73,35 @@ export default function ExpensesPage() {
     setLoading(true);
     setMessage(null);
 
-    const { error } = await supabase.from("expenses").insert({
-      clinic_id:      clinicId,
-      description_ar: description.trim(),
-      amount:         parseFloat(amount),
-      expense_date:   expenseDate,
-      category_id:    categoryId || null,
+    const res = await fetch("/api/expenses", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...authPortalHeaders("accountant"),
+      },
+      body: JSON.stringify({
+        description_ar: description.trim(),
+        amount: parseFloat(amount),
+        expense_date: expenseDate,
+        category_id: categoryId || null,
+      }),
     });
+    const json = await res.json().catch(() => ({}));
 
     setLoading(false);
-    if (error) {
-      setMessage({ type: "error", text: `تعذر حفظ المصروف: ${error.message}` });
+    if (!res.ok) {
+      setMessage({
+        type: "error",
+        text: `تعذر حفظ المصروف: ${(json as { error?: string }).error ?? res.statusText}`,
+      });
       return;
     }
-    setMessage({ type: "success", text: "تم تسجيل المصروف بنجاح" });
+    notifyClinicProfitRefresh();
+    setMessage({
+      type: "success",
+      text: "تم تسجيل المصروف وخصمه من ربح العيادة",
+    });
     setDescription("");
     setAmount("");
     setCategoryId("");

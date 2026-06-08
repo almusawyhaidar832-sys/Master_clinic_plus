@@ -17,9 +17,11 @@ export async function logoutFromCurrentPortal(
   const loginPortal =
     portalId === "doctor"
       ? "doctor"
-      : portalId === "admin"
-        ? "admin"
-        : "accountant";
+      : portalId === "assistant"
+        ? "assistant"
+        : portalId === "admin"
+          ? "admin"
+          : "accountant";
 
   router.push(`/login?portal=${loginPortal}`);
   router.refresh();

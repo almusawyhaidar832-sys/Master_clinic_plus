@@ -19,6 +19,7 @@ export default function DoctorWithdrawPage() {
   const [available, setAvailable] = useState(0);
   const [withdrawLimit, setWithdrawLimit] = useState(0);
   const [pending, setPending] = useState(0);
+  const [isDebtor, setIsDebtor] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -30,6 +31,7 @@ export default function DoctorWithdrawPage() {
         setAvailable(stats.availableBalance);
         setWithdrawLimit(stats.withdrawableLimit);
         setPending(stats.pendingAmount);
+        setIsDebtor(stats.isDebtor);
       }
     }
     load();
@@ -73,9 +75,20 @@ export default function DoctorWithdrawPage() {
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-bold text-slate-text">طلب سحب نقدي</h2>
-      <p className="text-sm text-slate-muted">
-        رصيدك: {formatCurrency(available)}
+      <p
+        className={`text-sm font-semibold tabular-nums ${
+          isDebtor ? "text-red-600" : "text-slate-muted"
+        }`}
+      >
+        رصيدك: {isDebtor ? "−" : ""}
+        {formatCurrency(Math.abs(available))}
+        {isDebtor && <span className="mr-1 text-xs">(مدين)</span>}
       </p>
+      {isDebtor && (
+        <p className="text-xs text-red-600">
+          لا يمكن طلب سحب — رصيدك سالب بسبب صرفيات أو التزامات على العيادة
+        </p>
+      )}
       {pending > 0 && (
         <p className="text-xs text-amber-600">
           لديك {formatCurrency(pending)} طلبات معلّقة — تُخصم من الرصيد عند الموافقة فقط
@@ -98,7 +111,7 @@ export default function DoctorWithdrawPage() {
           <Button
             className="w-full"
             onClick={handleRequest}
-            disabled={loading || !doctor}
+            disabled={loading || !doctor || isDebtor || withdrawLimit <= 0}
           >
             {loading ? "جاري الإرسال..." : "إرسال الطلب"}
           </Button>

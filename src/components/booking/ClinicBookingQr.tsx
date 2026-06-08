@@ -5,7 +5,7 @@ import QRCode from "qrcode";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Download, QrCode, RefreshCw } from "lucide-react";
+import { Copy, Download, ExternalLink, QrCode, RefreshCw, Smartphone } from "lucide-react";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 
 interface QrInfo {
@@ -21,13 +21,20 @@ export function ClinicBookingQr() {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setCopied(false);
     try {
-      const res = await fetch("/api/booking/qr", {
+      const origin =
+        typeof window !== "undefined"
+          ? encodeURIComponent(window.location.origin)
+          : "";
+      const qs = origin ? `?origin=${origin}` : "";
+      const res = await fetch(`/api/booking/qr${qs}`, {
         headers: authPortalHeaders("accountant"),
       });
       const data = await res.json();
@@ -134,17 +141,24 @@ export function ClinicBookingQr() {
 
         {info?.unreachableOnMobile && (
           <Alert variant="warning" className="mb-4">
-            <p className="font-medium">الباركود الحالي لا يعمل على الموبايل</p>
+            <p className="font-medium">الباركود لا يعمل على الموبايل بعد</p>
             <p className="mt-1 text-xs leading-relaxed">
-              الرابط يشير إلى جهاز التطوير المحلي. أضف في{" "}
-              <span className="font-mono">.env.local</span> عنوان IP شبكتك أو
-              دومين الموقع، مثلاً{" "}
+              شغّل السيرفر بـ{" "}
+              <span className="font-mono">npm run dev:lan</span> وتأكد أن
+              الموبايل على نفس Wi‑Fi. أو ضع في{" "}
+              <span className="font-mono">.env.local</span>:{" "}
               <span className="font-mono" dir="ltr">
-                NEXT_PUBLIC_APP_URL=http://192.168.1.5:3000
+                NEXT_PUBLIC_APP_URL=http://192.168.x.x:3000
               </span>
-              ، ثم شغّل{" "}
-              <span className="font-mono">npm run dev:lan</span> وأعد تحميل
-              هذه الصفحة.
+            </p>
+          </Alert>
+        )}
+
+        {info && !info.unreachableOnMobile && (
+          <Alert variant="info" className="mb-4">
+            <p className="flex items-center gap-2 font-medium">
+              <Smartphone className="h-4 w-4 shrink-0" />
+              جاهز للموبايل — امسح الباركود من كاميرا الجوال
             </p>
           </Alert>
         )}
@@ -173,9 +187,38 @@ export function ClinicBookingQr() {
               <p className="font-mono text-lg font-bold tracking-widest text-teal-700">
                 {info.bookingCode}
               </p>
-              <p className="mt-2 break-all text-xs text-slate-muted" dir="ltr">
+              <p className="mt-2 break-all text-sm text-teal-800" dir="ltr">
                 {info.bookingUrl}
               </p>
+            </div>
+
+            <div className="flex w-full flex-wrap justify-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="touch-target"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(info.bookingUrl);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              >
+                <Copy className="ml-2 h-4 w-4" />
+                {copied ? "تم النسخ" : "نسخ رابط الموبايل"}
+              </Button>
+              <a
+                href={info.bookingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="touch-target inline-flex items-center justify-center gap-2 rounded-lg border border-slate-border bg-surface-card px-4 py-2 text-sm font-medium text-slate-text hover:bg-surface"
+              >
+                <ExternalLink className="h-4 w-4" />
+                تجربة على الموبايل
+              </a>
             </div>
 
             <div className="flex w-full flex-wrap justify-center gap-2">

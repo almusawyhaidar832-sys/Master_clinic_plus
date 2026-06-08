@@ -24,6 +24,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   super_admin: "مالك العيادة",
   accountant: "محاسب",
   doctor: "طبيب",
+  assistant: "مساعد طبيب",
 };
 
 export function developerRoleLabel(role: string): string {

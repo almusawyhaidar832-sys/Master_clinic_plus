@@ -128,7 +128,7 @@ export function useDoctorQueueRealtime(doctorId: string | null | undefined) {
                 );
           if (!row) return;
 
-          if (payload.eventType === "INSERT" && row.sent_to_doctor_at) {
+          if (payload.eventType === "INSERT" && row.status === "waiting") {
             alertDoctorNewPatient(row, `new-${row.id}`, seenRef.current);
           }
 

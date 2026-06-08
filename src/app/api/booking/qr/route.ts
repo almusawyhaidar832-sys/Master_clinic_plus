@@ -4,6 +4,7 @@ import { fetchDeveloperActingClinic } from "@/lib/auth/developer-acting-clinic";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { ensureClinicBookingCode } from "@/lib/booking/server";
 import { buildBookingUrl } from "@/lib/booking/urls";
+import { detectDevLanOrigin, portFromOrigin } from "@/lib/booking/lan-origin";
 import { resolveBookingPublicOrigin } from "@/lib/booking/public-origin";
 
 /**
@@ -27,12 +28,21 @@ export async function GET(req: NextRequest) {
     }
 
     const bookingCode = await ensureClinicBookingCode(clinicId);
-    const { origin, unreachableOnMobile } = resolveBookingPublicOrigin({
+    let { origin, unreachableOnMobile } = resolveBookingPublicOrigin({
       clientOrigin: req.nextUrl.searchParams.get("origin"),
       requestOrigin: req.nextUrl.origin,
       forwardedHost: req.headers.get("x-forwarded-host"),
       forwardedProto: req.headers.get("x-forwarded-proto"),
     });
+
+    if (unreachableOnMobile) {
+      const port = portFromOrigin(origin);
+      const lan = detectDevLanOrigin(port);
+      if (lan) {
+        origin = lan;
+        unreachableOnMobile = false;
+      }
+    }
 
     const bookingUrl = buildBookingUrl(bookingCode, origin);
 

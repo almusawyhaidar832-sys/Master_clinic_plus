@@ -210,7 +210,7 @@ export async function createPublicBooking(
       appointment_date: input.appointmentDate,
       start_time: input.startTime,
       end_time: input.endTime,
-      status: "scheduled",
+      status: "pending",
       notes: input.notes?.trim() || null,
     })
     .select("id, clinic_id")

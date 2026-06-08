@@ -32,7 +32,10 @@ export default function DoctorWalletPage() {
           totalWithdrawn: 0,
           pendingAmount: 0,
           approvedAmount: 0,
+          expenseDeductions: 0,
+          payrollDeductions: 0,
           withdrawableLimit: 0,
+          isDebtor: false,
         });
         return;
       }
@@ -48,7 +51,10 @@ export default function DoctorWalletPage() {
           totalWithdrawn: 0,
           pendingAmount: 0,
           approvedAmount: 0,
-          withdrawableLimit: cached,
+          expenseDeductions: 0,
+          payrollDeductions: 0,
+          withdrawableLimit: Math.max(0, cached),
+          isDebtor: cached < 0,
         });
         return;
       }
@@ -79,6 +85,7 @@ export default function DoctorWalletPage() {
 
   const rows = [
     { label: "إجمالي الأرباح", value: stats?.totalEarnings, highlight: false },
+    { label: "صرفيات الطبيب", value: stats?.expenseDeductions, highlight: true },
     { label: "المسحوب (مدفوع)", value: stats?.totalWithdrawn, highlight: false },
     { label: "طلبات معلّقة", value: stats?.pendingAmount, highlight: true },
     { label: "موافق عليها (لم تُدفع)", value: stats?.approvedAmount, highlight: true },
@@ -103,10 +110,28 @@ export default function DoctorWalletPage() {
           وسجّل مبلغ «المدفوع» أكبر من صفر.
         </p>
       )}
-      <div className="rounded-2xl bg-gradient-to-br from-primary to-primary-700 p-8 text-white shadow-premium">
-        <p className="text-sm opacity-90">الرصيد القابل للسحب</p>
-        <p className="mt-2 text-4xl font-bold">
-          {stats !== null ? formatCurrency(stats.availableBalance) : "…"}
+      <div
+        className={`rounded-2xl p-8 text-white shadow-premium ${
+          stats?.isDebtor
+            ? "bg-gradient-to-br from-red-600 to-red-800"
+            : "bg-gradient-to-br from-primary to-primary-700"
+        }`}
+      >
+        <p className="text-sm opacity-90">
+          {stats?.isDebtor ? "الرصيد (مدين)" : "الرصيد القابل للسحب"}
+        </p>
+        <p className="mt-2 text-4xl font-bold tabular-nums">
+          {stats !== null ? (
+            <>
+              {stats.isDebtor ? "−" : ""}
+              {formatCurrency(Math.abs(stats.availableBalance))}
+              {stats.isDebtor && (
+                <span className="mr-2 text-base font-bold">(مدين)</span>
+              )}
+            </>
+          ) : (
+            "…"
+          )}
         </p>
       </div>
 

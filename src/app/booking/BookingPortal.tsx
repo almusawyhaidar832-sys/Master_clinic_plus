@@ -9,7 +9,7 @@ export function BookingPortal() {
   const clinicRef = searchParams.get("clinic")?.trim() ?? "";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-teal-50/40 to-surface px-4 py-10">
+    <div className="min-h-dvh safe-top safe-bottom bg-gradient-to-b from-teal-50/40 to-surface px-4 py-6 sm:py-10">
       {clinicRef ? (
         <BookingForm clinicRef={clinicRef} />
       ) : (

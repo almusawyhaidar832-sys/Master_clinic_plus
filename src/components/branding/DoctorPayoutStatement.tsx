@@ -5,6 +5,7 @@ import type { Doctor } from "@/types";
 import { ClinicBrandingHeader } from "./ClinicBrandingHeader";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { doctorPaymentLabel, isSalaryDoctor } from "@/lib/services/doctor-payment";
+import type { DoctorMonthlySettlement } from "@/lib/services/assistant-payroll";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface DoctorPayoutStatementProps {
@@ -30,6 +31,7 @@ interface DoctorPayoutStatementProps {
     status: string;
     requested_at: string;
   }[];
+  settlement?: DoctorMonthlySettlement | null;
 }
 
 export function DoctorPayoutStatement({
@@ -38,6 +40,7 @@ export function DoctorPayoutStatement({
   summary,
   operations,
   withdrawals,
+  settlement,
 }: DoctorPayoutStatementProps) {
   return (
     <div
@@ -46,11 +49,88 @@ export function DoctorPayoutStatement({
     >
       <ClinicBrandingHeader
         profile={clinic}
-        title="كشف حساب طبيب — مستحقات وسحوبات"
+        title="كشف حساب طبيب — مستحقات وتصفية شهرية"
         subtitle={formatDoctorDisplayName(doctor.full_name_ar)}
         meta={`التخصص: ${doctor.specialty_ar || "—"} — ${doctorPaymentLabel(doctor)}`}
         size="lg"
       />
+
+      {settlement && (
+        <section className="mb-6 rounded-xl border border-primary/25 bg-primary/5 p-4">
+          <h3 className="mb-3 text-sm font-bold text-primary">
+            التقرير المالي الشهري — تصفية الحساب
+          </h3>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-muted">إجمالي دخل الطبيب</span>
+              <span className="font-semibold">
+                {formatCurrency(settlement.totalDoctorIncome)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-muted">صرفيات العيادة (حصة الطبيب)</span>
+              <span className="font-semibold text-debt-text">
+                − {formatCurrency(settlement.totalClinicExpenses)}
+              </span>
+            </div>
+            {settlement.assistantLines.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-3">
+                <p className="mb-2 text-xs font-bold text-amber-900">
+                  خصم رواتب المساعدين (Payroll Deduction)
+                </p>
+                <ul className="space-y-1 text-xs">
+                  {settlement.assistantLines.map((line) => (
+                    <li
+                      key={line.assistantId}
+                      className="flex flex-wrap justify-between gap-2"
+                    >
+                      <span>
+                        {line.assistantName} — راتب {formatCurrency(line.totalSalary)}{" "}
+                        × {line.doctorSharePercentage}%
+                      </span>
+                      <span className="font-medium text-amber-800">
+                        − {formatCurrency(line.doctorDeduction)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-2 flex justify-between border-t border-amber-200 pt-2 text-sm font-bold text-amber-900">
+                  <span>إجمالي خصم رواتب المساعدين</span>
+                  <span>− {formatCurrency(settlement.assistantPayrollDeduction)}</span>
+                </div>
+              </div>
+            )}
+            {settlement.expenseLines.length > 0 && (
+              <details className="text-xs text-slate-muted">
+                <summary className="cursor-pointer font-medium">
+                  تفاصيل صرفيات العيادة ({settlement.expenseLines.length})
+                </summary>
+                <ul className="mt-2 space-y-1">
+                  {settlement.expenseLines.map((e) => (
+                    <li key={e.id} className="flex justify-between gap-2">
+                      <span>
+                        {formatDate(e.expenseDate)} — {e.description} (
+                        {e.percentageSplit}%)
+                      </span>
+                      <span>− {formatCurrency(e.doctorShare)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            <div className="flex justify-between gap-4 border-t border-primary/20 pt-3 text-base font-bold">
+              <span>صافي ربح الطبيب (Doctor Net Profit)</span>
+              <span className="text-primary">
+                {formatCurrency(settlement.doctorNetProfit)}
+              </span>
+            </div>
+            <p className="text-xs text-slate-muted" dir="ltr">
+              = (Total Doctor Income − Clinic Expenses) − (Assistant Salary × Doctor
+              Share %)
+            </p>
+          </div>
+        </section>
+      )}
 
       <div className="mb-6 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
         <div className="rounded-lg bg-surface p-2 text-center">

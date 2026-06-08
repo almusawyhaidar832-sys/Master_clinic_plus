@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Users, Stethoscope, Wallet, Receipt,
   UserCog, MessageCircle, TrendingUp, LogOut, FileText,
   ListOrdered, Package, FilePen, TestTube2, Pill, Globe, Undo2,
-  CalendarClock,
+  CalendarClock, UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -33,6 +33,7 @@ const iconMap: Record<string, LucideIcon> = {
   globe:       Globe,
   refunds:     Undo2,
   calendarClock: CalendarClock,
+  userRound:     UserRound,
 };
 
 interface SidebarProps {

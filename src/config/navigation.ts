@@ -15,6 +15,8 @@ export const accountantModuleNav: ModuleNavItem[] = [
   { href: "/dashboard",             label: "لوحة التحكم",        icon: "dashboard"    },
   { href: "/dashboard/ledger",      label: "إدخال جلسة",         icon: "patients",    requiredModule: "billing"            },
   { href: "/dashboard/queue",       label: "غرفة الانتظار",      icon: "listOrdered", requiredModule: "patient_queue"      },
+  { href: "/dashboard/assistants",  label: "إدارة المساعدين",    icon: "userRound"                                      },
+  { href: "/dashboard/doctor-expenses", label: "صرفيات الأطباء", icon: "expenses"                                     },
   { href: "/dashboard/patients",    label: "ملفات المرضى",        icon: "patients",    requiredModule: "patients"           },
   { href: "/dashboard/reports",     label: "تقارير العيادة",      icon: "profits",     requiredModule: "reports"            },
   { href: "/dashboard/refunds",     label: "إدارة المرتجعات",     icon: "refunds",     requiredModule: "billing"            },
@@ -22,8 +24,8 @@ export const accountantModuleNav: ModuleNavItem[] = [
   { href: "/dashboard/withdrawals", label: "طلبات السحب",         icon: "withdrawals", requiredModule: "doctor_wallet"      },
   { href: "/dashboard/expenses",    label: "المصروفات",           icon: "expenses"     },
   { href: "/dashboard/salary",      label: "رواتب الموظفين",      icon: "salary"       },
+  { href: "/dashboard/employees",  label: "إدارة الرواتب",       icon: "userCog"      },
   // Module-gated
-  { href: "/dashboard/inventory",   label: "المخزون",             icon: "package",     requiredModule: "inventory"          },
   { href: "/dashboard/prescriptions",label: "الوصفات الذكية",    icon: "filePen",     requiredModule: "smart_prescriptions"},
   { href: "/dashboard/lab",         label: "المختبر",             icon: "testTube",    requiredModule: "lab_integration"    },
   { href: "/dashboard/pharmacy",    label: "الصيدلية",            icon: "pill",        requiredModule: "pharmacy_link"      },
@@ -51,6 +53,17 @@ export const superAdminModuleNav: ModuleNavItem[] = [
     label: "لوحة المالك (جوال)",
     icon: "profits",
     roles: ["super_admin"],
+  },
+];
+
+// =============================================================================
+// ASSISTANT nav — حجوزات الطبيب فقط
+// =============================================================================
+export const assistantModuleNav: ModuleNavItem[] = [
+  {
+    href: "/assistant/dashboard",
+    label: "حجوزات طبيبي",
+    icon: "calendarClock",
   },
 ];
 

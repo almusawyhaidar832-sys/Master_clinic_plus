@@ -68,8 +68,18 @@ export function DoctorHomeDashboard() {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs opacity-90">رصيدك الحالي</p>
-            <p className="mt-1 text-3xl font-bold">
-              {wallet ? formatCurrency(wallet.availableBalance) : "…"}
+            <p className="mt-1 text-3xl font-bold tabular-nums">
+              {wallet ? (
+                <>
+                  {wallet.availableBalance < 0 ? "−" : ""}
+                  {formatCurrency(Math.abs(wallet.availableBalance))}
+                  {wallet.availableBalance < 0 && (
+                    <span className="mr-1 text-sm font-bold">(مدين)</span>
+                  )}
+                </>
+              ) : (
+                "…"
+              )}
             </p>
           </div>
           <Wallet className="h-8 w-8 opacity-80" />

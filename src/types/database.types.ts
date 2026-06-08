@@ -35,11 +35,13 @@ export interface Database {
         Row: {
           id: string;
           clinic_id: string | null;
-          role: "super_admin" | "accountant" | "doctor";
+          role: "super_admin" | "accountant" | "doctor" | "assistant";
           full_name: string;
           username: string | null;
           phone: string | null;
           avatar_url: string | null;
+          base_salary: number;
+          job_title: string | null;
           is_active: boolean;
           created_at: string;
           updated_at: string;
@@ -87,19 +89,76 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["patients"]["Insert"]>;
       };
 
+      assistants: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          doctor_id: string;
+          profile_id: string | null;
+          full_name_ar: string;
+          phone: string | null;
+          is_active: boolean;
+          total_salary: number;
+          doctor_share_percentage: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["assistants"]["Row"],
+          "id" | "created_at" | "updated_at"
+        > & { id?: string };
+        Update: Partial<Database["public"]["Tables"]["assistants"]["Insert"]>;
+      };
+
+      payroll_records: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          assistant_id: string;
+          doctor_id: string;
+          month_year: string;
+          assistant_name_ar: string;
+          doctor_name_ar: string | null;
+          total_salary: number;
+          doctor_share_percentage: number;
+          doctor_share_amount: number;
+          clinic_share_amount: number;
+          status: "generated" | "paid";
+          generated_at: string;
+          paid_at: string | null;
+          created_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["payroll_records"]["Row"],
+          "id" | "generated_at" | "created_at" | "paid_at"
+        > & { id?: string; paid_at?: string | null };
+        Update: Partial<Database["public"]["Tables"]["payroll_records"]["Insert"]>;
+      };
+
       appointments: {
         Row: {
           id: string;
           clinic_id: string;
           doctor_id: string;
+          assistant_id: string | null;
           patient_id: string | null;
           patient_name_ar: string | null;
           patient_phone: string | null;
           appointment_date: string;
           start_time: string;
           end_time: string;
-          status: "scheduled" | "confirmed" | "completed" | "cancelled" | "no_show";
+          status:
+            | "pending"
+            | "scheduled"
+            | "confirmed"
+            | "waiting"
+            | "in_clinic"
+            | "in_examination"
+            | "completed"
+            | "cancelled"
+            | "no_show";
           notes: string | null;
+          reason_for_change: string | null;
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["appointments"]["Row"], "id" | "created_at"> & {
@@ -108,11 +167,61 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["appointments"]["Insert"]>;
       };
 
+      doctor_expenses: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          doctor_id: string;
+          amount: number;
+          percentage_split: number;
+          invoice_storage_path: string | null;
+          invoice_file_name: string | null;
+          invoice_mime_type: string | null;
+          expense_date: string;
+          description_ar: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["doctor_expenses"]["Row"],
+          "id" | "created_at"
+        > & { id?: string };
+        Update: Partial<Database["public"]["Tables"]["doctor_expenses"]["Insert"]>;
+      };
+
+      invoices: {
+        Row: {
+          id: string;
+          clinic_id: string;
+          patient_id: string | null;
+          doctor_id: string | null;
+          operation_id: string | null;
+          appointment_id: string | null;
+          total_amount: number;
+          paid_amount: number;
+          remaining_amount: number;
+          xray_storage_path: string | null;
+          xray_file_name: string | null;
+          xray_mime_type: string | null;
+          invoice_date: string;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<
+          Database["public"]["Tables"]["invoices"]["Row"],
+          "id" | "remaining_amount" | "created_at" | "updated_at"
+        > & { id?: string };
+        Update: Partial<Database["public"]["Tables"]["invoices"]["Insert"]>;
+      };
+
       operation_types: {
         Row: {
           id: string;
           clinic_id: string;
           name_ar: string;
+          default_price: number | null;
           is_active: boolean;
           sort_order: number;
           review_fee_amount: number | null;
@@ -193,6 +302,7 @@ export interface Database {
           base_salary: number;
           phone: string | null;
           slot_number: number | null;
+          profile_id: string | null;
           is_active: boolean;
           created_at: string;
         };
@@ -230,6 +340,8 @@ export interface Database {
           type: string;
           description_ar: string | null;
           transaction_date: string;
+          reference_type: string | null;
+          reference_id: string | null;
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["transactions"]["Row"], "id" | "created_at"> & {

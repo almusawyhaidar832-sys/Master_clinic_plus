@@ -29,6 +29,7 @@ export const USER_ROLE_LABELS: Record<string, string> = {
   super_admin: "مدير النظام",
   accountant: "محاسب / استقبال",
   doctor: "طبيب",
+  assistant: "مساعد طبيب",
 };
 
 export const APP_NAME = "ماستر كلينك بلس";

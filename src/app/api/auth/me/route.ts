@@ -42,9 +42,10 @@ export async function GET() {
     profile: profile ?? null,
     profileError: error?.message ?? null,
     expectedDashboard:
-      profile?.role === "super_admin" ? "/admin"     :
-      profile?.role === "doctor"      ? "/doctor"    :
-      profile?.role === "accountant"  ? "/dashboard" :
+      profile?.role === "super_admin" ? "/admin"              :
+      profile?.role === "doctor"      ? "/doctor"             :
+      profile?.role === "assistant"   ? "/assistant/dashboard":
+      profile?.role === "accountant"  ? "/dashboard"          :
       "unknown — profile missing or role null",
   });
 }

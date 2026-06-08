@@ -45,6 +45,8 @@ export default function AdminTeamPage() {
   const [username,  setUsername]  = useState("");
   const [password,  setPassword]  = useState("");
   const [phone,     setPhone]     = useState("");
+  const [baseSalary, setBaseSalary] = useState("");
+  const [jobTitle,  setJobTitle]  = useState("محاسب");
   const [showPass,  setShowPass]  = useState(false);
   const [saving,    setSaving]    = useState(false);
   const [msg,       setMsg]       = useState<{ ok: boolean; text: string } | null>(null);
@@ -107,6 +109,11 @@ export default function AdminTeamPage() {
       setMsg({ ok: false, text: "كلمة المرور: 6 أحرف على الأقل" });
       return;
     }
+    const salary = Number(baseSalary);
+    if (!Number.isFinite(salary) || salary <= 0) {
+      setMsg({ ok: false, text: "أدخل الراتب الشهري للمحاسب" });
+      return;
+    }
 
     setSaving(true);
 
@@ -123,6 +130,8 @@ export default function AdminTeamPage() {
         role: "accountant",
         phone: phone || null,
         username: cleanUsername,
+        base_salary: salary,
+        job_title: jobTitle.trim() || "محاسب",
       }),
     });
 
@@ -140,6 +149,8 @@ export default function AdminTeamPage() {
     setUsername("");
     setPassword("");
     setPhone("");
+    setBaseSalary("");
+    setJobTitle("محاسب");
     setShowForm(false);
     loadTeam();
   }
@@ -289,6 +300,31 @@ WHERE p.id IS NULL;`}
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="07xxxxxxxx"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">
+                  الراتب الشهري <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  step="1000"
+                  value={baseSalary}
+                  onChange={(e) => setBaseSalary(e.target.value)}
+                  required
+                  placeholder="800000"
+                  dir="ltr"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-left focus:border-primary focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">الوظيفة</label>
+                <input
+                  value={jobTitle}
+                  onChange={(e) => setJobTitle(e.target.value)}
+                  placeholder="محاسب"
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               </div>

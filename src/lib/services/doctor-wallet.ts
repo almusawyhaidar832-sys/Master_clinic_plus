@@ -1,14 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { doctorShareFromExpense } from "@/lib/services/assistant-payroll";
 
 export interface DoctorWalletStats {
   totalEarnings: number;
   totalWithdrawn: number;
   pendingAmount: number;
   approvedAmount: number;
-  /** Balance shown to doctor — deducts paid + approved only (not pending) */
+  expenseDeductions: number;
+  payrollDeductions: number;
+  /** رصيد محاسبي بعد الصرفيات والرواتب — قد يكون سالباً (مدين) */
   availableBalance: number;
-  /** Max amount for a new request — also reserves pending requests */
+  /** أقصى مبلغ سحب جديد — صفر إذا الرصيد سالب */
   withdrawableLimit: number;
+  isDebtor: boolean;
 }
 
 type WithdrawalRow = { amount: number | string; status: string };
@@ -44,9 +48,49 @@ export function calcOperationEarned(
   return Math.round(paid * doctorPct * 100) / 100;
 }
 
+/** مجموع حصة الطبيب من فواتير الصرفيات */
+export async function fetchDoctorExpenseDeductionsTotal(
+  supabase: SupabaseClient,
+  doctorId: string
+): Promise<number> {
+  const { data } = await supabase
+    .from("doctor_expenses")
+    .select("amount, percentage_split")
+    .eq("doctor_id", doctorId);
+
+  return (data ?? []).reduce(
+    (s, row) =>
+      s +
+      doctorShareFromExpense(
+        Number(row.amount ?? 0),
+        Number(row.percentage_split ?? 0)
+      ),
+    0
+  );
+}
+
+/** خصومات رواتب المساعدين من الحركات المالية */
+export async function fetchDoctorPayrollDeductionsTotal(
+  supabase: SupabaseClient,
+  doctorId: string
+): Promise<number> {
+  const { data: txns } = await supabase
+    .from("transactions")
+    .select("amount")
+    .eq("doctor_id", doctorId)
+    .eq("type", "assistant_payroll_doctor")
+    .lt("amount", 0);
+
+  return (txns ?? []).reduce(
+    (s, t) => s + Math.abs(Number(t.amount ?? 0)),
+    0
+  );
+}
+
 export function computeWalletStats(
   totalEarnings: number,
-  withdrawals: WithdrawalRow[]
+  withdrawals: WithdrawalRow[],
+  deductions?: { expenseDeductions?: number; payrollDeductions?: number }
 ): DoctorWalletStats {
   let totalWithdrawn = 0;
   let pendingAmount = 0;
@@ -61,20 +105,29 @@ export function computeWalletStats(
 
   const round = (n: number) => Math.round(n * 100) / 100;
   const earned = round(totalEarnings);
+  const expenseDeductions = round(deductions?.expenseDeductions ?? 0);
+  const payrollDeductions = round(deductions?.payrollDeductions ?? 0);
 
-  const availableBalance = Math.max(0, earned - totalWithdrawn - approvedAmount);
-  const withdrawableLimit = Math.max(
-    0,
-    earned - totalWithdrawn - approvedAmount - pendingAmount
+  const netAccounting = round(
+    earned -
+      totalWithdrawn -
+      approvedAmount -
+      expenseDeductions -
+      payrollDeductions
   );
+
+  const withdrawableLimit = Math.max(0, netAccounting - pendingAmount);
 
   return {
     totalEarnings: earned,
     totalWithdrawn: round(totalWithdrawn),
     pendingAmount: round(pendingAmount),
     approvedAmount: round(approvedAmount),
-    availableBalance: round(availableBalance),
+    expenseDeductions,
+    payrollDeductions,
+    availableBalance: netAccounting,
     withdrawableLimit: round(withdrawableLimit),
+    isDebtor: netAccounting < 0,
   };
 }
 
@@ -157,7 +210,15 @@ export async function fetchDoctorWalletStats(
   }
 
   const totalEarnings = Math.max(clientEarnings, rpcEarned);
-  return computeWalletStats(totalEarnings, withdrawalsRes.data ?? []);
+  const [expenseDeductions, payrollDeductions] = await Promise.all([
+    fetchDoctorExpenseDeductionsTotal(supabase, doctorId),
+    fetchDoctorPayrollDeductionsTotal(supabase, doctorId),
+  ]);
+
+  return computeWalletStats(totalEarnings, withdrawalsRes.data ?? [], {
+    expenseDeductions,
+    payrollDeductions,
+  });
 }
 
 /** Max amount the doctor can request right now (accounts for pending requests) */

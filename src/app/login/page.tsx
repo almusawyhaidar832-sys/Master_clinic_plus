@@ -56,6 +56,15 @@ const PORTALS: Portal[] = [
     destination: "/doctor",
   },
   {
+    id:          "assistant",
+    title:       "بوابة المساعد",
+    subtitle:    "حجوزات الطبيب",
+    emoji:       "🧑‍💼",
+    color:       "border-teal-200 bg-teal-50/50",
+    btnColor:    "bg-teal-600 hover:bg-teal-700",
+    destination: "/assistant/dashboard",
+  },
+  {
     id:          "booking",
     title:       "بوابة الحجوزات",
     subtitle:    "حجز المرضى أونلاين",
@@ -67,7 +76,7 @@ const PORTALS: Portal[] = [
 ];
 
 // ── Portal card ────────────────────────────────────────────────────────────
-function PortalCard({ portal }: { portal: Portal }) {
+function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boolean }) {
   const router = useRouter();
 
   const [username, setUsername] = useState("");
@@ -147,7 +156,9 @@ function PortalCard({ portal }: { portal: Portal }) {
   }
 
   return (
-    <div className={`flex flex-col rounded-2xl border-2 p-5 transition-shadow hover:shadow-md ${portal.color}`}>
+    <div
+      className={`flex flex-col rounded-2xl border-2 p-5 transition-shadow hover:shadow-md ${portal.color} ${highlighted ? "ring-2 ring-teal-500 ring-offset-2" : ""}`}
+    >
 
       <div className="mb-4 flex items-center gap-3">
         <span className="text-3xl">{portal.emoji}</span>
@@ -216,6 +227,7 @@ function PortalCard({ portal }: { portal: Portal }) {
 function LoginPageContent() {
   const searchParams = useSearchParams();
   const mismatch = searchParams.get("reason") === "role_mismatch";
+  const portalHint = searchParams.get("portal");
 
   return (
     <div className="safe-top safe-bottom min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden">
@@ -242,9 +254,15 @@ function LoginPageContent() {
           </p>
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" dir="rtl">
+        {portalHint === "assistant" && (
+          <p className="mb-4 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-center text-sm text-teal-800">
+            مساعدو الأطباء: سجّل الدخول من بوابة «المساعد» — ستُوجَّه مباشرة لحجوزات طبيبك فقط.
+          </p>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" dir="rtl">
           {PORTALS.map((p) => (
-            <PortalCard key={p.id} portal={p} />
+            <PortalCard key={p.id} portal={p} highlighted={portalHint === p.id} />
           ))}
         </div>
 

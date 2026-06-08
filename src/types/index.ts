@@ -1,4 +1,4 @@
-export type UserRole = "super_admin" | "accountant" | "doctor";
+export type UserRole = "super_admin" | "accountant" | "doctor" | "assistant";
 
 export type DoctorPercentage =
   | "10"
@@ -17,11 +17,40 @@ export type DoctorPaymentType = "percentage" | "salary";
 export type WithdrawalStatus = "pending" | "approved" | "paid" | "rejected";
 export type WithdrawalSource = "doctor_request" | "accountant_cash";
 export type AppointmentStatus =
+  | "pending"
   | "scheduled"
   | "confirmed"
+  | "waiting"
+  | "in_clinic"
+  | "in_examination"
   | "completed"
   | "cancelled"
   | "no_show";
+
+export interface OperationType {
+  id: string;
+  clinic_id: string;
+  name_ar: string;
+  default_price: number | null;
+  is_active: boolean;
+  sort_order: number;
+}
+
+export interface Invoice {
+  id: string;
+  clinic_id: string;
+  patient_id: string | null;
+  doctor_id: string | null;
+  operation_id: string | null;
+  appointment_id: string | null;
+  total_amount: number;
+  paid_amount: number;
+  remaining_amount: number;
+  xray_storage_path: string | null;
+  xray_file_name: string | null;
+  invoice_date: string;
+  notes: string | null;
+}
 export type TreatmentStatus = "active" | "completed" | "cancelled";
 export type SalaryEntryType = "advance" | "deduction" | "absence";
 export type SalarySlipStatus = "draft" | "paid";
@@ -165,6 +194,7 @@ export interface StaffMember {
   base_salary: number;
   phone: string | null;
   slot_number: number | null;
+  profile_id?: string | null;
   is_active: boolean;
 }
 
@@ -190,10 +220,55 @@ export interface SalarySlip {
   staff?: StaffMember;
 }
 
+export interface Assistant {
+  id: string;
+  clinic_id: string;
+  doctor_id: string;
+  profile_id: string | null;
+  full_name_ar: string;
+  phone: string | null;
+  is_active: boolean;
+  total_salary: number;
+  doctor_share_percentage: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PayrollRecord {
+  id: string;
+  clinic_id: string;
+  assistant_id: string;
+  doctor_id: string;
+  month_year: string;
+  assistant_name_ar: string;
+  doctor_name_ar: string | null;
+  total_salary: number;
+  doctor_share_percentage: number;
+  doctor_share_amount: number;
+  clinic_share_amount: number;
+  status: "generated" | "paid";
+  generated_at: string;
+  paid_at: string | null;
+  created_at?: string;
+}
+
+export interface DoctorExpense {
+  id: string;
+  clinic_id: string;
+  doctor_id: string;
+  amount: number;
+  percentage_split: number;
+  invoice_storage_path: string | null;
+  invoice_file_name: string | null;
+  expense_date: string;
+  description_ar: string | null;
+}
+
 export interface Appointment {
   id: string;
   clinic_id: string;
   doctor_id: string;
+  assistant_id?: string | null;
   patient_id: string | null;
   patient_name_ar: string | null;
   patient_phone: string | null;
@@ -202,6 +277,7 @@ export interface Appointment {
   end_time: string;
   status: AppointmentStatus;
   notes: string | null;
+  reason_for_change?: string | null;
 }
 
 export interface ScheduleLock {

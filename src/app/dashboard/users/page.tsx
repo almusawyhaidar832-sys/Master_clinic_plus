@@ -5,7 +5,7 @@
  *
  * الصلاحيات:
  *   super_admin  → يرى جميع المستخدمين، يُنشئ محاسبين فقط
- *   accountant   → يرى أطباء ومحاسبين، يُنشئ أطباء فقط
+ *   accountant   → يرى الجميع، يُنشئ أطباء أو مساعدين
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -16,28 +16,36 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import {
   UserPlus, Users, Stethoscope, UserCog,
   Eye, EyeOff, CheckCircle2, XCircle, RefreshCw, ShieldAlert,
+  UserRound,
 } from "lucide-react";
 
 interface ClinicUser {
   id: string;
   full_name: string;
   username: string | null;
-  role: "accountant" | "doctor" | "super_admin";
+  role: "accountant" | "doctor" | "super_admin" | "assistant";
   phone: string | null;
   is_active: boolean;
   created_at: string;
 }
 
+interface ClinicDoctor {
+  id: string;
+  full_name_ar: string;
+}
+
+type CreateTargetRole = "accountant" | "doctor" | "assistant";
+
 const ROLE_CONFIG = {
-  doctor:      { label: "طبيب",   icon: Stethoscope, color: "bg-blue-100 text-blue-700"    },
-  accountant:  { label: "محاسب",  icon: UserCog,     color: "bg-violet-100 text-violet-700" },
-  super_admin: { label: "مالك",   icon: Users,       color: "bg-primary/10 text-primary"    },
+  doctor:      { label: "طبيب",        icon: Stethoscope, color: "bg-blue-100 text-blue-700"     },
+  accountant:  { label: "محاسب",       icon: UserCog,     color: "bg-violet-100 text-violet-700" },
+  super_admin: { label: "مالك",        icon: Users,       color: "bg-primary/10 text-primary"    },
+  assistant:   { label: "مساعد طبيب",  icon: UserRound,   color: "bg-teal-100 text-teal-700"     },
 };
 
-/** What each caller role is allowed to create */
-const ALLOWED_TARGET: Record<string, "accountant" | "doctor"> = {
-  super_admin: "accountant",
-  accountant:  "doctor",
+const ALLOWED_TARGETS: Record<string, CreateTargetRole[]> = {
+  super_admin: ["accountant"],
+  accountant:  ["doctor", "assistant"],
 };
 
 export default function UsersPage() {
@@ -45,19 +53,23 @@ export default function UsersPage() {
 
   const [callerRole, setCallerRole] = useState<string | null>(null);
   const [users,      setUsers]      = useState<ClinicUser[]>([]);
+  const [doctors,    setDoctors]    = useState<ClinicDoctor[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [showForm,   setShowForm]   = useState(false);
 
-  const [fullName,  setFullName]  = useState("");
-  const [username,  setUsername]  = useState("");
-  const [password,  setPassword]  = useState("");
-  const [phone,     setPhone]     = useState("");
-  const [showPass,  setShowPass]  = useState(false);
-  const [saving,    setSaving]    = useState(false);
-  const [msg,       setMsg]       = useState<{ ok: boolean; text: string } | null>(null);
+  const [targetRole, setTargetRole] = useState<CreateTargetRole | null>(null);
+  const [fullName,   setFullName]   = useState("");
+  const [username,   setUsername]   = useState("");
+  const [password,   setPassword]   = useState("");
+  const [phone,      setPhone]      = useState("");
+  const [doctorId,   setDoctorId]   = useState("");
+  const [baseSalary, setBaseSalary] = useState("");
+  const [jobTitle,   setJobTitle]   = useState("محاسب");
+  const [showPass,   setShowPass]   = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [msg,        setMsg]        = useState<{ ok: boolean; text: string } | null>(null);
 
-  // The target role is fixed based on the caller — no choice in the form
-  const targetRole = callerRole ? ALLOWED_TARGET[callerRole] : null;
+  const allowedTargets = callerRole ? ALLOWED_TARGETS[callerRole] ?? [] : [];
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -78,26 +90,56 @@ export default function UsersPage() {
 
     if (!profile?.clinic_id) {
       setUsers([]);
+      setDoctors([]);
       setLoading(false);
       return;
     }
 
-    // Only users in the current clinic
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, full_name, username, role, phone, is_active, created_at")
-      .eq("clinic_id", profile.clinic_id)
-      .order("created_at", { ascending: false });
+    const [usersRes, doctorsRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, full_name, username, role, phone, is_active, created_at")
+        .eq("clinic_id", profile.clinic_id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("doctors")
+        .select("id, full_name_ar")
+        .eq("clinic_id", profile.clinic_id)
+        .eq("is_active", true)
+        .order("full_name_ar"),
+    ]);
 
-    setUsers((data as ClinicUser[]) ?? []);
+    setUsers((usersRes.data as ClinicUser[]) ?? []);
+    setDoctors((doctorsRes.data as ClinicDoctor[]) ?? []);
     setLoading(false);
   }, [supabase]);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
 
+  function openForm(role: CreateTargetRole) {
+    setTargetRole(role);
+    setShowForm(true);
+    setMsg(null);
+    setDoctorId("");
+    setBaseSalary("");
+    setJobTitle("محاسب");
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!targetRole) return;
+    if (targetRole === "assistant" && !doctorId) {
+      setMsg({ ok: false, text: "اختر الطبيب المرتبط بالمساعد" });
+      return;
+    }
+    if (targetRole === "accountant") {
+      const salary = Number(baseSalary);
+      if (!Number.isFinite(salary) || salary <= 0) {
+        setMsg({ ok: false, text: "أدخل الراتب الشهري للمحاسب" });
+        return;
+      }
+    }
+
     setMsg(null);
     setSaving(true);
 
@@ -114,6 +156,9 @@ export default function UsersPage() {
         full_name: fullName,
         role: targetRole,
         phone,
+        doctor_id: targetRole === "assistant" ? doctorId : undefined,
+        base_salary: targetRole === "accountant" ? Number(baseSalary) : undefined,
+        job_title: targetRole === "accountant" ? jobTitle.trim() || "محاسب" : undefined,
       }),
     });
 
@@ -126,8 +171,10 @@ export default function UsersPage() {
     }
 
     setMsg({ ok: true, text: json.message });
-    setFullName(""); setUsername(""); setPassword(""); setPhone("");
+    setFullName(""); setUsername(""); setPassword(""); setPhone(""); setDoctorId("");
+    setBaseSalary(""); setJobTitle("محاسب");
     setShowForm(false);
+    setTargetRole(null);
     loadUsers();
   }
 
@@ -139,39 +186,51 @@ export default function UsersPage() {
     loadUsers();
   }
 
-  const activeCount  = users.filter(u => u.is_active).length;
-  const doctorCount  = users.filter(u => u.role === "doctor").length;
-  const accountCount = users.filter(u => u.role === "accountant").length;
+  const activeCount    = users.filter((u) => u.is_active).length;
+  const doctorCount    = users.filter((u) => u.role === "doctor").length;
+  const assistantCount = users.filter((u) => u.role === "assistant").length;
+  const accountCount   = users.filter((u) => u.role === "accountant").length;
 
   const targetCfg = targetRole ? ROLE_CONFIG[targetRole] : null;
   const TargetIcon = targetCfg?.icon ?? UserPlus;
 
+  const destinationForRole = (role: CreateTargetRole) => {
+    if (role === "doctor") return "/doctor";
+    if (role === "assistant") return "/assistant/dashboard";
+    return "/dashboard";
+  };
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
 
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-text">إدارة المستخدمين</h1>
           <p className="text-sm text-slate-muted">
             {callerRole === "super_admin"
-              ? "أضف محاسبين للعيادة — كل واحد يدخل بـ username وpassword"
-              : "أضف أطباء للعيادة — كل طبيب يدخل بـ username وpassword"}
+              ? "أضف محاسبين للعيادة"
+              : "أضف أطباء أو مساعدين — المساعد يُربط تلقائياً بالطبيب والعيادة"}
           </p>
         </div>
 
-        {targetRole && (
-          <button
-            onClick={() => { setShowForm(!showForm); setMsg(null); }}
-            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-primary/90"
-          >
-            <UserPlus className="h-4 w-4" />
-            {callerRole === "super_admin" ? "محاسب جديد" : "طبيب جديد"}
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {allowedTargets.map((role) => {
+            const cfg = ROLE_CONFIG[role];
+            return (
+              <button
+                key={role}
+                type="button"
+                onClick={() => openForm(role)}
+                className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-primary/90"
+              >
+                <UserPlus className="h-4 w-4" />
+                {role === "assistant" ? "مساعد جديد" : role === "doctor" ? "طبيب جديد" : "محاسب جديد"}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Permission banner */}
       {callerRole && (
         <div className="flex items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
           <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -179,21 +238,21 @@ export default function UsersPage() {
             <p className="font-semibold">
               {callerRole === "super_admin"
                 ? "أنت مسجل كـ مالك — يمكنك إنشاء حسابات المحاسبين فقط"
-                : "أنت مسجل كـ محاسب — يمكنك إنشاء حسابات الأطباء فقط"}
+                : "أنت مسجل كـ محاسب — يمكنك إنشاء أطباء ومساعدين"}
             </p>
             <p className="mt-0.5 text-blue-600">
-              الحساب الجديد سيُربط تلقائياً بعيادتك ويُوجَّه للـ Dashboard الصحيح عند تسجيل الدخول.
+              عند تسجيل مساعد، اختر الطبيب من القائمة لربطه بـ doctor_id و clinic_id تلقائياً.
             </p>
           </div>
         </div>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "إجمالي النشطين", value: activeCount,  color: "bg-emerald-50 text-emerald-700" },
-          { label: "الأطباء",        value: doctorCount,   color: "bg-blue-50 text-blue-700"       },
-          { label: "المحاسبون",      value: accountCount,  color: "bg-violet-50 text-violet-700"   },
+          { label: "النشطون", value: activeCount,    color: "bg-emerald-50 text-emerald-700" },
+          { label: "الأطباء", value: doctorCount,   color: "bg-blue-50 text-blue-700"       },
+          { label: "المساعدون", value: assistantCount, color: "bg-teal-50 text-teal-700"   },
+          { label: "المحاسبون", value: accountCount, color: "bg-violet-50 text-violet-700" },
         ].map((s) => (
           <div key={s.label} className={cn("rounded-2xl p-4 text-center", s.color)}>
             <p className="text-2xl font-black">{s.value}</p>
@@ -202,12 +261,11 @@ export default function UsersPage() {
         ))}
       </div>
 
-      {/* Create form */}
       {showForm && targetRole && targetCfg && (
         <div className="rounded-2xl border border-primary/20 bg-white p-6 shadow-sm">
           <h2 className="mb-5 flex items-center gap-2 text-lg font-bold text-slate-700">
             <TargetIcon className="h-5 w-5 text-primary" />
-            إنشاء حساب {targetCfg.label} جديد
+            {targetRole === "assistant" ? "تسجيل مساعد" : `إنشاء حساب ${targetCfg.label} جديد`}
           </h2>
 
           {msg && (
@@ -224,7 +282,6 @@ export default function UsersPage() {
             </div>
           )}
 
-          {/* Fixed role badge */}
           <div className="mb-4 flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
             <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", targetCfg.color)}>
               {targetCfg.label}
@@ -240,7 +297,7 @@ export default function UsersPage() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
-                  placeholder={targetRole === "doctor" ? "د. محمد أحمد" : "أحمد محمد"}
+                  placeholder={targetRole === "doctor" ? "د. محمد أحمد" : targetRole === "assistant" ? "سارة علي" : "أحمد محمد"}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
                 />
               </div>
@@ -253,19 +310,74 @@ export default function UsersPage() {
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
                 />
               </div>
+
+              {targetRole === "accountant" && (
+                <>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-600">
+                      الراتب الشهري <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      step="1000"
+                      value={baseSalary}
+                      onChange={(e) => setBaseSalary(e.target.value)}
+                      required
+                      placeholder="800000"
+                      dir="ltr"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-left focus:border-primary focus:outline-none"
+                    />
+                    <p className="mt-1 text-xs text-violet-600">
+                      يظهر في قائمة الرواتب ويُصرف كمصاريف عيادة
+                    </p>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-600">الوظيفة</label>
+                    <input
+                      value={jobTitle}
+                      onChange={(e) => setJobTitle(e.target.value)}
+                      placeholder="محاسب"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+                    />
+                  </div>
+                </>
+              )}
+
+              {targetRole === "assistant" && (
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-600">
+                    الطبيب المرتبط <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={doctorId}
+                    onChange={(e) => setDoctorId(e.target.value)}
+                    required
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+                  >
+                    <option value="">— اختر الطبيب —</option>
+                    {doctors.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.full_name_ar}
+                      </option>
+                    ))}
+                  </select>
+                  {doctors.length === 0 && (
+                    <p className="mt-1 text-xs text-amber-600">لا يوجد أطباء نشطون — أضف طبيباً أولاً</p>
+                  )}
+                </div>
+              )}
+
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">
-                  اسم المستخدم (للدخول)
-                </label>
+                <label className="mb-1 block text-sm font-medium text-slate-600">اسم المستخدم (للدخول)</label>
                 <input
                   value={username}
                   onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
                   required
-                  placeholder={targetRole === "doctor" ? "dr_ahmed" : "acc_sara"}
+                  placeholder={targetRole === "doctor" ? "dr_ahmed" : targetRole === "assistant" ? "asst_sara" : "acc_sara"}
                   dir="ltr"
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-left focus:border-primary focus:outline-none"
                 />
-                <p className="mt-0.5 text-xs text-slate-400">أحرف صغيرة وأرقام فقط، بدون مسافات</p>
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-600">كلمة المرور</label>
@@ -298,7 +410,10 @@ export default function UsersPage() {
                   الاسم: <strong>{fullName}</strong> ·
                   الدخول بـ: <strong dir="ltr">{username}</strong> ·
                   الدور: <strong>{targetCfg.label}</strong> ·
-                  يُوجَّه إلى: <strong>{targetRole === "doctor" ? "/doctor" : "/dashboard"}</strong>
+                  يُوجَّه إلى: <strong>{destinationForRole(targetRole)}</strong>
+                  {targetRole === "assistant" && doctorId && (
+                    <> · الطبيب: <strong>{doctors.find((d) => d.id === doctorId)?.full_name_ar}</strong></>
+                  )}
                 </p>
               </div>
             )}
@@ -306,15 +421,15 @@ export default function UsersPage() {
             <div className="flex gap-3">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || (targetRole === "assistant" && doctors.length === 0)}
                 className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-60"
               >
                 {saving && <RefreshCw className="h-4 w-4 animate-spin" />}
-                {saving ? "جارٍ الإنشاء..." : `إنشاء حساب ${targetCfg.label}`}
+                {saving ? "جارٍ الإنشاء..." : targetRole === "assistant" ? "تسجيل المساعد" : `إنشاء حساب ${targetCfg.label}`}
               </button>
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={() => { setShowForm(false); setTargetRole(null); }}
                 className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50"
               >
                 إلغاء
@@ -324,7 +439,6 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Success message outside form */}
       {msg?.ok && !showForm && (
         <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
           <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
@@ -332,7 +446,6 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Users list */}
       {loading ? (
         <div className="flex justify-center py-12">
           <RefreshCw className="h-6 w-6 animate-spin text-primary" />
@@ -341,17 +454,15 @@ export default function UsersPage() {
         <div className="space-y-2">
           {users.length === 0 && (
             <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">
-              لا يوجد مستخدمون بعد — ابدأ بإضافة{" "}
-              {callerRole === "super_admin" ? "محاسب" : "طبيب"}
+              لا يوجد مستخدمون بعد
             </div>
           )}
           {users.map((u) => {
             const cfg  = ROLE_CONFIG[u.role] ?? ROLE_CONFIG.accountant;
             const Icon = cfg.icon;
-            // Accountant can only toggle doctors, super_admin can toggle non-super_admin
             const canToggle =
               u.role !== "super_admin" &&
-              (callerRole === "super_admin" || u.role === "doctor");
+              (callerRole === "super_admin" || u.role === "doctor" || u.role === "assistant");
 
             return (
               <div
@@ -365,7 +476,7 @@ export default function UsersPage() {
                   <Icon className="h-5 w-5" />
                 </div>
 
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="font-semibold text-slate-800">{u.full_name}</p>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                     <span className={cn("rounded-full px-2 py-0.5 font-medium", cfg.color)}>

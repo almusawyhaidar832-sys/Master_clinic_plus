@@ -48,6 +48,57 @@ export function paymentReceiptMessage(params: {
 نقدّر ثقتكم بنا ونتمنى لكم دوام الصحة والعافية.`;
 }
 
+export type AppointmentUpdateAction =
+  | "accepted"
+  | "rejected"
+  | "modified"
+  | "created";
+
+/** تحديث موعد — قبول / رفض / تعديل */
+export function appointmentUpdateMessage(params: {
+  patientName: string;
+  date: string;
+  time: string;
+  endTime?: string;
+  doctorName: string;
+  clinic?: ClinicProfile | null;
+  clinicName?: string;
+  action: AppointmentUpdateAction;
+  reasonForChange?: string | null;
+}): string {
+  const clinicName =
+    params.clinicName ?? getClinicDisplayName(params.clinic ?? null);
+  const doctor = formatDoctorDisplayName(params.doctorName);
+  const timeLine = params.endTime
+    ? `${params.time} – ${params.endTime}`
+    : params.time;
+
+  const actionIntro: Record<AppointmentUpdateAction, string> = {
+    accepted: "تم تأكيد موعدكم",
+    rejected: "نعتذر — تم رفض طلب الحجز",
+    modified: "تم تعديل موعدكم",
+    created: "تم تسجيل موعدكم",
+  };
+
+  let body = `مرحباً ${params.patientName}،
+
+${actionIntro[params.action]} في ${clinicName} مع ${doctor}:
+📅 التاريخ: ${params.date}
+🕐 الوقت: ${timeLine}`;
+
+  if (params.reasonForChange?.trim()) {
+    body += `\n\n📝 سبب التغيير: ${params.reasonForChange.trim()}`;
+  }
+
+  if (params.action === "rejected") {
+    body += "\n\nللاستفسار أو حجز موعد آخر يرجى الرد على هذه الرسالة.";
+  } else {
+    body += "\n\nنتطلع لرؤيتكم. للاستفسار يرجى الرد على هذه الرسالة.";
+  }
+
+  return body;
+}
+
 /** رسالة تجريبية — اختبار ربط WhatsApp API */
 export function testNotificationMessage(clinicName: string): string {
   return `🔔 رسالة تجريبية من ${clinicName}

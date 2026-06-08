@@ -126,8 +126,11 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
 
   const displayName = clinic.nameAr || clinic.name;
 
+  const inputMobile =
+    "min-h-[3rem] text-base sm:text-sm touch-target";
+
   return (
-    <div className="mx-auto w-full max-w-lg">
+    <div className="mx-auto w-full max-w-lg pb-4">
       <Link
         href="/booking"
         className="mb-4 inline-flex items-center gap-1 text-sm text-slate-muted hover:text-teal-600"
@@ -178,7 +181,7 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
       ) : (
         <form
           onSubmit={handleSubmit}
-          className="space-y-4 rounded-xl border border-slate-200/80 bg-surface-card p-5 shadow-sm"
+          className="space-y-4 rounded-xl border border-slate-200/80 bg-surface-card p-4 shadow-sm sm:p-5"
         >
           <div className="flex items-center gap-2 text-slate-text">
             <Calendar className="h-5 w-5 text-teal-600" />
@@ -214,19 +217,25 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
                   onChange={(e) => setPatientName(e.target.value)}
                   placeholder="الاسم الكامل"
                   required
+                  autoComplete="name"
+                  className={inputMobile}
                 />
               </div>
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-text">
-                  رقم الهاتف (اختياري)
+                  رقم الهاتف
                 </label>
                 <Input
                   value={patientPhone}
                   onChange={(e) => setPatientPhone(e.target.value)}
                   placeholder="07xxxxxxxx"
                   dir="ltr"
-                  className="text-left"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  required
+                  className={`text-left ${inputMobile}`}
                 />
               </div>
 
@@ -240,6 +249,7 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
                   min={todayISO()}
                   onChange={(e) => setDate(e.target.value)}
                   required
+                  className={inputMobile}
                 />
               </div>
 
@@ -253,6 +263,7 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
                     required
+                    className={inputMobile}
                   />
                 </div>
                 <div>
@@ -264,6 +275,7 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
                     required
+                    className={inputMobile}
                   />
                 </div>
               </div>
@@ -276,12 +288,13 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="سبب الزيارة أو ملاحظة للعيادة"
+                  className={inputMobile}
                 />
               </div>
 
               <Button
                 type="submit"
-                className="w-full bg-teal-600 hover:bg-teal-700"
+                className="touch-target w-full bg-teal-600 py-3 text-base hover:bg-teal-700"
                 disabled={submitting || !doctorId}
               >
                 {submitting ? "جاري الحجز..." : "تأكيد الحجز"}

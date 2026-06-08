@@ -10,6 +10,7 @@ import { broadcastPatientSentToDoctor, broadcastQueueScreenRecall } from "@/lib/
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { useQueueListRefresh } from "@/hooks/useQueueListRefresh";
 import { announceArabic } from "@/lib/queue/realtime-client";
+import { TodayAppointmentsPanel } from "@/components/operations/TodayAppointmentsPanel";
 import {
   Users, Clock, CheckCircle2, UserCheck, Plus, Volume2,
   RefreshCw, Monitor, Phone, X, ChevronRight, Send, RotateCcw,
@@ -172,16 +173,28 @@ function StatCard({ label, value, icon: Icon, color }: {
 }
 
 async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...authPortalHeaders("accountant"),
-      ...init?.headers,
-    },
-  });
-  const data = (await res.json()) as T & { error?: string };
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...authPortalHeaders("accountant"),
+        ...init?.headers,
+      },
+    });
+  } catch {
+    throw new Error("تعذر الاتصال بالسيرفر — تأكد أن التطبيق يعمل");
+  }
+
+  let data: T & { error?: string };
+  try {
+    data = (await res.json()) as T & { error?: string };
+  } catch {
+    throw new Error("استجابة غير متوقعة من السيرفر");
+  }
+
   if (!res.ok) {
     throw new Error(translateDbError(data.error ?? "تعذر تنفيذ العملية"));
   }
@@ -248,6 +261,8 @@ export default function QueuePage() {
         announceArabic(`${name}، يرجى التوجه إلى عيادة ${doctorName}`);
       } else if (data.status === "in_progress") {
         announceArabic(`${name}، تفضل بالدخول إلى عيادة ${doctorName}`);
+      } else if (data.status === "done") {
+        if (clinicId) notifyQueueRefresh({ scope: "clinic", clinicId });
       }
       await fetchQueue();
     } catch (err) {
@@ -388,6 +403,8 @@ export default function QueuePage() {
       {pageError && (
         <Alert variant="error">{pageError}</Alert>
       )}
+
+      <TodayAppointmentsPanel title="حجوزات اليوم — دفع ودخول" compact onApprovedToQueue={fetchQueue} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>

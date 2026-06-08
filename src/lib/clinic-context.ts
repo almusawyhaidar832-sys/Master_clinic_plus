@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Doctor, Profile } from "@/types";
+import type { Assistant, Doctor, Profile } from "@/types";
 import { fetchDeveloperActingClinic } from "@/lib/auth/developer-acting-clinic";
 import type { ActiveClinicResult } from "@/lib/clinic-types";
 import { getCurrentUser } from "@/lib/supabase/auth-helpers";
@@ -43,6 +43,29 @@ export async function getDoctorForCurrentUser(
   const { data } = await query.maybeSingle();
 
   return data as Doctor | null;
+}
+
+export async function getAssistantForCurrentUser(
+  supabase: SupabaseClient
+): Promise<Assistant | null> {
+  const user = await getCurrentUser(supabase);
+  if (!user) return null;
+
+  const profile = await getAuthProfile(supabase);
+  if (profile?.role !== "assistant") return null;
+
+  let query = supabase
+    .from("assistants")
+    .select("*")
+    .eq("profile_id", user.id)
+    .eq("is_active", true);
+
+  if (profile.clinic_id) {
+    query = query.eq("clinic_id", profile.clinic_id);
+  }
+
+  const { data } = await query.maybeSingle();
+  return data as Assistant | null;
 }
 
 /** Returns profile.clinic_id only (no fallback) */

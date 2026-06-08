@@ -12,11 +12,13 @@ import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import {
   fetchPaidSalariesForDisplay,
   fetchPaidSalariesForProfitDeduction,
+  fetchPayrollAccrualsForProfitDeduction,
   fetchReviewFeesInPeriod,
   fetchPeriodVisitorDebt,
   mergeExecutiveDashboardMetrics,
   type ExecutiveSnapshotCore,
 } from "@/lib/services/executive-snapshot";
+import { CLINIC_PROFIT_REFRESH_EVENT } from "@/lib/services/clinic-profit";
 import { cn, localDateISO, todayISO } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, Minus,
@@ -325,8 +327,15 @@ export function ExecutiveDashboard() {
     setLoading(true);
     const { from, to } = getRange();
 
-    const [snapRes, topRes, salariesDisplay, salariesDeducted, reviewFees, visitorDebt] =
-      await Promise.all([
+    const [
+      snapRes,
+      topRes,
+      salariesDisplay,
+      salariesPaidLegacy,
+      payrollAccruals,
+      reviewFees,
+      visitorDebt,
+    ] = await Promise.all([
       supabase.rpc("get_clinic_financial_snapshot", {
         p_clinic_id: clinicId, p_from: from, p_to: to,
       }),
@@ -337,9 +346,13 @@ export function ExecutiveDashboard() {
       }),
       fetchPaidSalariesForDisplay(supabase, clinicId, from, to),
       fetchPaidSalariesForProfitDeduction(supabase, clinicId, from, to),
+      fetchPayrollAccrualsForProfitDeduction(supabase, clinicId, from, to),
       fetchReviewFeesInPeriod(supabase, clinicId, from, to),
       fetchPeriodVisitorDebt(supabase, clinicId, from, to),
     ]);
+
+    const salariesDeducted =
+      payrollAccruals > 0 ? payrollAccruals : salariesPaidLegacy;
 
     const baseSnap: Snapshot = snapRes.data
       ? (mergeExecutiveDashboardMetrics(
@@ -393,6 +406,13 @@ export function ExecutiveDashboard() {
     }
     fetchData();
   }, [fetchData, clinicLoading, clinicId]);
+
+  useEffect(() => {
+    const onRefresh = () => void fetchData();
+    window.addEventListener(CLINIC_PROFIT_REFRESH_EVENT, onRefresh);
+    return () =>
+      window.removeEventListener(CLINIC_PROFIT_REFRESH_EVENT, onRefresh);
+  }, [fetchData]);
 
   const PERIODS = [
     { key: "today" as Period, label: "اليوم"    },

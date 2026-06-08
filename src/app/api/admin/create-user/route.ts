@@ -11,6 +11,7 @@ import {
   buildDoctorPaymentFields,
   insertDoctorRow,
 } from "@/lib/services/doctor-row-write";
+import { upsertAccountantStaffRow } from "@/lib/services/accountant-payroll-sync";
 
 /**
  * POST /api/admin/create-user
@@ -21,7 +22,8 @@ import {
  *
  * Body: { full_name, password, role, phone?, username?, clinic_id?,
  *         specialty_ar?, percentage?, materials_share? }
- *   role: "accountant" | "doctor"
+ *   role: "accountant" | "doctor" | "assistant"
+ *   doctor_id?: string (required when role = assistant)
  */
 export async function POST(req: NextRequest) {
   try {
@@ -63,10 +65,15 @@ export async function POST(req: NextRequest) {
       materials_share = "0",
       payment_type = "percentage",
       salary_amount = 0,
+      doctor_id = null,
+      total_salary = 0,
+      doctor_share_percentage = 0,
+      base_salary = 0,
+      job_title = "محاسب",
     } = body as {
       full_name:  string;
       password:   string;
-      role:       "accountant" | "doctor";
+      role:       "accountant" | "doctor" | "assistant";
       phone?:     string | null;
       username?:  string | null;
       clinic_id?: string | null;
@@ -75,12 +82,20 @@ export async function POST(req: NextRequest) {
       materials_share?: string;
       payment_type?: string;
       salary_amount?: number;
+      doctor_id?: string | null;
+      total_salary?: number;
+      doctor_share_percentage?: number;
+      base_salary?: number;
+      job_title?: string;
     };
     if (!full_name?.trim() || !password || !role) {
       return NextResponse.json({ error: "الاسم وكلمة المرور والدور مطلوبة" }, { status: 400 });
     }
-    if (!["accountant", "doctor"].includes(role)) {
-      return NextResponse.json({ error: "الدور يجب أن يكون accountant أو doctor" }, { status: 400 });
+    if (!["accountant", "doctor", "assistant"].includes(role)) {
+      return NextResponse.json(
+        { error: "الدور يجب أن يكون accountant أو doctor أو assistant" },
+        { status: 400 }
+      );
     }
     if (password.length < 6) {
       return NextResponse.json({ error: "كلمة المرور 6 أحرف على الأقل" }, { status: 400 });
@@ -103,8 +118,28 @@ export async function POST(req: NextRequest) {
     if (callerProfile.role === "super_admin" && role !== "accountant") {
       return NextResponse.json({ error: "المدير يمكنه إضافة محاسبين فقط" }, { status: 403 });
     }
-    if (callerProfile.role === "accountant" && role !== "doctor") {
-      return NextResponse.json({ error: "المحاسب يمكنه إضافة أطباء فقط" }, { status: 403 });
+    if (callerProfile.role === "accountant" && !["doctor", "assistant"].includes(role)) {
+      return NextResponse.json(
+        { error: "المحاسب يمكنه إضافة أطباء أو مساعدين فقط" },
+        { status: 403 }
+      );
+    }
+
+    if (role === "accountant") {
+      const accSalary = Number(base_salary);
+      if (!Number.isFinite(accSalary) || accSalary <= 0) {
+        return NextResponse.json(
+          { error: "أدخل الراتب الشهري للمحاسب" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (role === "assistant" && !doctor_id) {
+      return NextResponse.json(
+        { error: "يجب اختيار الطبيب المرتبط بالمساعد" },
+        { status: 400 }
+      );
     }
 
     // ── Step 6: resolve clinic_id ──────────────────────────────────────────
@@ -126,6 +161,23 @@ export async function POST(req: NextRequest) {
         { error: "لا توجد عيادة في النظام — أنشئ عيادة أولاً" },
         { status: 400 }
       );
+    }
+
+    if (role === "assistant") {
+      const { data: linkedDoctor } = await admin
+        .from("doctors")
+        .select("id, clinic_id")
+        .eq("id", doctor_id)
+        .eq("clinic_id", clinic_id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (!linkedDoctor) {
+        return NextResponse.json(
+          { error: "الطبيب المختار غير موجود في عيادتك" },
+          { status: 400 }
+        );
+      }
     }
 
     // ── Step 7: build auth email (must match login resolver) ───────────────
@@ -162,6 +214,11 @@ export async function POST(req: NextRequest) {
 
     // ── Step 9: insert profile ─────────────────────────────────────────────
     // Build profile object — include username only if column exists
+    const accSalary =
+      role === "accountant" ? Math.max(0, Number(base_salary) || 0) : 0;
+    const accJob =
+      role === "accountant" ? (job_title || "محاسب").trim() : null;
+
     const profilePayload: Record<string, unknown> = {
       id:        authData.user.id,
       clinic_id,
@@ -170,6 +227,11 @@ export async function POST(req: NextRequest) {
       phone:     phone ?? null,
       is_active: true,
     };
+
+    if (role === "accountant") {
+      profilePayload.base_salary = accSalary;
+      profilePayload.job_title = accJob;
+    }
 
     // Try with username first; retry without if column doesn't exist
     const { error: profileErr } = await admin
@@ -238,6 +300,53 @@ export async function POST(req: NextRequest) {
         await admin.from("profiles").delete().eq("id", authData.user.id);
         return NextResponse.json(
           { error: `تعذر حفظ بيانات الطبيب: ${doctorErrMsg}` },
+          { status: 500 }
+        );
+      }
+    }
+
+    if (role === "accountant") {
+      const staffResult = await upsertAccountantStaffRow(admin, {
+        clinicId: clinic_id,
+        profileId: authData.user.id,
+        fullName: full_name.trim(),
+        baseSalary: accSalary,
+        jobTitle: accJob ?? "محاسب",
+      });
+
+      if ("error" in staffResult) {
+        await getAuthAdmin(admin).deleteUser(authData.user.id);
+        await admin.from("profiles").delete().eq("id", authData.user.id);
+        return NextResponse.json(
+          { error: `تعذر ربط المحاسب بقائمة الرواتب: ${staffResult.error}` },
+          { status: 500 }
+        );
+      }
+    }
+
+    if (role === "assistant") {
+      const assistantTotalSalary = Math.max(0, Number(total_salary) || 0);
+      const assistantDoctorShare = Math.min(
+        100,
+        Math.max(0, Number(doctor_share_percentage) || 0)
+      );
+
+      const { error: assistantErr } = await admin.from("assistants").insert({
+        clinic_id,
+        doctor_id: doctor_id!,
+        profile_id: authData.user.id,
+        full_name_ar: full_name.trim(),
+        phone: phone ?? null,
+        is_active: true,
+        total_salary: assistantTotalSalary,
+        doctor_share_percentage: assistantDoctorShare,
+      });
+
+      if (assistantErr) {
+        await getAuthAdmin(admin).deleteUser(authData.user.id);
+        await admin.from("profiles").delete().eq("id", authData.user.id);
+        return NextResponse.json(
+          { error: `تعذر ربط المساعد بالطبيب: ${assistantErr.message}` },
           { status: 500 }
         );
       }

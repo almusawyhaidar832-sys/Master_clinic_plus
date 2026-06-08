@@ -27,6 +27,7 @@ export default function WithdrawalsPage() {
   const [cashAmount, setCashAmount] = useState("");
   const [cashNotes, setCashNotes] = useState("");
   const [walletPreview, setWalletPreview] = useState<number | null>(null);
+  const [walletIsDebtor, setWalletIsDebtor] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [canManage, setCanManage] = useState(false);
@@ -66,11 +67,13 @@ export default function WithdrawalsPage() {
     async function preview() {
       if (!cashDoctorId) {
         setWalletPreview(null);
+        setWalletIsDebtor(false);
         return;
       }
       const supabase = createClient();
       const stats = await fetchDoctorWalletStats(supabase, cashDoctorId);
       setWalletPreview(stats.availableBalance);
+      setWalletIsDebtor(stats.isDebtor);
     }
     preview();
   }, [cashDoctorId]);
@@ -217,11 +220,28 @@ export default function WithdrawalsPage() {
               required
             />
             {walletPreview !== null && cashDoctorId && (
-              <div className="sm:col-span-2 rounded-lg bg-primary/5 p-3 text-sm">
+              <div
+                className={`sm:col-span-2 rounded-lg p-3 text-sm ${
+                  walletIsDebtor ? "bg-red-50" : "bg-primary/5"
+                }`}
+              >
                 <span className="text-slate-muted">الرصيد المتاح: </span>
-                <span className="font-bold text-primary">
-                  {formatCurrency(walletPreview)}
+                <span
+                  className={`font-bold tabular-nums ${
+                    walletIsDebtor ? "text-red-600" : "text-primary"
+                  }`}
+                >
+                  {walletIsDebtor ? "−" : ""}
+                  {formatCurrency(Math.abs(walletPreview))}
+                  {walletIsDebtor && (
+                    <span className="mr-1 text-xs font-bold">(مدين)</span>
+                  )}
                 </span>
+                {walletIsDebtor && (
+                  <p className="mt-1 text-xs text-red-600">
+                    لا يمكن سحب مبلغ — الطبيب مدين للعيادة
+                  </p>
+                )}
               </div>
             )}
             <Input
@@ -231,8 +251,15 @@ export default function WithdrawalsPage() {
               className="sm:col-span-2"
             />
             <div className="sm:col-span-2">
-              <Button type="submit" disabled={loading}>
-                {loading ? "جاري التسجيل..." : "تسجيل دفع نقدي (يخصم فوراً)"}
+              <Button
+                type="submit"
+                disabled={loading || walletIsDebtor || (walletPreview ?? 0) <= 0}
+              >
+                {loading
+                  ? "جاري التسجيل..."
+                  : walletIsDebtor
+                    ? "لا يمكن السحب — الطبيب مدين"
+                    : "تسجيل دفع نقدي (يخصم فوراً)"}
               </Button>
             </div>
           </form>

@@ -15,6 +15,7 @@ import {
   speakQueueScreenAnnouncement,
   warmUpSpeechVoices,
 } from "@/lib/queue/queue-screen-voice";
+import { playAttentionBeep } from "@/lib/queue/web-speech";
 import { cn } from "@/lib/utils";
 import { Volume2, Clock, CheckCircle2, Monitor, Copy, RotateCcw } from "lucide-react";
 
@@ -106,6 +107,7 @@ function QueueScreenContent() {
 
   const voiceEnabledRef = useRef(true);
   const prevCalledRef = useRef<Set<string>>(new Set());
+  const prevWaitingRef = useRef<Set<string>>(new Set());
   const queueReadyRef = useRef(false);
 
   useEffect(() => {
@@ -164,6 +166,10 @@ function QueueScreenContent() {
         (r) => !prevCalledRef.current.has(r.id) && r.status === "called"
       );
 
+      const newlyWaiting = waitingRows.filter(
+        (r) => !prevWaitingRef.current.has(r.id)
+      );
+
       if (queueReadyRef.current) {
         for (const entry of newlyCalled) {
           speakQueueScreenAnnouncement(
@@ -172,9 +178,13 @@ function QueueScreenContent() {
             voiceEnabledRef.current
           );
         }
+        if (newlyWaiting.length > 0) {
+          void playAttentionBeep();
+        }
       }
 
       prevCalledRef.current = new Set(calledRows.map((r) => r.id));
+      prevWaitingRef.current = new Set(waitingRows.map((r) => r.id));
       queueReadyRef.current = true;
 
       setCalled(calledRows);
@@ -207,12 +217,36 @@ function QueueScreenContent() {
           );
         }
       })
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "patient_queue",
+          filter: `clinic_id=eq.${clinicId}`,
+        },
+        () => {
+          void fetchQueue();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "appointments",
+          filter: `clinic_id=eq.${clinicId}`,
+        },
+        () => {
+          void fetchQueue();
+        }
+      )
       .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [clinicId]);
+  }, [clinicId, fetchQueue]);
 
   function handleClinicResolved(id: string) {
     setClinicId(id);

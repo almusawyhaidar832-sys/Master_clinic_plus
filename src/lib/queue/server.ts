@@ -184,6 +184,8 @@ export async function insertQueueEntry(input: {
   patient_name?: string | null;
   patient_phone?: string | null;
   patient_id?: string | null;
+  appointment_id?: string | null;
+  source?: "walk_in" | "appointment" | "online";
   send_to_doctor?: boolean;
 }) {
   const admin = getAdminClient();
@@ -197,9 +199,10 @@ export async function insertQueueEntry(input: {
       patient_name: input.patient_name?.trim() || null,
       patient_phone: input.patient_phone?.trim() || null,
       patient_id: input.patient_id ?? null,
+      appointment_id: input.appointment_id ?? null,
       queue_date: today,
       status: "waiting",
-      source: "walk_in",
+      source: input.source ?? "walk_in",
       sent_to_doctor_at: input.send_to_doctor ? new Date().toISOString() : null,
     })
     .select("id")
@@ -231,8 +234,11 @@ export async function updateQueueStatus(
   if (opts?.clinicId) query = query.eq("clinic_id", opts.clinicId);
   if (opts?.doctorId) query = query.eq("doctor_id", opts.doctorId);
 
-  const { error } = await query;
+  const { data, error } = await query.select("id").maybeSingle();
   if (error) throw new Error(error.message);
+  if (!data) {
+    throw new Error("لم يتم تحديث الدور — تحقق من الصلاحيات أو حالة المراجع");
+  }
 }
 
 export async function getDoctorByProfileId(profileId: string) {

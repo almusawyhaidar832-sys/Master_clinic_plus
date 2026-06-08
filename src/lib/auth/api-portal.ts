@@ -37,6 +37,10 @@ export function isApiDoctorRole(role: string | null | undefined): boolean {
   return normalizeRole(role) === "doctor";
 }
 
+export function isApiAssistantRole(role: string | null | undefined): boolean {
+  return normalizeRole(role) === "assistant";
+}
+
 /** Headers for client fetch — pin the correct portal session on API routes */
 export function authPortalHeaders(
   portal: AuthPortalId

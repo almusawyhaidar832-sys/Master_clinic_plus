@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { translateDbError } from "@/lib/db-errors";
 import {
   computeWalletStats,
+  fetchDoctorExpenseDeductionsTotal,
+  fetchDoctorPayrollDeductionsTotal,
   fetchDoctorTotalEarnings,
 } from "@/lib/services/doctor-wallet";
 
@@ -18,16 +20,22 @@ export async function computeDoctorWalletBreakdown(
   admin: SupabaseClient,
   doctorId: string
 ) {
-  const [totalEarnings, wdsRes] = await Promise.all([
-    fetchDoctorTotalEarnings(admin, doctorId),
-    admin
-      .from("doctor_withdrawals")
-      .select("amount, status")
-      .eq("doctor_id", doctorId)
-      .neq("status", "rejected"),
-  ]);
+  const [totalEarnings, wdsRes, expenseDeductions, payrollDeductions] =
+    await Promise.all([
+      fetchDoctorTotalEarnings(admin, doctorId),
+      admin
+        .from("doctor_withdrawals")
+        .select("amount, status")
+        .eq("doctor_id", doctorId)
+        .neq("status", "rejected"),
+      fetchDoctorExpenseDeductionsTotal(admin, doctorId),
+      fetchDoctorPayrollDeductionsTotal(admin, doctorId),
+    ]);
 
-  return computeWalletStats(totalEarnings, wdsRes.data ?? []);
+  return computeWalletStats(totalEarnings, wdsRes.data ?? [], {
+    expenseDeductions,
+    payrollDeductions,
+  });
 }
 
 /** @deprecated use computeDoctorWithdrawableLimit */

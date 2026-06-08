@@ -10,6 +10,7 @@ import {
   updateQueueStatus,
   type QueueStatus,
 } from "@/lib/queue/server";
+import { syncAppointmentFromQueueStatus } from "@/lib/services/appointment-queue-sync";
 
 const NEXT_STATUS: Partial<Record<QueueStatus, QueueStatus>> = {
   waiting: "called",
@@ -19,6 +20,18 @@ const NEXT_STATUS: Partial<Record<QueueStatus, QueueStatus>> = {
 
 function staffRolesOk(role: string) {
   return isApiStaffRole(role);
+}
+
+async function updateQueueAndSync(
+  admin: ReturnType<typeof getAdminClient>,
+  queueEntryId: string,
+  status: QueueStatus,
+  opts?: { clinicId?: string; doctorId?: string }
+) {
+  await updateQueueStatus(queueEntryId, status, opts);
+  await syncAppointmentFromQueueStatus(admin, queueEntryId, status).catch((err) => {
+    console.error("[api/queue] appointment sync failed:", err);
+  });
 }
 
 /** PATCH — advance status or cancel */
@@ -44,7 +57,7 @@ export async function PATCH(
       if (!staffRolesOk(role)) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
-      await updateQueueStatus(id, "cancelled", { clinicId: profile.clinic_id });
+      await updateQueueAndSync(admin, id, "cancelled", { clinicId: profile.clinic_id });
       return NextResponse.json({ success: true });
     }
 
@@ -56,7 +69,7 @@ export async function PATCH(
       if (!doctor) {
         return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
       }
-      await updateQueueStatus(id, "in_progress", { doctorId: doctor.id });
+      await updateQueueAndSync(admin, id, "in_progress", { doctorId: doctor.id });
       return NextResponse.json({ success: true });
     }
 
@@ -87,7 +100,7 @@ export async function PATCH(
       return NextResponse.json({ error: "لا يمكن تقديم هذا الدور" }, { status: 400 });
     }
 
-    await updateQueueStatus(id, next, {
+    await updateQueueAndSync(admin, id, next, {
       clinicId: profile.clinic_id,
       doctorId: role === "doctor" ? entry.doctor_id : undefined,
     });
