@@ -21,20 +21,21 @@ import type { Doctor } from "@/types";
 
 interface TransferDoctorPanelProps {
   patientId: string;
+  clinicId: string;
   treatmentCases: PatientTreatmentCase[];
-  doctors: Doctor[];
   onTransferred?: (caseId: string, doctor: PatientPrimaryDoctor) => void;
 }
 
 export function TransferDoctorPanel({
   patientId,
+  clinicId,
   treatmentCases,
-  doctors,
   onTransferred,
 }: TransferDoctorPanelProps) {
   const [casesWithDoctors, setCasesWithDoctors] = useState<CaseWithDoctor[]>(
     []
   );
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [history, setHistory] = useState<DoctorTransferRecord[]>([]);
   const [open, setOpen] = useState(false);
   const [selectedCaseId, setSelectedCaseId] = useState("");
@@ -45,13 +46,25 @@ export function TransferDoctorPanel({
 
   const load = useCallback(async () => {
     const supabase = createClient();
-    const [caseRows, hist] = await Promise.all([
+
+    const [caseRows, hist, docRes] = await Promise.all([
       fetchCasesWithDoctors(supabase, patientId, treatmentCases),
       fetchPatientTransferHistory(supabase, patientId, 8),
+      supabase
+        .from("doctors")
+        .select("*")
+        .eq("clinic_id", clinicId)
+        .order("full_name_ar"),
     ]);
     setCasesWithDoctors(caseRows);
     setHistory(hist);
-  }, [patientId, treatmentCases]);
+    if (docRes.error) {
+      setError(translateDbError(docRes.error.message));
+      setDoctors([]);
+      return;
+    }
+    setDoctors((docRes.data as Doctor[]) ?? []);
+  }, [patientId, clinicId, treatmentCases]);
 
   useEffect(() => {
     void load();
@@ -151,8 +164,11 @@ export function TransferDoctorPanel({
             setOpen((v) => !v);
             setError(null);
             setSuccess(null);
-            if (!open && !selectedCaseId && casesWithDoctors[0]) {
-              setSelectedCaseId(casesWithDoctors[0].caseId);
+            if (!open) {
+              void load();
+              if (!selectedCaseId && casesWithDoctors[0]) {
+                setSelectedCaseId(casesWithDoctors[0].caseId);
+              }
             }
           }}
         >
@@ -203,6 +219,13 @@ export function TransferDoctorPanel({
             options={doctorOptions}
             disabled={!selectedCaseId}
           />
+          <p className="text-[11px] text-slate-muted">
+            {doctorOptions.length > 0
+              ? `${doctorOptions.length} طبيب متاح للتحويل`
+              : doctors.length > 0
+                ? "كل الأطباء في العيادة هم الطبيب الحالي لهذه الحالة"
+                : "لا يوجد أطباء مسجلون في عيادة هذا المريض"}
+          </p>
 
           <div className="flex gap-2">
             <Button

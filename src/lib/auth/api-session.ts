@@ -1,13 +1,24 @@
 import { cookies } from "next/headers";
-import { createServerAuthClientFromAnySession } from "@/lib/supabase/create-auth-client";
+import {
+  createServerAuthClientFromAnySession,
+  createServerAuthClient,
+} from "@/lib/supabase/create-auth-client";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/supabase/auth-helpers";
+import { resolvePortalFromRequest } from "@/lib/auth/api-portal";
 
-export async function createApiSessionClient() {
+type CookieStore = {
+  getAll: () => { name: string; value: string }[];
+  setAll: (
+    cookiesToSet: { name: string; value: string; options?: object }[]
+  ) => void;
+};
+
+async function getCookieStore(): Promise<CookieStore> {
   const cookieStore = await cookies();
-  return createServerAuthClientFromAnySession({
+  return {
     getAll: () => cookieStore.getAll(),
-    setAll: (cookiesToSet: { name: string; value: string; options?: object }[]) => {
+    setAll: (cookiesToSet) => {
       try {
         cookiesToSet.forEach(({ name, value, options }) =>
           cookieStore.set(name, value, options)
@@ -16,19 +27,32 @@ export async function createApiSessionClient() {
         // ignore
       }
     },
-  });
+  };
 }
 
-export async function getApiSessionUser() {
-  const supabase = await createApiSessionClient();
+export async function createApiSessionClient(req?: Request) {
+  const store = await getCookieStore();
+  const portalId = resolvePortalFromRequest(req);
+
+  if (portalId) {
+    const client = createServerAuthClient(store, portalId);
+    const user = await getCurrentUser(client);
+    if (user) return client;
+  }
+
+  return createServerAuthClientFromAnySession(store);
+}
+
+export async function getApiSessionUser(req?: Request) {
+  const supabase = await createApiSessionClient(req);
   return getCurrentUser(supabase);
 }
 
-export async function getApiCallerProfile() {
-  const user = await getApiSessionUser();
+export async function getApiCallerProfile(req?: Request) {
+  const user = await getApiSessionUser(req);
   if (!user) return null;
 
-  const supabase = await createApiSessionClient();
+  const supabase = await createApiSessionClient(req);
   const admin = getAdminClient();
 
   let { data: profile } = await admin
@@ -49,3 +73,10 @@ export async function getApiCallerProfile() {
 
   return profile;
 }
+
+export {
+  authPortalHeaders,
+  isApiDoctorRole,
+  isApiStaffRole,
+  resolvePortalFromRequest,
+} from "@/lib/auth/api-portal";

@@ -4,6 +4,7 @@ import type { ClinicProfile } from "@/types/clinic-profile";
 import type { Doctor } from "@/types";
 import { ClinicBrandingHeader } from "./ClinicBrandingHeader";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
+import { doctorPaymentLabel, isSalaryDoctor } from "@/lib/services/doctor-payment";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface DoctorPayoutStatementProps {
@@ -47,13 +48,15 @@ export function DoctorPayoutStatement({
         profile={clinic}
         title="كشف حساب طبيب — مستحقات وسحوبات"
         subtitle={formatDoctorDisplayName(doctor.full_name_ar)}
-        meta={`التخصص: ${doctor.specialty_ar || "—"} — نسبة ${doctor.percentage}%`}
+        meta={`التخصص: ${doctor.specialty_ar || "—"} — ${doctorPaymentLabel(doctor)}`}
         size="lg"
       />
 
       <div className="mb-6 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
         <div className="rounded-lg bg-surface p-2 text-center">
-          <p className="text-xs text-slate-muted">إجمالي المستحق</p>
+          <p className="text-xs text-slate-muted">
+            {isSalaryDoctor(doctor) ? "الراتب الشهري" : "إجمالي المستحق"}
+          </p>
           <p className="font-bold">{formatCurrency(summary.totalEarned)}</p>
         </div>
         <div className="rounded-lg bg-surface p-2 text-center">
@@ -76,8 +79,17 @@ export function DoctorPayoutStatement({
 
       <section className="mb-6">
         <h3 className="mb-2 text-sm font-bold">
-          عمليات {formatDoctorDisplayName(doctor.full_name_ar)}
+          {isSalaryDoctor(doctor)
+            ? `ملخص ${formatDoctorDisplayName(doctor.full_name_ar)} — راتب ثابت`
+            : `عمليات ${formatDoctorDisplayName(doctor.full_name_ar)}`}
         </h3>
+        {isSalaryDoctor(doctor) ? (
+          <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-slate-text">
+            هذا الطبيب على نظام <strong>راتب ثابت شهري</strong> بقيمة{" "}
+            <strong>{formatCurrency(doctor.salary_amount ?? 0)}</strong> — لا
+            تُحسب له حصة من الجلسات في التقرير الشهري.
+          </p>
+        ) : (
         <table className="w-full text-xs sm:text-sm">
           <thead>
             <tr className="border-b text-right text-slate-muted">
@@ -102,6 +114,7 @@ export function DoctorPayoutStatement({
             ))}
           </tbody>
         </table>
+        )}
       </section>
 
       {withdrawals.length > 0 && (

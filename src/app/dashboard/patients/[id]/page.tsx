@@ -27,7 +27,7 @@ import { getActiveClinicId } from "@/lib/clinic-context";
 import { PatientSessionsByCase } from "@/components/patients/PatientSessionsByCase";
 import { fetchPatientClinicalRecords } from "@/lib/clinical/fetch-patient-clinical";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
-import type { Doctor, Patient, PatientOperation } from "@/types";
+import type { Patient, PatientOperation } from "@/types";
 import { getPatientDisplayPhone } from "@/lib/phone";
 import { TransferDoctorPanel } from "@/components/patients/TransferDoctorPanel";
 import type { PatientPrimaryDoctor } from "@/lib/services/patient-primary-doctor";
@@ -50,7 +50,6 @@ export default function PatientProfilePage() {
   );
   const sessionFormRef = useRef<HTMLDivElement>(null);
   const continueFormRef = useRef<HTMLDivElement>(null);
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [caseDoctorKeys, setCaseDoctorKeys] = useState<Record<string, string>>(
     {}
   );
@@ -147,22 +146,12 @@ export default function PatientProfilePage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const clinic = await getActiveClinicId(supabase);
       const { data: pRes } = await supabase
         .from("patients")
         .select("*")
         .eq("id", id)
         .maybeSingle();
       if (pRes) setPatient(pRes as Patient);
-      if (clinic?.clinicId) {
-        const { data: docRows } = await supabase
-          .from("doctors")
-          .select("*")
-          .eq("clinic_id", clinic.clinicId)
-          .eq("is_active", true)
-          .order("full_name_ar");
-        if (docRows) setDoctors(docRows as Doctor[]);
-      }
       await Promise.all([loadOperations(), loadTreatmentCases()]);
     }
     if (id) load();
@@ -277,8 +266,8 @@ export default function PatientProfilePage() {
         <div className="px-4 pb-4">
           <TransferDoctorPanel
             patientId={id}
+            clinicId={patient.clinic_id}
             treatmentCases={treatmentCases}
-            doctors={doctors}
             onTransferred={handleDoctorTransferred}
           />
         </div>

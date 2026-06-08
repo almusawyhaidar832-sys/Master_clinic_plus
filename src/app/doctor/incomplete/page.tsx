@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { fetchOpenTreatmentCasesForDoctor } from "@/lib/services/patient-treatment-cases";
 import { formatCurrency } from "@/lib/utils";
 import { AlertCircle } from "lucide-react";
@@ -16,7 +17,13 @@ export default function IncompleteTreatmentsPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const open = await fetchOpenTreatmentCasesForDoctor(supabase);
+      const doctor = await getDoctorForCurrentUser(supabase);
+      if (!doctor) {
+        setItems([]);
+        setLoading(false);
+        return;
+      }
+      const open = await fetchOpenTreatmentCasesForDoctor(supabase, doctor.id);
       setItems(open);
       setLoading(false);
     }

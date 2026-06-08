@@ -10,10 +10,10 @@ export type StaffAdminContext = {
   clinicId: string | null;
 };
 
-export async function requireStaffAdmin(): Promise<
-  StaffAdminContext | { error: string; status: number }
-> {
-  const profile = await getApiCallerProfile();
+export async function requireStaffAdmin(
+  req?: Request
+): Promise<StaffAdminContext | { error: string; status: number }> {
+  const profile = await getApiCallerProfile(req);
   if (!profile) {
     return { error: "يجب تسجيل الدخول أولاً", status: 401 };
   }

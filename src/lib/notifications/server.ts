@@ -6,7 +6,7 @@ function adminClient() {
 }
 
 /** Resolve doctor login profile even if doctors.profile_id is missing */
-async function resolveDoctorProfileId(
+export async function resolveDoctorProfileId(
   admin: ReturnType<typeof adminClient>,
   doctorId: string,
   clinicId: string
@@ -41,7 +41,7 @@ async function resolveDoctorProfileId(
   return null;
 }
 
-async function insertNotifications(
+export async function insertNotifications(
   rows: {
     clinic_id: string;
     recipient_profile_id: string;

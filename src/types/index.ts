@@ -12,6 +12,8 @@ export type DoctorPercentage =
 
 export type MaterialsCostShare = "0" | "10" | "20" | "30" | "40" | "50";
 
+export type DoctorPaymentType = "percentage" | "salary";
+
 export type WithdrawalStatus = "pending" | "approved" | "paid" | "rejected";
 export type WithdrawalSource = "doctor_request" | "accountant_cash";
 export type AppointmentStatus =
@@ -56,6 +58,8 @@ export interface Doctor {
   phone: string | null;
   percentage: DoctorPercentage;
   materials_share: MaterialsCostShare;
+  payment_type?: DoctorPaymentType;
+  salary_amount?: number;
   is_active: boolean;
 }
 

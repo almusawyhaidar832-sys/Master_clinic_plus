@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { assignPrimaryDoctorForSession } from "@/lib/services/patient-primary-doctor";
 import {
   createTreatmentCase,
   fetchPatientTreatmentCasesDirect,
@@ -9,7 +10,7 @@ import {
 /** GET — كل حالات المريض (يتجاوز RLS — يظهر الحالات الجديدة في ملخص الحالات) */
 export async function GET(req: NextRequest) {
   try {
-    const profile = await getApiCallerProfile();
+    const profile = await getApiCallerProfile(req);
     if (!profile?.clinic_id) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
     }
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest) {
 /** POST — إنشاء حالة علاج جديدة (يتجاوز RLS من المتصفح) */
 export async function POST(req: NextRequest) {
   try {
-    const profile = await getApiCallerProfile();
+    const profile = await getApiCallerProfile(req);
     if (!profile?.clinic_id) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
     }
@@ -75,6 +76,7 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as Record<string, unknown>;
     const patientId = String(body.patientId ?? "").trim();
     const treatmentName = String(body.treatmentName ?? "").trim();
+    const doctorId = String(body.doctorId ?? "").trim();
     const casePrice = Number(body.casePrice);
     const discount = Number(body.discount ?? 0);
     const paid = Number(body.paid ?? 0);
@@ -86,6 +88,9 @@ export async function POST(req: NextRequest) {
         { error: "معرّف المريض واسم العلاج مطلوبان" },
         { status: 400 }
       );
+    }
+    if (!doctorId) {
+      return NextResponse.json({ error: "اختر الطبيب للحالة" }, { status: 400 });
     }
     if (!Number.isFinite(casePrice) || casePrice <= 0) {
       return NextResponse.json(
@@ -105,6 +110,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "المريض غير موجود" }, { status: 404 });
     }
 
+    const { data: doctor } = await admin
+      .from("doctors")
+      .select("id, clinic_id")
+      .eq("id", doctorId)
+      .maybeSingle();
+
+    if (!doctor || doctor.clinic_id !== profile.clinic_id) {
+      return NextResponse.json(
+        { error: "الطبيب غير موجود في هذه العيادة" },
+        { status: 400 }
+      );
+    }
+
     const created = await createTreatmentCase(admin, {
       patientId,
       clinicId: profile.clinic_id,
@@ -114,6 +132,7 @@ export async function POST(req: NextRequest) {
       paid: Number.isFinite(paid) ? paid : 0,
       doctorShare: Number.isFinite(doctorShare) ? doctorShare : 0,
       clinicShare: Number.isFinite(clinicShare) ? clinicShare : 0,
+      primaryDoctorId: doctorId,
     });
 
     if (!created.case) {
@@ -122,6 +141,12 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    await assignPrimaryDoctorForSession(admin, {
+      patientId,
+      doctorId,
+      caseId: created.case.id,
+    });
 
     return NextResponse.json({ case: created.case });
   } catch (err) {

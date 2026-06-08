@@ -102,6 +102,7 @@ export function MasterReportDocument({
             <thead>
               <tr className="border-b text-right text-slate-muted">
                 <th className="py-1">الطبيب</th>
+                <th className="py-1">طريقة المحاسبة</th>
                 <th className="py-1">مستحق</th>
                 <th className="py-1">مسحوب</th>
                 <th className="py-1">قابل للسحب</th>
@@ -112,6 +113,7 @@ export function MasterReportDocument({
               {report.doctors.map((d) => (
                 <tr key={d.id} className="border-b border-slate-border/40">
                   <td className="py-1 font-medium">{d.full_name_ar}</td>
+                  <td className="py-1 text-slate-muted">{d.paymentLabel}</td>
                   <td className="py-1">{formatCurrency(d.totalEarned)}</td>
                   <td className="py-1">{formatCurrency(d.totalWithdrawn)}</td>
                   <td className="py-1 text-primary">

@@ -9,6 +9,8 @@ import { ReportActions } from "@/components/reports/ReportActions";
 import { downloadPatientStatementPdf } from "@/lib/reports/pdf-export";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { createClient } from "@/lib/supabase/client";
+import { getDoctorForCurrentUser } from "@/lib/clinic-context";
+import { fetchPatientsForCurrentDoctor } from "@/lib/services/doctor-patients";
 import type { Patient, PatientOperation, MedicalLog } from "@/types";
 
 function StatementContent() {
@@ -31,12 +33,9 @@ function StatementContent() {
   useEffect(() => {
     async function loadPatients() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("patients")
-        .select("id, full_name_ar")
-        .order("full_name_ar");
+      const list = await fetchPatientsForCurrentDoctor(supabase);
       setPatients(
-        (data ?? []).map((p: { id: string; full_name_ar: string }) => ({
+        list.map((p) => ({
           value: p.id,
           label: p.full_name_ar,
         }))
@@ -52,17 +51,22 @@ function StatementContent() {
   async function generate() {
     if (!patientId) return;
     const supabase = createClient();
+    const doctor = await getDoctorForCurrentUser(supabase);
+    if (!doctor) return;
+
     const [pRes, oRes, lRes] = await Promise.all([
       supabase.from("patients").select("*").eq("id", patientId).single(),
       supabase
         .from("patient_operations")
         .select("*, doctor:doctors!doctor_id(full_name_ar)")
         .eq("patient_id", patientId)
+        .eq("doctor_id", doctor.id)
         .order("operation_date", { ascending: false }),
       supabase
         .from("medical_logs")
         .select("*, doctor:doctors!doctor_id(full_name_ar)")
         .eq("patient_id", patientId)
+        .eq("doctor_id", doctor.id)
         .order("log_date", { ascending: false }),
     ]);
     if (pRes.data) setPatient(pRes.data as Patient);

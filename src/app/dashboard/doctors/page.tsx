@@ -11,6 +11,7 @@ import {
   MATERIALS_SHARE_OPTIONS,
 } from "@/lib/constants";
 import type { Doctor } from "@/types";
+import { doctorPaymentLabel } from "@/lib/services/doctor-payment";
 import { Plus, RefreshCw, PencilLine, Check, X, Settings2 } from "lucide-react";
 
 function labelFor(
@@ -27,10 +28,9 @@ interface EditState {
 }
 
 export default function DoctorsPage() {
-  const { clinicId, loading: clinicLoading } = useActiveClinicId();
+  const { clinicId, clinicName, loading: clinicLoading } = useActiveClinicId();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAll, setShowAll] = useState(false);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
 
@@ -39,11 +39,15 @@ export default function DoctorsPage() {
     const supabase = createClient();
     let q = supabase.from("doctors").select("*").order("full_name_ar");
     if (clinicId) q = q.eq("clinic_id", clinicId);
-    if (!showAll) q = q.eq("is_active", true);
-    const { data } = await q;
+    const { data, error } = await q;
+    if (error) {
+      setDoctors([]);
+      setLoading(false);
+      return;
+    }
     setDoctors((data as Doctor[]) || []);
     setLoading(false);
-  }, [showAll, clinicId]);
+  }, [clinicId]);
 
   useEffect(() => {
     if (clinicLoading) return;
@@ -88,17 +92,10 @@ export default function DoctorsPage() {
           <p className="text-slate-muted">
             {isLoading
               ? "جاري التحميل..."
-              : `${doctors.length} طبيب ${showAll ? "(الكل)" : "نشط"}`}
+              : `${doctors.length} طبيب${clinicName ? ` — ${clinicName}` : ""}`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAll((v) => !v)}
-          >
-            {showAll ? "عرض النشطين فقط" : "عرض الكل (شاملاً الموقوفين)"}
-          </Button>
           <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
           </Button>
@@ -157,6 +154,9 @@ export default function DoctorsPage() {
                     {doc.specialty_ar && (
                       <p className="text-xs text-slate-muted">{doc.specialty_ar}</p>
                     )}
+                    <p className="text-[11px] font-medium text-primary">
+                      {doctorPaymentLabel(doc)}
+                    </p>
                     <p className="text-xs text-slate-muted" dir="ltr">
                       {doc.phone ? (
                         <>📱 {doc.phone}</>

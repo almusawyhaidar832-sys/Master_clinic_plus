@@ -8,6 +8,7 @@ import {
   getCachedRecentPatients,
 } from "@/lib/offline-cache";
 import { createClient } from "@/lib/supabase/client";
+import { fetchPatientsForCurrentDoctor } from "@/lib/services/doctor-patients";
 import type { Patient } from "@/types";
 
 export default function DoctorPatientsPage() {
@@ -23,12 +24,7 @@ export default function DoctorPatientsPage() {
         return;
       }
       const supabase = createClient();
-      const { data } = await supabase
-        .from("patients")
-        .select("id, full_name_ar, phone, notes")
-        .order("updated_at", { ascending: false })
-        .limit(50);
-      const list = (data as Patient[]) || [];
+      const list = await fetchPatientsForCurrentDoctor(supabase);
       setPatients(list);
       cacheRecentPatients(list);
       setLoading(false);
@@ -43,6 +39,9 @@ export default function DoctorPatientsPage() {
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-bold text-slate-text">رعاية المرضى</h2>
+      <p className="text-xs text-slate-muted">
+        مراجعوك فقط — حسب الجلسات والحالات المسجّلة باسمك
+      </p>
       <Input
         label="بحث"
         value={search}
@@ -52,7 +51,7 @@ export default function DoctorPatientsPage() {
       {loading ? (
         <p className="text-sm text-slate-muted">جاري التحميل...</p>
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-slate-muted">لا يوجد مرضى</p>
+        <p className="text-sm text-slate-muted">لا يوجد مراجعون مسجّلون لك</p>
       ) : (
         filtered.map((p) => (
           <Link

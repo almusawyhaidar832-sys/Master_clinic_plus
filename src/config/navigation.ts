@@ -58,6 +58,7 @@ export const superAdminModuleNav: ModuleNavItem[] = [
 // =============================================================================
 export const doctorModuleNav: ModuleNavItem[] = [
   { href: "/doctor",           label: "الرئيسية",    icon: "home"         },
+  { href: "/doctor/queue",     label: "الانتظار",    icon: "listOrdered", requiredModule: "patient_queue"  },
   { href: "/doctor/wallet",    label: "المحفظة",     icon: "wallet",      requiredModule: "doctor_wallet"  },
   { href: "/doctor/patients",  label: "المرضى",      icon: "users",       requiredModule: "patients"       },
   { href: "/doctor/schedule",  label: "المواعيد",    icon: "calendarClock",requiredModule: "appointments"  },

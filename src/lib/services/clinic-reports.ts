@@ -12,6 +12,13 @@ import {
 } from "@/lib/services/clinic-stats";
 import { currentMonthYear } from "@/lib/utils";
 import { fetchRefundsForReport } from "@/lib/services/session-refunds";
+import {
+  doctorPaymentLabel,
+  isSalaryDoctor,
+  normalizeDoctorPaymentType,
+  resolveDoctorPeriodEarned,
+} from "@/lib/services/doctor-payment";
+import type { DoctorPaymentType } from "@/types";
 
 function relationName(
   rel: { full_name_ar: string } | { full_name_ar: string }[] | null | undefined
@@ -25,6 +32,9 @@ export interface DoctorLedgerSummary {
   full_name_ar: string;
   specialty_ar: string | null;
   percentage: string;
+  payment_type: DoctorPaymentType;
+  salary_amount: number;
+  paymentLabel: string;
   totalEarned: number;
   totalWithdrawn: number;
   pendingWithdrawalAmount: number;
@@ -115,8 +125,12 @@ const entryTypeLabels: Record<string, string> = {
 };
 
 export async function fetchDoctorLedgers(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  monthYear?: string
 ): Promise<DoctorLedgerSummary[]> {
+  const { start, end } = getMonthBounds(monthYear);
+  const periodScoped = Boolean(monthYear);
+
   const { data: doctors } = await supabase
     .from("doctors")
     .select("*")
@@ -127,11 +141,19 @@ export async function fetchDoctorLedgers(
 
   const summaries = await Promise.all(
     doctors.map(async (doc) => {
+      let opsQuery = supabase
+        .from("patient_operations")
+        .select("doctor_share_amount")
+        .eq("doctor_id", doc.id);
+
+      if (periodScoped) {
+        opsQuery = opsQuery
+          .gte("operation_date", start)
+          .lte("operation_date", end);
+      }
+
       const [opsRes, withdrawnRes, pendingRes, balance] = await Promise.all([
-        supabase
-          .from("patient_operations")
-          .select("doctor_share_amount")
-          .eq("doctor_id", doc.id),
+        opsQuery,
         supabase
           .from("doctor_withdrawals")
           .select("amount")
@@ -145,7 +167,7 @@ export async function fetchDoctorLedgers(
         fetchDoctorWithdrawableBalance(supabase, doc.id),
       ]);
 
-      const totalEarned = (opsRes.data ?? []).reduce(
+      const operationsShareSum = (opsRes.data ?? []).reduce(
         (s, r) => s + Number(r.doctor_share_amount ?? 0),
         0
       );
@@ -158,15 +180,37 @@ export async function fetchDoctorLedgers(
         0
       );
 
+      const payment_type = normalizeDoctorPaymentType(doc.payment_type);
+      const salary_amount = Number(doc.salary_amount ?? 0);
+      const doctorForCalc = { payment_type, salary_amount };
+      const totalEarned = periodScoped
+        ? resolveDoctorPeriodEarned(doctorForCalc, operationsShareSum)
+        : resolveDoctorPeriodEarned(doctorForCalc, operationsShareSum);
+
+      let withdrawableBalance = balance;
+      if (isSalaryDoctor(doctorForCalc) && periodScoped) {
+        withdrawableBalance = Math.max(
+          0,
+          totalEarned - totalWithdrawn - pendingWithdrawalAmount
+        );
+      }
+
       return {
         id: doc.id,
         full_name_ar: doc.full_name_ar,
         specialty_ar: doc.specialty_ar,
         percentage: doc.percentage,
+        payment_type,
+        salary_amount,
+        paymentLabel: doctorPaymentLabel({
+          payment_type,
+          percentage: doc.percentage,
+          salary_amount,
+        }),
         totalEarned,
         totalWithdrawn,
         pendingWithdrawalAmount,
-        withdrawableBalance: balance,
+        withdrawableBalance,
         operationsCount: opsRes.data?.length ?? 0,
       };
     })
@@ -177,26 +221,36 @@ export async function fetchDoctorLedgers(
 
 export async function fetchDoctorLedgerDetail(
   supabase: SupabaseClient,
-  doctorId: string
+  doctorId: string,
+  monthYear?: string
 ) {
+  const { start, end } = getMonthBounds(monthYear);
+  const periodScoped = Boolean(monthYear);
+
   const { data: doctor } = await supabase
     .from("doctors")
     .select("*")
     .eq("id", doctorId)
     .single();
 
+  let opsQuery = supabase
+    .from("patient_operations")
+    .select("*, patient:patients!patient_id(full_name_ar)")
+    .eq("doctor_id", doctorId)
+    .order("operation_date", { ascending: false })
+    .limit(100);
+
+  if (periodScoped) {
+    opsQuery = opsQuery
+      .gte("operation_date", start)
+      .lte("operation_date", end);
+  }
+
   const [summary, opsRes, withdrawalsRes] = await Promise.all([
-    fetchDoctorLedgers(supabase).then((list) =>
+    fetchDoctorLedgers(supabase, monthYear).then((list) =>
       list.find((d) => d.id === doctorId)
     ),
-    supabase
-      .from("patient_operations")
-      .select(
-        "*, patient:patients!patient_id(full_name_ar)"
-      )
-      .eq("doctor_id", doctorId)
-      .order("operation_date", { ascending: false })
-      .limit(100),
+    opsQuery,
     supabase
       .from("doctor_withdrawals")
       .select("*")
@@ -233,7 +287,7 @@ export async function fetchMasterClinicReport(
   ] = await Promise.all([
     fetchClinicProfitStats(supabase),
     fetchTodaySummary(supabase),
-    fetchDoctorLedgers(supabase),
+    fetchDoctorLedgers(supabase, my),
     supabase
       .from("doctor_withdrawals")
       .select("id, amount, requested_at, doctor:doctors!doctor_id(full_name_ar)")

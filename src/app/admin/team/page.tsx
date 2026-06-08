@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 import { cn } from "@/lib/utils";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import {
   UserPlus, UserCog, Users, CheckCircle2,
   XCircle, RefreshCw, Eye, EyeOff, ShieldCheck,
@@ -111,7 +112,11 @@ export default function AdminTeamPage() {
 
     const res = await fetch("/api/admin/create-user", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...authPortalHeaders("admin"),
+      },
       body: JSON.stringify({
         full_name: fullName.trim(),
         password,

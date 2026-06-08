@@ -6,6 +6,55 @@
 
 -- A) محفظة الطبيب + السحوبات (إصلاح access denied عند الدفع النقدي)
 
+CREATE OR REPLACE FUNCTION public.calc_doctor_operation_earned(
+  p_doctor_id UUID,
+  p_doctor_share_amount NUMERIC,
+  p_paid_amount NUMERIC,
+  p_treatment_case_id UUID
+)
+RETURNS NUMERIC
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_share NUMERIC;
+  v_paid NUMERIC;
+  v_case_doc NUMERIC;
+  v_case_final NUMERIC;
+  v_pct NUMERIC;
+BEGIN
+  v_share := COALESCE(p_doctor_share_amount, 0);
+  IF v_share <> 0 THEN
+    RETURN ROUND(v_share, 2);
+  END IF;
+
+  v_paid := COALESCE(p_paid_amount, 0);
+  IF v_paid = 0 THEN
+    RETURN 0;
+  END IF;
+
+  IF p_treatment_case_id IS NOT NULL THEN
+    SELECT doctor_share_total, final_price
+    INTO v_case_doc, v_case_final
+    FROM public.patient_treatment_cases
+    WHERE id = p_treatment_case_id;
+
+    IF COALESCE(v_case_final, 0) > 0 THEN
+      RETURN ROUND(v_paid * (COALESCE(v_case_doc, 0) / v_case_final), 2);
+    END IF;
+  END IF;
+
+  SELECT (d.percentage::TEXT)::NUMERIC / 100
+  INTO v_pct
+  FROM public.doctors d
+  WHERE d.id = p_doctor_id;
+
+  RETURN ROUND(v_paid * COALESCE(v_pct, 0.5), 2);
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.get_doctor_wallet_stats(p_doctor_id UUID)
 RETURNS JSON
 LANGUAGE plpgsql
@@ -31,8 +80,16 @@ BEGIN
     RAISE EXCEPTION 'access denied';
   END IF;
 
-  SELECT COALESCE(SUM(doctor_share_amount), 0) INTO v_earned
-  FROM public.patient_operations WHERE doctor_id = p_doctor_id;
+  SELECT COALESCE(SUM(
+    public.calc_doctor_operation_earned(
+      po.doctor_id,
+      po.doctor_share_amount,
+      po.paid_amount,
+      po.treatment_case_id
+    )
+  ), 0) INTO v_earned
+  FROM public.patient_operations po
+  WHERE po.doctor_id = p_doctor_id;
 
   SELECT COALESCE(SUM(amount), 0) INTO v_paid_out
   FROM public.doctor_withdrawals
@@ -60,6 +117,8 @@ BEGIN
 END;
 $$;
 
+GRANT EXECUTE ON FUNCTION public.calc_doctor_operation_earned(UUID, NUMERIC, NUMERIC, UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.calc_doctor_operation_earned(UUID, NUMERIC, NUMERIC, UUID) TO service_role;
 GRANT EXECUTE ON FUNCTION public.get_doctor_wallet_stats(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_doctor_wallet_stats(UUID) TO service_role;
 

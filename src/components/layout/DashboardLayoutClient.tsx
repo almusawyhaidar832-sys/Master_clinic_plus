@@ -10,6 +10,7 @@ import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicModules } from "@/contexts/ClinicModulesContext";
 import { useModuleNav } from "@/hooks/useModuleNav";
 import { DeveloperImpersonationBanner } from "@/components/developer/DeveloperImpersonationBanner";
+import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
 import type { NavItem, UserRole } from "@/types";
 
 export function DashboardLayoutClient({
@@ -79,6 +80,7 @@ export function DashboardLayoutClient({
       notificationCount={notificationCount}
     >
       <DeveloperImpersonationBanner />
+      <QueueRealtimeBridge portal="dashboard" />
       {children}
     </DashboardShell>
   );

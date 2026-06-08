@@ -84,3 +84,28 @@ export async function fetchPatientPrimaryDoctor(
     data.doctor as { full_name_ar?: string } | null
   );
 }
+
+/** بعد كل جلسة — يربط المراجع والحالة بالطبيب الذي سجّلت الجلسة باسمه */
+export async function assignPrimaryDoctorForSession(
+  supabase: SupabaseClient,
+  input: {
+    patientId: string;
+    doctorId: string;
+    caseId?: string | null;
+  }
+): Promise<void> {
+  if (!input.patientId || !input.doctorId) return;
+
+  await supabase
+    .from("patients")
+    .update({ primary_doctor_id: input.doctorId })
+    .eq("id", input.patientId);
+
+  const caseId = input.caseId?.trim();
+  if (caseId) {
+    await supabase
+      .from("patient_treatment_cases")
+      .update({ primary_doctor_id: input.doctorId })
+      .eq("id", caseId);
+  }
+}

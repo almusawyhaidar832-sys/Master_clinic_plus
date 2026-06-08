@@ -19,5 +19,8 @@ export function translateDbError(message: string): string {
   if (m.includes("patients_total_paid_check")) {
     return "تعذر الإرجاع — المبلغ يتجاوز المدفوع المسجّل للمراجع";
   }
+  if (m.includes("failed to fetch") || m.includes("networkerror")) {
+    return "تعذر الاتصال بالخادم — تحقق من الإنترنت أو إعدادات Supabase في .env.local";
+  }
   return message;
 }

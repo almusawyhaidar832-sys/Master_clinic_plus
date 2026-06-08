@@ -6,12 +6,16 @@ type AuthUser = { id: string; email?: string };
 export async function getCurrentUser(
   supabase: SupabaseClient
 ): Promise<AuthUser | null> {
-  const auth = supabase.auth as {
-    getUser: () => Promise<{ data: { user: AuthUser | null }; error: Error | null }>;
-  };
-  const { data, error } = await auth.getUser();
-  if (error) return null;
-  return data.user;
+  try {
+    const auth = supabase.auth as {
+      getUser: () => Promise<{ data: { user: AuthUser | null }; error: Error | null }>;
+    };
+    const { data, error } = await auth.getUser();
+    if (error) return null;
+    return data.user;
+  } catch {
+    return null;
+  }
 }
 
 export async function signOutUser(supabase: SupabaseClient): Promise<void> {

@@ -20,6 +20,11 @@ export const MATERIALS_SHARE_OPTIONS = [
   { value: "50", label: "50% — تقسيم مناصفة" },
 ] as const;
 
+export const DOCTOR_PAYMENT_TYPE_OPTIONS = [
+  { value: "percentage", label: "نسبة من الجلسات" },
+  { value: "salary", label: "راتب ثابت شهري" },
+] as const;
+
 export const USER_ROLE_LABELS: Record<string, string> = {
   super_admin: "مدير النظام",
   accountant: "محاسب / استقبال",

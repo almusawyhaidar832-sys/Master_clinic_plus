@@ -10,6 +10,11 @@ import {
   updateProfileRow,
 } from "@/lib/admin/profile-write";
 import { getAuthAdmin } from "@/lib/supabase/auth-helpers";
+import {
+  normalizeDoctorPaymentType,
+  parseSalaryAmount,
+} from "@/lib/services/doctor-payment";
+import { updateDoctorRow } from "@/lib/services/doctor-row-write";
 import type { Doctor } from "@/types";
 
 function sanitizeUsername(raw: string): string {
@@ -113,6 +118,10 @@ export async function PATCH(
     const phoneRaw = body.phone?.trim() ?? "";
     const percentage = body.percentage;
     const materialsShare = body.materials_share;
+    const paymentType = body.payment_type
+      ? normalizeDoctorPaymentType(body.payment_type)
+      : undefined;
+    const salaryAmountRaw = body.salary_amount;
     const usernameRaw = body.username?.trim() ?? "";
     const password = String(body.password ?? "");
 
@@ -121,6 +130,30 @@ export async function PATCH(
     if (body.specialty_ar !== undefined) doctorUpdate.specialty_ar = specialty;
     if (percentage) doctorUpdate.percentage = String(percentage);
     if (materialsShare) doctorUpdate.materials_share = String(materialsShare);
+    if (paymentType) {
+      doctorUpdate.payment_type = paymentType;
+      if (paymentType === "salary") {
+        const salaryAmount = parseSalaryAmount(salaryAmountRaw);
+        if (salaryAmount <= 0) {
+          return NextResponse.json(
+            { error: "أدخل قيمة الراتب الثابت" },
+            { status: 400 }
+          );
+        }
+        doctorUpdate.salary_amount = salaryAmount;
+      } else {
+        doctorUpdate.salary_amount = 0;
+      }
+    } else if (salaryAmountRaw !== undefined && doctor.payment_type === "salary") {
+      const salaryAmount = parseSalaryAmount(salaryAmountRaw);
+      if (salaryAmount <= 0) {
+        return NextResponse.json(
+          { error: "أدخل قيمة الراتب الثابت" },
+          { status: 400 }
+        );
+      }
+      doctorUpdate.salary_amount = salaryAmount;
+    }
 
     let normalizedPhone: string | null = null;
     if (body.phone !== undefined) {
@@ -282,13 +315,14 @@ export async function PATCH(
     }
 
     if (Object.keys(doctorUpdate).length > 0) {
-      const { error: doctorErr } = await ctx.admin
-        .from("doctors")
-        .update(doctorUpdate)
-        .eq("id", id);
-      if (doctorErr) {
+      const { error: doctorErrMsg } = await updateDoctorRow(
+        ctx.admin,
+        id,
+        doctorUpdate
+      );
+      if (doctorErrMsg) {
         return NextResponse.json(
-          { error: `تعذر تحديث بيانات الطبيب: ${doctorErr.message}` },
+          { error: `تعذر تحديث بيانات الطبيب: ${doctorErrMsg}` },
           { status: 500 }
         );
       }

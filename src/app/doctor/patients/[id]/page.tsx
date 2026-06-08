@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
+import {
+  fetchPatientsForCurrentDoctor,
+  patientBelongsToDoctor,
+} from "@/lib/services/doctor-patients";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import type { Doctor, Patient, PatientOperation, MedicalLog, Treatment } from "@/types";
@@ -31,6 +35,7 @@ export default function DoctorPatientDetailPage() {
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [showSessionForm, setShowSessionForm] = useState(false);
   const [clinicalByOp, setClinicalByOp] = useState<ClinicalByOperationId>({});
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const reloadOperations = useCallback(async () => {
     const supabase = createClient();
@@ -52,6 +57,16 @@ export default function DoctorPatientDetailPage() {
       const supabase = createClient();
       const doc = await getDoctorForCurrentUser(supabase);
       setDoctor(doc);
+      if (!doc) {
+        setAccessDenied(true);
+        return;
+      }
+      const allowed = await patientBelongsToDoctor(supabase, id, doc.id);
+      if (!allowed) {
+        setAccessDenied(true);
+        return;
+      }
+      setAccessDenied(false);
 
       let opsQuery = supabase
         .from("patient_operations")
@@ -108,6 +123,22 @@ export default function DoctorPatientDetailPage() {
       setLogs((prev) => [data as MedicalLog, ...prev]);
       setNewLog("");
     }
+  }
+
+  if (accessDenied) {
+    return (
+      <div className="space-y-4">
+        <Link href="/doctor/patients">
+          <Button variant="ghost" size="sm">
+            <ArrowRight className="h-4 w-4" />
+            قائمة المرضى
+          </Button>
+        </Link>
+        <p className="text-sm text-slate-muted">
+          هذا المراجع غير مرتبط بحسابك.
+        </p>
+      </div>
+    );
   }
 
   if (!patient) {

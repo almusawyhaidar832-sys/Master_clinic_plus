@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 import { cn } from "@/lib/utils";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import {
   UserPlus, Users, Stethoscope, UserCog,
   Eye, EyeOff, CheckCircle2, XCircle, RefreshCw, ShieldAlert,
@@ -102,7 +103,11 @@ export default function UsersPage() {
 
     const res = await fetch("/api/admin/create-user", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...authPortalHeaders("accountant"),
+      },
       body: JSON.stringify({
         username,
         password,

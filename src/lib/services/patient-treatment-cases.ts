@@ -10,6 +10,7 @@ import {
   treatmentStatusFromAmounts,
   type PatientFinancialPlan,
 } from "@/lib/services/patient-financial-plan";
+import { caseBelongsToDoctor } from "@/lib/services/doctor-patients";
 
 export interface PatientTreatmentCase extends PatientFinancialPlan {
   id: string;
@@ -572,13 +573,15 @@ export async function fetchPatientTreatmentCasesDirect(
 
 /** حالات عليها ذمة — للطبيب (متابعة العلاج) */
 export async function fetchOpenTreatmentCasesForDoctor(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  doctorId: string
 ): Promise<TreatmentCaseWithPatient[]> {
   const { data: rows, error } = await supabase
     .from("patient_treatment_cases")
     .select(
       "*, patient:patients!patient_id(id, full_name_ar)"
     )
+    .or(`primary_doctor_id.eq.${doctorId},primary_doctor_id.is.null`)
     .order("updated_at", { ascending: false });
 
   if (error || !rows?.length) return [];
@@ -614,6 +617,20 @@ export async function fetchOpenTreatmentCasesForDoctor(
     const caseOps = patientOps.filter(
       (o) => o.treatment_case_id?.trim() === db.id
     );
+
+    if (
+      !caseBelongsToDoctor(
+        {
+          id: db.id,
+          primary_doctor_id: (r as { primary_doctor_id?: string | null })
+            .primary_doctor_id,
+        },
+        caseOps,
+        doctorId
+      )
+    ) {
+      continue;
+    }
 
     const built =
       caseOps.length > 0
@@ -711,12 +728,13 @@ export async function createTreatmentCase(
     paid: number;
     doctorShare: number;
     clinicShare: number;
+    primaryDoctorId?: string | null;
   }
 ): Promise<{ case: PatientTreatmentCase | null; error?: string }> {
   const finalPrice = Math.max(0, input.casePrice - input.discount);
   const status = treatmentStatusFromAmounts(finalPrice, input.paid);
 
-  const row = {
+  const row: Record<string, unknown> = {
     patient_id: input.patientId,
     clinic_id: input.clinicId,
     treatment_name_ar: input.treatmentName.trim(),
@@ -728,6 +746,10 @@ export async function createTreatmentCase(
     total_paid: input.paid,
     status,
   };
+
+  if (input.primaryDoctorId) {
+    row.primary_doctor_id = input.primaryDoctorId;
+  }
 
   const { data, error } = await supabase
     .from("patient_treatment_cases")
@@ -749,11 +771,17 @@ export async function createTreatmentCaseViaApi(input: {
   paid: number;
   doctorShare: number;
   clinicShare: number;
+  doctorId: string;
 }): Promise<{ case: PatientTreatmentCase | null; error?: string }> {
   try {
+    const { authPortalHeaders } = await import("@/lib/auth/api-portal");
     const res = await fetch("/api/treatment-cases", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...authPortalHeaders("accountant"),
+      },
       body: JSON.stringify(input),
     });
     const data = (await res.json()) as {

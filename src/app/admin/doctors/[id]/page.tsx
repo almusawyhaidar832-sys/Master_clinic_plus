@@ -10,6 +10,7 @@ import { DoctorPayoutStatement } from "@/components/branding/DoctorPayoutStateme
 import { ReportActions } from "@/components/reports/ReportActions";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
+import { currentMonthYear } from "@/lib/utils";
 import { ArrowRight } from "lucide-react";
 import type { Doctor } from "@/types";
 
@@ -24,7 +25,7 @@ export default function AdminDoctorLedgerDetailPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const result = await fetchDoctorLedgerDetail(supabase, id);
+      const result = await fetchDoctorLedgerDetail(supabase, id, currentMonthYear());
       setData(result);
     }
     if (id) load();

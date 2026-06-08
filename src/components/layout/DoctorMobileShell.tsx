@@ -11,6 +11,7 @@ import { useModuleNav } from "@/hooks/useModuleNav";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { doctorModuleNav, doctorModuleQuickActions } from "@/config/navigation";
+import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile, getDoctorForCurrentUser } from "@/lib/clinic-context";
 import type { Doctor } from "@/types";
@@ -18,7 +19,7 @@ import {
   Wallet, ArrowDownToLine, Users, Calendar,
   CalendarClock, AlertCircle, FileText, Home,
   Smile, FilePen, Activity, Sun, Moon, Languages,
-  UserCog, LogOut,
+  UserCog, LogOut, ListOrdered,
 } from "lucide-react";
 
 /** Maps icon string keys → Lucide components for the bottom nav */
@@ -35,6 +36,7 @@ const NAV_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> 
   filePen:         FilePen,
   activity:        Activity,
   userCog:         UserCog,
+  listOrdered:     ListOrdered,
 };
 
 /** Maps icon string keys for quick actions */
@@ -77,6 +79,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col bg-surface pb-20">
+      <QueueRealtimeBridge portal="doctor" />
       <header className="safe-top sticky top-0 z-30 bg-primary px-4 py-3 text-white shadow-premium">
         <div className="flex items-center gap-2">
           {profile?.logo_url && (

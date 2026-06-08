@@ -49,6 +49,7 @@ import {
 import {
   fetchCasePrimaryDoctor,
   fetchPatientPrimaryDoctor,
+  assignPrimaryDoctorForSession,
 } from "@/lib/services/patient-primary-doctor";
 import { TreatmentCasePicker } from "@/components/accountant/TreatmentCasePicker";
 import type { Doctor, Patient, PatientOperation } from "@/types";
@@ -356,11 +357,6 @@ export function QuickEntryForm({
   }, [lockDoctorId]);
 
   useEffect(() => {
-    if (lockDoctorId || doctorId || doctors.length === 0) return;
-    setDoctorId(doctors[0].id);
-  }, [doctors, doctorId, lockDoctorId]);
-
-  useEffect(() => {
     if (defaultPatientPhone?.trim()) {
       setPatientPhone(defaultPatientPhone);
     }
@@ -446,6 +442,10 @@ export function QuickEntryForm({
           setForceNewPlan(true);
           setFinancialPlan(EMPTY_FINANCIAL_PLAN);
           setSelectedCaseId(null);
+          if (!lockDoctorId) {
+            setAssignedDoctor(null);
+            setDoctorId("");
+          }
           if (defaultNewCaseTreatmentName?.trim()) {
             setOperationName(defaultNewCaseTreatmentName.trim());
           }
@@ -676,6 +676,7 @@ export function QuickEntryForm({
           .insert({
             full_name_ar: name,
             clinic_id: activeClinic.clinicId,
+            primary_doctor_id: doctorId,
             ...patientPhoneColumns(phoneCheck.normalized),
           })
           .select("id")
@@ -958,6 +959,7 @@ export function QuickEntryForm({
         paid,
         doctorShare: split?.doctorShare ?? 0,
         clinicShare: split?.clinicShare ?? 0,
+        doctorId,
       });
       if (created.case) {
         newCaseId = created.case.id;
@@ -1095,6 +1097,17 @@ export function QuickEntryForm({
     }
 
     const operationIdForNotify = op!.id;
+
+    await assignPrimaryDoctorForSession(supabase, {
+      patientId: patientId!,
+      doctorId,
+      caseId:
+        linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
+          ? linkedCaseId
+          : savedCaseIdForWa && isPersistedTreatmentCaseId(savedCaseIdForWa)
+            ? savedCaseIdForWa
+            : null,
+    });
 
     setSelectedPatientId(patientId!);
 
@@ -1597,6 +1610,12 @@ export function QuickEntryForm({
         )}
 
         {formSchema.showDoctor && (
+        <>
+        {selectedDoctor && (
+          <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+            تأكد من <strong>الطبيب</strong> قبل الحفظ — الرصيد يُحسب لهذا الطبيب فقط
+          </div>
+        )}
         <Select
           label="الطبيب *"
           name="doctor_id"
@@ -1607,6 +1626,7 @@ export function QuickEntryForm({
           required
           disabled={!!lockDoctorId}
         />
+        </>
         )}
 
         {formSchema.showPlanSummary && plan.final_price > 0 && (

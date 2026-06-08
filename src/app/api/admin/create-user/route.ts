@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
 import { usernameToAuthEmail } from "@/lib/auth/credentials";
-import { getCurrentUser, getAuthAdmin } from "@/lib/supabase/auth-helpers";
+import { getApiCallerProfile } from "@/lib/auth/api-session";
+import { getAuthAdmin } from "@/lib/supabase/auth-helpers";
+import {
+  normalizeDoctorPaymentType,
+  parseSalaryAmount,
+} from "@/lib/services/doctor-payment";
+import {
+  buildDoctorPaymentFields,
+  insertDoctorRow,
+} from "@/lib/services/doctor-row-write";
 
 /**
  * POST /api/admin/create-user
  *
  * Uses service_role for EVERYTHING after session verification, so RLS
- * never blocks the operation. Session JWT is verified via anon client,
- * all DB work uses service_role.
+ * never blocks the operation. Session is read from the correct portal cookie
+ * (accountant / admin / doctor) via getApiCallerProfile.
  *
  * Body: { full_name, password, role, phone?, username?, clinic_id?,
  *         specialty_ar?, percentage?, materials_share? }
@@ -18,25 +25,18 @@ import { getCurrentUser, getAuthAdmin } from "@/lib/supabase/auth-helpers";
  */
 export async function POST(req: NextRequest) {
   try {
-    // ── Step 1: verify session (JWT check only) ───────────────────────────
-    const cookieStore = await cookies();
-    const sessionClient = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      }
-    );
-
-    const user = await getCurrentUser(sessionClient);
-    if (!user) {
+    const callerProfile = await getApiCallerProfile(req);
+    if (!callerProfile) {
       return NextResponse.json({ error: "يجب تسجيل الدخول أولاً" }, { status: 401 });
     }
 
-    // ── Step 2: build service-role admin client ───────────────────────────
+    if (!["accountant", "super_admin"].includes(callerProfile.role)) {
+      return NextResponse.json(
+        { error: `دورك الحالي (${callerProfile.role}) لا يملك صلاحية إنشاء حسابات` },
+        { status: 403 }
+      );
+    }
+
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!serviceKey) {
       return NextResponse.json(
@@ -50,37 +50,6 @@ export async function POST(req: NextRequest) {
       serviceKey,
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
-
-    // ── Step 3: read caller's profile via service_role (bypasses RLS) ─────
-    const { data: callerProfile, error: callerErr } = await admin
-      .from("profiles")
-      .select("role, clinic_id")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (callerErr) {
-      console.error("[create-user] profile read error:", callerErr.message);
-      return NextResponse.json(
-        { error: `تعذر قراءة بيانات حسابك: ${callerErr.message}` },
-        { status: 500 }
-      );
-    }
-
-    if (!callerProfile) {
-      return NextResponse.json(
-        { error: "لا يوجد ملف شخصي لحسابك — تأكد من إعداد قاعدة البيانات" },
-        { status: 403 }
-      );
-    }
-
-    if (!["accountant", "super_admin"].includes(callerProfile.role)) {
-      return NextResponse.json(
-        { error: `دورك الحالي (${callerProfile.role}) لا يملك صلاحية إنشاء حسابات` },
-        { status: 403 }
-      );
-    }
-
-    // ── Step 4: parse & validate body ─────────────────────────────────────
     const body = await req.json();
     const {
       full_name,
@@ -92,6 +61,8 @@ export async function POST(req: NextRequest) {
       specialty_ar = null,
       percentage   = "50",
       materials_share = "0",
+      payment_type = "percentage",
+      salary_amount = 0,
     } = body as {
       full_name:  string;
       password:   string;
@@ -102,8 +73,9 @@ export async function POST(req: NextRequest) {
       specialty_ar?: string | null;
       percentage?: string;
       materials_share?: string;
+      payment_type?: string;
+      salary_amount?: number;
     };
-
     if (!full_name?.trim() || !password || !role) {
       return NextResponse.json({ error: "الاسم وكلمة المرور والدور مطلوبة" }, { status: 400 });
     }
@@ -235,23 +207,37 @@ export async function POST(req: NextRequest) {
         ? String(percentage) : "50";
       const docMaterials     = validMaterials.includes(String(materials_share))
         ? String(materials_share) : "0";
+      const docPaymentType = normalizeDoctorPaymentType(payment_type);
+      const docSalaryAmount =
+        docPaymentType === "salary" ? parseSalaryAmount(salary_amount) : 0;
 
-      const { error: doctorErr } = await admin.from("doctors").insert({
+      if (docPaymentType === "salary" && docSalaryAmount <= 0) {
+        await getAuthAdmin(admin).deleteUser(authData.user.id);
+        return NextResponse.json(
+          { error: "أدخل قيمة الراتب الثابت للطبيب" },
+          { status: 400 }
+        );
+      }
+
+      const paymentFields = buildDoctorPaymentFields(payment_type, salary_amount);
+
+      const { error: doctorErrMsg } = await insertDoctorRow(admin, {
         clinic_id,
-        profile_id:      authData.user.id,
-        full_name_ar:    full_name.trim(),
-        specialty_ar:    specialty_ar?.trim() || null,
-        phone:           phone ?? null,
-        percentage:      docPercentage,
+        profile_id: authData.user.id,
+        full_name_ar: full_name.trim(),
+        specialty_ar: specialty_ar?.trim() || null,
+        phone: phone ?? null,
+        percentage: docPercentage,
         materials_share: docMaterials,
-        is_active:       true,
+        ...paymentFields,
+        is_active: true,
       });
 
-      if (doctorErr) {
+      if (doctorErrMsg) {
         await getAuthAdmin(admin).deleteUser(authData.user.id);
         await admin.from("profiles").delete().eq("id", authData.user.id);
         return NextResponse.json(
-          { error: `تعذر حفظ بيانات الطبيب: ${doctorErr.message}` },
+          { error: `تعذر حفظ بيانات الطبيب: ${doctorErrMsg}` },
           { status: 500 }
         );
       }

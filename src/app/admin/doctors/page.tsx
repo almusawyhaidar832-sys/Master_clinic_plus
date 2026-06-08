@@ -8,7 +8,7 @@ import {
   fetchDoctorLedgers,
   type DoctorLedgerSummary,
 } from "@/lib/services/clinic-reports";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, currentMonthYear } from "@/lib/utils";
 import { ChevronLeft } from "lucide-react";
 
 export default function AdminDoctorsLedgerPage() {
@@ -18,7 +18,7 @@ export default function AdminDoctorsLedgerPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const data = await fetchDoctorLedgers(supabase);
+      const data = await fetchDoctorLedgers(supabase, currentMonthYear());
       setDoctors(data);
       setLoading(false);
     }
@@ -49,6 +49,7 @@ export default function AdminDoctorsLedgerPage() {
                 {d.specialty_ar && (
                   <p className="text-xs text-slate-muted">{d.specialty_ar}</p>
                 )}
+                <p className="text-[11px] text-primary font-medium">{d.paymentLabel}</p>
                 <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                   <span className="text-slate-muted">
                     مستحق:{" "}

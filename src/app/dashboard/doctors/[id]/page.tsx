@@ -5,14 +5,11 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
-import {
-  DOCTOR_PERCENTAGE_OPTIONS,
-  MATERIALS_SHARE_OPTIONS,
-} from "@/lib/constants";
-import type { Doctor } from "@/types";
+import { DoctorPaymentFields } from "@/components/doctors/DoctorPaymentFields";
+import type { Doctor, DoctorPaymentType } from "@/types";
+import { normalizeDoctorPaymentType } from "@/lib/services/doctor-payment";
 import {
   ArrowRight,
   CheckCircle2,
@@ -39,6 +36,8 @@ export default function EditDoctorPage() {
   const [phone, setPhone] = useState("");
   const [percentage, setPercentage] = useState("50");
   const [materialsShare, setMaterialsShare] = useState("0");
+  const [paymentType, setPaymentType] = useState<DoctorPaymentType>("percentage");
+  const [salaryAmount, setSalaryAmount] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -64,6 +63,12 @@ export default function EditDoctorPage() {
         setPhone(doc.phone ?? "");
         setPercentage(doc.percentage ?? "50");
         setMaterialsShare(doc.materials_share ?? "0");
+        setPaymentType(normalizeDoctorPaymentType(doc.payment_type));
+        setSalaryAmount(
+          doc.salary_amount != null && doc.salary_amount > 0
+            ? String(doc.salary_amount)
+            : ""
+        );
         setUsername(json.username ?? "");
         setHasLogin(Boolean(json.hasLogin));
       } catch {
@@ -113,6 +118,10 @@ export default function EditDoctorPage() {
       setError("يرجى إدخال اسم الطبيب");
       return;
     }
+    if (paymentType === "salary" && !(Number(salaryAmount) > 0)) {
+      setError("أدخل قيمة الراتب الثابت");
+      return;
+    }
 
     if (!hasLogin && username.trim() && !password) {
       setError("لإنشاء حساب دخول جديد أدخل كلمة المرور أيضاً");
@@ -131,6 +140,8 @@ export default function EditDoctorPage() {
           phone: phone.trim(),
           percentage,
           materials_share: materialsShare,
+          payment_type: paymentType,
+          salary_amount: paymentType === "salary" ? Number(salaryAmount) : 0,
           username: username.trim() || undefined,
           password: password || undefined,
         }),
@@ -220,18 +231,15 @@ export default function EditDoctorPage() {
               />
             </div>
 
-            <Select
-              label="نسبة الطبيب"
-              value={percentage}
-              onChange={(e) => setPercentage(e.target.value)}
-              options={[...DOCTOR_PERCENTAGE_OPTIONS]}
-            />
-
-            <Select
-              label="نسبة تحمل المواد"
-              value={materialsShare}
-              onChange={(e) => setMaterialsShare(e.target.value)}
-              options={[...MATERIALS_SHARE_OPTIONS]}
+            <DoctorPaymentFields
+              paymentType={paymentType}
+              onPaymentTypeChange={setPaymentType}
+              salaryAmount={salaryAmount}
+              onSalaryAmountChange={setSalaryAmount}
+              percentage={percentage}
+              onPercentageChange={setPercentage}
+              materialsShare={materialsShare}
+              onMaterialsShareChange={setMaterialsShare}
             />
 
             <div className="rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-4 space-y-3">

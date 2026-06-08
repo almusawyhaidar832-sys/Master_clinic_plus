@@ -6,20 +6,19 @@ import { formatCurrency } from "@/lib/utils";
 import { cacheDoctorBalance, getCachedDoctorBalance } from "@/lib/offline-cache";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
-import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
+import {
+  fetchDoctorWalletStats,
+  type DoctorWalletStats,
+} from "@/lib/services/doctor-wallet";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { Button } from "@/components/ui/Button";
 import { ArrowDownToLine } from "lucide-react";
 
 export default function DoctorWalletPage() {
-  const [stats, setStats] = useState<{
-    availableBalance: number;
-    totalEarnings: number;
-    totalWithdrawn: number;
-    pendingAmount: number;
-    approvedAmount: number;
-  } | null>(null);
+  const [stats, setStats] = useState<DoctorWalletStats | null>(null);
   const [offline, setOffline] = useState(false);
   const [doctorId, setDoctorId] = useState<string | null>(null);
+  const [zeroHint, setZeroHint] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -33,6 +32,7 @@ export default function DoctorWalletPage() {
           totalWithdrawn: 0,
           pendingAmount: 0,
           approvedAmount: 0,
+          withdrawableLimit: 0,
         });
         return;
       }
@@ -48,12 +48,30 @@ export default function DoctorWalletPage() {
           totalWithdrawn: 0,
           pendingAmount: 0,
           approvedAmount: 0,
+          withdrawableLimit: cached,
         });
         return;
       }
 
-      const live = await fetchDoctorWalletStats(supabase, doctor.id);
+      let live: DoctorWalletStats | null = null;
+      try {
+        const res = await fetch("/api/doctor/wallet-stats", {
+          credentials: "include",
+          headers: authPortalHeaders("doctor"),
+        });
+        if (res.ok) {
+          live = (await res.json()) as DoctorWalletStats;
+        }
+      } catch {
+        /* fallback below */
+      }
+
+      if (!live) {
+        live = await fetchDoctorWalletStats(supabase, doctor.id);
+      }
+
       setStats(live);
+      setZeroHint(live.totalEarnings <= 0);
       cacheDoctorBalance(live.availableBalance, doctor.id);
     }
     load();
@@ -76,6 +94,13 @@ export default function DoctorWalletPage() {
       {!doctorId && stats?.availableBalance === 0 && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
           لم يُربط حسابك بسجل طبيب. تواصل مع الإدارة.
+        </p>
+      )}
+      {doctorId && zeroHint && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 leading-relaxed">
+          الرصيد يُحسب من <strong>المبلغ المدفوع</strong> في الإدخال السريع — إذا
+          سجّلت الحالة بدون دفعة يبقى الرصيد صفر. تأكد أن المحاسب اختار طبيبك
+          وسجّل مبلغ «المدفوع» أكبر من صفر.
         </p>
       )}
       <div className="rounded-2xl bg-gradient-to-br from-primary to-primary-700 p-8 text-white shadow-premium">

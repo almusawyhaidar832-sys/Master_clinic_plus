@@ -5,15 +5,17 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
-import {
-  DOCTOR_PERCENTAGE_OPTIONS,
-  MATERIALS_SHARE_OPTIONS,
-} from "@/lib/constants";
+import { DoctorPaymentFields } from "@/components/doctors/DoctorPaymentFields";
+import type { DoctorPaymentType } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
+import {
+  buildClientDoctorInsertRow,
+  insertDoctorRowClient,
+} from "@/lib/services/doctor-row-write";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { ArrowRight, CheckCircle2, Building2, Eye, EyeOff, KeyRound } from "lucide-react";
 
 export default function NewDoctorPage() {
@@ -25,6 +27,8 @@ export default function NewDoctorPage() {
   const [phone,          setPhone]          = useState("");
   const [percentage,     setPercentage]     = useState("50");
   const [materialsShare, setMaterialsShare] = useState("0");
+  const [paymentType,      setPaymentType]      = useState<DoctorPaymentType>("percentage");
+  const [salaryAmount,     setSalaryAmount]     = useState("");
   const [username,       setUsername]       = useState("");
   const [password,       setPassword]       = useState("");
   const [showPass,       setShowPass]       = useState(false);
@@ -43,6 +47,10 @@ export default function NewDoctorPage() {
     }
     if (!clinicId) {
       setError("لا توجد عيادة في قاعدة البيانات. أنشئ عيادة أولاً.");
+      return;
+    }
+    if (paymentType === "salary" && !(Number(salaryAmount) > 0)) {
+      setError("أدخل قيمة الراتب الثابت");
       return;
     }
 
@@ -65,7 +73,11 @@ export default function NewDoctorPage() {
 
       const res = await fetch("/api/admin/create-user", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...authPortalHeaders("accountant"),
+        },
         body: JSON.stringify({
           username:        cleanUsername,
           password,
@@ -75,6 +87,8 @@ export default function NewDoctorPage() {
           specialty_ar:    specialty.trim() || null,
           percentage,
           materials_share: materialsShare,
+          payment_type:    paymentType,
+          salary_amount:   paymentType === "salary" ? Number(salaryAmount) : 0,
         }),
       });
 
@@ -96,19 +110,24 @@ export default function NewDoctorPage() {
 
     // بدون username → طبيب بدون حساب دخول
     const supabase = createClient();
-    const { error: insertError } = await supabase.from("doctors").insert({
-      clinic_id:       clinicId,
-      full_name_ar:    fullName.trim(),
-      specialty_ar:    specialty.trim() || null,
-      phone:           phone.trim() || null,
-      percentage:      percentage as "10" | "20" | "30" | "40" | "50" | "60" | "70" | "80",
-      materials_share: materialsShare as "0" | "10" | "20" | "30" | "40" | "50",
-    });
+    const { error: insertError } = await insertDoctorRowClient(
+      supabase,
+      buildClientDoctorInsertRow({
+        clinic_id: clinicId,
+        full_name_ar: fullName.trim(),
+        specialty_ar: specialty.trim() || null,
+        phone: phone.trim() || null,
+        percentage,
+        materials_share: materialsShare,
+        payment_type: paymentType,
+        salary_amount: paymentType === "salary" ? Number(salaryAmount) : 0,
+      })
+    );
 
     setSaving(false);
 
     if (insertError) {
-      const msg = insertError.message ?? "";
+      const msg = insertError ?? "";
       if (msg.includes("row-level security") || msg.includes("policy")) {
         setError("رُفض الحفظ: تأكد أن دورك accountant أو super_admin.");
       } else if (msg.includes("duplicate") || msg.includes("unique")) {
@@ -202,22 +221,15 @@ export default function NewDoctorPage() {
               placeholder="07xxxxxxxx"
             />
 
-            <Select
-              label="نسبة الطبيب من كل عملية"
-              name="percentage"
-              value={percentage}
-              onChange={(e) => setPercentage(e.target.value)}
-              options={[...DOCTOR_PERCENTAGE_OPTIONS]}
-              required
-            />
-
-            <Select
-              label="نسبة تحمل الطبيب لتكلفة المواد"
-              name="materials_share"
-              value={materialsShare}
-              onChange={(e) => setMaterialsShare(e.target.value)}
-              options={[...MATERIALS_SHARE_OPTIONS]}
-              required
+            <DoctorPaymentFields
+              paymentType={paymentType}
+              onPaymentTypeChange={setPaymentType}
+              salaryAmount={salaryAmount}
+              onSalaryAmountChange={setSalaryAmount}
+              percentage={percentage}
+              onPercentageChange={setPercentage}
+              materialsShare={materialsShare}
+              onMaterialsShareChange={setMaterialsShare}
             />
 
             <div className="rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-4 space-y-3">
