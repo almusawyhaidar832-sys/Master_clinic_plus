@@ -266,3 +266,51 @@ export async function notifyDoctorSessionPayment(
     },
   ]);
 }
+
+/** Refund on doctor's session → notify doctor with amount + reason */
+export async function notifyDoctorRefund(refundId: string) {
+  const admin = adminClient();
+
+  const { data: refund, error } = await admin
+    .from("session_refunds")
+    .select(
+      "id, clinic_id, amount, reason, doctor_id, patient_id, session_id, treatment_case_id"
+    )
+    .eq("id", refundId)
+    .maybeSingle();
+
+  if (error || !refund) throw new Error("refund not found");
+
+  const [{ data: doctor }, { data: patient }] = await Promise.all([
+    admin
+      .from("doctors")
+      .select("full_name_ar, profile_id")
+      .eq("id", refund.doctor_id)
+      .maybeSingle(),
+    admin
+      .from("patients")
+      .select("full_name_ar")
+      .eq("id", refund.patient_id)
+      .maybeSingle(),
+  ]);
+
+  const profileId =
+    doctor?.profile_id ??
+    (await resolveDoctorProfileId(admin, refund.doctor_id, refund.clinic_id));
+
+  if (!profileId) return;
+
+  const amount = Number(refund.amount ?? 0);
+  const patientName = patient?.full_name_ar ?? "مراجع";
+  const reason = String(refund.reason ?? "").trim() || "بدون سبب";
+
+  await insertNotifications([
+    {
+      clinic_id: refund.clinic_id,
+      recipient_profile_id: profileId,
+      title_ar: "مرتجع على إحدى حالاتك",
+      body_ar: `${patientName} — تم إرجاع ${formatCurrency(amount)} — السبب: ${reason}`,
+      link_path: `/doctor/patients/${refund.patient_id}`,
+    },
+  ]);
+}

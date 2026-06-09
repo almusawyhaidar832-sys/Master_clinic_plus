@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveClinicId } from "@/lib/clinic-context";
 import { useAppointmentsRealtime } from "@/hooks/useAppointmentsRealtime";
-import { AppointmentPayModal } from "@/components/operations/AppointmentPayModal";
 import type { DashboardAppointment } from "@/components/operations/PaymentInvoiceModal";
+import { buildLedgerPayUrl } from "@/lib/ledger/navigation";
 import { EditAppointmentModal } from "@/components/assistant/EditAppointmentModal";
 import { RejectAppointmentModal } from "@/components/assistant/RejectAppointmentModal";
 import { setAccountantAppointmentStatusViaApi } from "@/lib/services/accountant-appointments-client";
@@ -52,12 +53,12 @@ export function TodayAppointmentsPanel({
   compact = false,
   onApprovedToQueue,
 }: TodayAppointmentsPanelProps) {
+  const router = useRouter();
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<DashboardAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
-  const [payTarget, setPayTarget] = useState<DashboardAppointment | null>(null);
   const [editing, setEditing] = useState<DashboardAppointment | null>(null);
   const [rejecting, setRejecting] = useState<DashboardAppointment | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -130,6 +131,16 @@ export function TodayAppointmentsPanel({
     } finally {
       setActionId(null);
     }
+  }
+
+  function handlePay(appointment: DashboardAppointment) {
+    router.push(
+      buildLedgerPayUrl({
+        patientId: appointment.patient_id,
+        appointmentId: appointment.id,
+        doctorId: appointment.doctor_id,
+      })
+    );
   }
 
   async function handleCheckIn(appointment: DashboardAppointment) {
@@ -303,8 +314,9 @@ export function TodayAppointmentsPanel({
                   )}
                   <button
                     type="button"
-                    onClick={() => setPayTarget(a)}
+                    onClick={() => handlePay(a)}
                     className="flex items-center gap-1 rounded-lg border border-primary/30 bg-white px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/5"
+                    title="فتح إدخال الجلسة مع بيانات المريض"
                   >
                     <Receipt className="h-3 w-3" />
                     دفع
@@ -314,17 +326,6 @@ export function TodayAppointmentsPanel({
             );
           })}
         </div>
-      )}
-
-      {payTarget && (
-        <AppointmentPayModal
-          appointment={payTarget}
-          onClose={() => setPayTarget(null)}
-          onSaved={() => {
-            setMessage("تم حفظ الفاتورة بنجاح");
-            load();
-          }}
-        />
       )}
 
       {editing && (

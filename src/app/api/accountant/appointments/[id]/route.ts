@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile, isApiStaffRole } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
-import { updateStaffAppointment } from "@/lib/services/staff-appointments-server";
+import {
+  deleteStaffAppointment,
+  updateStaffAppointment,
+} from "@/lib/services/staff-appointments-server";
 
 /** PATCH /api/accountant/appointments/[id] — تعديل موعد (محاسب) */
 export async function PATCH(
@@ -33,6 +36,27 @@ export async function PATCH(
     );
 
     return NextResponse.json({ success: true, appointment });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+/** DELETE /api/accountant/appointments/[id] — حذف موعد (محاسب) */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const caller = await getApiCallerProfile(req);
+    if (!caller?.clinic_id || !isApiStaffRole(String(caller.role))) {
+      return NextResponse.json({ error: "للموظفين فقط" }, { status: 403 });
+    }
+
+    const admin = getAdminClient();
+    await deleteStaffAppointment(admin, caller.clinic_id as string, id);
+    return NextResponse.json({ success: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
     return NextResponse.json({ error: msg }, { status: 500 });

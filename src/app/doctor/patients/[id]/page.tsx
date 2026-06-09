@@ -1,33 +1,56 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import {
-  fetchPatientsForCurrentDoctor,
   patientBelongsToDoctor,
 } from "@/lib/services/doctor-patients";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
-import type { Doctor, Patient, PatientOperation, MedicalLog, Treatment } from "@/types";
-import { AddSessionClinicalPanel } from "@/components/clinical/AddSessionClinicalPanel";
-import { SessionClinicalView } from "@/components/clinical/SessionClinicalView";
+import type { Doctor, Patient, MedicalLog, Treatment, PatientOperation } from "@/types";
 import { QuickEntryForm } from "@/components/accountant/QuickEntryForm";
 import { fetchPatientClinicalRecords } from "@/lib/clinical/fetch-patient-clinical";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
-import { opName } from "@/types";
 import { getPatientDisplayPhone } from "@/lib/phone";
+import {
+  fetchPatientTreatmentCases,
+  isPersistedTreatmentCaseId,
+  type PatientTreatmentCase,
+} from "@/lib/services/patient-treatment-cases";
+import { fetchPatientOperationsForProfile } from "@/lib/services/patient-operations-profile";
+import {
+  buildPatientCaseGroups,
+  sumCaseGroupsFinancials,
+} from "@/lib/services/patient-case-groups";
+import { PatientSessionsByCase } from "@/components/patients/PatientSessionsByCase";
+import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { ArrowRight, FileText, Plus, X } from "lucide-react";
+import { useClinicSync } from "@/hooks/useClinicSync";
+
+function treatmentCasesForDoctor(
+  cases: PatientTreatmentCase[],
+  operations: PatientOperation[]
+): PatientTreatmentCase[] {
+  const doctorCaseIds = new Set(
+    operations
+      .map((o) => o.treatment_case_id?.trim())
+      .filter((id): id is string => !!id && isPersistedTreatmentCaseId(id))
+  );
+  return cases.filter((c) => doctorCaseIds.has(c.id));
+}
 
 export default function DoctorPatientDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const [patient, setPatient] = useState<Patient | null>(null);
   const [operations, setOperations] = useState<PatientOperation[]>([]);
+  const [treatmentCases, setTreatmentCases] = useState<PatientTreatmentCase[]>([]);
   const [logs, setLogs] = useState<MedicalLog[]>([]);
   const [treatments, setTreatments] = useState<Treatment[]>([]);
   const [newLog, setNewLog] = useState("");
@@ -37,20 +60,58 @@ export default function DoctorPatientDetailPage() {
   const [clinicalByOp, setClinicalByOp] = useState<ClinicalByOperationId>({});
   const [accessDenied, setAccessDenied] = useState(false);
 
+  const doctorCases = useMemo(
+    () => treatmentCasesForDoctor(treatmentCases, operations),
+    [treatmentCases, operations]
+  );
+
+  const caseGroups = useMemo(
+    () =>
+      buildPatientCaseGroups(operations, doctorCases, {
+        clinicalSessionsOnly: true,
+        clinicalByOp,
+      }),
+    [operations, doctorCases, clinicalByOp]
+  );
+
+  const caseTotals = useMemo(
+    () => sumCaseGroupsFinancials(caseGroups),
+    [caseGroups]
+  );
+  const totalPaid = caseTotals.totalPaid;
+  const totalDebt = caseTotals.totalRemaining;
+  const clinicalSessionCount = caseTotals.sessionCount;
+
   const reloadOperations = useCallback(async () => {
     const supabase = createClient();
     const doc = await getDoctorForCurrentUser(supabase);
-    let opsQuery = supabase
-      .from("patient_operations")
-      .select("*")
-      .eq("patient_id", id)
-      .order("operation_date", { ascending: false });
-    if (doc) opsQuery = opsQuery.eq("doctor_id", doc.id);
-    const { data } = await opsQuery;
-    setOperations((data as PatientOperation[]) || []);
+    if (!doc) return;
+
+    const ops = await fetchPatientOperationsForProfile(supabase, id, {
+      doctorId: doc.id,
+    });
+    setOperations(ops);
     const clinical = await fetchPatientClinicalRecords(id);
     setClinicalByOp(clinical);
   }, [id]);
+
+  const loadTreatmentCases = useCallback(async () => {
+    const supabase = createClient();
+    const cases = await fetchPatientTreatmentCases(supabase, id);
+    setTreatmentCases(cases);
+  }, [id]);
+
+  const refreshPatientData = useCallback(async () => {
+    await Promise.all([reloadOperations(), loadTreatmentCases()]);
+  }, [reloadOperations, loadTreatmentCases]);
+
+  useClinicSync({
+    topics: ["sessions", "refunds", "all"],
+    doctorId: doctor?.id,
+    patientId: id,
+    onRefresh: refreshPatientData,
+    enabled: !!doctor?.id && !accessDenied,
+  });
 
   useEffect(() => {
     async function load() {
@@ -68,16 +129,8 @@ export default function DoctorPatientDetailPage() {
       }
       setAccessDenied(false);
 
-      let opsQuery = supabase
-        .from("patient_operations")
-        .select("*")
-        .eq("patient_id", id)
-        .order("operation_date", { ascending: false });
-      if (doc) opsQuery = opsQuery.eq("doctor_id", doc.id);
-
-      const [pRes, oRes, lRes, tRes] = await Promise.all([
+      const [pRes, lRes, tRes] = await Promise.all([
         supabase.from("patients").select("*").eq("id", id).single(),
-        opsQuery,
         supabase
           .from("medical_logs")
           .select("*, doctor:doctors!doctor_id(full_name_ar)")
@@ -91,28 +144,27 @@ export default function DoctorPatientDetailPage() {
       ]);
 
       if (pRes.data) setPatient(pRes.data as Patient);
-      setOperations((oRes.data as PatientOperation[]) || []);
       setLogs((lRes.data as MedicalLog[]) || []);
       setTreatments((tRes.data as Treatment[]) || []);
-      const clinical = await fetchPatientClinicalRecords(id);
-      setClinicalByOp(clinical);
+
+      await Promise.all([reloadOperations(), loadTreatmentCases()]);
     }
     if (id) load();
-  }, [id]);
+  }, [id, reloadOperations, loadTreatmentCases]);
 
   async function addLog() {
     if (!newLog.trim()) return;
     const supabase = createClient();
-    const doctor = await getDoctorForCurrentUser(supabase);
-    if (!doctor) return;
+    const currentDoctor = await getDoctorForCurrentUser(supabase);
+    if (!currentDoctor) return;
 
     setSaving(true);
     const { data } = await supabase
       .from("medical_logs")
       .insert({
-        clinic_id: doctor.clinic_id,
+        clinic_id: currentDoctor.clinic_id,
         patient_id: id,
-        doctor_id: doctor.id,
+        doctor_id: currentDoctor.id,
         content_ar: newLog.trim(),
       })
       .select()
@@ -163,7 +215,35 @@ export default function DoctorPatientDetailPage() {
             </p>
           )}
         </CardHeader>
-        <div className="flex flex-col gap-2">
+
+        <div className="grid grid-cols-3 gap-3 px-4 pb-4">
+          <div className="rounded-lg bg-surface p-3 text-center">
+            <p className="text-lg font-bold text-slate-text">
+              {clinicalSessionCount}
+            </p>
+            <p className="text-xs text-slate-muted">جلسات علاجية</p>
+          </div>
+          <div className="rounded-lg bg-surface p-3 text-center">
+            <p className="text-lg font-bold text-primary">
+              {formatCurrency(totalPaid)}
+            </p>
+            <p className="text-xs text-slate-muted">مدفوع</p>
+          </div>
+          <div
+            className={`rounded-lg p-3 text-center ${totalDebt > FINANCIAL_EPSILON ? "bg-debt/40" : "bg-emerald-50"}`}
+          >
+            <p
+              className={`text-lg font-bold ${totalDebt > FINANCIAL_EPSILON ? "text-debt-text" : "text-emerald-700"}`}
+            >
+              {formatCurrency(totalDebt)}
+            </p>
+            <p className="text-xs text-slate-muted">
+              {totalDebt > FINANCIAL_EPSILON ? "ذمة متبقية" : "لا ذمة"}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 px-4 pb-4">
           <Button
             variant="primary"
             size="sm"
@@ -196,9 +276,12 @@ export default function DoctorPatientDetailPage() {
           defaultPatientId={id}
           defaultPatientName={patient.full_name_ar}
           lockDoctorId={doctor.id}
+          lockDoctorName={doctor.full_name_ar}
+          prefetchedCases={doctorCases}
           onSuccess={() => {
             setShowSessionForm(false);
-            reloadOperations();
+            void reloadOperations();
+            void loadTreatmentCases();
           }}
         />
       )}
@@ -208,7 +291,7 @@ export default function DoctorPatientDetailPage() {
           <CardHeader>
             <CardTitle className="text-base">علاجات نشطة</CardTitle>
           </CardHeader>
-          <ul className="space-y-2 text-sm">
+          <ul className="space-y-2 px-4 pb-4 text-sm">
             {treatments.map((t) => (
               <li key={t.id} className="rounded bg-amber-50 p-2">
                 {t.title_ar} ({t.completed_sessions}/{t.expected_sessions})
@@ -218,74 +301,65 @@ export default function DoctorPatientDetailPage() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">سجل الجلسات</CardTitle>
-        </CardHeader>
-        {operations.length === 0 ? (
-          <p className="text-sm text-slate-muted">لا توجد عمليات</p>
+      <div>
+        <h3 className="mb-1 text-lg font-semibold text-slate-text">
+          سجل الجلسات حسب الحالة
+        </h3>
+        <p className="mb-3 text-xs text-slate-muted">
+          الملخص المالي في رأس كل حالة — الجلسات تعرض العمل الطبي فقط بدون مبالغ
+          الدفع
+        </p>
+
+        {operations.length === 0 && doctorCases.length === 0 ? (
+          <Alert variant="info">لا توجد حالات أو جلسات مسجّلة لهذا المراجع معك</Alert>
         ) : (
-          <ul className="space-y-3 text-sm">
-            {operations.map((op) => (
-              <li
-                key={op.id}
-                className="rounded-lg border border-slate-border p-3"
-              >
-                <div className="flex justify-between gap-2">
-                  <span className="font-medium">
-                    {opName(op)}
-                    {op.operation_date
-                      ? ` — ${formatDate(op.operation_date)}`
-                      : ""}
-                  </span>
-                  <span className="font-medium text-primary shrink-0">
-                    {formatCurrency(op.doctor_share_amount ?? op.paid_amount)}
-                  </span>
-                </div>
-                <SessionClinicalView data={clinicalByOp[op.id]} />
-                <AddSessionClinicalPanel
-                  operationId={op.id}
-                  existing={clinicalByOp[op.id]}
-                  onSaved={reloadOperations}
-                />
-              </li>
-            ))}
-          </ul>
+          <PatientSessionsByCase
+            patientId={id}
+            operations={operations}
+            treatmentCases={doctorCases}
+            clinicalByOp={clinicalByOp}
+            onClinicalSaved={reloadOperations}
+            showContinueActions={false}
+            allowEdit={false}
+            viewMode="clinical"
+          />
         )}
-      </Card>
+      </div>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">إضافة ملاحظة طبية</CardTitle>
         </CardHeader>
-        <textarea
-          className="mb-2 w-full rounded-lg border border-slate-border p-3 text-sm"
-          rows={3}
-          value={newLog}
-          onChange={(e) => setNewLog(e.target.value)}
-          placeholder="سجل زيارة، تشخيص، خطة علاج..."
-        />
-        <Button size="sm" onClick={addLog} disabled={saving}>
-          {saving ? "جاري الحفظ..." : "حفظ السجل"}
-        </Button>
-        {logs.length > 0 && (
-          <ul className="mt-4 space-y-2 text-sm">
-            {logs.map((log) => (
-              <li key={log.id} className="rounded bg-surface p-2">
-                <p className="text-xs text-slate-muted">
-                  {formatDate(log.log_date)}
-                </p>
-                <p className="text-xs text-primary mb-1">
-                  {formatDoctorDisplayName(
-                    (log as { doctor?: { full_name_ar: string } }).doctor
-                      ?.full_name_ar ?? doctor?.full_name_ar
-                  )}
-                </p>
-                <p>{log.content_ar}</p>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="px-4 pb-4">
+          <textarea
+            className="mb-2 w-full rounded-lg border border-slate-border p-3 text-sm"
+            rows={3}
+            value={newLog}
+            onChange={(e) => setNewLog(e.target.value)}
+            placeholder="سجل زيارة، تشخيص، خطة علاج..."
+          />
+          <Button size="sm" onClick={addLog} disabled={saving}>
+            {saving ? "جاري الحفظ..." : "حفظ السجل"}
+          </Button>
+          {logs.length > 0 && (
+            <ul className="mt-4 space-y-2 text-sm">
+              {logs.map((log) => (
+                <li key={log.id} className="rounded bg-surface p-2">
+                  <p className="text-xs text-slate-muted">
+                    {formatDate(log.log_date)}
+                  </p>
+                  <p className="mb-1 text-xs text-primary">
+                    {formatDoctorDisplayName(
+                      (log as { doctor?: { full_name_ar: string } }).doctor
+                        ?.full_name_ar ?? doctor?.full_name_ar
+                    )}
+                  </p>
+                  <p>{log.content_ar}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </Card>
     </div>
   );

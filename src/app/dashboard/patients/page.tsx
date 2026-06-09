@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { formatCurrency } from "@/lib/utils";
 import { computeOutstandingDebtFromOperations } from "@/lib/services/patient-treatment-cases";
-import { searchPatientsByQuery } from "@/lib/services/patient-search";
+import { searchPatientsViaApi } from "@/lib/services/patient-search";
 import type { Patient, PatientOperation } from "@/types";
 import { Search, FileText } from "lucide-react";
 import { AddPatientForm } from "@/components/patients/AddPatientForm";
@@ -43,11 +43,10 @@ export default function PatientsSearchPage() {
     setSearched(true);
     setSearchError(null);
 
-    const supabase = createClient();
-    const { patients, error } = await searchPatientsByQuery(supabase, trimmed, {
+    const { patients, error } = await searchPatientsViaApi(trimmed, {
+      portal: "accountant",
       limit: 30,
       minLength: 2,
-      clinicId: clinicId ?? undefined,
     });
 
     if (error) {
@@ -61,6 +60,7 @@ export default function PatientsSearchPage() {
     const debtMap: Record<string, number> = {};
 
     if (ids.length > 0) {
+      const supabase = createClient();
       let opQuery = supabase
         .from("patient_operations")
         .select(

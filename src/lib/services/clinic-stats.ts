@@ -21,6 +21,7 @@ export interface ClinicProfitStats {
   cashInflow: number;
   outstandingDebts: number;
   netProfit: number;
+  totalRefunds: number;
   clinicShareTotal: number;
   doctorShareTotal: number;
   totalExpenses: number;
@@ -67,6 +68,7 @@ export async function fetchClinicProfitStats(
       cashInflow: 0,
       outstandingDebts: 0,
       netProfit: 0,
+      totalRefunds: 0,
       clinicShareTotal: 0,
       doctorShareTotal: 0,
       totalExpenses: 0,
@@ -75,7 +77,11 @@ export async function fetchClinicProfitStats(
     };
   }
 
-  const [opsRes, expensesRes, salariesRes, shares, outstandingDebts] =
+  const { fetchTotalRefundsAmount } = await import(
+    "@/lib/services/session-refunds"
+  );
+
+  const [opsRes, expensesRes, salariesRes, shares, outstandingDebts, totalRefunds] =
     await Promise.all([
       supabase
         .from("patient_operations")
@@ -89,6 +95,7 @@ export async function fetchClinicProfitStats(
         .eq("status", "paid"),
       fetchTreatmentLevelShares(supabase, clinicId),
       fetchOutstandingDebts(supabase, clinicId),
+      fetchTotalRefundsAmount(supabase, { clinicId }),
     ]);
 
   const ops = opsRes.data ?? [];
@@ -112,21 +119,28 @@ export async function fetchClinicProfitStats(
     doctorShareAccrued: doctorShareTotal,
   });
 
+  const refundsRounded = Math.round(totalRefunds * 100) / 100;
+  const netProfit = Math.round(
+    (cashInflow - refundsRounded - totalExpenses - totalSalariesPaid) * 100
+  ) / 100;
+
   return {
     cashInflow,
     outstandingDebts,
-    netProfit: profit.netProfit,
+    netProfit,
+    totalRefunds: refundsRounded,
     clinicShareTotal,
     doctorShareTotal,
     totalExpenses,
     totalSalariesPaid,
     breakdown: [
-      { label: "حصة العيادة من العمليات", amount: clinicShareTotal },
-      { label: "المتحصل نقداً (مرضى)", amount: cashInflow },
-      { label: "أرباح الأطباء (محافظ — منفصلة)", amount: doctorShareTotal },
-      { label: "رواتب مدفوعة", amount: -totalSalariesPaid },
+      { label: "إجمالي الإيرادات (محصّل)", amount: cashInflow },
+      { label: "المرتجعات", amount: -refundsRounded },
       { label: "مصروفات عامة", amount: -totalExpenses },
-      { label: "صافي ربح العيادة", amount: profit.netProfit },
+      { label: "رواتب مدفوعة", amount: -totalSalariesPaid },
+      { label: "حصة العيادة من العمليات", amount: clinicShareTotal },
+      { label: "أرباح الأطباء (محافظ — منفصلة)", amount: doctorShareTotal },
+      { label: "صافي ربح العيادة", amount: netProfit },
     ],
   };
 }

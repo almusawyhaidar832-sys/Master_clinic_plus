@@ -12,7 +12,12 @@ export interface NotificationRow {
 }
 
 /** Default link for accountant withdrawal alerts */
-export function notificationActionHref(title: string): string | null {
+export function notificationActionHref(
+  title: string,
+  linkPath?: string | null
+): string | null {
+  if (linkPath?.trim()) return linkPath;
+  if (title.includes("مرتجع")) return "/doctor/notifications";
   if (title.includes("سحب")) return "/dashboard/withdrawals";
   if (title.includes("جلسة") || title.includes("مراجع")) return "/dashboard/ledger";
   return null;

@@ -4,28 +4,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
-import {
-  computedCaseRemaining,
-  FINANCIAL_EPSILON,
-  isTreatmentCaseComplete,
-} from "@/lib/services/patient-financial-plan";
+import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import Link from "next/link";
-import { sortOpsChronologically } from "@/lib/services/case-session-count";
 import {
-  groupOperationsByTreatmentCase,
-  type TreatmentCaseSessionGroup,
-} from "@/lib/services/group-operations-by-case";
-import {
-  isPersistedTreatmentCaseId,
-  treatmentCaseDisplayLabel,
-  treatmentNameKey,
-} from "@/lib/services/patient-treatment-cases";
+  buildPatientCaseGroups,
+  type CaseSessionItem,
+  type PatientCaseGroup,
+} from "@/lib/services/patient-case-groups";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
+import { isPersistedTreatmentCaseId } from "@/lib/services/patient-treatment-cases";
 import { AddSessionClinicalPanel } from "@/components/clinical/AddSessionClinicalPanel";
 import { SessionClinicalView } from "@/components/clinical/SessionClinicalView";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
 import { hasClinicalData } from "@/lib/clinical/types";
-import type { PatientOperation } from "@/types";
+import { opName, type PatientOperation } from "@/types";
 import { SessionEditDialog } from "@/components/sessions/SessionEditDialog";
 import { SessionRefundModal } from "@/components/sessions/SessionRefundModal";
 import { createClient } from "@/lib/supabase/client";
@@ -37,75 +29,66 @@ interface PatientSessionsByCaseProps {
   treatmentCases: PatientTreatmentCase[];
   clinicalByOp: ClinicalByOperationId;
   onClinicalSaved: () => void;
-  /** فتح نموذج المتابعة داخل نفس الصفحة */
   onContinueCase?: (caseId: string) => void;
-  /** مسار الإدخال السريع (افتراضي لوحة المحاسب) */
   ledgerPath?: string;
-  /** محاسب / طبيب / مالك — يظهر زر تعديل السجل */
   allowEdit?: boolean;
+  showContinueActions?: boolean;
+  /** clinical — قائمة الجلسات العلاجية؛ الملخص المالي من كل جلسات الحالة */
+  viewMode?: "accountant" | "clinical";
 }
 
-function resolveGroupCaseId(
-  group: TreatmentCaseSessionGroup,
-  treatmentCases: PatientTreatmentCase[]
-): string | null {
-  if (group.caseId && isPersistedTreatmentCaseId(group.caseId)) {
-    return group.caseId;
-  }
-  if (
-    group.caseInfo?.id &&
-    isPersistedTreatmentCaseId(group.caseInfo.id)
-  ) {
-    return group.caseInfo.id;
-  }
-  for (const op of group.sessions) {
-    const linked = op.treatment_case_id?.trim();
-    if (linked && isPersistedTreatmentCaseId(linked)) return linked;
-  }
-  const nameKey = treatmentNameKey(group.treatmentName);
-  const nameMatches = treatmentCases.filter(
-    (c) =>
-      isPersistedTreatmentCaseId(c.id) &&
-      treatmentNameKey(c.treatment_name_ar) === nameKey
+function CaseFinancialSummary({ group }: { group: PatientCaseGroup }) {
+  return (
+    <p className="text-xs tabular-nums text-slate-muted leading-relaxed">
+      الإجمالي:{" "}
+      <span className="font-semibold text-slate-text">
+        {formatCurrency(group.total)}
+      </span>
+      {" | "}
+      المدفوع:{" "}
+      <span className="font-semibold text-primary">
+        {formatCurrency(group.totalPaid)}
+      </span>
+      {" | "}
+      المتبقي:{" "}
+      <span
+        className={cn(
+          "font-bold",
+          group.remaining > FINANCIAL_EPSILON
+            ? "text-debt-text"
+            : "text-emerald-700"
+        )}
+      >
+        {formatCurrency(group.remaining)}
+      </span>
+    </p>
   );
-  if (nameMatches.length === 1) return nameMatches[0].id;
-  return null;
 }
 
-function resolveGroupCaseInfo(
-  group: TreatmentCaseSessionGroup,
-  treatmentCases: PatientTreatmentCase[],
-  linkedCaseId: string | null
-): PatientTreatmentCase | null {
-  if (group.caseInfo) return group.caseInfo;
-  if (linkedCaseId) {
-    return treatmentCases.find((c) => c.id === linkedCaseId) ?? null;
-  }
-  const nameKey = treatmentNameKey(group.treatmentName);
-  const nameMatches = treatmentCases.filter(
-    (c) => treatmentNameKey(c.treatment_name_ar) === nameKey
-  );
-  if (nameMatches.length === 1) return nameMatches[0];
-  return null;
-}
-
-function sessionDateLabel(op: PatientOperation): string {
-  if (op.operation_date) return formatDate(op.operation_date);
-  if (op.created_at) return formatDate(op.created_at.split("T")[0]);
+function sessionDateLabel(item: CaseSessionItem): string {
+  if (item.date) return formatDate(item.date);
   return "—";
 }
 
-function sessionKindLabel(op: PatientOperation): string {
+function sessionKindLabel(op: PatientOperation, clinicalView: boolean): string {
+  if (clinicalView) {
+    if (op.session_kind === "plan" || Number(op.total_amount) > 0) {
+      return "بداية العلاج";
+    }
+    if (op.session_kind === "payment") return "دفعة";
+    if (op.session_kind === "discount") return "خصم";
+    return "متابعة";
+  }
   if (op.session_kind === "discount") return "خصم إضافي";
   if (op.session_kind === "plan" || Number(op.total_amount) > 0) {
     return "فتح ملف / سعر الحالة";
   }
-  return "دفعة";
+  if (op.session_kind === "payment") return "دفعة";
+  return "جلسة";
 }
 
 function SessionRow({
-  op,
-  sessionNumber,
+  item,
   totalInCase,
   caseId,
   patientId,
@@ -114,9 +97,10 @@ function SessionRow({
   clinical,
   onClinicalSaved,
   allowEdit,
+  showContinueActions,
+  clinicalView,
 }: {
-  op: PatientOperation;
-  sessionNumber: number;
+  item: CaseSessionItem;
   totalInCase: number;
   caseId: string | null;
   patientId: string;
@@ -125,7 +109,10 @@ function SessionRow({
   clinical?: ClinicalByOperationId[string];
   onClinicalSaved: () => void;
   allowEdit?: boolean;
+  showContinueActions?: boolean;
+  clinicalView?: boolean;
 }) {
+  const op = item.operation;
   const [refundOpen, setRefundOpen] = useState(false);
   const [maxRefundable, setMaxRefundable] = useState(0);
   const [refundLoading, setRefundLoading] = useState(false);
@@ -135,7 +122,7 @@ function SessionRow({
   };
   const isPlan = op.session_kind === "plan" || Number(op.total_amount) > 0;
   const hasClinical = hasClinicalData(clinical);
-  const sessionPaid = Number(op.paid_amount ?? 0);
+  const sessionPaid = item.amountPaid;
   const canRefund =
     !!allowEdit && op.session_kind !== "refund" && sessionPaid > 0;
   const linkedCaseId =
@@ -149,10 +136,14 @@ function SessionRow({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-medium text-primary">
-            {sessionKindLabel(op)} — جلسة {sessionNumber} من {totalInCase}
+            {sessionKindLabel(op, !!clinicalView)} — جلسة {item.sessionNumber}{" "}
+            من {totalInCase}
           </p>
-          <p className="text-sm font-semibold text-slate-text tabular-nums">
-            {sessionDateLabel(op)}
+          <p className="text-sm font-semibold text-slate-text">
+            {clinicalView ? opName(op) : sessionDateLabel(item)}
+          </p>
+          <p className="text-sm text-slate-muted tabular-nums">
+            {sessionDateLabel(item)}
           </p>
           <p className="text-xs text-slate-muted">
             {formatDoctorDisplayName(opWithDoctor.doctor?.full_name_ar)}
@@ -161,24 +152,17 @@ function SessionRow({
             <p className="mt-1 text-xs text-slate-muted italic">{op.notes}</p>
           )}
         </div>
-        <div className="text-left shrink-0 tabular-nums" dir="ltr">
-          {isPlan && Number(op.total_amount) > 0 && (
-            <p className="text-sm font-bold text-slate-text">
-              سعر الحالة: {formatCurrency(op.total_amount)}
+        {sessionPaid > 0 && (
+          <div className="shrink-0 text-left tabular-nums" dir="ltr">
+            <p className="text-xs text-slate-muted">مدفوع هذه الجلسة</p>
+            <p className="text-sm font-bold text-primary">
+              {formatCurrency(sessionPaid)}
             </p>
-          )}
-          {Number(op.paid_amount) > 0 && (
-            <p className="text-xs text-primary font-semibold">
-              دفع: {formatCurrency(op.paid_amount)}
-            </p>
-          )}
-          {op.session_kind === "discount" && (
-            <p className="text-xs text-amber-800">خصم على الذمة</p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {isPlan && linkedCaseId && (
+      {showContinueActions !== false && isPlan && linkedCaseId && (
         <div className="mt-2">
           {onContinueCase ? (
             <button
@@ -239,14 +223,6 @@ function SessionRow({
           )}
         </div>
       </div>
-
-      <SessionRefundModal
-        operation={op}
-        maxRefundable={maxRefundable}
-        open={refundOpen}
-        onClose={() => setRefundOpen(false)}
-        onSaved={onClinicalSaved}
-      />
     </div>
   );
 }
@@ -256,23 +232,17 @@ function ContinueCaseButton({
   onContinueCase,
   ledgerPath,
   patientId,
-  compact,
 }: {
   caseId: string;
   onContinueCase?: (caseId: string) => void;
   ledgerPath: string;
   patientId: string;
-  compact?: boolean;
 }) {
   if (onContinueCase) {
     return (
       <button
         type="button"
-        className={
-          compact
-            ? "text-xs font-semibold text-primary underline"
-            : "w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
-        }
+        className="w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
         onClick={(e) => {
           e.stopPropagation();
           onContinueCase(caseId);
@@ -285,11 +255,7 @@ function ContinueCaseButton({
   return (
     <Link
       href={`${ledgerPath}?patient=${encodeURIComponent(patientId)}&case=${encodeURIComponent(caseId)}`}
-      className={
-        compact
-          ? "text-xs font-semibold text-primary underline"
-          : "block w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-center text-sm font-semibold text-primary hover:bg-primary/10"
-      }
+      className="block w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-center text-sm font-semibold text-primary hover:bg-primary/10"
       onClick={(e) => e.stopPropagation()}
     >
       متابعة الحالة — إضافة جلسة / دفعة
@@ -304,38 +270,40 @@ function CaseAccordion({
   patientId,
   ledgerPath,
   onContinueCase,
-  treatmentCases,
   clinicalByOp,
   onClinicalSaved,
   allowEdit,
+  showContinueActions,
+  clinicalView,
 }: {
-  group: TreatmentCaseSessionGroup;
+  group: PatientCaseGroup;
   expanded: boolean;
   onToggle: () => void;
   patientId: string;
   ledgerPath: string;
   onContinueCase?: (caseId: string) => void;
-  treatmentCases: PatientTreatmentCase[];
   clinicalByOp: ClinicalByOperationId;
   onClinicalSaved: () => void;
   allowEdit?: boolean;
+  showContinueActions?: boolean;
+  clinicalView?: boolean;
 }) {
-  const linkedCaseId = resolveGroupCaseId(group, treatmentCases);
-  const caseInfo = resolveGroupCaseInfo(group, treatmentCases, linkedCaseId);
-  const remaining = caseInfo ? computedCaseRemaining(caseInfo) : 0;
-  const complete =
-    caseInfo ? isTreatmentCaseComplete(caseInfo) && remaining <= FINANCIAL_EPSILON : false;
+  const linkedCaseId =
+    group.caseId && isPersistedTreatmentCaseId(group.caseId)
+      ? group.caseId
+      : null;
   const canContinue =
+    showContinueActions !== false &&
     !!linkedCaseId &&
-    (caseInfo ? remaining > FINANCIAL_EPSILON : true);
+    group.remaining > FINANCIAL_EPSILON;
 
   return (
     <div
       className={cn(
         "rounded-xl border overflow-hidden",
-        complete
+        group.isComplete
           ? "border-emerald-200 bg-emerald-50/30"
-          : remaining > FINANCIAL_EPSILON
+          : group.remaining > FINANCIAL_EPSILON
             ? "border-debt/40 bg-debt/5"
             : "border-slate-border bg-surface-card"
       )}
@@ -343,46 +311,38 @@ function CaseAccordion({
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-right hover:bg-black/[0.02] transition-colors"
+        className="flex w-full items-start justify-between gap-3 px-4 py-3 text-right hover:bg-black/[0.02] transition-colors"
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-start gap-2 min-w-0">
           <ChevronDown
             className={cn(
-              "h-5 w-5 shrink-0 text-slate-muted transition-transform",
+              "mt-0.5 h-5 w-5 shrink-0 text-slate-muted transition-transform",
               expanded && "rotate-180"
             )}
           />
-          <div>
+          <div className="min-w-0">
             <p className="font-semibold text-slate-text text-base">
-              {caseInfo
-                ? treatmentCaseDisplayLabel(caseInfo, treatmentCases)
-                : group.treatmentName}
-            </p>
-            <p className="text-xs text-slate-muted mt-0.5">
-              {group.sessionCount} جلسة
-              {caseInfo && (
-                <>
+              {group.caseName}
+              {group.total > 0 && (
+                <span className="font-normal text-slate-muted">
                   {" "}
-                  · السعر الكلي {formatCurrency(caseInfo.case_price)}
-                </>
+                  — {formatCurrency(group.total)}
+                </span>
               )}
             </p>
+            <p className="text-xs text-slate-muted mt-0.5">
+              {group.sessions.length} جلسة
+            </p>
+            <div className="mt-1.5">
+              <CaseFinancialSummary group={group} />
+            </div>
           </div>
         </div>
-        <div className="shrink-0 text-left flex flex-col items-end gap-1">
-          {complete ? (
-            <span className="text-xs font-semibold text-emerald-700">
-              ✓ مكتمل
-            </span>
-          ) : caseInfo ? (
-            <>
-              <p className="text-xs text-slate-muted">المتبقي</p>
-              <p className="text-lg font-bold text-debt-text tabular-nums">
-                {formatCurrency(remaining)}
-              </p>
-            </>
-          ) : null}
-        </div>
+        {group.isComplete && (
+          <span className="shrink-0 text-xs font-semibold text-emerald-700">
+            ✓ مكتمل
+          </span>
+        )}
       </button>
 
       {canContinue && linkedCaseId && (
@@ -400,28 +360,26 @@ function CaseAccordion({
         <div className="border-t border-slate-border/60 px-3 pb-3 pt-2 space-y-2 bg-white/60">
           {group.sessions.length === 0 ? (
             <p className="text-xs text-slate-muted px-2 py-2">
-              لا جلسات مسجّلة بعد — استخدم «متابعة الحالة» أعلاه لإضافة أول جلسة.
+              لا جلسات مسجّلة في هذه الحالة بعد.
             </p>
-          ) : null}
-          {(() => {
-            const chronological = sortOpsChronologically(group.sessions);
-            const totalInCase = chronological.length;
-            return chronological.map((op, index) => (
+          ) : (
+            group.sessions.map((item) => (
               <SessionRow
-                key={op.id}
-                op={op}
-                sessionNumber={index + 1}
-                totalInCase={totalInCase}
+                key={item.operation.id}
+                item={item}
+                totalInCase={group.sessions.length}
                 caseId={linkedCaseId}
                 patientId={patientId}
                 ledgerPath={ledgerPath}
                 onContinueCase={onContinueCase}
-                clinical={clinicalByOp[op.id]}
+                clinical={clinicalByOp[item.operation.id]}
                 onClinicalSaved={onClinicalSaved}
                 allowEdit={allowEdit}
+                showContinueActions={showContinueActions}
+                clinicalView={clinicalView}
               />
-            ));
-          })()}
+            ))
+          )}
         </div>
       )}
     </div>
@@ -437,41 +395,22 @@ export function PatientSessionsByCase({
   onContinueCase,
   ledgerPath = "/dashboard/ledger",
   allowEdit = false,
+  showContinueActions = true,
+  viewMode = "accountant",
 }: PatientSessionsByCaseProps) {
-  const groups = useMemo(() => {
-    const base = groupOperationsByTreatmentCase(operations, treatmentCases);
-    const representedCaseIds = new Set(
-      base
-        .map((g) => g.caseId)
-        .filter((id): id is string => !!id && isPersistedTreatmentCaseId(id))
-    );
-    for (const c of treatmentCases) {
-      if (!isPersistedTreatmentCaseId(c.id)) continue;
-      if (representedCaseIds.has(c.id)) continue;
-      if (computedCaseRemaining(c) <= FINANCIAL_EPSILON) continue;
-      base.push({
-        key: `case:${c.id}`,
-        treatmentName: c.treatment_name_ar,
-        caseId: c.id,
-        caseInfo: c,
-        sessions: [],
-        sessionCount: 0,
-      });
-    }
-    return base.sort((a, b) => {
-      const aComplete = a.caseInfo ? isTreatmentCaseComplete(a.caseInfo) : false;
-      const bComplete = b.caseInfo ? isTreatmentCaseComplete(b.caseInfo) : false;
-      if (aComplete !== bComplete) return aComplete ? 1 : -1;
-      const aRem = a.caseInfo ? computedCaseRemaining(a.caseInfo) : 0;
-      const bRem = b.caseInfo ? computedCaseRemaining(b.caseInfo) : 0;
-      if (aRem !== bRem) return bRem - aRem;
-      return a.treatmentName.localeCompare(b.treatmentName, "ar");
-    });
-  }, [operations, treatmentCases]);
+  const clinicalView = viewMode === "clinical";
 
-  const defaultKey = groups.find(
-    (g) => g.caseInfo && !isTreatmentCaseComplete(g.caseInfo)
-  )?.key ?? groups[0]?.key ?? null;
+  const caseGroups = useMemo(
+    () =>
+      buildPatientCaseGroups(operations, treatmentCases, {
+        clinicalSessionsOnly: clinicalView,
+        clinicalByOp,
+      }),
+    [operations, treatmentCases, clinicalView, clinicalByOp]
+  );
+
+  const defaultKey =
+    caseGroups.find((g) => !g.isComplete)?.key ?? caseGroups[0]?.key ?? null;
 
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const didInit = useRef(false);
@@ -483,14 +422,14 @@ export function PatientSessionsByCase({
     }
   }, [defaultKey]);
 
-  if (groups.length === 0) return null;
+  if (caseGroups.length === 0) return null;
 
   return (
     <div className="space-y-2">
       <p className="text-xs text-slate-muted mb-2">
-        اضغط على اسم الحالة لعرض كل جلساتها وتواريخها
+        كل حالة مجمّعة بمعرّفها — الملخص المالي محسوب من جلسات هذه الحالة فقط
       </p>
-      {groups.map((group) => (
+      {caseGroups.map((group) => (
         <CaseAccordion
           key={group.key}
           group={group}
@@ -501,12 +440,16 @@ export function PatientSessionsByCase({
           patientId={patientId}
           ledgerPath={ledgerPath}
           onContinueCase={onContinueCase}
-          treatmentCases={treatmentCases}
           clinicalByOp={clinicalByOp}
           onClinicalSaved={onClinicalSaved}
           allowEdit={allowEdit}
+          showContinueActions={showContinueActions}
+          clinicalView={clinicalView}
         />
       ))}
     </div>
   );
 }
+
+/** للاستخدام في الصفحات — خريطة الحالات بعد الجلب */
+export { buildPatientCaseGroups, buildPatientCaseGroupsMap } from "@/lib/services/patient-case-groups";

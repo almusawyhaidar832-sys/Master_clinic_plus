@@ -11,7 +11,10 @@ import {
   fetchTodaySummary,
 } from "@/lib/services/clinic-stats";
 import { currentMonthYear } from "@/lib/utils";
-import { fetchRefundsForReport } from "@/lib/services/session-refunds";
+import {
+  fetchRefundsForReport,
+  fetchTotalRefundsAmount,
+} from "@/lib/services/session-refunds";
 import {
   doctorPaymentLabel,
   isSalaryDoctor,
@@ -64,6 +67,7 @@ export interface MasterClinicReport {
     doctorPayouts: number;
     outstandingDebts: number;
     netProfit: number;
+    totalRefunds: number;
     cashInflow: number;
   };
   today: {
@@ -356,6 +360,10 @@ export async function fetchMasterClinicReport(
   const { start, end, my } = getMonthBounds(monthYear);
 
   const clinicProfile = await fetchClinicProfile(supabase);
+  const active = await import("@/lib/clinic-context").then((m) =>
+    m.getActiveClinicId(supabase)
+  );
+  const clinicId = active?.clinicId;
 
   const [
     profitStats,
@@ -367,6 +375,7 @@ export async function fetchMasterClinicReport(
     monthOpsRes,
     monthOpsCountRes,
     refunds,
+    monthRefundsTotal,
   ] = await Promise.all([
     fetchClinicProfitStats(supabase),
     fetchTodaySummary(supabase),
@@ -405,6 +414,13 @@ export async function fetchMasterClinicReport(
       .gte("operation_date", start)
       .lte("operation_date", end),
     fetchRefundsForReport(supabase, start, end),
+    clinicId
+      ? fetchTotalRefundsAmount(supabase, {
+          clinicId,
+          from: start,
+          to: end,
+        })
+      : Promise.resolve(0),
   ]);
 
   const monthRows = monthOpsCountRes.data ?? [];
@@ -421,7 +437,15 @@ export async function fetchMasterClinicReport(
     0
   );
 
-  const totalRevenue = monthBilled || profitStats.cashInflow;
+  const totalRevenue = monthCollected || profitStats.cashInflow;
+  const totalRefunds = Math.round(monthRefundsTotal * 100) / 100;
+  const netProfit = Math.round(
+    (totalRevenue -
+      totalRefunds -
+      profitStats.totalExpenses -
+      profitStats.totalSalariesPaid) *
+      100
+  ) / 100;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -436,7 +460,8 @@ export async function fetchMasterClinicReport(
       staffSalaries: profitStats.totalSalariesPaid,
       doctorPayouts: profitStats.doctorShareTotal,
       outstandingDebts: profitStats.outstandingDebts,
-      netProfit: profitStats.netProfit,
+      totalRefunds,
+      netProfit,
       cashInflow: profitStats.cashInflow,
     },
     today,

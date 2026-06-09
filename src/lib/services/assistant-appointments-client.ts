@@ -1,5 +1,14 @@
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import { notifyAppointmentMutation } from "@/lib/sync/mutation-notify";
 import type { Appointment } from "@/types";
+
+function syncAppointment(appointment?: Appointment) {
+  if (!appointment?.clinic_id) return;
+  notifyAppointmentMutation({
+    clinicId: appointment.clinic_id,
+    doctorId: appointment.doctor_id,
+  });
+}
 
 async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
   return res.json().catch(() => ({})) as Promise<T & { error?: string }>;
@@ -24,6 +33,7 @@ export async function createAssistantAppointmentViaApi(input: {
   });
   const json = await parseJson<{ appointment?: Appointment }>(res);
   if (!res.ok) return { ok: false, error: json.error ?? "تعذر إضافة الموعد" };
+  syncAppointment(json.appointment);
   return { ok: true, appointment: json.appointment };
 }
 
@@ -50,6 +60,7 @@ export async function updateAssistantAppointmentViaApi(
   });
   const json = await parseJson<{ appointment?: Appointment }>(res);
   if (!res.ok) return { ok: false, error: json.error ?? "تعذر تعديل الموعد" };
+  syncAppointment(json.appointment);
   return { ok: true, appointment: json.appointment };
 }
 
@@ -69,6 +80,7 @@ export async function setAssistantAppointmentStatusViaApi(
   });
   const json = await parseJson<{ appointment?: Appointment }>(res);
   if (!res.ok) return { ok: false, error: json.error ?? "تعذر تحديث الحالة" };
+  syncAppointment(json.appointment);
   return { ok: true, appointment: json.appointment };
 }
 

@@ -18,7 +18,9 @@ import {
   Wallet,
   TrendingUp,
   ChevronLeft,
+  Activity,
 } from "lucide-react";
+import { ActivityFeed } from "@/components/admin/ActivityFeed";
 
 export default function AdminHomePage() {
   const [stats, setStats] = useState<ClinicProfitStats | null>(null);
@@ -99,6 +101,22 @@ export default function AdminHomePage() {
           </Card>
         </Link>
       </div>
+
+      <Card className="p-4 ring-1 ring-amber-200/60">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-amber-600" />
+            <p className="text-sm font-bold text-slate-text">موجز العمليات</p>
+          </div>
+          <Link
+            href="/admin/activity"
+            className="text-xs font-semibold text-primary"
+          >
+            السجل الكامل ←
+          </Link>
+        </div>
+        <ActivityFeed authPortal="admin" compact maxItems={5} pollMs={30_000} />
+      </Card>
 
       <Link href="/admin/report">
         <Button className="w-full" size="lg">

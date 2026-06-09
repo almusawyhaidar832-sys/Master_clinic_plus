@@ -13,7 +13,6 @@ import {
 } from "@/hooks/useQueueRealtime";
 import { ensureNotificationPermission } from "@/lib/queue/realtime-client";
 import { QueueAlertOverlay } from "@/components/queue/QueueAlertOverlay";
-import { installQueueAudioUnlock } from "@/lib/queue/audio-alerts";
 
 interface QueueRealtimeBridgeProps {
   portal: "dashboard" | "doctor";
@@ -48,7 +47,6 @@ export function QueueRealtimeBridge({ portal }: QueueRealtimeBridgeProps) {
 
   useEffect(() => {
     void ensureNotificationPermission();
-    return installQueueAudioUnlock();
   }, []);
 
   const activeDoctorId = portal === "doctor" ? doctorId : null;

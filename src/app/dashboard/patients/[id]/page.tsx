@@ -17,13 +17,17 @@ import {
   isTreatmentCaseSettledForPicker,
 } from "@/lib/services/patient-financial-plan";
 import {
-  computeOutstandingDebtFromTreatmentCases,
   fetchPatientTreatmentCases,
   isPersistedTreatmentCaseId,
   treatmentCaseDisplayLabel,
   type PatientTreatmentCase,
 } from "@/lib/services/patient-treatment-cases";
 import { getActiveClinicId } from "@/lib/clinic-context";
+import { fetchPatientOperationsForProfile } from "@/lib/services/patient-operations-profile";
+import {
+  buildPatientCaseGroups,
+  sumCaseGroupsFinancials,
+} from "@/lib/services/patient-case-groups";
 import { PatientSessionsByCase } from "@/components/patients/PatientSessionsByCase";
 import { fetchPatientClinicalRecords } from "@/lib/clinical/fetch-patient-clinical";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
@@ -98,17 +102,12 @@ export default function PatientProfilePage() {
     const supabase = createClient();
     const clinic = await getActiveClinicId(supabase);
     if (!clinic?.clinicId) return;
-    const { data } = await supabase
-      .from("patient_operations")
-      .select("*, doctor:doctors!doctor_id(full_name_ar)")
-      .eq("patient_id", id)
-      .eq("clinic_id", clinic.clinicId)
-      .order("created_at", { ascending: false });
-    if (data) {
-      setOperations(data as PatientOperation[]);
-      const clinical = await fetchPatientClinicalRecords(id);
-      setClinicalByOp(clinical);
-    }
+    const data = await fetchPatientOperationsForProfile(supabase, id, {
+      clinicId: clinic.clinicId,
+    });
+    setOperations(data);
+    const clinical = await fetchPatientClinicalRecords(id);
+    setClinicalByOp(clinical);
   }, [id]);
 
   const loadTreatmentCases = useCallback(async () => {
@@ -183,12 +182,17 @@ export default function PatientProfilePage() {
     ? `${id}-continue-${caseDoctorKeys[continueCaseId] ?? "x"}-${continueCaseId}`
     : "";
 
-  const totalDebt = useMemo(
-    () => computeOutstandingDebtFromTreatmentCases(treatmentCases),
-    [treatmentCases]
+  const caseGroups = useMemo(
+    () => buildPatientCaseGroups(operations, treatmentCases),
+    [operations, treatmentCases]
   );
-  const totalPaid = operations.reduce((s, o) => s + o.paid_amount, 0);
-  const totalBilled = operations.reduce((s, o) => s + o.total_amount, 0);
+  const caseTotals = useMemo(
+    () => sumCaseGroupsFinancials(caseGroups),
+    [caseGroups]
+  );
+  const totalDebt = caseTotals.totalRemaining;
+  const totalPaid = caseTotals.totalPaid;
+  const totalBilled = caseGroups.reduce((s, g) => s + g.total, 0);
 
   if (accessDenied) {
     return (

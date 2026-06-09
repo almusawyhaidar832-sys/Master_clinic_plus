@@ -9,7 +9,7 @@ import { Alert } from "@/components/ui/Alert";
 import { SessionRefundModal } from "@/components/sessions/SessionRefundModal";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile } from "@/lib/clinic-context";
-import { searchPatientsByQuery } from "@/lib/services/patient-search";
+import { PatientSearchField } from "@/components/patients/PatientSearchField";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import {
   fetchRefundableSessionsByDoctor,
@@ -21,12 +21,16 @@ import {
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { Doctor, PatientOperation } from "@/types";
 import { CheckCircle2, Search, Undo2, User, Stethoscope } from "lucide-react";
+import { useClinicSync } from "@/hooks/useClinicSync";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 
 type SearchMode = "patient" | "doctor";
 
 export default function RefundsDashboardPage() {
+  const { clinicId } = useActiveClinicId();
   const [mode, setMode] = useState<SearchMode>("patient");
   const [patientQuery, setPatientQuery] = useState("");
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [doctorId, setDoctorId] = useState("");
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [sessions, setSessions] = useState<RefundableSessionRow[]>([]);
@@ -63,7 +67,17 @@ export default function RefundsDashboardPage() {
     loadDoctors();
   }, [loadHistory, loadDoctors]);
 
-  async function searchSessions() {
+  useClinicSync({
+    topics: ["refunds", "all"],
+    clinicId,
+    onRefresh: () => {
+      void loadHistory();
+      if (searched) void searchSessions();
+    },
+    enabled: !!clinicId,
+  });
+
+  async function searchSessions(patientIdOverride?: string | null) {
     setLoading(true);
     setSearched(true);
     setMessage(null);
@@ -82,32 +96,15 @@ export default function RefundsDashboardPage() {
         }
         rows = await fetchRefundableSessionsByDoctor(supabase, doctorId);
       } else {
-        const q = patientQuery.trim();
-        if (q.length < 2) {
-          setMessage("اكتب اسم المراجع (حرفين على الأقل)");
+        const pid = patientIdOverride ?? selectedPatientId;
+        if (pid) {
+          rows = await fetchRefundableSessionsByPatients(supabase, [pid]);
+        } else {
+          setMessage("اختر مراجعاً من القائمة أو اكتب اسمه ثم اضغط بحث");
           setSessions([]);
           setLoading(false);
           return;
         }
-        const { patients, error } = await searchPatientsByQuery(supabase, q, {
-          limit: 20,
-        });
-        if (error) {
-          setMessage(error);
-          setSessions([]);
-          setLoading(false);
-          return;
-        }
-        if (!patients.length) {
-          setMessage("لا يوجد مراجع بهذا الاسم");
-          setSessions([]);
-          setLoading(false);
-          return;
-        }
-        rows = await fetchRefundableSessionsByPatients(
-          supabase,
-          patients.map((p) => p.id)
-        );
       }
 
       setSessions(rows);
@@ -230,18 +227,33 @@ export default function RefundsDashboardPage() {
           </div>
 
           {mode === "patient" ? (
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                type="search"
-                value={patientQuery}
-                onChange={(e) => setPatientQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && searchSessions()}
-                placeholder="اسم المراجع..."
-                className="min-w-0 flex-1 rounded-lg border border-slate-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-              <Button onClick={searchSessions} disabled={loading}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1">
+                <p className="mb-1 text-xs font-medium text-slate-muted">
+                  ابحث بالاسم — تظهر النتائج أثناء الكتابة
+                </p>
+                <PatientSearchField
+                  portal="accountant"
+                  value={patientQuery}
+                  selectedPatientId={selectedPatientId}
+                  placeholder="اسم المراجع (حرفان على الأقل)..."
+                  onChange={(v) => {
+                    setPatientQuery(v);
+                    setSelectedPatientId(null);
+                  }}
+                  onSelect={(p) => {
+                    setPatientQuery(p.full_name_ar);
+                    setSelectedPatientId(p.id);
+                    void searchSessions(p.id);
+                  }}
+                />
+              </div>
+              <Button
+                onClick={() => searchSessions()}
+                disabled={loading || !selectedPatientId}
+              >
                 <Search className="h-4 w-4" />
-                بحث
+                عرض الجلسات
               </Button>
             </div>
           ) : (

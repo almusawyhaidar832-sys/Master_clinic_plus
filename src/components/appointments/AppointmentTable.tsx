@@ -17,6 +17,10 @@ import {
   deleteAssistantAppointmentViaApi,
   setAssistantAppointmentStatusViaApi,
 } from "@/lib/services/assistant-appointments-client";
+import {
+  deleteAccountantAppointmentViaApi,
+  setAccountantAppointmentStatusViaApi,
+} from "@/lib/services/accountant-appointments-client";
 import { formatDate, formatTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import {
@@ -61,19 +65,20 @@ export function AppointmentTable({
   const [actionId, setActionId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const canManage = role === "assistant";
+  const canManage = role === "assistant" || role === "accountant";
   const showDoctorColumn = role === "accountant";
+  const portal = role === "accountant" ? "accountant" : "assistant";
 
   const defaultTitle =
     role === "accountant"
-      ? "مواعيد العيادة"
+      ? "حجوزات العيادة"
       : role === "doctor"
         ? "مواعيدي"
         : "حجوزات طبيبي";
 
   const defaultSubtitle =
     role === "accountant"
-      ? "كل الأطباء — تحديث فوري عند حجز الباركود"
+      ? "حجز فوري لأي طبيب — منع تضارب المواعيد — تحديث لحظي"
       : role === "doctor"
         ? "مواعيدك فقط — تحديث فوري"
         : "إدارة كاملة — إضافة وتعديل وحذف";
@@ -81,7 +86,10 @@ export function AppointmentTable({
   async function handleAccept(appt: AppointmentWithDoctor) {
     setActionId(appt.id);
     setMessage(null);
-    const result = await setAssistantAppointmentStatusViaApi(appt.id, "accept");
+    const result =
+      portal === "accountant"
+        ? await setAccountantAppointmentStatusViaApi(appt.id, "accept")
+        : await setAssistantAppointmentStatusViaApi(appt.id, "accept");
     setActionId(null);
     if (!result.ok) {
       setMessage(result.error ?? "تعذر القبول");
@@ -94,7 +102,10 @@ export function AppointmentTable({
   async function handleDelete(appt: AppointmentWithDoctor) {
     if (!confirm(`حذف موعد ${appt.patient_name_ar}؟`)) return;
     setActionId(appt.id);
-    const result = await deleteAssistantAppointmentViaApi(appt.id);
+    const result =
+      portal === "accountant"
+        ? await deleteAccountantAppointmentViaApi(appt.id)
+        : await deleteAssistantAppointmentViaApi(appt.id);
     setActionId(null);
     if (!result.ok) {
       setMessage(result.error ?? "تعذر الحذف");
@@ -126,7 +137,7 @@ export function AppointmentTable({
               className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700"
             >
               <Plus className="h-4 w-4" />
-              إضافة موعد
+              {role === "accountant" ? "حجز مراجع" : "إضافة موعد"}
             </button>
           )}
           <button
@@ -208,9 +219,13 @@ export function AppointmentTable({
 
       {showAdd && (
         <AddAppointmentModal
+          portal={portal}
+          clinicId={clinicId}
           onClose={() => setShowAdd(false)}
           onSaved={() => {
-            setMessage("تم إضافة الموعد");
+            setMessage(
+              role === "accountant" ? "تم حجز المراجع بنجاح" : "تم إضافة الموعد"
+            );
             refresh();
           }}
         />
@@ -218,6 +233,7 @@ export function AppointmentTable({
       {editing && (
         <EditAppointmentModal
           appointment={editing}
+          portal={portal}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setMessage("تم تعديل الموعد");
@@ -228,6 +244,7 @@ export function AppointmentTable({
       {rejecting && (
         <RejectAppointmentModal
           appointment={rejecting}
+          portal={portal}
           onClose={() => setRejecting(null)}
           onSaved={() => {
             setMessage("تم رفض الطلب");

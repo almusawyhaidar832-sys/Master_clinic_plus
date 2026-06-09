@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { buildDoctorPatientUrl } from "@/lib/queue/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { translateDbError } from "@/lib/db-errors";
 import { cn } from "@/lib/utils";
@@ -67,6 +70,7 @@ async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export default function DoctorQueuePage() {
+  const router = useRouter();
   const supabase = createClient();
   const { profile } = useClinicProfile();
   const clinicId = profile?.id ?? null;
@@ -146,13 +150,17 @@ export default function DoctorQueuePage() {
     }
   };
 
-  const enterPatient = async (entryId: string) => {
-    setUpdating(entryId);
+  const enterPatient = async (entry: QueueEntry) => {
+    setUpdating(entry.id);
     try {
-      await apiJson(`/api/queue/${entryId}`, {
+      await apiJson(`/api/queue/${entry.id}`, {
         method: "PATCH",
         body: JSON.stringify({ action: "enter" }),
       });
+      if (entry.patient_id) {
+        router.push(buildDoctorPatientUrl(entry.patient_id));
+        return;
+      }
       await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : "تعذر تحديث الحالة");
@@ -277,7 +285,7 @@ export default function DoctorQueuePage() {
                   {entry.status === "called" && (
                     <>
                       <button
-                        onClick={() => enterPatient(entry.id)}
+                        onClick={() => enterPatient(entry)}
                         disabled={updating === entry.id}
                         className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
                       >
@@ -298,17 +306,28 @@ export default function DoctorQueuePage() {
                     </>
                   )}
                   {entry.status === "in_progress" && (
-                    <button
-                      onClick={() => finishVisit(entry.id)}
-                      disabled={updating === entry.id}
-                      className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
-                    >
-                      {updating === entry.id
-                        ? <RefreshCw className="h-4 w-4 animate-spin" />
-                        : <CheckCircle2 className="h-4 w-4" />
-                      }
-                      أنهِ الكشف
-                    </button>
+                    <>
+                      {entry.patient_id && (
+                        <Link
+                          href={buildDoctorPatientUrl(entry.patient_id)}
+                          className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 py-2.5 text-sm font-bold text-emerald-800 hover:bg-emerald-100"
+                        >
+                          <LogIn className="h-4 w-4" />
+                          ملف المريض
+                        </Link>
+                      )}
+                      <button
+                        onClick={() => finishVisit(entry.id)}
+                        disabled={updating === entry.id}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                      >
+                        {updating === entry.id
+                          ? <RefreshCw className="h-4 w-4 animate-spin" />
+                          : <CheckCircle2 className="h-4 w-4" />
+                        }
+                        أنهِ الكشف
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

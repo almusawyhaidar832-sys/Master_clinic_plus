@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calculateDoctorShare } from "@/lib/finance";
+import { ensureAppointmentPatient } from "@/lib/services/ensure-appointment-patient";
 import type { DoctorPercentage, MaterialsCostShare } from "@/types";
 
 export interface AppointmentInvoiceInput {
@@ -50,35 +51,12 @@ export async function createAppointmentInvoice(
     throw new Error("بيانات الطبيب غير موجودة");
   }
 
-  let patientId = appointment.patient_id as string | null;
-
-  if (!patientId) {
-    const name = (appointment.patient_name_ar as string | null)?.trim();
-    if (!name) {
-      throw new Error("اسم المراجع مطلوب لإصدار الفاتورة");
-    }
-
-    const { data: newPatient, error: patientErr } = await admin
-      .from("patients")
-      .insert({
-        clinic_id: appointment.clinic_id,
-        full_name_ar: name,
-        phone: appointment.patient_phone ?? null,
-      })
-      .select("id")
-      .single();
-
-    if (patientErr || !newPatient) {
-      throw new Error(patientErr?.message ?? "تعذر إنشاء ملف المريض");
-    }
-
-    patientId = newPatient.id;
-
-    await admin
-      .from("appointments")
-      .update({ patient_id: patientId })
-      .eq("id", appointment.id);
-  }
+  const patientCtx = await ensureAppointmentPatient(
+    admin,
+    appointment.id as string,
+    appointment.clinic_id as string
+  );
+  const patientId = patientCtx.patientId;
 
   const materialsCost = Math.max(0, input.materialsCost ?? 0);
   const totalAmount = Math.max(0, input.totalAmount);

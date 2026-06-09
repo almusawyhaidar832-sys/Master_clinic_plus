@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppointmentsRealtime } from "@/hooks/useAppointmentsRealtime";
+import { useClinicSync } from "@/hooks/useClinicSync";
 import { todayISO } from "@/lib/utils";
 import type { Appointment } from "@/types";
 
@@ -68,6 +69,12 @@ export function useCentralizedAppointments({
   }, [load]);
 
   useAppointmentsRealtime(clinicId, load);
+  useClinicSync({
+    topics: ["appointments", "all"],
+    clinicId,
+    onRefresh: load,
+    enabled: enabled && !!clinicId,
+  });
 
   const pendingCount = appointments.filter((a) => a.status === "pending").length;
 

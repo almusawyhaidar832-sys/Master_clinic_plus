@@ -64,9 +64,12 @@ export async function resolveEmailForUsername(
     return trimmed;
   }
 
+  const safe = sanitizeUsername(trimmed);
+  const lookup = safe.length >= 3 ? safe : trimmed;
+
   const { data: rpcEmail, error: rpcError } = await supabase.rpc(
     "get_email_for_username",
-    { p_username: trimmed }
+    { p_username: lookup }
   );
 
   if (!rpcError && rpcEmail && typeof rpcEmail === "string") {

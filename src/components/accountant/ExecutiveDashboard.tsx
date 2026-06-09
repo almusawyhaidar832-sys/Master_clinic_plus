@@ -18,7 +18,7 @@ import {
   mergeExecutiveDashboardMetrics,
   type ExecutiveSnapshotCore,
 } from "@/lib/services/executive-snapshot";
-import { CLINIC_PROFIT_REFRESH_EVENT } from "@/lib/services/clinic-profit";
+import { useClinicSync } from "@/hooks/useClinicSync";
 import { cn, localDateISO, todayISO } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, Minus,
@@ -407,12 +407,12 @@ export function ExecutiveDashboard() {
     fetchData();
   }, [fetchData, clinicLoading, clinicId]);
 
-  useEffect(() => {
-    const onRefresh = () => void fetchData();
-    window.addEventListener(CLINIC_PROFIT_REFRESH_EVENT, onRefresh);
-    return () =>
-      window.removeEventListener(CLINIC_PROFIT_REFRESH_EVENT, onRefresh);
-  }, [fetchData]);
+  useClinicSync({
+    topics: ["profit", "sessions", "refunds", "all"],
+    clinicId,
+    onRefresh: fetchData,
+    enabled: !!clinicId,
+  });
 
   const PERIODS = [
     { key: "today" as Period, label: "اليوم"    },

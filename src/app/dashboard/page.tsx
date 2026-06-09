@@ -4,7 +4,7 @@ import { ExecutiveDashboard } from "@/components/accountant/ExecutiveDashboard";
 import { AccountantAppointmentsPanel } from "@/components/appointments/AccountantAppointmentsPanel";
 import {
   Users, Stethoscope, Wallet, Receipt,
-  FileText, ListOrdered, QrCode,
+  FileText, ListOrdered, QrCode, CalendarClock,
 } from "lucide-react";
 
 const quickLinks = [
@@ -21,6 +21,13 @@ const quickLinks = [
     desc: "نداء صوتي — تتبع حي للمرضى",
     icon: ListOrdered,
     color: "bg-amber-50 text-amber-600",
+  },
+  {
+    href: "/dashboard/appointments",
+    title: "الحجوزات",
+    desc: "حجز فوري + جدول المواعيد لكل الأطباء",
+    icon: CalendarClock,
+    color: "bg-teal-50 text-teal-700",
   },
   {
     href: "/dashboard/withdrawals",
@@ -84,7 +91,7 @@ export default function DashboardPage() {
       {/* Executive Dashboard — the killer feature */}
       <ExecutiveDashboard />
 
-      {/* مواعيد مركزية — كل الأطباء + Realtime */}
+      {/* معاينة الحجوزات — الصفحة الكاملة في /dashboard/appointments */}
       <AccountantAppointmentsPanel />
     </div>
   );

@@ -9,6 +9,7 @@ import {
   clinicQueueChannelName,
   doctorQueueChannelName,
 } from "@/lib/queue/realtime-client";
+import { buildDoctorPatientUrl } from "@/lib/queue/navigation";
 import { resolvePatientDisplayName } from "@/lib/queue/utils";
 
 interface QueuePayload {
@@ -17,6 +18,7 @@ interface QueuePayload {
   clinic_id: string;
   status: string;
   patient_name: string | null;
+  patient_id: string | null;
   ticket_number: number;
   sent_to_doctor_at: string | null;
   patient?: { full_name_ar: string } | null;
@@ -55,6 +57,32 @@ function alertAccountantAdmit(row: QueuePayload, dedupeKey: string, seen: Set<st
     message: msg,
     linkPath: "/dashboard/queue",
   });
+}
+
+function alertDoctorExamStart(row: QueuePayload, dedupeKey: string, seen: Set<string>) {
+  if (seen.has(dedupeKey)) return;
+  if (!shouldFireQueueAlert(`doctor-exam-${row.id}`)) return;
+  seen.add(dedupeKey);
+
+  const name = resolvePatientDisplayName(row);
+  const linkPath = row.patient_id
+    ? buildDoctorPatientUrl(row.patient_id)
+    : "/doctor/queue";
+
+  void triggerQueueAlert({
+    kind: "doctor_exam",
+    title: "بدء الكشف",
+    message: `${name} داخل العيادة — افتح ملف المريض`,
+    linkPath,
+  });
+
+  if (
+    row.patient_id &&
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/doctor/queue")
+  ) {
+    window.location.href = linkPath;
+  }
 }
 
 function alertDoctorFromBroadcast(
@@ -141,6 +169,20 @@ export function useDoctorQueueRealtime(doctorId: string | null | undefined) {
             alertDoctorNewPatient(
               row,
               `sent-${row.id}-${row.sent_to_doctor_at}`,
+              seenRef.current
+            );
+          }
+
+          const oldStatus = (payload.old as { status?: string } | undefined)
+            ?.status;
+          if (
+            payload.eventType === "UPDATE" &&
+            row.status === "in_progress" &&
+            oldStatus === "called"
+          ) {
+            alertDoctorExamStart(
+              row,
+              `exam-${row.id}`,
               seenRef.current
             );
           }

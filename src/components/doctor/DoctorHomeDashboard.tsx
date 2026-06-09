@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser, getAuthProfile } from "@/lib/clinic-context";
@@ -10,6 +10,7 @@ import { formatCurrency, todayISO } from "@/lib/utils";
 import { doctorQuickActions, QUICK_ACTION_ICON_MAP } from "@/components/layout/DoctorMobileShell";
 import { cn } from "@/lib/utils";
 import { Bell, TrendingUp, Wallet, ArrowDownToLine } from "lucide-react";
+import { useClinicSync } from "@/hooks/useClinicSync";
 
 export function DoctorHomeDashboard() {
   const [doctorName, setDoctorName] = useState("");
@@ -22,35 +23,49 @@ export function DoctorHomeDashboard() {
   } | null>(null);
   const [todayOps, setTodayOps] = useState(0);
   const [notifications, setNotifications] = useState(0);
-  useEffect(() => {
-    async function load() {
-      const supabase = createClient();
-      const doctor = await getDoctorForCurrentUser(supabase);
-      if (!doctor) return;
+  const [doctorId, setDoctorId] = useState<string | null>(null);
+  const [clinicId, setClinicId] = useState<string | null>(null);
 
-      const profile = await getAuthProfile(supabase);
+  const load = useCallback(async () => {
+    const supabase = createClient();
+    const doctor = await getDoctorForCurrentUser(supabase);
+    if (!doctor) return;
 
-      setDoctorName(doctor.full_name_ar);
-      setSpecialty(doctor.specialty_ar ?? "");
+    const profile = await getAuthProfile(supabase);
+    setDoctorId(doctor.id);
+    setClinicId(profile?.clinic_id ?? null);
 
-      const [stats, opsRes, notifCount] = await Promise.all([
-        fetchDoctorWalletStats(supabase, doctor.id),
-        supabase
-          .from("patient_operations")
-          .select("id", { count: "exact", head: true })
-          .eq("doctor_id", doctor.id)
-          .eq("operation_date", todayISO()),
-        profile
-          ? fetchUnreadNotificationCount(supabase, profile.id)
-          : Promise.resolve(0),
-      ]);
+    setDoctorName(doctor.full_name_ar);
+    setSpecialty(doctor.specialty_ar ?? "");
 
-      setWallet(stats);
-      setTodayOps(opsRes.count ?? 0);
-      setNotifications(notifCount);
-    }
-    load();
+    const [stats, opsRes, notifCount] = await Promise.all([
+      fetchDoctorWalletStats(supabase, doctor.id),
+      supabase
+        .from("patient_operations")
+        .select("id", { count: "exact", head: true })
+        .eq("doctor_id", doctor.id)
+        .eq("operation_date", todayISO()),
+      profile
+        ? fetchUnreadNotificationCount(supabase, profile.id)
+        : Promise.resolve(0),
+    ]);
+
+    setWallet(stats);
+    setTodayOps(opsRes.count ?? 0);
+    setNotifications(notifCount);
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useClinicSync({
+    topics: ["sessions", "refunds", "profit", "notifications", "all"],
+    clinicId,
+    doctorId,
+    onRefresh: load,
+    enabled: !!doctorId,
+  });
 
   return (
     <div className="space-y-5 animate-fade-in">

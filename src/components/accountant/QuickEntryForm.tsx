@@ -52,6 +52,7 @@ import {
   assignPrimaryDoctorForSession,
 } from "@/lib/services/patient-primary-doctor";
 import { TreatmentCasePicker } from "@/components/accountant/TreatmentCasePicker";
+import { PatientSearchField } from "@/components/patients/PatientSearchField";
 import type { Doctor, Patient, PatientOperation } from "@/types";
 import {
   ensurePatientPhoneOnRecord,
@@ -59,6 +60,7 @@ import {
   patientPhoneColumns,
   validatePatientPhone,
 } from "@/lib/phone";
+import { notifySessionMutation } from "@/lib/sync/mutation-notify";
 
 /** Common dental procedure suggestions — user can also type freely */
 const DENTAL_SUGGESTIONS = [
@@ -127,6 +129,8 @@ interface QuickEntryFormProps {
   defaultNewCaseTreatmentName?: string;
   /** Lock doctor (doctor portal session entry) */
   lockDoctorId?: string;
+  /** اسم الطبيب عند القفل — للعرض الفوري قبل تحميل قائمة الأطباء */
+  lockDoctorName?: string;
   /** بدون إطار Card — للتضمين داخل لوحة المتابعة */
   embedded?: boolean;
   onSuccess?: (operation: PatientOperation) => void;
@@ -143,6 +147,7 @@ export function QuickEntryForm({
   defaultForceNewPlan = false,
   defaultNewCaseTreatmentName,
   lockDoctorId,
+  lockDoctorName,
   embedded = false,
   onSuccess,
   onTreatmentCasesChanged,
@@ -152,12 +157,9 @@ export function QuickEntryForm({
   // Patient search state
   const [patientQuery, setPatientQuery] = useState(defaultPatientName ?? "");
   const [patientPhone, setPatientPhone] = useState(defaultPatientPhone ?? "");
-  const [patientSuggestions, setPatientSuggestions] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
     defaultPatientId ?? null
   );
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const initialCase = defaultCaseId
     ? prefetchedCases?.find((c) => c.id === defaultCaseId)
@@ -356,10 +358,38 @@ export function QuickEntryForm({
         setReviewFeeEnabled(!!c.review_fee_enabled);
         setClinicReviewFeeAmount(Number(c.review_fee_amount ?? 0));
       }
-      if (lockDoctorId) setDoctorId(lockDoctorId);
+      if (lockDoctorId) {
+        setDoctorId(lockDoctorId);
+        if (lockDoctorName) {
+          setAssignedDoctor({ id: lockDoctorId, full_name_ar: lockDoctorName });
+        }
+      }
     }
     load();
-  }, [lockDoctorId]);
+  }, [lockDoctorId, lockDoctorName]);
+
+  useEffect(() => {
+    if (!lockDoctorId || lockDoctorName) return;
+    let cancelled = false;
+    async function loadLockedDoctorName() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("doctors")
+        .select("id, full_name_ar")
+        .eq("id", lockDoctorId!)
+        .maybeSingle();
+      if (!cancelled && data?.full_name_ar) {
+        setAssignedDoctor({
+          id: data.id as string,
+          full_name_ar: data.full_name_ar as string,
+        });
+      }
+    }
+    void loadLockedDoctorName();
+    return () => {
+      cancelled = true;
+    };
+  }, [lockDoctorId, lockDoctorName]);
 
   useEffect(() => {
     if (defaultPatientPhone?.trim()) {
@@ -367,33 +397,17 @@ export function QuickEntryForm({
     }
   }, [defaultPatientPhone]);
 
-  // Patient search autocomplete
   useEffect(() => {
-    if (selectedPatientId) return; // already selected
-    const q = patientQuery.trim();
-    if (q.length < 2) {
-      setPatientSuggestions([]);
-      return;
+    if (defaultPatientName?.trim()) {
+      setPatientQuery(defaultPatientName.trim());
     }
-    const timeout = setTimeout(async () => {
-      const supabase = createClient();
-      const { searchPatientsByQuery } = await import(
-        "@/lib/services/patient-search"
-      );
-      const { patients: rows } = await searchPatientsByQuery(supabase, q, {
-        limit: 8,
-        minLength: 2,
-      });
-      setPatientSuggestions(rows as Patient[]);
-      if (rows.length === 1 && rows[0].full_name_ar === q) {
-        setSelectedPatientId(rows[0].id);
-        setShowSuggestions(false);
-      } else {
-        setShowSuggestions(true);
-      }
-    }, 300);
-    return () => clearTimeout(timeout);
-  }, [patientQuery, selectedPatientId]);
+  }, [defaultPatientName]);
+
+  useEffect(() => {
+    if (defaultPatientId) {
+      setSelectedPatientId(defaultPatientId);
+    }
+  }, [defaultPatientId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -599,20 +613,6 @@ export function QuickEntryForm({
       cancelled = true;
     };
   }, [selectedPatientId, selectedCaseId, lockDoctorId]);
-
-  // Close suggestions on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (
-        suggestionsRef.current &&
-        !suggestionsRef.current.contains(e.target as Node)
-      ) {
-        setShowSuggestions(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1330,6 +1330,11 @@ export function QuickEntryForm({
     setMaterialsCost("");
     setNotes("");
     setClinical(EMPTY_CLINICAL_DRAFT);
+    notifySessionMutation({
+      clinicId: activeClinic.clinicId,
+      doctorId,
+      patientId: patientId ?? undefined,
+    });
     onSuccess?.(op!);
 
     } catch (err) {
@@ -1425,7 +1430,7 @@ export function QuickEntryForm({
         )}
 
         {formSchema.showPatientSearch && (
-        <div className="sm:col-span-2 relative" ref={suggestionsRef}>
+        <div className="sm:col-span-2">
           <label className="mb-1 block text-sm font-medium text-slate-text">
             المريض{" "}
             {selectedPatientId && (
@@ -1433,23 +1438,29 @@ export function QuickEntryForm({
             )}
           </label>
           <div className="flex gap-2">
-            <input
-              type="text"
-              className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm text-slate-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            <PatientSearchField
+              portal="accountant"
               value={patientQuery}
-              onChange={(e) => {
-                setPatientQuery(e.target.value);
-                setSelectedPatientId(null);
-                setPatientPhone("");
-              }}
-              onFocus={() => patientSuggestions.length > 0 && setShowSuggestions(true)}
+              selectedPatientId={selectedPatientId}
+              disabled={!!defaultPatientId}
+              required
+              showIcon={false}
               placeholder={
                 isFollowUpSession
                   ? "ابحث عن اسم المريض..."
                   : "اسم المريض — جديد أو موجود"
               }
-              required
-              disabled={!!defaultPatientId}
+              className="min-w-0 flex-1"
+              onChange={(v) => {
+                setPatientQuery(v);
+                setSelectedPatientId(null);
+                setPatientPhone("");
+              }}
+              onSelect={(p) => {
+                setSelectedPatientId(p.id);
+                setPatientQuery(p.full_name_ar);
+                setPatientPhone(getPatientDisplayPhone(p) ?? "");
+              }}
             />
             {selectedPatientId && !defaultPatientId && (
               <button
@@ -1465,34 +1476,6 @@ export function QuickEntryForm({
               </button>
             )}
           </div>
-
-          {showSuggestions && patientSuggestions.length > 0 && !defaultPatientId && (
-            <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-border bg-white shadow-premium">
-              {patientSuggestions.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="flex w-full items-center gap-2 px-4 py-2 text-sm hover:bg-primary/5 text-right"
-                  onClick={() => {
-                    setSelectedPatientId(p.id);
-                    setPatientQuery(p.full_name_ar);
-                    setPatientPhone(getPatientDisplayPhone(p) ?? "");
-                    setShowSuggestions(false);
-                  }}
-                >
-                  <span className="font-medium">{p.full_name_ar}</span>
-                  {getPatientDisplayPhone(p) && (
-                    <span className="text-xs text-slate-muted" dir="ltr">
-                      {getPatientDisplayPhone(p)}
-                    </span>
-                  )}
-                  <span className="mr-auto text-[10px] rounded-full bg-primary/10 text-primary px-2">
-                    مريض سابق
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
         )}
 
@@ -1616,21 +1599,34 @@ export function QuickEntryForm({
 
         {formSchema.showDoctor && (
         <>
-        {selectedDoctor && (
-          <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
-            تأكد من <strong>الطبيب</strong> قبل الحفظ — الرصيد يُحسب لهذا الطبيب فقط
+        {lockDoctorId ? (
+          <div className="sm:col-span-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+            <p className="text-xs text-slate-muted">طبيب الموعد / الجلسة</p>
+            <p className="text-base font-semibold text-slate-text">
+              {selectedDoctor?.full_name_ar ??
+                assignedDoctor?.full_name_ar ??
+                lockDoctorName ??
+                "جاري التحميل..."}
+            </p>
           </div>
+        ) : (
+          <>
+            {selectedDoctor && (
+              <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                تأكد من <strong>الطبيب</strong> قبل الحفظ — الرصيد يُحسب لهذا الطبيب فقط
+              </div>
+            )}
+            <Select
+              label="الطبيب *"
+              name="doctor_id"
+              value={doctorId}
+              onChange={(e) => setDoctorId(e.target.value)}
+              options={doctors.map((d) => ({ value: d.id, label: d.full_name_ar }))}
+              placeholder="اختر الطبيب"
+              required
+            />
+          </>
         )}
-        <Select
-          label="الطبيب *"
-          name="doctor_id"
-          value={doctorId}
-          onChange={(e) => setDoctorId(e.target.value)}
-          options={doctors.map((d) => ({ value: d.id, label: d.full_name_ar }))}
-          placeholder="اختر الطبيب"
-          required
-          disabled={!!lockDoctorId}
-        />
         </>
         )}
 

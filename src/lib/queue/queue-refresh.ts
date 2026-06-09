@@ -1,5 +1,7 @@
 "use client";
 
+import { notifyClinicSync } from "@/lib/sync/clinic-events";
+
 export type QueueRefreshScope = "doctor" | "clinic";
 
 export interface QueueRefreshDetail {
@@ -14,6 +16,12 @@ const QUEUE_REFRESH_EVENT = "master-clinic-queue-refresh";
 export function notifyQueueRefresh(detail: QueueRefreshDetail) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(QUEUE_REFRESH_EVENT, { detail }));
+  notifyClinicSync({
+    topic: "queue",
+    clinicId: detail.clinicId,
+    doctorId: detail.doctorId,
+    source: "mutation",
+  });
 }
 
 export function subscribeQueueRefresh(

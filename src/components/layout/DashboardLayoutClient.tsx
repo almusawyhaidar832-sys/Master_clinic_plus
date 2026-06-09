@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { accountantModuleNav, superAdminModuleNav } from "@/config/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -9,8 +9,10 @@ import { getAuthProfile } from "@/lib/clinic-context";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicModules } from "@/contexts/ClinicModulesContext";
 import { useModuleNav } from "@/hooks/useModuleNav";
+import { useClinicSync } from "@/hooks/useClinicSync";
 import { DeveloperImpersonationBanner } from "@/components/developer/DeveloperImpersonationBanner";
 import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
+import { ClinicDataSyncBridge } from "@/components/sync/ClinicDataSyncBridge";
 import type { NavItem, UserRole } from "@/types";
 
 export function DashboardLayoutClient({
@@ -42,24 +44,32 @@ export function DashboardLayoutClient({
       roles: i.roles,
     }));
 
-  useEffect(() => {
-    async function load() {
-      const supabase = createClient();
-      const authProfile = await getAuthProfile(supabase);
-      if (!authProfile) return;
-      setUserRole(authProfile.role);
-      setStaffName(
-        authProfile.full_name?.trim() ||
-          authProfile.username?.trim() ||
-          ""
-      );
-      const count = await fetchUnreadNotificationCount(supabase, authProfile.id);
-      setNotificationCount(count);
-    }
-    load();
-    const interval = setInterval(load, 30_000);
-    return () => clearInterval(interval);
+  const loadNotifications = useCallback(async () => {
+    const supabase = createClient();
+    const authProfile = await getAuthProfile(supabase);
+    if (!authProfile) return;
+    setUserRole(authProfile.role);
+    setStaffName(
+      authProfile.full_name?.trim() ||
+        authProfile.username?.trim() ||
+        ""
+    );
+    const count = await fetchUnreadNotificationCount(supabase, authProfile.id);
+    setNotificationCount(count);
   }, []);
+
+  useEffect(() => {
+    void loadNotifications();
+    const interval = setInterval(() => void loadNotifications(), 30_000);
+    return () => clearInterval(interval);
+  }, [loadNotifications]);
+
+  useClinicSync({
+    topics: ["sessions", "refunds", "queue", "appointments", "all"],
+    clinicId: profile?.id,
+    onRefresh: loadNotifications,
+    enabled: !!profile?.id,
+  });
 
   const isOwner = userRole === "super_admin";
   const headerTitle =
@@ -78,9 +88,12 @@ export function DashboardLayoutClient({
       clinicName={displayName}
       staffLabel={isOwner ? "المالك" : "المحاسب"}
       notificationCount={notificationCount}
+      showGlobalSync={userRole === "super_admin"}
+      clinicId={profile?.id}
     >
       <DeveloperImpersonationBanner />
       <QueueRealtimeBridge portal="dashboard" />
+      <ClinicDataSyncBridge />
       {children}
     </DashboardShell>
   );

@@ -4,8 +4,12 @@ import {
   announceArabic,
   showBrowserNotification,
 } from "@/lib/queue/realtime-client";
+import { prepareSpeechAuto } from "@/lib/queue/web-speech";
 
-export type QueueAlertKind = "doctor_new" | "accountant_admit";
+export type QueueAlertKind =
+  | "doctor_new"
+  | "doctor_exam"
+  | "accountant_admit";
 
 export interface QueueAlertDetail {
   kind: QueueAlertKind;
@@ -15,12 +19,32 @@ export interface QueueAlertDetail {
 }
 
 const QUEUE_ALERT_EVENT = "master-clinic-queue-alert";
+export const AUDIO_ALERTS_CONSENT_KEY = "mcp-audio-alerts-unlocked";
 
 let ctx: AudioContext | null = null;
 let audioReady = false;
+let globalUnlockInstalled = false;
 
 export function isQueueAudioReady() {
   return audioReady;
+}
+
+export function hasPersistedAudioConsent(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(AUDIO_ALERTS_CONSENT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistAudioConsent(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(AUDIO_ALERTS_CONSENT_KEY, "1");
+  } catch {
+    // private browsing / quota
+  }
 }
 
 /** Unlock Web Audio — browsers block sound until user interacts with the page */
@@ -30,27 +54,49 @@ export async function unlockQueueAudio(): Promise<boolean> {
     if (!ctx) ctx = new AudioContext();
     if (ctx.state === "suspended") await ctx.resume();
     audioReady = ctx.state === "running";
+    if (audioReady) persistAudioConsent();
     return audioReady;
   } catch {
     return false;
   }
 }
 
-/** Call once on layout mount — any click/keypress unlocks audio */
-export function installQueueAudioUnlock(): () => void {
+/**
+ * Install once per tab — any click/keypress unlocks audio silently.
+ * No UI prompt; consent is saved to localStorage for future sessions.
+ */
+export function installGlobalAudioUnlock(onUnlocked?: () => void): () => void {
   if (typeof window === "undefined") return () => {};
 
-  const unlock = () => {
-    void unlockQueueAudio();
+  const tryUnlock = () => {
+    void unlockQueueAudio().then((ok) => {
+      if (!ok) return;
+      prepareSpeechAuto();
+      onUnlocked?.();
+      window.removeEventListener("pointerdown", tryUnlock, true);
+      window.removeEventListener("keydown", tryUnlock, true);
+      globalUnlockInstalled = false;
+    });
   };
 
-  window.addEventListener("pointerdown", unlock, { capture: true });
-  window.addEventListener("keydown", unlock, { capture: true });
+  if (globalUnlockInstalled) {
+    return () => {};
+  }
+
+  globalUnlockInstalled = true;
+  window.addEventListener("pointerdown", tryUnlock, { capture: true });
+  window.addEventListener("keydown", tryUnlock, { capture: true });
 
   return () => {
-    window.removeEventListener("pointerdown", unlock, { capture: true });
-    window.removeEventListener("keydown", unlock, { capture: true });
+    window.removeEventListener("pointerdown", tryUnlock, true);
+    window.removeEventListener("keydown", tryUnlock, true);
+    globalUnlockInstalled = false;
   };
+}
+
+/** @deprecated Use installGlobalAudioUnlock via AudioAlertsProvider */
+export function installQueueAudioUnlock(): () => void {
+  return installGlobalAudioUnlock();
 }
 
 function tone(

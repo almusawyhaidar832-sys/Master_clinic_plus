@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Bell, Menu, Sun, Moon, Languages } from "lucide-react";
+import { GlobalSyncButton } from "@/components/sync/GlobalSyncButton";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,9 @@ interface HeaderProps {
   subtitle?: string;
   onMenuClick?: () => void;
   notificationCount?: number;
+  /** زر المزامنة العامة — للمدير فقط */
+  showGlobalSync?: boolean;
+  clinicId?: string | null;
 }
 
 export function Header({
@@ -18,6 +22,8 @@ export function Header({
   subtitle,
   onMenuClick,
   notificationCount = 0,
+  showGlobalSync = false,
+  clinicId,
 }: HeaderProps) {
   const { isDark, toggleTheme } = useTheme();
   const { lang, toggleLang } = useLanguage();
@@ -44,6 +50,8 @@ export function Header({
 
       {/* Right: controls */}
       <div className="flex items-center gap-1">
+
+        {showGlobalSync && <GlobalSyncButton clinicId={clinicId} />}
 
         {/* Language toggle */}
         <button

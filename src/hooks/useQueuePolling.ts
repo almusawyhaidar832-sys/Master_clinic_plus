@@ -23,13 +23,17 @@ async function fetchQueueRows(portal: "doctor" | "accountant"): Promise<{
   doctorId?: string | null;
   clinicId?: string;
 }> {
-  const res = await fetch("/api/queue", {
-    credentials: "include",
-    cache: "no-store",
-    headers: authPortalHeaders(portal),
-  });
-  if (!res.ok) return { queue: [] };
-  return res.json();
+  try {
+    const res = await fetch("/api/queue", {
+      credentials: "include",
+      cache: "no-store",
+      headers: authPortalHeaders(portal),
+    });
+    if (!res.ok) return { queue: [] };
+    return res.json();
+  } catch {
+    return { queue: [] };
+  }
 }
 
 /**

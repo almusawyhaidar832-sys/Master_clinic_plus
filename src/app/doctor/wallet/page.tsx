@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useClinicSync } from "@/hooks/useClinicSync";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils";
 import { cacheDoctorBalance, getCachedDoctorBalance } from "@/lib/offline-cache";
@@ -20,68 +21,76 @@ export default function DoctorWalletPage() {
   const [doctorId, setDoctorId] = useState<string | null>(null);
   const [zeroHint, setZeroHint] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      const supabase = createClient();
-      const doctor = await getDoctorForCurrentUser(supabase);
+  const load = useCallback(async () => {
+    const supabase = createClient();
+    const doctor = await getDoctorForCurrentUser(supabase);
 
-      if (!doctor) {
-        setStats({
-          availableBalance: 0,
-          totalEarnings: 0,
-          totalWithdrawn: 0,
-          pendingAmount: 0,
-          approvedAmount: 0,
-          expenseDeductions: 0,
-          payrollDeductions: 0,
-          withdrawableLimit: 0,
-          isDebtor: false,
-        });
-        return;
-      }
-
-      setDoctorId(doctor.id);
-
-      if (!navigator.onLine) {
-        setOffline(true);
-        const cached = getCachedDoctorBalance(doctor.id) ?? 0;
-        setStats({
-          availableBalance: cached,
-          totalEarnings: 0,
-          totalWithdrawn: 0,
-          pendingAmount: 0,
-          approvedAmount: 0,
-          expenseDeductions: 0,
-          payrollDeductions: 0,
-          withdrawableLimit: Math.max(0, cached),
-          isDebtor: cached < 0,
-        });
-        return;
-      }
-
-      let live: DoctorWalletStats | null = null;
-      try {
-        const res = await fetch("/api/doctor/wallet-stats", {
-          credentials: "include",
-          headers: authPortalHeaders("doctor"),
-        });
-        if (res.ok) {
-          live = (await res.json()) as DoctorWalletStats;
-        }
-      } catch {
-        /* fallback below */
-      }
-
-      if (!live) {
-        live = await fetchDoctorWalletStats(supabase, doctor.id);
-      }
-
-      setStats(live);
-      setZeroHint(live.totalEarnings <= 0);
-      cacheDoctorBalance(live.availableBalance, doctor.id);
+    if (!doctor) {
+      setStats({
+        availableBalance: 0,
+        totalEarnings: 0,
+        totalWithdrawn: 0,
+        pendingAmount: 0,
+        approvedAmount: 0,
+        expenseDeductions: 0,
+        payrollDeductions: 0,
+        withdrawableLimit: 0,
+        isDebtor: false,
+      });
+      return;
     }
-    load();
+
+    setDoctorId(doctor.id);
+
+    if (!navigator.onLine) {
+      setOffline(true);
+      const cached = getCachedDoctorBalance(doctor.id) ?? 0;
+      setStats({
+        availableBalance: cached,
+        totalEarnings: 0,
+        totalWithdrawn: 0,
+        pendingAmount: 0,
+        approvedAmount: 0,
+        expenseDeductions: 0,
+        payrollDeductions: 0,
+        withdrawableLimit: Math.max(0, cached),
+        isDebtor: cached < 0,
+      });
+      return;
+    }
+
+    let live: DoctorWalletStats | null = null;
+    try {
+      const res = await fetch("/api/doctor/wallet-stats", {
+        credentials: "include",
+        headers: authPortalHeaders("doctor"),
+      });
+      if (res.ok) {
+        live = (await res.json()) as DoctorWalletStats;
+      }
+    } catch {
+      /* fallback below */
+    }
+
+    if (!live) {
+      live = await fetchDoctorWalletStats(supabase, doctor.id);
+    }
+
+    setStats(live);
+    setZeroHint(live.totalEarnings <= 0);
+    cacheDoctorBalance(live.availableBalance, doctor.id);
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useClinicSync({
+    topics: ["sessions", "refunds", "profit", "all"],
+    doctorId,
+    onRefresh: load,
+    enabled: !!doctorId,
+  });
 
   const rows = [
     { label: "إجمالي الأرباح", value: stats?.totalEarnings, highlight: false },

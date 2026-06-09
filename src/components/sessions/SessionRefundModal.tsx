@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { formatCurrency } from "@/lib/utils";
 import { translateDbError } from "@/lib/db-errors";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
+import type { AuthPortalId } from "@/lib/auth/portal-access";
 import type { PatientOperation } from "@/types";
+import { notifyRefundMutation } from "@/lib/sync/mutation-notify";
 
 interface SessionRefundModalProps {
   operation: PatientOperation;
@@ -16,6 +19,8 @@ interface SessionRefundModalProps {
   onSaved: (info?: { amount: number }) => void;
   patientName?: string;
   doctorName?: string;
+  /** Portal session cookie — defaults to accountant dashboard */
+  authPortal?: AuthPortalId;
 }
 
 export function SessionRefundModal({
@@ -26,6 +31,7 @@ export function SessionRefundModal({
   onSaved,
   patientName,
   doctorName,
+  authPortal = "accountant",
 }: SessionRefundModalProps) {
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -51,7 +57,11 @@ export function SessionRefundModal({
     try {
       const res = await fetch("/api/refunds", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...authPortalHeaders(authPortal),
+        },
         body: JSON.stringify({
           sessionId: operation.id,
           amount: Number(amount),
@@ -70,6 +80,11 @@ export function SessionRefundModal({
         return;
       }
 
+      notifyRefundMutation({
+        clinicId: operation.clinic_id,
+        doctorId: operation.doctor_id,
+        patientId: operation.patient_id,
+      });
       onSaved({ amount: Number(data.refund?.amount ?? amount) });
       onClose();
     } catch {

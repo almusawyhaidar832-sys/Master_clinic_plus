@@ -81,7 +81,7 @@ export function buildSessionEntrySchema(opts: {
     showOperation: isFirst && !picking,
     showNotes: !picking,
     showDoctor:
-      !opts.lockDoctorId && !picking && !opts.hasAssignedDoctor,
+      !!opts.lockDoctorId || (!picking && !opts.hasAssignedDoctor),
     showAssignedDoctor:
       !opts.lockDoctorId && !!opts.hasAssignedDoctor,
     showPatientSearch: !opts.defaultPatientId,

@@ -20,6 +20,7 @@ export function MasterReportDocument({
   return (
     <div
       id="master-clinic-report-print"
+      dir="rtl"
       className="rounded-xl border border-slate-border bg-white p-4 text-slate-text sm:p-6"
     >
       <ClinicBrandingHeader
@@ -35,10 +36,11 @@ export function MasterReportDocument({
         <h3 className="mb-3 text-sm font-bold text-primary">الملخص المالي الرئيسي</h3>
         <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
           <StatBox label="إجمالي الإيرادات (الشهر)" value={summary.totalRevenue} />
-          <StatBox label="التدفق النقدي (تراكمي)" value={summary.cashInflow} />
-          <StatBox label="حصة العيادة" value={summary.totalClinicShare} />
+          <StatBox label="المرتجعات (مطروحة)" value={summary.totalRefunds} negative />
           <StatBox label="مصروفات عامة" value={summary.generalExpenses} negative />
           <StatBox label="رواتب الموظفين" value={summary.staffSalaries} negative />
+          <StatBox label="التدفق النقدي (تراكمي)" value={summary.cashInflow} />
+          <StatBox label="حصة العيادة" value={summary.totalClinicShare} />
           <StatBox label="مستحقات الأطباء" value={summary.doctorPayouts} negative />
           <StatBox label="ديون معلّقة" value={summary.outstandingDebts} warning />
           <StatBox
@@ -48,6 +50,9 @@ export function MasterReportDocument({
             className="col-span-2 sm:col-span-1"
           />
         </div>
+        <p className="mt-2 text-xs text-slate-muted">
+          الربح الصافي = الإيرادات − المرتجعات − المصروفات − الرواتب
+        </p>
       </section>
 
       <section className="mb-6 grid grid-cols-2 gap-3 text-sm">

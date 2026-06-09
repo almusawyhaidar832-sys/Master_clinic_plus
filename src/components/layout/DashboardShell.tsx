@@ -18,6 +18,8 @@ interface DashboardShellProps {
   staffLabel?: string;
   clinicLogoUrl?: string | null;
   notificationCount?: number;
+  showGlobalSync?: boolean;
+  clinicId?: string | null;
 }
 
 export function DashboardShell({
@@ -29,6 +31,8 @@ export function DashboardShell({
   staffLabel,
   clinicLogoUrl,
   notificationCount,
+  showGlobalSync,
+  clinicId,
 }: DashboardShellProps) {
   const sidebarTitle = clinicName || title;
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -78,6 +82,8 @@ export function DashboardShell({
           subtitle={subtitle}
           onMenuClick={() => setMobileOpen(true)}
           notificationCount={notificationCount}
+          showGlobalSync={showGlobalSync}
+          clinicId={clinicId}
         />
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>

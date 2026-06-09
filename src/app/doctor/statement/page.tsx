@@ -11,6 +11,8 @@ import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { fetchPatientsForCurrentDoctor } from "@/lib/services/doctor-patients";
+import { fetchPatientTreatmentCases } from "@/lib/services/patient-treatment-cases";
+import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
 import type { Patient, PatientOperation, MedicalLog } from "@/types";
 
 function StatementContent() {
@@ -24,6 +26,9 @@ function StatementContent() {
   const [patientId, setPatientId] = useState(preselectedId ?? "");
   const [patient, setPatient] = useState<Patient | null>(null);
   const [operations, setOperations] = useState<PatientOperation[]>([]);
+  const [treatmentCases, setTreatmentCases] = useState<PatientTreatmentCase[]>(
+    []
+  );
   const [logs, setLogs] = useState<
     (MedicalLog & { doctor?: { full_name_ar: string } })[]
   >([]);
@@ -54,7 +59,7 @@ function StatementContent() {
     const doctor = await getDoctorForCurrentUser(supabase);
     if (!doctor) return;
 
-    const [pRes, oRes, lRes] = await Promise.all([
+    const [pRes, oRes, lRes, cases] = await Promise.all([
       supabase.from("patients").select("*").eq("id", patientId).single(),
       supabase
         .from("patient_operations")
@@ -68,10 +73,12 @@ function StatementContent() {
         .eq("patient_id", patientId)
         .eq("doctor_id", doctor.id)
         .order("log_date", { ascending: false }),
+      fetchPatientTreatmentCases(supabase, patientId, doctor.clinic_id),
     ]);
     if (pRes.data) setPatient(pRes.data as Patient);
     setOperations((oRes.data as PatientOperation[]) || []);
     setLogs(lRes.data ?? []);
+    setTreatmentCases(cases);
     setGenerated(true);
   }
 
@@ -111,14 +118,7 @@ function StatementContent() {
                   patientName: patient.full_name_ar,
                   periodLabel: "كشف حساب كامل",
                   generatedAt: new Date().toLocaleString("ar-IQ"),
-                  operations,
-                  agreedTotal: patient.agreed_total ?? undefined,
-                  totalPaid: patient.total_paid ?? undefined,
-                  remaining: Math.max(
-                    0,
-                    Number(patient.agreed_total ?? 0) -
-                      Number(patient.total_paid ?? 0)
-                  ),
+                  elementId: "patient-statement-print",
                 });
               } finally {
                 setPdfLoading(false);
@@ -128,6 +128,7 @@ function StatementContent() {
           <PatientStatementDocument
             patient={patient}
             operations={operations}
+            treatmentCases={treatmentCases}
             medicalLogs={logs}
             clinic={profile}
           />

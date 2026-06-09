@@ -117,6 +117,10 @@ html.dark {
     box-shadow: none !important;
   }
 
+  #patient-statement-print .statement-case-body {
+    display: block !important;
+  }
+
   #master-clinic-report-print {
     padding: 0 !important;
     max-width: 100% !important;

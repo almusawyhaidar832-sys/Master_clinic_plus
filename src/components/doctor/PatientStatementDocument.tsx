@@ -3,13 +3,15 @@
 import type { ClinicProfile } from "@/types/clinic-profile";
 import type { MedicalLog, Patient, PatientOperation } from "@/types";
 import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
+import { PatientStatementByCase } from "@/components/statements/PatientStatementByCase";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
-import { computeOutstandingDebtFromOperations } from "@/lib/services/patient-treatment-cases";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
+import { formatDate } from "@/lib/utils";
 
 interface PatientStatementDocumentProps {
   patient: Patient;
   operations: PatientOperation[];
+  treatmentCases: PatientTreatmentCase[];
   medicalLogs: (MedicalLog & { doctor?: { full_name_ar: string } })[];
   clinic?: ClinicProfile | null;
 }
@@ -17,15 +19,14 @@ interface PatientStatementDocumentProps {
 export function PatientStatementDocument({
   patient,
   operations,
+  treatmentCases,
   medicalLogs,
   clinic,
 }: PatientStatementDocumentProps) {
-  const totalPaid = operations.reduce((s, o) => s + o.paid_amount, 0);
-  const totalDebt = computeOutstandingDebtFromOperations(operations);
-
   return (
     <div
       id="patient-statement-print"
+      dir="rtl"
       className="rounded-xl border border-slate-border bg-white p-6 text-slate-text"
     >
       <ClinicBrandingHeader
@@ -42,50 +43,13 @@ export function PatientStatementDocument({
         </p>
       )}
 
-      <section className="mb-6">
-        <h2 className="mb-2 font-semibold">الملخص المالي</h2>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded bg-surface p-2">
-            <span className="text-slate-muted">إجمالي المدفوع: </span>
-            <strong>{formatCurrency(totalPaid)}</strong>
-          </div>
-          <div className="rounded bg-debt/30 p-2">
-            <span className="text-slate-muted">متبقي: </span>
-            <strong className="text-debt-text">{formatCurrency(totalDebt)}</strong>
-          </div>
-        </div>
-      </section>
-
-      <section className="mb-6">
-        <h2 className="mb-2 font-semibold">السجل المالي</h2>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-right text-slate-muted">
-              <th className="py-1">التاريخ</th>
-              <th className="py-1">الطبيب</th>
-              <th className="py-1">العملية</th>
-              <th className="py-1">المدفوع</th>
-            </tr>
-          </thead>
-          <tbody>
-            {operations.map((op) => (
-              <tr key={op.id} className="border-b border-slate-border/40">
-                <td className="py-1">{formatDate(op.operation_date ?? "")}</td>
-                <td className="py-1 font-medium text-primary">
-                  {formatDoctorDisplayName(
-                    (op.doctor as { full_name_ar: string })?.full_name_ar
-                  )}
-                </td>
-                <td className="py-1">{op.operation_type || op.operation_name_ar || "—"}</td>
-                <td className="py-1">{formatCurrency(op.paid_amount)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      <PatientStatementByCase
+        operations={operations}
+        treatmentCases={treatmentCases}
+      />
 
       {medicalLogs.length > 0 && (
-        <section>
+        <section className="mt-6 border-t border-slate-border pt-6">
           <h2 className="mb-2 font-semibold">السجل الطبي</h2>
           <ul className="space-y-2 text-sm">
             {medicalLogs.map((log) => (

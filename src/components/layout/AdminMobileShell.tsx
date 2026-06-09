@@ -14,10 +14,12 @@ import {
   Users,
   UserCog,
   LogOut,
+  Activity,
 } from "lucide-react";
 
 const adminNav = [
   { href: "/admin",           label: "الرئيسية", icon: Home        },
+  { href: "/admin/activity",  label: "المراقبة", icon: Activity    },
   { href: "/admin/profits",   label: "الأرباح",  icon: TrendingUp  },
   { href: "/admin/doctors",   label: "الأطباء",  icon: Stethoscope },
   { href: "/admin/team",      label: "الفريق",   icon: Users       },

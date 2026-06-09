@@ -1,24 +1,54 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, RefreshCw } from "lucide-react";
 import { todayISO } from "@/lib/utils";
 import { createAssistantAppointmentViaApi } from "@/lib/services/assistant-appointments-client";
+import { createAccountantAppointmentViaApi } from "@/lib/services/accountant-appointments-client";
+import { createClient } from "@/lib/supabase/client";
+import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
+import { Select } from "@/components/ui/Select";
+import type { Doctor } from "@/types";
 
 interface AddAppointmentModalProps {
   onClose: () => void;
   onSaved: () => void;
+  portal?: "assistant" | "accountant";
+  clinicId?: string | null;
 }
 
-export function AddAppointmentModal({ onClose, onSaved }: AddAppointmentModalProps) {
+export function AddAppointmentModal({
+  onClose,
+  onSaved,
+  portal = "assistant",
+  clinicId = null,
+}: AddAppointmentModalProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [doctorId, setDoctorId] = useState("");
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [date, setDate] = useState(todayISO());
   const [startTime, setStartTime] = useState("10:00");
   const [endTime, setEndTime] = useState("10:30");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (portal !== "accountant" || !clinicId) return;
+    const supabase = createClient();
+    supabase
+      .from("doctors")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .eq("is_active", true)
+      .order("full_name_ar")
+      .then(({ data }) => {
+        const list = (data as Doctor[]) ?? [];
+        setDoctors(list);
+        if (list[0]?.id) setDoctorId(list[0].id);
+      });
+  }, [portal, clinicId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,16 +61,29 @@ export function AddAppointmentModal({ onClose, onSaved }: AddAppointmentModalPro
       setError("هاتف المريض مطلوب");
       return;
     }
+    if (portal === "accountant" && !doctorId) {
+      setError("اختر الطبيب");
+      return;
+    }
 
     setSaving(true);
-    const result = await createAssistantAppointmentViaApi({
+    const payload = {
       patient_name_ar: name.trim(),
       patient_phone: phone.trim(),
       appointment_date: date,
       start_time: startTime,
       end_time: endTime,
       notes: notes.trim() || undefined,
-    });
+    };
+
+    const result =
+      portal === "accountant"
+        ? await createAccountantAppointmentViaApi({
+            ...payload,
+            doctor_id: doctorId,
+          })
+        : await createAssistantAppointmentViaApi(payload);
+
     setSaving(false);
 
     if (!result.ok) {
@@ -55,7 +98,9 @@ export function AddAppointmentModal({ onClose, onSaved }: AddAppointmentModalPro
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
       <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">إضافة موعد</h2>
+          <h2 className="text-lg font-bold text-slate-800">
+            {portal === "accountant" ? "حجز مراجع جديد" : "إضافة موعد"}
+          </h2>
           <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-slate-100">
             <X className="h-5 w-5 text-slate-500" />
           </button>
@@ -66,6 +111,18 @@ export function AddAppointmentModal({ onClose, onSaved }: AddAppointmentModalPro
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {portal === "accountant" && (
+            <Select
+              label="الطبيب"
+              value={doctorId}
+              onChange={(e) => setDoctorId(e.target.value)}
+              placeholder="— اختر الطبيب —"
+              options={doctors.map((d) => ({
+                value: d.id,
+                label: formatDoctorDisplayName(d.full_name_ar),
+              }))}
+            />
+          )}
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-600">اسم المريض</label>
             <input

@@ -398,6 +398,23 @@ export async function fetchRefundHistory(
   }));
 }
 
+/** Sum of refund amounts in a date range (inclusive) */
+export async function fetchTotalRefundsAmount(
+  supabase: SupabaseClient,
+  opts: { clinicId: string; from?: string; to?: string }
+): Promise<number> {
+  let query = supabase
+    .from("session_refunds")
+    .select("amount")
+    .eq("clinic_id", opts.clinicId);
+
+  if (opts.from) query = query.gte("created_at", `${opts.from}T00:00:00`);
+  if (opts.to) query = query.lte("created_at", `${opts.to}T23:59:59.999`);
+
+  const { data } = await query;
+  return (data ?? []).reduce((s, r) => s + Number(r.amount ?? 0), 0);
+}
+
 export async function fetchRefundsForReport(
   supabase: SupabaseClient,
   from: string,

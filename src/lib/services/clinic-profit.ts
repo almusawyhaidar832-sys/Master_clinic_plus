@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { notifyClinicSync } from "@/lib/sync/clinic-events";
 
 /** يُبث عند تغيّر المصروفات أو الرواتب — اللوحة التنفيذية تُحدَّث فوراً */
 export const CLINIC_PROFIT_REFRESH_EVENT = "clinic-profit-refresh";
@@ -26,9 +27,14 @@ export interface RecordTransactionInput {
 }
 
 /** إشعار الواجهة بتحديث صافي الربح */
-export function notifyClinicProfitRefresh(): void {
+export function notifyClinicProfitRefresh(clinicId?: string): void {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(CLINIC_PROFIT_REFRESH_EVENT));
+    notifyClinicSync({
+      topic: "profit",
+      clinicId,
+      source: "mutation",
+    });
   }
 }
 

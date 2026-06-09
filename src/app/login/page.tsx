@@ -4,10 +4,17 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FaTooth } from "react-icons/fa";
 import { createClientForPortal } from "@/lib/supabase/client";
-import { signInWithPassword, signOutUser } from "@/lib/supabase/auth-helpers";
-import { resolveAuthEmail } from "@/lib/auth/credentials";
-import { isRoleAllowedForPath, loginPortalToAuthPortalId } from "@/lib/auth/portal-access";
-import { getAuthProfile } from "@/lib/clinic-context";
+import { signOutUser } from "@/lib/supabase/auth-helpers";
+import {
+  isValidSanitizedUsername,
+  sanitizeUsername,
+  signInWithUsername,
+} from "@/lib/auth/credentials";
+import {
+  isRoleAllowedForPath,
+  loginPortalToAuthPortalId,
+  normalizeRole,
+} from "@/lib/auth/portal-access";
 import { Eye, EyeOff } from "lucide-react";
 import { DEVELOPER } from "@/lib/constants";
 import { DeveloperFooterLink } from "@/components/layout/DeveloperFooterLink";
@@ -124,30 +131,39 @@ function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boo
         return;
       }
 
+      const trimmedUser = username.trim();
+      if (
+        !trimmedUser.includes("@") &&
+        !isValidSanitizedUsername(sanitizeUsername(trimmedUser))
+      ) {
+        setError("اسم المستخدم: 3 أحرف إنجليزية على الأقل (مثل dr_ahmed)");
+        setLoading(false);
+        return;
+      }
+
       const supabase = createClientForPortal(authPortal);
-      const email = resolveAuthEmail(username.trim());
+      const result = await signInWithUsername(supabase, trimmedUser, password);
 
-      const { data, error: signInError } = await signInWithPassword(
-        supabase,
-        email,
-        password
-      );
-
-      if (signInError || !data.user) {
-        setError("اسم المستخدم أو كلمة المرور غير صحيحة");
+      if (!result.ok) {
+        setError(result.error);
         setLoading(false);
         return;
       }
 
-      const profile = await getAuthProfile(supabase);
-      if (!profile || !isRoleAllowedForPath(profile.role, portal.destination)) {
+      const role = normalizeRole(result.role);
+      if (!role || !isRoleAllowedForPath(role, portal.destination)) {
         await signOutUser(supabase);
-        setError("هذا الحساب لا يناسب هذه البوابة — استخدم بوابة الدخول الصحيحة لدورك");
+        setError(
+          role
+            ? `هذا الحساب لا يناسب بوابة «${portal.title}» — استخدم البوابة الصحيحة لدورك`
+            : "تم الدخول لكن لم يُعثر على دور الحساب — راجع مدير العيادة لربط الحساب"
+        );
         setLoading(false);
         return;
       }
 
-      router.push(portal.destination);
+      router.refresh();
+      window.location.assign(portal.destination);
     } catch {
       setError("خطأ في الاتصال — تحقق من اتصالك بالإنترنت");
     } finally {
@@ -257,6 +273,13 @@ function LoginPageContent() {
         {portalHint === "assistant" && (
           <p className="mb-4 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-center text-sm text-teal-800">
             مساعدو الأطباء: سجّل الدخول من بوابة «المساعد» — ستُوجَّه مباشرة لحجوزات طبيبك فقط.
+          </p>
+        )}
+
+        {portalHint === "doctor" && (
+          <p className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-center text-sm text-blue-800">
+            أطباء: استخدم اسم المستخدم الإنجليزي الذي أنشأه المحاسب (مثل dr_ahmed) وليس الاسم العربي.
+            إذا ظهر «بدون حساب دخول» في قائمة الأطباء، اطلب من المحاسب إنشاء حساب من إدارة المستخدمين.
           </p>
         )}
 
