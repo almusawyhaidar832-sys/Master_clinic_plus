@@ -17,14 +17,13 @@ export const accountantModuleNav: ModuleNavItem[] = [
   { href: "/dashboard/queue",       label: "غرفة الانتظار",      icon: "listOrdered", requiredModule: "patient_queue"      },
   { href: "/dashboard/appointments", label: "الحجوزات",          icon: "calendarClock", requiredModule: "appointments"     },
   { href: "/dashboard/assistants",  label: "إدارة المساعدين",    icon: "userRound"                                      },
-  { href: "/dashboard/doctor-expenses", label: "صرفيات الأطباء", icon: "expenses"                                     },
+  { href: "/dashboard/doctor-expenses", label: "صرفيات عامة",    icon: "expenses"                                     },
   { href: "/dashboard/patients",    label: "ملفات المرضى",        icon: "patients",    requiredModule: "patients"           },
   { href: "/dashboard/reports",     label: "تقارير العيادة",      icon: "profits",     requiredModule: "reports"            },
   { href: "/dashboard/refunds",     label: "إدارة المرتجعات",     icon: "refunds",     requiredModule: "billing"            },
   { href: "/dashboard/activity",    label: "سجل المراقبة",        icon: "activity"                                      },
   { href: "/dashboard/doctors",     label: "الأطباء",             icon: "doctors"      },
   { href: "/dashboard/withdrawals", label: "طلبات السحب",         icon: "withdrawals", requiredModule: "doctor_wallet"      },
-  { href: "/dashboard/expenses",    label: "المصروفات",           icon: "expenses"     },
   { href: "/dashboard/salary",      label: "رواتب الموظفين",      icon: "salary"       },
   { href: "/dashboard/employees",  label: "إدارة الرواتب",       icon: "userCog"      },
   // Module-gated
@@ -74,6 +73,7 @@ export const assistantModuleNav: ModuleNavItem[] = [
 // =============================================================================
 export const doctorModuleNav: ModuleNavItem[] = [
   { href: "/doctor",           label: "الرئيسية",    icon: "home"         },
+  { href: "/doctor/financial-ledger", label: "السجل المالي", icon: "scrollText", requiredModule: "doctor_wallet" },
   { href: "/doctor/queue",     label: "الانتظار",    icon: "listOrdered", requiredModule: "patient_queue"  },
   { href: "/doctor/wallet",    label: "المحفظة",     icon: "wallet",      requiredModule: "doctor_wallet"  },
   { href: "/doctor/patients",  label: "المرضى",      icon: "users",       requiredModule: "patients"       },
@@ -83,6 +83,7 @@ export const doctorModuleNav: ModuleNavItem[] = [
 
 // Doctor quick actions — shown on home screen grid
 export const doctorModuleQuickActions: ModuleNavItem[] = [
+  { href: "/doctor/financial-ledger", label: "السجل المالي",          icon: "scrollText",    requiredModule: "doctor_wallet"      },
   { href: "/doctor/wallet",      label: "المحفظة",               icon: "wallet",        requiredModule: "doctor_wallet"      },
   { href: "/doctor/withdraw",    label: "طلب سحب",               icon: "arrowDownToLine",requiredModule: "doctor_wallet"     },
   { href: "/doctor/patients",    label: "رعاية المرضى",          icon: "users",         requiredModule: "patients"           },

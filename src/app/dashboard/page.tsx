@@ -37,9 +37,9 @@ const quickLinks = [
     color: "bg-violet-50 text-violet-600",
   },
   {
-    href: "/dashboard/expenses",
-    title: "المصروفات والرواتب",
-    desc: "مصروفات مصنّفة + رواتب موظفين",
+    href: "/dashboard/doctor-expenses",
+    title: "صرفيات عامة",
+    desc: "صرفيات العيادة + رواتب الأطباء + مصروفات",
     icon: Receipt,
     color: "bg-purple-50 text-purple-600",
   },

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X, Upload, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
 import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
 
 interface DoctorOption {
@@ -119,7 +120,8 @@ export function AddDoctorExpenseModal({
         return;
       }
 
-      notifyClinicProfitRefresh();
+      notifyClinicProfitRefresh(clinicId);
+      notifyFinancialMutation({ clinicId, doctorId });
       onSaved();
       onClose();
     } catch {

@@ -14,6 +14,8 @@ import {
   resolveCanManageWithdrawals,
   updateWithdrawalStatusClient,
 } from "@/lib/withdrawals/update-status-client";
+import { useClinicSync } from "@/hooks/useClinicSync";
+import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
 import { formatCurrency } from "@/lib/utils";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import type { Doctor, DoctorWithdrawal } from "@/types";
@@ -31,6 +33,7 @@ export default function WithdrawalsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [canManage, setCanManage] = useState(false);
+  const [clinicId, setClinicId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -50,6 +53,7 @@ export default function WithdrawalsPage() {
     }
 
     if (profile?.clinic_id) {
+      setClinicId(profile.clinic_id);
       const docRes = await supabase
         .from("doctors")
         .select("*")
@@ -62,6 +66,13 @@ export default function WithdrawalsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useClinicSync({
+    topics: ["financial"],
+    clinicId,
+    onRefresh: () => void load(),
+    enabled: !!clinicId,
+  });
 
   useEffect(() => {
     async function preview() {
@@ -108,6 +119,14 @@ export default function WithdrawalsPage() {
       return;
     }
 
+    const row = items.find((i) => i.id === id);
+    if (profile.clinic_id) {
+      notifyFinancialMutation({
+        clinicId: profile.clinic_id,
+        doctorId: row?.doctor_id,
+      });
+    }
+
     setMessage("تم تحديث الطلب بنجاح");
     load();
   }
@@ -146,6 +165,9 @@ export default function WithdrawalsPage() {
     setCashNotes("");
     setShowCashForm(false);
     setMessage("تم تسجيل الدفع النقدي وخصمه من محفظة الطبيب");
+    if (clinicId) {
+      notifyFinancialMutation({ clinicId, doctorId: cashDoctorId });
+    }
     load();
   }
 

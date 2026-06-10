@@ -35,7 +35,9 @@ export function DoctorPaymentFields({
   return (
     <div className="space-y-4 rounded-xl border border-slate-border bg-surface/40 p-4">
       <div>
-        <p className="mb-2 text-sm font-semibold text-slate-text">طريقة المحاسبة</p>
+        <p className="mb-2 text-sm font-semibold text-slate-text">
+          الاتفاق المالي (financial_agreement)
+        </p>
         <div className="flex flex-wrap gap-4">
           {DOCTOR_PAYMENT_TYPE_OPTIONS.map((opt) => (
             <label

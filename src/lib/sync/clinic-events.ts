@@ -13,6 +13,7 @@ export type ClinicSyncTopic =
   | "refunds"
   | "audit"
   | "profit"
+  | "financial"
   | "notifications";
 
 export type ClinicSyncSource = "mutation" | "realtime" | "manual" | "polling";

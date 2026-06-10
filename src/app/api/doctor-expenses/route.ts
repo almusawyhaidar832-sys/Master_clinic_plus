@@ -9,6 +9,7 @@ import {
   applyDoctorExpenseFinancialDeductions,
   rollbackDoctorExpenseInsert,
 } from "@/lib/services/doctor-expense-deduction";
+import { archiveDoctorExpenseToHistory } from "@/lib/services/invoice-archive";
 
 /**
  * POST /api/doctor-expenses
@@ -113,12 +114,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const archive = await archiveDoctorExpenseToHistory(admin, {
+      clinicId,
+      expenseId: expense.id,
+      finalizedBy: caller.id,
+    });
+
+    if (!archive.ok) {
+      return NextResponse.json(
+        {
+          error: `تم حفظ الصرفية لكن فشل نقلها للسجل التاريخي: ${archive.error}`,
+          expense_id: expense.id,
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       expense_id: expense.id,
+      history_id: archive.historyId,
       doctor_share: doctorShare,
       clinic_share: clinicShare,
       profit_updated: true,
+      archived_to_history: true,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";

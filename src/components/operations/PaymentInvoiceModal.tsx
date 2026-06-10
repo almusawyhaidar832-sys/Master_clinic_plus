@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Upload, RefreshCw, Wallet } from "lucide-react";
 import { cn, formatCurrency, todayISO } from "@/lib/utils";
-import { calculateDoctorShare } from "@/lib/finance";
+import { calculateDoctorShareForDoctor } from "@/lib/finance";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { createClient } from "@/lib/supabase/client";
 import type {
   Appointment,
+  DoctorPaymentType,
   DoctorPercentage,
   MaterialsCostShare,
   OperationType,
@@ -24,7 +25,12 @@ import { notifySessionMutation } from "@/lib/sync/mutation-notify";
 import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
 
 export interface DashboardAppointment extends Appointment {
-  doctor?: { full_name_ar: string; percentage: DoctorPercentage; materials_share: MaterialsCostShare } | null;
+  doctor?: {
+    full_name_ar: string;
+    percentage: DoctorPercentage;
+    materials_share: MaterialsCostShare;
+    payment_type?: DoctorPaymentType;
+  } | null;
 }
 
 interface PaymentInvoiceModalProps {
@@ -82,11 +88,14 @@ export function PaymentInvoiceModal({
     const materials = Number(materialsCost) || 0;
     const doctor = appointment.doctor;
     if (!doctor || total <= 0) return null;
-    return calculateDoctorShare(
+    return calculateDoctorShareForDoctor(
       total,
-      doctor.percentage,
-      materials,
-      doctor.materials_share
+      {
+        percentage: doctor.percentage,
+        materials_share: doctor.materials_share,
+        payment_type: doctor.payment_type,
+      },
+      materials
     );
   }, [totalAmount, materialsCost, appointment.doctor]);
 
@@ -159,8 +168,8 @@ export function PaymentInvoiceModal({
           notes: notes.trim() || null,
         } as PatientOperation;
 
-        setInvoiceData(
-          buildSessionInvoiceData({
+        setInvoiceData({
+          ...buildSessionInvoiceData({
             operation: stubOp,
             clinic: clinicProfile ?? null,
             patientName,
@@ -176,8 +185,9 @@ export function PaymentInvoiceModal({
               total > FINANCIAL_EPSILON &&
               paid >= total - FINANCIAL_EPSILON,
             notes: notes.trim() || null,
-          })
-        );
+          }),
+          invoiceId: (json.invoiceId as string) ?? null,
+        });
       } else {
         onClose();
       }
@@ -195,6 +205,8 @@ export function PaymentInvoiceModal({
     return (
       <SessionInvoiceModal
         data={invoiceData}
+        invoiceId={invoiceData.invoiceId}
+        onFinalized={onSaved}
         onClose={() => {
           setInvoiceData(null);
           onClose();

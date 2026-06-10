@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { calculateDoctorShare, splitTreatmentAndReviewFee } from "@/lib/finance";
+import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import { splitTreatmentAndReviewFee } from "@/lib/finance";
 import { formatCurrency } from "@/lib/utils";
 import type { Doctor, DoctorPercentage, MaterialsCostShare } from "@/types";
 
@@ -29,8 +30,9 @@ export function FinancialPreview({
     if (!doctor) return null;
 
     if (lockedSplit && lockedSplit.agreedTotal > 0) {
-      const pct = Number(doctor.percentage);
-      const matPct = Number(doctor.materials_share);
+      const salary = isSalaryDoctor(doctor);
+      const pct = salary ? 0 : Number(doctor.percentage);
+      const matPct = salary ? 0 : Number(doctor.materials_share);
       const doctorGross = lockedSplit.agreedTotal * (pct / 100);
       const doctorMaterials = materialsCost * (matPct / 100);
       const clinicMaterials = materialsCost - doctorMaterials;
@@ -42,6 +44,7 @@ export function FinancialPreview({
         doctorShare: lockedSplit.doctorShare,
         clinicShare: lockedSplit.clinicShare,
         locked: true,
+        salaryDoctor: salary,
       };
     }
 
@@ -54,6 +57,8 @@ export function FinancialPreview({
       {
         percentage: doctor.percentage as DoctorPercentage,
         materials_share: doctor.materials_share as MaterialsCostShare,
+        payment_type: doctor.payment_type,
+        financial_agreement: doctor.financial_agreement,
       }
     );
     if (!split) return null;

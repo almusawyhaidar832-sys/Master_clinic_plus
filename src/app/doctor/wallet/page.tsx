@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/utils";
 import { cacheDoctorBalance, getCachedDoctorBalance } from "@/lib/offline-cache";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
+import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import {
   fetchDoctorWalletStats,
   type DoctorWalletStats,
@@ -19,6 +20,7 @@ export default function DoctorWalletPage() {
   const [stats, setStats] = useState<DoctorWalletStats | null>(null);
   const [offline, setOffline] = useState(false);
   const [doctorId, setDoctorId] = useState<string | null>(null);
+  const [salaryDoctor, setSalaryDoctor] = useState(false);
   const [zeroHint, setZeroHint] = useState(false);
 
   const load = useCallback(async () => {
@@ -41,6 +43,8 @@ export default function DoctorWalletPage() {
     }
 
     setDoctorId(doctor.id);
+    const isSalary = isSalaryDoctor(doctor);
+    setSalaryDoctor(isSalary);
 
     if (!navigator.onLine) {
       setOffline(true);
@@ -77,7 +81,7 @@ export default function DoctorWalletPage() {
     }
 
     setStats(live);
-    setZeroHint(live.totalEarnings <= 0);
+    setZeroHint(!isSalary && live.totalEarnings <= 0);
     cacheDoctorBalance(live.availableBalance, doctor.id);
   }, []);
 
@@ -86,18 +90,34 @@ export default function DoctorWalletPage() {
   }, [load]);
 
   useClinicSync({
-    topics: ["sessions", "refunds"],
+    topics: ["sessions", "refunds", "financial"],
     doctorId,
     onRefresh: load,
     enabled: !!doctorId,
   });
 
   const rows = [
-    { label: "إجمالي الأرباح", value: stats?.totalEarnings, highlight: false },
+    {
+      label: salaryDoctor ? "الراتب الشهري المستحق" : "إجمالي الأرباح",
+      value: stats?.totalEarnings,
+      highlight: false,
+    },
     { label: "صرفيات الطبيب", value: stats?.expenseDeductions, highlight: true },
-    { label: "المسحوب (مدفوع)", value: stats?.totalWithdrawn, highlight: false },
-    { label: "طلبات معلّقة", value: stats?.pendingAmount, highlight: true },
-    { label: "موافق عليها (لم تُدفع)", value: stats?.approvedAmount, highlight: true },
+    {
+      label: salaryDoctor ? "الراتب المُصرف" : "المسحوب (مدفوع)",
+      value: stats?.totalWithdrawn,
+      highlight: false,
+    },
+    ...(salaryDoctor
+      ? []
+      : [
+          { label: "طلبات معلّقة", value: stats?.pendingAmount, highlight: true },
+          {
+            label: "موافق عليها (لم تُدفع)",
+            value: stats?.approvedAmount,
+            highlight: true,
+          },
+        ]),
   ];
 
   return (
@@ -119,6 +139,12 @@ export default function DoctorWalletPage() {
           وسجّل مبلغ «المدفوع» أكبر من صفر.
         </p>
       )}
+      {salaryDoctor && (
+        <p className="rounded-lg bg-primary/5 px-3 py-2 text-xs text-slate-text leading-relaxed">
+          أنت على نظام <strong>راتب ثابت</strong>. يُسجّل صرف راتبك من
+          «صرفيات عامة» ويظهر في السجل المالي.
+        </p>
+      )}
       <div
         className={`rounded-2xl p-8 text-white shadow-premium ${
           stats?.isDebtor
@@ -127,7 +153,11 @@ export default function DoctorWalletPage() {
         }`}
       >
         <p className="text-sm opacity-90">
-          {stats?.isDebtor ? "الرصيد (مدين)" : "الرصيد القابل للسحب"}
+          {salaryDoctor
+            ? "المتبقي من الراتب (قابل للصرف)"
+            : stats?.isDebtor
+              ? "الرصيد (مدين)"
+              : "الرصيد القابل للسحب"}
         </p>
         <p className="mt-2 text-4xl font-bold tabular-nums">
           {stats !== null ? (
@@ -161,17 +191,21 @@ export default function DoctorWalletPage() {
         ))}
       </div>
 
-      <Link href="/doctor/withdraw">
-        <Button className="w-full">
-          <ArrowDownToLine className="h-4 w-4" />
-          طلب سحب جديد
-        </Button>
-      </Link>
+      {!salaryDoctor && (
+        <Link href="/doctor/withdraw">
+          <Button className="w-full">
+            <ArrowDownToLine className="h-4 w-4" />
+            طلب سحب جديد
+          </Button>
+        </Link>
+      )}
 
-      <p className="text-xs text-slate-muted text-center leading-relaxed">
-        طلب السحب لا يخصم من رصيدك — يُخصم عند موافقة المحاسب أو الدفع.
-        المحاسب يمكنه أيضاً تسجيل دفع نقدي مباشر.
-      </p>
+      {!salaryDoctor && (
+        <p className="text-xs text-slate-muted text-center leading-relaxed">
+          طلب السحب لا يخصم من رصيدك — يُخصم عند موافقة المحاسب أو الدفع.
+          المحاسب يمكنه أيضاً تسجيل دفع نقدي مباشر.
+        </p>
+      )}
     </div>
   );
 }

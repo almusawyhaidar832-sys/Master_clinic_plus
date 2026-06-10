@@ -9,6 +9,7 @@ export type FinancialTransactionType =
   | "clinic_expense"
   | "staff_salary_accrual"
   | "staff_salary_paid"
+  | "doctor_salary_paid"
   | "assistant_payroll_doctor"
   | "assistant_payroll_clinic"
   | "doctor_expense_doctor"
@@ -32,7 +33,7 @@ export function notifyClinicProfitRefresh(clinicId?: string): void {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(CLINIC_PROFIT_REFRESH_EVENT));
     notifyClinicSync({
-      topic: "profit",
+      topic: ["profit", "financial"],
       clinicId,
       source: "mutation",
     });

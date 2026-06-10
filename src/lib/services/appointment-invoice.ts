@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { calculateDoctorShare } from "@/lib/finance";
+import { calculateDoctorShareForDoctor } from "@/lib/finance";
+import { buildInvoiceNumber } from "@/lib/invoices/session-invoice";
 import { ensureAppointmentPatient } from "@/lib/services/ensure-appointment-patient";
-import type { DoctorPercentage, MaterialsCostShare } from "@/types";
+import type { DoctorPaymentType, DoctorPercentage, MaterialsCostShare } from "@/types";
 
 export interface AppointmentInvoiceInput {
   appointmentId: string;
@@ -62,11 +63,14 @@ export async function createAppointmentInvoice(
   const totalAmount = Math.max(0, input.totalAmount);
   const paidAmount = Math.min(Math.max(0, input.paidAmount), totalAmount);
 
-  const split = calculateDoctorShare(
+  const split = calculateDoctorShareForDoctor(
     totalAmount,
-    String(doctor.percentage) as DoctorPercentage,
-    materialsCost,
-    String(doctor.materials_share) as MaterialsCostShare
+    {
+      percentage: String(doctor.percentage) as DoctorPercentage,
+      materials_share: String(doctor.materials_share) as MaterialsCostShare,
+      payment_type: doctor.payment_type as DoctorPaymentType | undefined,
+    },
+    materialsCost
   );
 
   const opPayload: Record<string, unknown> = {
@@ -105,6 +109,8 @@ export async function createAppointmentInvoice(
     total_amount: totalAmount,
     paid_amount: paidAmount,
     invoice_date: appointment.appointment_date,
+    invoice_number: buildInvoiceNumber(operation.id as string),
+    status: "draft",
     notes: input.notes?.trim() || null,
     created_by: input.createdBy,
   };

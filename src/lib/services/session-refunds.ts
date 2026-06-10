@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { calculateDoctorShare } from "@/lib/finance";
-import { opName, type DoctorPercentage, type MaterialsCostShare } from "@/types";
+import { calculateDoctorShareForDoctor } from "@/lib/finance";
+import {
+  opName,
+  type Doctor,
+  type DoctorPercentage,
+  type MaterialsCostShare,
+} from "@/types";
 
 export interface SessionRefund {
   id: string;
@@ -25,10 +30,10 @@ export interface RefundShareSplit {
 
 export function computeRefundShareSplit(
   amount: number,
-  doctor: {
-    percentage: DoctorPercentage;
-    materials_share: MaterialsCostShare;
-  } | null
+  doctor: Pick<
+    Doctor,
+    "percentage" | "materials_share" | "payment_type" | "financial_agreement"
+  > | null
 ): RefundShareSplit {
   const refundAmount = Math.max(0, amount);
   if (refundAmount <= 0) {
@@ -40,11 +45,15 @@ export function computeRefundShareSplit(
       clinicShareDeduction: Math.round(refundAmount * 100) / 100,
     };
   }
-  const { doctorShare, clinicShare } = calculateDoctorShare(
+  const { doctorShare, clinicShare } = calculateDoctorShareForDoctor(
     refundAmount,
-    doctor.percentage,
-    0,
-    doctor.materials_share
+    {
+      percentage: doctor.percentage,
+      materials_share: doctor.materials_share,
+      payment_type: doctor.payment_type,
+      financial_agreement: doctor.financial_agreement,
+    },
+    0
   );
   return {
     doctorShareDeduction: doctorShare,
@@ -134,7 +143,7 @@ export async function createSessionRefund(
 
   const { data: doctor, error: doctorErr } = await supabase
     .from("doctors")
-    .select("id, percentage, materials_share")
+    .select("id, percentage, materials_share, payment_type")
     .eq("id", session.doctor_id)
     .maybeSingle();
 
@@ -145,6 +154,7 @@ export async function createSessionRefund(
   const split = computeRefundShareSplit(amount, {
     percentage: doctor.percentage as DoctorPercentage,
     materials_share: doctor.materials_share as MaterialsCostShare,
+    payment_type: doctor.payment_type as Doctor["payment_type"],
   });
 
   const sessionLabel = opName(session as Parameters<typeof opName>[0]) || "إرجاع";

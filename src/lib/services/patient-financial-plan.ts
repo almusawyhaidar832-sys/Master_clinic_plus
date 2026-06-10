@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { calculateDoctorShare, splitTreatmentAndReviewFee } from "@/lib/finance";
+import {
+  calculateDoctorShareForDoctor,
+  splitTreatmentAndReviewFee,
+  type DoctorShareInput,
+} from "@/lib/finance";
 import type { Doctor, DoctorPercentage, MaterialsCostShare } from "@/types";
 
 export type SessionKind = "plan" | "payment";
@@ -540,6 +544,15 @@ export function computeRemainingBalance(
   return Math.max(0, finalPrice - totalPaid - newPayment);
 }
 
+function doctorShareInput(doctor: Doctor): DoctorShareInput {
+  return {
+    percentage: doctor.percentage as DoctorPercentage,
+    materials_share: doctor.materials_share as MaterialsCostShare,
+    payment_type: doctor.payment_type,
+    financial_agreement: doctor.financial_agreement,
+  };
+}
+
 /** Split once on treatment final (after discount), not per payment session */
 export function previewTreatmentSplit(
   finalPrice: number,
@@ -547,12 +560,7 @@ export function previewTreatmentSplit(
   doctor: Doctor | null
 ): { doctorShare: number; clinicShare: number } | null {
   if (!doctor || finalPrice <= 0) return null;
-  return calculateDoctorShare(
-    finalPrice,
-    doctor.percentage as DoctorPercentage,
-    materialsCost,
-    doctor.materials_share as MaterialsCostShare
-  );
+  return calculateDoctorShareForDoctor(finalPrice, doctorShareInput(doctor), materialsCost);
 }
 
 /** علاج + كشفية: الكشفية بالكامل للعيادة */
@@ -566,12 +574,7 @@ export function previewTreatmentSplitWithReview(
     treatmentFinal,
     reviewFee,
     materialsCost,
-    doctor
-      ? {
-          percentage: doctor.percentage as DoctorPercentage,
-          materials_share: doctor.materials_share as MaterialsCostShare,
-        }
-      : null
+    doctor ? doctorShareInput(doctor) : null
   );
 }
 

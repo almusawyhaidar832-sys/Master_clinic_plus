@@ -6,6 +6,9 @@ import { opName } from "@/types";
 
 export interface SessionInvoiceData {
   operationId: string;
+  invoiceId?: string | null;
+  doctorId?: string | null;
+  patientId?: string | null;
   invoiceNumber: string;
   issuedAt: string;
   clinic: ClinicProfile | null;
@@ -51,6 +54,8 @@ export function buildSessionInvoiceData(input: {
 }): SessionInvoiceData {
   return {
     operationId: input.operation.id,
+    doctorId: input.operation.doctor_id ?? null,
+    patientId: input.operation.patient_id ?? null,
     invoiceNumber: buildInvoiceNumber(input.operation.id),
     issuedAt: new Date().toISOString(),
     clinic: input.clinic,

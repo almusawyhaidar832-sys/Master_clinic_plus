@@ -9,7 +9,6 @@ import {
   fetchClinicProfitStats,
   fetchTodaySummary,
 } from "@/lib/services/clinic-stats";
-import { currentMonthYear } from "@/lib/utils";
 import {
   fetchRefundsForReport,
   fetchTotalRefundsAmount,
@@ -31,10 +30,15 @@ import { fetchPayrollRecordsForDoctorMonth } from "@/lib/services/assistant-payr
 import {
   calcOperationEarned,
   computeEarningsFromOperationsForDoctors,
+  computeSalaryDoctorWithdrawable,
+  fetchDoctorSalaryPayoutRecords,
+  fetchDoctorSalaryPayoutsByDoctor,
   fetchDoctorWalletStatsBatch,
   fetchOperationCountsByDoctor,
   fetchWithdrawalSumsByDoctor,
 } from "@/lib/services/doctor-wallet";
+import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import { currentMonthYear, monthDateRange } from "@/lib/utils";
 
 function relationName(
   rel: { full_name_ar: string } | { full_name_ar: string }[] | null | undefined
@@ -161,24 +165,38 @@ export async function fetchDoctorLedgers(
   if (!doctors?.length) return [];
 
   const doctorIds = doctors.map((d) => d.id as string);
+  const salaryPeriod = periodScoped
+    ? { from: start, to: end }
+    : monthDateRange(currentMonthYear());
 
-  const [periodEarningsMap, opsCountMap, withdrawalSums, walletBatch] =
-    await Promise.all([
-      computeEarningsFromOperationsForDoctors(
-        supabase,
-        doctorIds,
-        periodScoped ? start : undefined,
-        periodScoped ? end : undefined
-      ),
-      fetchOperationCountsByDoctor(
-        supabase,
-        active.clinicId,
-        doctorIds,
-        periodScoped ? { from: start, to: end } : undefined
-      ),
-      fetchWithdrawalSumsByDoctor(supabase, doctorIds),
-      fetchDoctorWalletStatsBatch(supabase, doctorIds),
-    ]);
+  const [
+    periodEarningsMap,
+    opsCountMap,
+    withdrawalSums,
+    walletBatch,
+    salaryPayoutsMap,
+  ] = await Promise.all([
+    computeEarningsFromOperationsForDoctors(
+      supabase,
+      doctorIds,
+      periodScoped ? start : undefined,
+      periodScoped ? end : undefined
+    ),
+    fetchOperationCountsByDoctor(
+      supabase,
+      active.clinicId,
+      doctorIds,
+      periodScoped ? { from: start, to: end } : undefined
+    ),
+    fetchWithdrawalSumsByDoctor(supabase, doctorIds),
+    fetchDoctorWalletStatsBatch(supabase, doctorIds, salaryPeriod),
+    fetchDoctorSalaryPayoutsByDoctor(
+      supabase,
+      doctorIds,
+      salaryPeriod.from,
+      salaryPeriod.to
+    ),
+  ]);
 
   return doctors.map((doc) => {
     const payment_type = normalizeDoctorPaymentType(doc.payment_type);
@@ -187,6 +205,35 @@ export async function fetchDoctorLedgers(
     const operationsShareSum = periodEarningsMap.get(doc.id) ?? 0;
     const withdrawals = withdrawalSums.get(doc.id);
     const wallet = walletBatch.get(doc.id);
+    const totalEarned = resolveDoctorPeriodEarned(
+      doctorForCalc,
+      operationsShareSum
+    );
+
+    if (isSalaryDoctor({ payment_type })) {
+      const salaryPaid = salaryPayoutsMap.get(doc.id) ?? 0;
+      return {
+        id: doc.id,
+        full_name_ar: doc.full_name_ar,
+        specialty_ar: doc.specialty_ar,
+        percentage: doc.percentage,
+        payment_type,
+        salary_amount,
+        paymentLabel: doctorPaymentLabel({
+          payment_type,
+          percentage: doc.percentage,
+          salary_amount,
+        }),
+        totalEarned,
+        totalWithdrawn: salaryPaid,
+        pendingWithdrawalAmount: 0,
+        withdrawableBalance: computeSalaryDoctorWithdrawable(
+          totalEarned,
+          salaryPaid
+        ),
+        operationsCount: opsCountMap.get(doc.id) ?? 0,
+      };
+    }
 
     return {
       id: doc.id,
@@ -200,13 +247,10 @@ export async function fetchDoctorLedgers(
         percentage: doc.percentage,
         salary_amount,
       }),
-      totalEarned: resolveDoctorPeriodEarned(
-        doctorForCalc,
-        operationsShareSum
-      ),
+      totalEarned,
       totalWithdrawn: withdrawals?.totalWithdrawn ?? 0,
       pendingWithdrawalAmount: withdrawals?.pendingWithdrawalAmount ?? 0,
-      withdrawableBalance: wallet?.availableBalance ?? 0,
+      withdrawableBalance: wallet?.withdrawableLimit ?? 0,
       operationsCount: opsCountMap.get(doc.id) ?? 0,
     };
   });
@@ -230,29 +274,73 @@ export async function fetchDoctorLedgerSummary(
   if (!doctor) return undefined;
 
   const doctorIds = [doctorId];
-  const [periodEarningsMap, opsCountMap, withdrawalSums, walletBatch] =
-    await Promise.all([
-      computeEarningsFromOperationsForDoctors(
-        supabase,
-        doctorIds,
-        periodScoped ? start : undefined,
-        periodScoped ? end : undefined
-      ),
-      fetchOperationCountsByDoctor(
-        supabase,
-        doctor.clinic_id as string,
-        doctorIds,
-        periodScoped ? { from: start, to: end } : undefined
-      ),
-      fetchWithdrawalSumsByDoctor(supabase, doctorIds),
-      fetchDoctorWalletStatsBatch(supabase, doctorIds),
-    ]);
+  const salaryPeriod = periodScoped
+    ? { from: start, to: end }
+    : monthDateRange(currentMonthYear());
+
+  const [
+    periodEarningsMap,
+    opsCountMap,
+    withdrawalSums,
+    walletBatch,
+    salaryPayoutsMap,
+  ] = await Promise.all([
+    computeEarningsFromOperationsForDoctors(
+      supabase,
+      doctorIds,
+      periodScoped ? start : undefined,
+      periodScoped ? end : undefined
+    ),
+    fetchOperationCountsByDoctor(
+      supabase,
+      doctor.clinic_id as string,
+      doctorIds,
+      periodScoped ? { from: start, to: end } : undefined
+    ),
+    fetchWithdrawalSumsByDoctor(supabase, doctorIds),
+    fetchDoctorWalletStatsBatch(supabase, doctorIds, salaryPeriod),
+    fetchDoctorSalaryPayoutsByDoctor(
+      supabase,
+      doctorIds,
+      salaryPeriod.from,
+      salaryPeriod.to
+    ),
+  ]);
 
   const payment_type = normalizeDoctorPaymentType(doctor.payment_type);
   const salary_amount = Number(doctor.salary_amount ?? 0);
   const doctorForCalc = { payment_type, salary_amount };
   const withdrawals = withdrawalSums.get(doctorId);
   const wallet = walletBatch.get(doctorId);
+  const totalEarned = resolveDoctorPeriodEarned(
+    doctorForCalc,
+    periodEarningsMap.get(doctorId) ?? 0
+  );
+
+  if (isSalaryDoctor({ payment_type })) {
+    const salaryPaid = salaryPayoutsMap.get(doctorId) ?? 0;
+    return {
+      id: doctor.id,
+      full_name_ar: doctor.full_name_ar,
+      specialty_ar: doctor.specialty_ar,
+      percentage: doctor.percentage,
+      payment_type,
+      salary_amount,
+      paymentLabel: doctorPaymentLabel({
+        payment_type,
+        percentage: doctor.percentage,
+        salary_amount,
+      }),
+      totalEarned,
+      totalWithdrawn: salaryPaid,
+      pendingWithdrawalAmount: 0,
+      withdrawableBalance: computeSalaryDoctorWithdrawable(
+        totalEarned,
+        salaryPaid
+      ),
+      operationsCount: opsCountMap.get(doctorId) ?? 0,
+    };
+  }
 
   return {
     id: doctor.id,
@@ -266,13 +354,10 @@ export async function fetchDoctorLedgerSummary(
       percentage: doctor.percentage,
       salary_amount,
     }),
-    totalEarned: resolveDoctorPeriodEarned(
-      doctorForCalc,
-      periodEarningsMap.get(doctorId) ?? 0
-    ),
+    totalEarned,
     totalWithdrawn: withdrawals?.totalWithdrawn ?? 0,
     pendingWithdrawalAmount: withdrawals?.pendingWithdrawalAmount ?? 0,
-    withdrawableBalance: wallet?.availableBalance ?? 0,
+    withdrawableBalance: wallet?.withdrawableLimit ?? 0,
     operationsCount: opsCountMap.get(doctorId) ?? 0,
   };
 }
@@ -332,7 +417,11 @@ export async function fetchDoctorLedgerDetail(
         .eq("doctor_id", doctorId)
         .eq("is_active", true);
 
-  const [summary, opsRes, withdrawalsRes, payrollRes, expensesRes, assistantsFallback] =
+  const salaryPeriod = periodScoped
+    ? { from: start, to: end }
+    : monthDateRange(currentMonthYear());
+
+  const [summary, opsRes, withdrawalsRes, payrollRes, expensesRes, assistantsFallback, salaryPayouts] =
     await Promise.all([
       fetchDoctorLedgerSummary(supabase, doctorId, monthYear),
       opsQuery,
@@ -344,6 +433,12 @@ export async function fetchDoctorLedgerDetail(
       payrollPromise,
       expensesQuery,
       assistantsFallbackPromise,
+      fetchDoctorSalaryPayoutRecords(
+        supabase,
+        doctorId,
+        salaryPeriod.from,
+        salaryPeriod.to
+      ),
     ]);
 
   const operations = opsRes.data ?? [];
@@ -401,6 +496,7 @@ export async function fetchDoctorLedgerDetail(
     summary,
     operations,
     withdrawals: withdrawalsRes.data ?? [],
+    salaryPayouts,
     settlement,
   };
 }

@@ -2048,6 +2048,12 @@ export function QuickEntryForm({
       {invoiceData && (
         <SessionInvoiceModal
           data={invoiceData}
+          onFinalized={() => {
+            if (pendingSuccessOp) {
+              onSuccess?.(pendingSuccessOp);
+              setPendingSuccessOp(null);
+            }
+          }}
           onClose={() => {
             setInvoiceData(null);
             if (pendingSuccessOp) {

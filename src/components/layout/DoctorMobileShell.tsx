@@ -19,7 +19,7 @@ import {
   Wallet, ArrowDownToLine, Users, Calendar,
   CalendarClock, AlertCircle, FileText, Home,
   Smile, FilePen, Activity, Sun, Moon, Languages,
-  UserCog, LogOut, ListOrdered,
+  UserCog, LogOut, ListOrdered, ScrollText,
 } from "lucide-react";
 
 /** Maps icon string keys → Lucide components for the bottom nav */
@@ -32,6 +32,7 @@ const NAV_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> 
   calendar:        Calendar,
   alertCircle:     AlertCircle,
   fileText:        FileText,
+  scrollText:      ScrollText,
   smile:           Smile,
   filePen:         FilePen,
   activity:        Activity,

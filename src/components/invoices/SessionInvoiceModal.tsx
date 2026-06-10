@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, MessageCircle, Loader2 } from "lucide-react";
+import { X, MessageCircle, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { ReportActions } from "@/components/reports/ReportActions";
@@ -16,16 +16,30 @@ import {
 import { downloadSessionInvoicePdf } from "@/lib/reports/pdf-export";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { getClinicDisplayName } from "@/lib/services/clinic-profile";
+import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
 
 interface SessionInvoiceModalProps {
   data: SessionInvoiceData;
+  invoiceId?: string | null;
   onClose: () => void;
+  /** بعد الاعتماد النهائي — الفاتورة تُؤرشف وتختفي من العمليات النشطة */
+  onFinalized?: () => void;
 }
 
-export function SessionInvoiceModal({ data, onClose }: SessionInvoiceModalProps) {
+export function SessionInvoiceModal({
+  data,
+  invoiceId: invoiceIdProp,
+  onClose,
+  onFinalized,
+}: SessionInvoiceModalProps) {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [waLoading, setWaLoading] = useState(false);
-  const [waMessage, setWaMessage] = useState<{
+  const [finalizeLoading, setFinalizeLoading] = useState(false);
+  const [finalized, setFinalized] = useState(false);
+  const [invoiceId, setInvoiceId] = useState<string | null>(
+    invoiceIdProp ?? data.invoiceId ?? null
+  );
+  const [actionMessage, setActionMessage] = useState<{
     type: "success" | "error" | "info";
     text: string;
   } | null>(null);
@@ -35,7 +49,7 @@ export function SessionInvoiceModal({ data, onClose }: SessionInvoiceModalProps)
 
   async function sendWhatsApp() {
     if (!data.patientPhone?.trim()) {
-      setWaMessage({
+      setActionMessage({
         type: "error",
         text: "لا يوجد رقم جوال للمراجع — أضف الرقم في ملف المريض",
       });
@@ -43,7 +57,7 @@ export function SessionInvoiceModal({ data, onClose }: SessionInvoiceModalProps)
     }
 
     setWaLoading(true);
-    setWaMessage(null);
+    setActionMessage(null);
 
     try {
       const res = await fetch("/api/whatsapp/send-session", {
@@ -63,11 +77,10 @@ export function SessionInvoiceModal({ data, onClose }: SessionInvoiceModalProps)
         ok?: boolean;
         error?: string;
         configured?: boolean;
-        status?: string;
       };
 
       if (!res.ok) {
-        setWaMessage({
+        setActionMessage({
           type: "error",
           text: json.error ?? "تعذر إرسال الواتساب",
         });
@@ -75,19 +88,19 @@ export function SessionInvoiceModal({ data, onClose }: SessionInvoiceModalProps)
       }
 
       if (json.configured === false) {
-        setWaMessage({
+        setActionMessage({
           type: "info",
           text: "واتساب غير مضبوط — انسخ الرسالة يدوياً أو اضبط WHATSAPP_* في الإعدادات",
         });
         return;
       }
 
-      setWaMessage({
+      setActionMessage({
         type: "success",
         text: `✓ تم إرسال الفاتورة إلى ${data.patientName} عبر واتساب`,
       });
     } catch {
-      setWaMessage({ type: "error", text: "تعذر الاتصال بالسيرفر" });
+      setActionMessage({ type: "error", text: "تعذر الاتصال بالسيرفر" });
     } finally {
       setWaLoading(false);
     }
@@ -98,6 +111,98 @@ export function SessionInvoiceModal({ data, onClose }: SessionInvoiceModalProps)
     const text = encodeURIComponent(sessionInvoiceWhatsAppMessage(data));
     const phone = data.patientPhone.replace(/\D/g, "");
     window.open(`https://wa.me/${phone}?text=${text}`, "_blank", "noopener");
+  }
+
+  async function handleFinalize() {
+    setFinalizeLoading(true);
+    setActionMessage(null);
+
+    const snapshot: SessionInvoiceData = {
+      ...data,
+      invoiceId: invoiceId ?? data.invoiceId,
+    };
+
+    try {
+      let activeInvoiceId = invoiceId;
+      if (!activeInvoiceId) {
+        const draftRes = await fetch("/api/invoices/draft", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...authPortalHeaders("accountant"),
+          },
+          body: JSON.stringify({
+            operation_id: data.operationId,
+            snapshot,
+          }),
+        });
+        const draftJson = (await draftRes.json()) as {
+          invoice_id?: string;
+          error?: string;
+        };
+        if (!draftRes.ok) {
+          setActionMessage({
+            type: "error",
+            text: draftJson.error ?? "تعذر إنشاء مسودة الفاتورة",
+          });
+          return;
+        }
+        activeInvoiceId = draftJson.invoice_id ?? null;
+        setInvoiceId(activeInvoiceId);
+      }
+
+      const res = await fetch("/api/invoices/finalize", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...authPortalHeaders("accountant"),
+        },
+        body: JSON.stringify({
+          operation_id: data.operationId,
+          invoice_id: activeInvoiceId,
+          snapshot: { ...snapshot, invoiceId: activeInvoiceId },
+        }),
+      });
+
+      const json = (await res.json()) as {
+        success?: boolean;
+        error?: string;
+        already_archived?: boolean;
+      };
+
+      if (!res.ok) {
+        setActionMessage({
+          type: "error",
+          text: json.error ?? "تعذر اعتماد الفاتورة",
+        });
+        return;
+      }
+
+      setFinalized(true);
+      setActionMessage({
+        type: "success",
+        text: json.already_archived
+          ? "الفاتورة مؤرشفة مسبقاً — تم التحديث"
+          : "✓ تم الاعتماد النهائي — نُقلت الفاتورة إلى السجل التاريخي",
+      });
+
+      if (data.clinic?.id) {
+        notifyFinancialMutation({
+          clinicId: data.clinic.id,
+          doctorId: data.doctorId ?? undefined,
+          patientId: data.patientId ?? undefined,
+          alsoSessions: true,
+        });
+      }
+
+      onFinalized?.();
+    } catch {
+      setActionMessage({ type: "error", text: "تعذر الاتصال بالسيرفر" });
+    } finally {
+      setFinalizeLoading(false);
+    }
   }
 
   return (
@@ -125,17 +230,24 @@ export function SessionInvoiceModal({ data, onClose }: SessionInvoiceModalProps)
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {waMessage && (
+          {actionMessage && (
             <Alert
               variant={
-                waMessage.type === "success"
+                actionMessage.type === "success"
                   ? "success"
-                  : waMessage.type === "error"
+                  : actionMessage.type === "error"
                     ? "error"
                     : "info"
               }
             >
-              {waMessage.text}
+              {actionMessage.text}
+            </Alert>
+          )}
+
+          {!finalized && (
+            <Alert variant="info">
+              بعد مراجعة الفاتورة اضغط <strong>اعتماد نهائي</strong> لنقلها إلى
+              السجل التاريخي وإخفائها من جلسات اليوم.
             </Alert>
           )}
 
@@ -188,10 +300,36 @@ export function SessionInvoiceModal({ data, onClose }: SessionInvoiceModalProps)
           <SessionPaymentInvoiceDocument data={data} />
         </div>
 
-        <div className="border-t border-slate-border p-4 no-print">
-          <Button type="button" variant="outline" className="w-full" onClick={onClose}>
-            إغلاق ومتابعة العمل
-          </Button>
+        <div className="border-t border-slate-border p-4 no-print space-y-2">
+          {!finalized ? (
+            <>
+              <Button
+                type="button"
+                className="w-full"
+                disabled={finalizeLoading}
+                onClick={() => void handleFinalize()}
+              >
+                {finalizeLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                اعتماد نهائي — نقل إلى السجل التاريخي
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={onClose}
+              >
+                إغلاق مؤقت (تبقى في العمليات النشطة)
+              </Button>
+            </>
+          ) : (
+            <Button type="button" className="w-full" onClick={onClose}>
+              إغلاق
+            </Button>
+          )}
         </div>
       </div>
     </div>

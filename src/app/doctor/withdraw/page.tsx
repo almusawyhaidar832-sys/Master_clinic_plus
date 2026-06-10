@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
+import { useClinicSync } from "@/hooks/useClinicSync";
+import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
 import { formatCurrency } from "@/lib/utils";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import type { Doctor } from "@/types";
@@ -21,21 +23,30 @@ export default function DoctorWithdrawPage() {
   const [pending, setPending] = useState(0);
   const [isDebtor, setIsDebtor] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      const supabase = createClient();
-      const doc = await getDoctorForCurrentUser(supabase);
-      setDoctor(doc);
-      if (doc) {
-        const stats = await fetchDoctorWalletStats(supabase, doc.id);
-        setAvailable(stats.availableBalance);
-        setWithdrawLimit(stats.withdrawableLimit);
-        setPending(stats.pendingAmount);
-        setIsDebtor(stats.isDebtor);
-      }
+  const load = useCallback(async () => {
+    const supabase = createClient();
+    const doc = await getDoctorForCurrentUser(supabase);
+    setDoctor(doc);
+    if (doc) {
+      const stats = await fetchDoctorWalletStats(supabase, doc.id);
+      setAvailable(stats.availableBalance);
+      setWithdrawLimit(stats.withdrawableLimit);
+      setPending(stats.pendingAmount);
+      setIsDebtor(stats.isDebtor);
     }
-    load();
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useClinicSync({
+    topics: ["financial"],
+    clinicId: doctor?.clinic_id,
+    doctorId: doctor?.id,
+    onRefresh: load,
+    enabled: !!doctor?.id,
+  });
 
   async function handleRequest() {
     setError("");
@@ -69,7 +80,12 @@ export default function DoctorWithdrawPage() {
       return;
     }
 
+    notifyFinancialMutation({
+      clinicId: doctor.clinic_id,
+      doctorId: doctor.id,
+    });
     setSent(true);
+    void load();
   }
 
   return (
@@ -80,40 +96,34 @@ export default function DoctorWithdrawPage() {
           isDebtor ? "text-red-600" : "text-slate-muted"
         }`}
       >
-        رصيدك: {isDebtor ? "−" : ""}
+        {isDebtor ? "رصيدك مدين —" : "الرصيد القابل للسحب:"}{" "}
         {formatCurrency(Math.abs(available))}
-        {isDebtor && <span className="mr-1 text-xs">(مدين)</span>}
       </p>
-      {isDebtor && (
-        <p className="text-xs text-red-600">
-          لا يمكن طلب سحب — رصيدك سالب بسبب صرفيات أو التزامات على العيادة
-        </p>
-      )}
       {pending > 0 && (
-        <p className="text-xs text-amber-600">
-          لديك {formatCurrency(pending)} طلبات معلّقة — تُخصم من الرصيد عند الموافقة فقط
+        <p className="text-xs text-amber-700">
+          لديك طلبات معلّقة بقيمة {formatCurrency(pending)} — تُخصم عند الموافقة
         </p>
       )}
 
       {sent ? (
         <Alert variant="success">
-          تم إرسال الطلب — سيصل إشعار فوري لمحاسب العيادة
+          تم إرسال طلب السحب — سيتم إشعار المحاسب. يُحدَّث رصيدك تلقائياً عند
+          الموافقة.
         </Alert>
       ) : (
         <>
           {error && <Alert variant="error">{error}</Alert>}
           <CurrencyInput
-            label="المبلغ المطلوب"
+            label="المبلغ المطلوب (د.ع)"
             value={amount}
             onChange={setAmount}
-            placeholder="500,000"
           />
           <Button
             className="w-full"
-            onClick={handleRequest}
-            disabled={loading || !doctor || isDebtor || withdrawLimit <= 0}
+            onClick={() => void handleRequest()}
+            disabled={loading || withdrawLimit <= 0}
           >
-            {loading ? "جاري الإرسال..." : "إرسال الطلب"}
+            {loading ? "جارٍ الإرسال..." : "إرسال الطلب"}
           </Button>
         </>
       )}

@@ -31,6 +31,12 @@ interface DoctorPayoutStatementProps {
     status: string;
     requested_at: string;
   }[];
+  salaryPayouts?: {
+    id: string;
+    amount: number;
+    payoutDate: string;
+    descriptionAr: string;
+  }[];
   settlement?: DoctorMonthlySettlement | null;
 }
 
@@ -40,6 +46,7 @@ export function DoctorPayoutStatement({
   summary,
   operations,
   withdrawals,
+  salaryPayouts = [],
   settlement,
 }: DoctorPayoutStatementProps) {
   return (
@@ -140,7 +147,9 @@ export function DoctorPayoutStatement({
           <p className="font-bold">{formatCurrency(summary.totalEarned)}</p>
         </div>
         <div className="rounded-lg bg-surface p-2 text-center">
-          <p className="text-xs text-slate-muted">المسحوب</p>
+          <p className="text-xs text-slate-muted">
+            {isSalaryDoctor(doctor) ? "الراتب المُصرف" : "المسحوب"}
+          </p>
           <p className="font-bold">{formatCurrency(summary.totalWithdrawn)}</p>
         </div>
         <div className="rounded-lg bg-primary/10 p-2 text-center">
@@ -197,7 +206,33 @@ export function DoctorPayoutStatement({
         )}
       </section>
 
-      {withdrawals.length > 0 && (
+      {isSalaryDoctor(doctor) && salaryPayouts.length > 0 && (
+        <section className="mb-6">
+          <h3 className="mb-2 text-sm font-bold">صرفيات الراتب الثابت</h3>
+          <table className="w-full text-xs sm:text-sm">
+            <thead>
+              <tr className="border-b text-right text-slate-muted">
+                <th className="py-1">التاريخ</th>
+                <th className="py-1">الوصف</th>
+                <th className="py-1">المبلغ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {salaryPayouts.map((p) => (
+                <tr key={p.id} className="border-b border-slate-border/40">
+                  <td className="py-1">{formatDate(p.payoutDate)}</td>
+                  <td className="py-1">{p.descriptionAr}</td>
+                  <td className="py-1 font-medium text-primary">
+                    {formatCurrency(p.amount)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {!isSalaryDoctor(doctor) && withdrawals.length > 0 && (
         <section>
           <h3 className="mb-2 text-sm font-bold">طلبات السحب</h3>
           <table className="w-full text-xs sm:text-sm">

@@ -34,15 +34,18 @@ export async function fetchTodayLedgerOperations(
   const today = todayISO();
   const { startIso, endIso } = localPeriodUtcBounds(today, today);
 
-  let { data } = await supabase
+  let opsQuery = supabase
     .from("patient_operations")
     .select(
       "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
     )
     .eq("clinic_id", clinicId)
     .eq("operation_date", today)
+    .or("invoice_status.neq.archived,invoice_status.is.null")
     .order("created_at", { ascending: false })
     .limit(100);
+
+  let { data } = await opsQuery;
 
   if (!data?.length) {
     const fallback = await supabase
@@ -53,12 +56,15 @@ export async function fetchTodayLedgerOperations(
       .eq("clinic_id", clinicId)
       .gte("created_at", startIso)
       .lte("created_at", endIso)
+      .or("invoice_status.neq.archived,invoice_status.is.null")
       .order("created_at", { ascending: false })
       .limit(100);
     data = fallback.data;
   }
 
-  const operations = (data ?? []) as TodayOperationRow[];
+  const operations = ((data ?? []) as TodayOperationRow[]).filter(
+    (op) => op.invoice_status !== "archived"
+  );
   const caseIds = [
     ...new Set(
       operations

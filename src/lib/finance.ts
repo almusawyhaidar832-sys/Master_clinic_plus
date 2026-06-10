@@ -1,4 +1,12 @@
-import type { DoctorPercentage, MaterialsCostShare } from "@/types";
+import type { DoctorPercentage, DoctorPaymentType, MaterialsCostShare } from "@/types";
+import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+
+export type DoctorShareInput = {
+  percentage: DoctorPercentage;
+  materials_share: MaterialsCostShare;
+  payment_type?: DoctorPaymentType | null;
+  financial_agreement?: DoctorPaymentType | null;
+};
 
 /** Doctor payout from operation based on fixed agreement rules */
 export function calculateDoctorShare(
@@ -20,17 +28,43 @@ export function calculateDoctorShare(
 }
 
 /**
+ * تقسيم المبلغ حسب اتفاق الطبيب المالي.
+ * salary → حصة الطبيب 0 والمبلغ كاملاً للعيادة.
+ */
+export function calculateDoctorShareForDoctor(
+  totalAmount: number,
+  doctor: DoctorShareInput | null,
+  materialsCost: number
+): { doctorShare: number; clinicShare: number } {
+  const treatment = Math.max(0, totalAmount);
+  if (treatment <= 0) {
+    return { doctorShare: 0, clinicShare: 0 };
+  }
+  if (!doctor || isSalaryDoctor(doctor)) {
+    return { doctorShare: 0, clinicShare: Math.round(treatment * 100) / 100 };
+  }
+  return calculateDoctorShare(
+    treatment,
+    doctor.percentage,
+    materialsCost,
+    doctor.materials_share
+  );
+}
+
+/**
  * العلاج يُقسّم حسب نسبة الطبيب — الكشفية كاملة لصافي ربح العيادة (لا تدخل محفظة الطبيب).
+ * طبيب الراتب: كل المبالغ للعيادة.
  */
 export function splitTreatmentAndReviewFee(
   treatmentFinal: number,
   reviewFee: number,
   materialsCost: number,
-  doctor: { percentage: DoctorPercentage; materials_share: MaterialsCostShare } | null
+  doctor: DoctorShareInput | null
 ): { doctorShare: number; clinicShare: number; agreedTotal: number } | null {
   const treatment = Math.max(0, treatmentFinal);
   const review = Math.max(0, reviewFee);
   if (treatment <= 0 && review <= 0) return null;
+
   if (!doctor || treatment <= 0) {
     return {
       doctorShare: 0,
@@ -38,6 +72,16 @@ export function splitTreatmentAndReviewFee(
       agreedTotal: Math.round((treatment + review) * 100) / 100,
     };
   }
+
+  if (isSalaryDoctor(doctor)) {
+    const agreedTotal = Math.round((treatment + review) * 100) / 100;
+    return {
+      doctorShare: 0,
+      clinicShare: agreedTotal,
+      agreedTotal,
+    };
+  }
+
   const split = calculateDoctorShare(
     treatment,
     doctor.percentage,

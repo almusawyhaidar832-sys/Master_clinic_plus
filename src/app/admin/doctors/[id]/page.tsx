@@ -66,6 +66,7 @@ export default function AdminDoctorLedgerDetailPage() {
         summary={data.summary}
         operations={data.operations}
         withdrawals={data.withdrawals}
+        salaryPayouts={data.salaryPayouts}
         settlement={data.settlement}
       />
     </div>

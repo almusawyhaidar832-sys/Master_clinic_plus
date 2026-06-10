@@ -423,7 +423,7 @@ export function ExecutiveDashboard() {
   }, [fetchData, clinicLoading, clinicId]);
 
   useClinicSync({
-    topics: ["profit", "sessions", "refunds"],
+    topics: ["profit", "sessions", "refunds", "financial"],
     clinicId,
     onRefresh: () => fetchData({ silent: true }),
     enabled: !!clinicId,

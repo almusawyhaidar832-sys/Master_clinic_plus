@@ -86,7 +86,7 @@ export function TodayAppointmentsPanel({
       .from("appointments")
       .select(
         `*,
-        doctor:doctors ( full_name_ar, percentage, materials_share )`
+        doctor:doctors ( full_name_ar, percentage, materials_share, payment_type )`
       )
       .eq("clinic_id", active.clinicId)
       .eq("appointment_date", todayISO())

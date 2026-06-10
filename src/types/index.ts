@@ -12,7 +12,9 @@ export type DoctorPercentage =
 
 export type MaterialsCostShare = "0" | "10" | "20" | "30" | "40" | "50";
 
+/** الاتفاق المالي مع الطبيب — مخزّن في DB كـ payment_type */
 export type DoctorPaymentType = "percentage" | "salary";
+export type DoctorFinancialAgreement = DoctorPaymentType;
 
 export type WithdrawalStatus = "pending" | "approved" | "paid" | "rejected";
 export type WithdrawalSource = "doctor_request" | "accountant_cash";
@@ -51,6 +53,8 @@ export interface Invoice {
   xray_file_name: string | null;
   invoice_date: string;
   notes: string | null;
+  status?: "draft" | "finalized";
+  invoice_number?: string | null;
 }
 export type TreatmentStatus = "active" | "completed" | "cancelled";
 export type SalaryEntryType = "advance" | "deduction" | "absence";
@@ -89,6 +93,8 @@ export interface Doctor {
   percentage: DoctorPercentage;
   materials_share: MaterialsCostShare;
   payment_type?: DoctorPaymentType;
+  /** مرادف payment_type في الواجهة — percentage أو salary */
+  financial_agreement?: DoctorFinancialAgreement;
   salary_amount?: number;
   is_active: boolean;
 }
@@ -156,6 +162,7 @@ export interface PatientOperation {
   is_review_statement?: boolean;
   session_kind?: "plan" | "payment" | "discount" | "refund";
   treatment_case_id?: string | null;
+  invoice_status?: "pending" | "archived";
   created_at?: string;
   patient?: Patient | { full_name_ar: string };
   doctor?: Doctor | { full_name_ar: string };
@@ -185,6 +192,8 @@ export interface Expense {
   amount: number;
   expense_date: string;
   created_at: string;
+  doctor_id?: string | null;
+  expense_kind?: "general" | "doctor_salary";
 }
 
 export interface StaffMember {
