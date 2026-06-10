@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { doctorShareFromExpense } from "@/lib/services/assistant-payroll";
 
 export interface DoctorWalletStats {
   totalEarnings: number;
@@ -48,23 +47,20 @@ export function calcOperationEarned(
   return Math.round(paid * doctorPct * 100) / 100;
 }
 
-/** مجموع حصة الطبيب من فواتير الصرفيات */
+/** مجموع ما خُصم فعلياً من الطبيب بسبب الصرفيات (من الحركات المالية) */
 export async function fetchDoctorExpenseDeductionsTotal(
   supabase: SupabaseClient,
   doctorId: string
 ): Promise<number> {
   const { data } = await supabase
-    .from("doctor_expenses")
-    .select("amount, percentage_split")
-    .eq("doctor_id", doctorId);
+    .from("transactions")
+    .select("amount")
+    .eq("doctor_id", doctorId)
+    .eq("type", "doctor_expense_doctor")
+    .lt("amount", 0);
 
   return (data ?? []).reduce(
-    (s, row) =>
-      s +
-      doctorShareFromExpense(
-        Number(row.amount ?? 0),
-        Number(row.percentage_split ?? 0)
-      ),
+    (s, row) => s + Math.abs(Number(row.amount ?? 0)),
     0
   );
 }
@@ -131,6 +127,224 @@ export function computeWalletStats(
   };
 }
 
+const OPERATION_EARNINGS_SELECT =
+  "doctor_share_amount, paid_amount, treatment_case_id, operation_date, patient_treatment_cases(doctor_share_total, final_price)";
+
+const OPERATION_EARNINGS_BATCH_SELECT =
+  "doctor_id, doctor_share_amount, paid_amount, treatment_case_id, operation_date, patient_treatment_cases(doctor_share_total, final_price)";
+
+type OperationEarningBatchRow = OperationEarningRow & { doctor_id: string };
+
+async function fetchDoctorPercentageMap(
+  supabase: SupabaseClient,
+  doctorIds: string[]
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (!doctorIds.length) return map;
+
+  const { data } = await supabase
+    .from("doctors")
+    .select("id, percentage")
+    .in("id", doctorIds);
+
+  for (const row of data ?? []) {
+    map.set(row.id, Number(row.percentage ?? 50) / 100);
+  }
+  return map;
+}
+
+function initDoctorNumberMap(
+  doctorIds: string[],
+  initial = 0
+): Map<string, number> {
+  return new Map(doctorIds.map((id) => [id, initial]));
+}
+
+/** أرباح عدة أطباء — استعلام واحد للجلسات + نسب الأطباء */
+export async function computeEarningsFromOperationsForDoctors(
+  supabase: SupabaseClient,
+  doctorIds: string[],
+  from?: string,
+  to?: string
+): Promise<Map<string, number>> {
+  const sums = initDoctorNumberMap(doctorIds);
+  if (!doctorIds.length) return sums;
+
+  let opsQuery = supabase
+    .from("patient_operations")
+    .select(OPERATION_EARNINGS_BATCH_SELECT)
+    .in("doctor_id", doctorIds);
+
+  if (from) opsQuery = opsQuery.gte("operation_date", from);
+  if (to) opsQuery = opsQuery.lte("operation_date", to);
+
+  const [pctMap, opsRes] = await Promise.all([
+    fetchDoctorPercentageMap(supabase, doctorIds),
+    opsQuery,
+  ]);
+
+  for (const row of (opsRes.data ?? []) as OperationEarningBatchRow[]) {
+    const pct = pctMap.get(row.doctor_id) ?? 0.5;
+    const prev = sums.get(row.doctor_id) ?? 0;
+    sums.set(row.doctor_id, prev + calcOperationEarned(row, pct));
+  }
+
+  for (const [id, total] of sums) {
+    sums.set(id, Math.round(total * 100) / 100);
+  }
+  return sums;
+}
+
+/** عدد جلسات كل طبيب — استعلام خفيف بدون join */
+export async function fetchOperationCountsByDoctor(
+  supabase: SupabaseClient,
+  clinicId: string,
+  doctorIds: string[],
+  range?: { from: string; to: string }
+): Promise<Map<string, number>> {
+  const counts = initDoctorNumberMap(doctorIds);
+  if (!doctorIds.length) return counts;
+
+  let q = supabase
+    .from("patient_operations")
+    .select("doctor_id")
+    .eq("clinic_id", clinicId)
+    .in("doctor_id", doctorIds);
+
+  if (range) {
+    q = q.gte("operation_date", range.from).lte("operation_date", range.to);
+  }
+
+  const { data } = await q;
+  for (const row of data ?? []) {
+    const id = row.doctor_id as string;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function groupWithdrawalsByDoctor(
+  rows: { doctor_id: string; amount: number | string; status: string }[] | null
+): Map<string, WithdrawalRow[]> {
+  const map = new Map<string, WithdrawalRow[]>();
+  for (const row of rows ?? []) {
+    const list = map.get(row.doctor_id) ?? [];
+    list.push({ amount: row.amount, status: row.status });
+    map.set(row.doctor_id, list);
+  }
+  return map;
+}
+
+function groupDeductionsByDoctor(
+  rows: { doctor_id: string; amount: number | string }[] | null
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const row of rows ?? []) {
+    const id = row.doctor_id;
+    map.set(id, (map.get(id) ?? 0) + Math.abs(Number(row.amount ?? 0)));
+  }
+  return map;
+}
+
+/** محافظ عدة أطباء — 4 استعلامات بدل 4×N */
+export async function fetchDoctorWalletStatsBatch(
+  supabase: SupabaseClient,
+  doctorIds: string[]
+): Promise<Map<string, DoctorWalletStats>> {
+  const result = new Map<string, DoctorWalletStats>();
+  if (!doctorIds.length) return result;
+
+  const [earningsMap, withdrawalsRes, expenseRows, payrollRows] =
+    await Promise.all([
+      computeEarningsFromOperationsForDoctors(supabase, doctorIds),
+      supabase
+        .from("doctor_withdrawals")
+        .select("doctor_id, amount, status")
+        .in("doctor_id", doctorIds)
+        .neq("status", "rejected"),
+      supabase
+        .from("transactions")
+        .select("doctor_id, amount")
+        .in("doctor_id", doctorIds)
+        .eq("type", "doctor_expense_doctor")
+        .lt("amount", 0),
+      supabase
+        .from("transactions")
+        .select("doctor_id, amount")
+        .in("doctor_id", doctorIds)
+        .eq("type", "assistant_payroll_doctor")
+        .lt("amount", 0),
+    ]);
+
+  const withdrawalsByDoctor = groupWithdrawalsByDoctor(withdrawalsRes.data);
+  const expenseByDoctor = groupDeductionsByDoctor(expenseRows.data);
+  const payrollByDoctor = groupDeductionsByDoctor(payrollRows.data);
+
+  for (const doctorId of doctorIds) {
+    result.set(
+      doctorId,
+      computeWalletStats(
+        earningsMap.get(doctorId) ?? 0,
+        withdrawalsByDoctor.get(doctorId) ?? [],
+        {
+          expenseDeductions: expenseByDoctor.get(doctorId) ?? 0,
+          payrollDeductions: payrollByDoctor.get(doctorId) ?? 0,
+        }
+      )
+    );
+  }
+
+  return result;
+}
+
+function sumWithdrawalsByStatus(
+  rows: WithdrawalRow[] | undefined,
+  statuses: string[]
+): number {
+  return (rows ?? [])
+    .filter((r) => statuses.includes(r.status))
+    .reduce((s, r) => s + Number(r.amount ?? 0), 0);
+}
+
+/** مجموع السحوبات (موافق + مدفوع) والمعلّق — استعلام واحد */
+export async function fetchWithdrawalSumsByDoctor(
+  supabase: SupabaseClient,
+  doctorIds: string[]
+): Promise<
+  Map<string, { totalWithdrawn: number; pendingWithdrawalAmount: number }>
+> {
+  const map = new Map<
+    string,
+    { totalWithdrawn: number; pendingWithdrawalAmount: number }
+  >();
+  if (!doctorIds.length) return map;
+
+  const { data } = await supabase
+    .from("doctor_withdrawals")
+    .select("doctor_id, amount, status")
+    .in("doctor_id", doctorIds);
+
+  const byDoctor = groupWithdrawalsByDoctor(data);
+  for (const doctorId of doctorIds) {
+    const rows = byDoctor.get(doctorId);
+    map.set(doctorId, {
+      totalWithdrawn: sumWithdrawalsByStatus(rows, ["approved", "paid"]),
+      pendingWithdrawalAmount: sumWithdrawalsByStatus(rows, ["pending"]),
+    });
+  }
+  return map;
+}
+
+function sumOperationEarnings(
+  rows: OperationEarningRow[] | null | undefined,
+  doctorPct: number
+): number {
+  return (rows ?? []).reduce(
+    (sum, row) => sum + calcOperationEarned(row, doctorPct),
+    0
+  );
+}
+
 /** حساب الأرباح من الجلسات — لا يعتمد على doctor_share_amount (غالباً 0 في DB) */
 export async function computeEarningsFromOperations(
   supabase: SupabaseClient,
@@ -139,9 +353,7 @@ export async function computeEarningsFromOperations(
   const [opsRes, doctorRes] = await Promise.all([
     supabase
       .from("patient_operations")
-      .select(
-        "doctor_share_amount, paid_amount, treatment_case_id, patient_treatment_cases(doctor_share_total, final_price)"
-      )
+      .select(OPERATION_EARNINGS_SELECT)
       .eq("doctor_id", doctorId),
     supabase
       .from("doctors")
@@ -151,11 +363,33 @@ export async function computeEarningsFromOperations(
   ]);
 
   const pct = Number(doctorRes.data?.percentage ?? 50) / 100;
+  return sumOperationEarnings(opsRes.data, pct);
+}
 
-  return (opsRes.data ?? []).reduce(
-    (sum, row) => sum + calcOperationEarned(row, pct),
-    0
-  );
+/** أرباح الطبيب لفترة محددة — للتقارير والتسوية الشهرية */
+export async function computeEarningsFromOperationsForPeriod(
+  supabase: SupabaseClient,
+  doctorId: string,
+  from?: string,
+  to?: string
+): Promise<number> {
+  let opsQuery = supabase
+    .from("patient_operations")
+    .select(OPERATION_EARNINGS_SELECT)
+    .eq("doctor_id", doctorId);
+
+  if (from) opsQuery = opsQuery.gte("operation_date", from);
+  if (to) opsQuery = opsQuery.lte("operation_date", to);
+
+  const { data: doctor } = await supabase
+    .from("doctors")
+    .select("percentage")
+    .eq("id", doctorId)
+    .maybeSingle();
+
+  const pct = Number(doctor?.percentage ?? 50) / 100;
+  const { data: ops } = await opsQuery;
+  return sumOperationEarnings(ops, pct);
 }
 
 /** مستحقات الطبيب — من حصة كل دفعة (نسبة من doctor_share_total للحالة) */
@@ -163,57 +397,24 @@ export async function fetchDoctorTotalEarnings(
   supabase: SupabaseClient,
   doctorId: string
 ): Promise<number> {
-  const [clientEarnings, rpcRes] = await Promise.all([
-    computeEarningsFromOperations(supabase, doctorId),
-    supabase.rpc("get_doctor_wallet_stats", { p_doctor_id: doctorId }),
-  ]);
-
-  if (
-    !rpcRes.error &&
-    rpcRes.data &&
-    typeof rpcRes.data === "object" &&
-    !("error" in rpcRes.data)
-  ) {
-    const rpcEarned = Number(
-      (rpcRes.data as Record<string, number>).total_earnings ?? 0
-    );
-    return Math.max(clientEarnings, rpcEarned);
-  }
-
-  return clientEarnings;
+  return computeEarningsFromOperations(supabase, doctorId);
 }
 
 export async function fetchDoctorWalletStats(
   supabase: SupabaseClient,
   doctorId: string
 ): Promise<DoctorWalletStats> {
-  const [clientEarnings, rpcRes, withdrawalsRes] = await Promise.all([
-    computeEarningsFromOperations(supabase, doctorId),
-    supabase.rpc("get_doctor_wallet_stats", { p_doctor_id: doctorId }),
-    supabase
-      .from("doctor_withdrawals")
-      .select("amount, status")
-      .eq("doctor_id", doctorId)
-      .neq("status", "rejected"),
-  ]);
-
-  let rpcEarned = 0;
-  if (
-    !rpcRes.error &&
-    rpcRes.data &&
-    typeof rpcRes.data === "object" &&
-    !("error" in rpcRes.data)
-  ) {
-    rpcEarned = Number(
-      (rpcRes.data as Record<string, number>).total_earnings ?? 0
-    );
-  }
-
-  const totalEarnings = Math.max(clientEarnings, rpcEarned);
-  const [expenseDeductions, payrollDeductions] = await Promise.all([
-    fetchDoctorExpenseDeductionsTotal(supabase, doctorId),
-    fetchDoctorPayrollDeductionsTotal(supabase, doctorId),
-  ]);
+  const [totalEarnings, withdrawalsRes, expenseDeductions, payrollDeductions] =
+    await Promise.all([
+      computeEarningsFromOperations(supabase, doctorId),
+      supabase
+        .from("doctor_withdrawals")
+        .select("amount, status")
+        .eq("doctor_id", doctorId)
+        .neq("status", "rejected"),
+      fetchDoctorExpenseDeductionsTotal(supabase, doctorId),
+      fetchDoctorPayrollDeductionsTotal(supabase, doctorId),
+    ]);
 
   return computeWalletStats(totalEarnings, withdrawalsRes.data ?? [], {
     expenseDeductions,

@@ -6,10 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { getActiveClinicId } from "@/lib/clinic-context";
 import { useAppointmentsRealtime } from "@/hooks/useAppointmentsRealtime";
 import type { DashboardAppointment } from "@/components/operations/PaymentInvoiceModal";
-import { buildLedgerPayUrl } from "@/lib/ledger/navigation";
+import { resolveAppointmentPaymentUrl } from "@/lib/ledger/open-appointment-payment";
 import { EditAppointmentModal } from "@/components/assistant/EditAppointmentModal";
 import { RejectAppointmentModal } from "@/components/assistant/RejectAppointmentModal";
 import { setAccountantAppointmentStatusViaApi } from "@/lib/services/accountant-appointments-client";
+import { broadcastPatientSentToDoctor } from "@/lib/queue/broadcast";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { cn, formatTime, todayISO } from "@/lib/utils";
@@ -35,6 +36,7 @@ const STATUS_CONFIG: Record<
   waiting:        { label: "في الانتظار",  color: "text-amber-800",   bg: "bg-amber-50"    },
   in_clinic:      { label: "داخل العيادة", color: "text-teal-700",    bg: "bg-teal-100"    },
   in_examination: { label: "داخل الكشف", color: "text-emerald-700", bg: "bg-emerald-100" },
+  ready_for_payment: { label: "جاهز للدفع", color: "text-violet-700", bg: "bg-violet-100" },
   completed:      { label: "مكتمل",        color: "text-violet-600",  bg: "bg-violet-100"  },
   cancelled:      { label: "ملغي",         color: "text-red-600",     bg: "bg-red-100"     },
   no_show:        { label: "لم يحضر",      color: "text-amber-600",   bg: "bg-amber-100"   },
@@ -53,7 +55,6 @@ export function TodayAppointmentsPanel({
   compact = false,
   onApprovedToQueue,
 }: TodayAppointmentsPanelProps) {
-  const router = useRouter();
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<DashboardAppointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +64,9 @@ export function TodayAppointmentsPanel({
   const [rejecting, setRejecting] = useState<DashboardAppointment | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [payingId, setPayingId] = useState<string | null>(null);
+  const [finishingId, setFinishingId] = useState<string | null>(null);
+  const router = useRouter();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -133,40 +137,108 @@ export function TodayAppointmentsPanel({
     }
   }
 
-  function handlePay(appointment: DashboardAppointment) {
-    router.push(
-      buildLedgerPayUrl({
-        patientId: appointment.patient_id,
-        appointmentId: appointment.id,
-        doctorId: appointment.doctor_id,
-      })
-    );
-  }
-
   async function handleCheckIn(appointment: DashboardAppointment) {
     setCheckingIn(appointment.id);
     setMessage(null);
     try {
-      const res = await fetch("/api/operations/check-in", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          ...authPortalHeaders("accountant"),
-        },
-        body: JSON.stringify({ appointment_id: appointment.id }),
-      });
-      const json = await res.json();
+      let res: Response;
+      try {
+        res = await fetch("/api/operations/check-in", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...authPortalHeaders("accountant"),
+          },
+          body: JSON.stringify({ appointment_id: appointment.id }),
+        });
+      } catch {
+        setMessage("تعذر الاتصال بالسيرفر — تأكد أن التطبيق يعمل");
+        return;
+      }
+
+      const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         setMessage(json.error ?? "تعذر تسجيل الدخول");
         return;
       }
-      setMessage(`تم دخول ${appointment.patient_name_ar || "المراجع"} للعيادة`);
+
+      const name = appointment.patient_name_ar || "المراجع";
+      setToast(`تم دخول ${name} لغرفة الانتظار — أُشعر الطبيب`);
+
+      const supabase = createClient();
+      void broadcastPatientSentToDoctor(supabase, appointment.doctor_id, {
+        name,
+        entryId: json.queue_entry_id as string | undefined,
+      });
+
+      if (clinicId) {
+        notifyQueueRefresh({ scope: "clinic", clinicId });
+        notifyQueueRefresh({ scope: "doctor", doctorId: appointment.doctor_id });
+      }
+      onApprovedToQueue?.();
       load();
-    } catch {
-      setMessage("خطأ في الاتصال");
     } finally {
       setCheckingIn(null);
+    }
+  }
+
+  async function handleOpenPayment(appointment: DashboardAppointment) {
+    if (!clinicId) return;
+    setPayingId(appointment.id);
+    setMessage(null);
+    try {
+      const href = await resolveAppointmentPaymentUrl({
+        clinicId,
+        appointmentId: appointment.id,
+        patientId: appointment.patient_id,
+        doctorId: appointment.doctor_id,
+        patientPhone: appointment.patient_phone,
+        patientNameAr: appointment.patient_name_ar,
+      });
+      router.push(href);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "تعذر فتح إدخال الجلسة");
+    } finally {
+      setPayingId(null);
+    }
+  }
+
+  async function handleFinishExamination(appointment: DashboardAppointment) {
+    setFinishingId(appointment.id);
+    setMessage(null);
+    try {
+      let res: Response;
+      try {
+        res = await fetch("/api/operations/finish-examination", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...authPortalHeaders("accountant"),
+          },
+          body: JSON.stringify({ appointment_id: appointment.id }),
+        });
+      } catch {
+        setMessage("تعذر الاتصال بالسيرفر — تأكد أن التطبيق يعمل");
+        return;
+      }
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessage(json.error ?? "تعذر إنهاء الكشف");
+        return;
+      }
+
+      setToast("انتهى الكشف — المراجع جاهز للدفع");
+      if (clinicId) {
+        notifyQueueRefresh({ scope: "clinic", clinicId });
+        notifyQueueRefresh({ scope: "doctor", doctorId: appointment.doctor_id });
+      }
+      onApprovedToQueue?.();
+      load();
+    } finally {
+      setFinishingId(null);
     }
   }
 
@@ -229,6 +301,8 @@ export function TodayAppointmentsPanel({
             const cfg = STATUS_CONFIG[a.status] ?? STATUS_CONFIG.scheduled;
             const isPending = a.status === "pending";
             const canCheckIn = ["scheduled", "confirmed", "waiting"].includes(a.status);
+            const canCheckout = a.status === "ready_for_payment";
+            const inConsultation = a.status === "in_clinic" || a.status === "in_examination";
 
             return (
               <div
@@ -312,15 +386,36 @@ export function TodayAppointmentsPanel({
                       دخول
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => handlePay(a)}
-                    className="flex items-center gap-1 rounded-lg border border-primary/30 bg-white px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/5"
-                    title="فتح إدخال الجلسة مع بيانات المريض"
-                  >
-                    <Receipt className="h-3 w-3" />
-                    دفع
-                  </button>
+                  {inConsultation && (
+                    <button
+                      type="button"
+                      disabled={finishingId === a.id}
+                      onClick={() => handleFinishExamination(a)}
+                      className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                    >
+                      {finishingId === a.id ? (
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Receipt className="h-3 w-3" />
+                      )}
+                      إنهاء الكشف
+                    </button>
+                  )}
+                  {canCheckout && (
+                    <button
+                      type="button"
+                      disabled={payingId === a.id}
+                      onClick={() => handleOpenPayment(a)}
+                      className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                    >
+                      {payingId === a.id ? (
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Receipt className="h-3 w-3" />
+                      )}
+                      دفع
+                    </button>
+                  )}
                 </div>
               </div>
             );

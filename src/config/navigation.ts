@@ -12,7 +12,7 @@ import type { ModuleNavItem } from "@/hooks/useModuleNav";
 // =============================================================================
 export const accountantModuleNav: ModuleNavItem[] = [
   // Core — always visible
-  { href: "/dashboard",             label: "لوحة التحكم",        icon: "dashboard"    },
+  { href: "/dashboard",             label: "الربح والتحكم",      icon: "dashboard"    },
   { href: "/dashboard/ledger",      label: "إدخال جلسة",         icon: "patients",    requiredModule: "billing"            },
   { href: "/dashboard/queue",       label: "غرفة الانتظار",      icon: "listOrdered", requiredModule: "patient_queue"      },
   { href: "/dashboard/appointments", label: "الحجوزات",          icon: "calendarClock", requiredModule: "appointments"     },

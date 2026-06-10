@@ -17,6 +17,11 @@ export type ClinicReportPdfInput = {
   elementId: string;
 };
 
+export type SettlementPdfInput = {
+  periodLabel: string;
+  elementId: string;
+};
+
 function safePdfFilename(base: string, fallback: string): string {
   const cleaned = base.replace(/[^\w\u0600-\u06FF\s-]/g, "").trim();
   return cleaned || fallback;
@@ -36,4 +41,27 @@ export async function downloadClinicReportPdf(
 ): Promise<void> {
   const period = input.periodLabel.replace(/\s/g, "-");
   await downloadElementAsPdf(input.elementId, `تقرير-${period}.pdf`);
+}
+
+/** تصدير كشف التسوية الشهرية */
+export async function downloadSettlementPdf(
+  input: SettlementPdfInput
+): Promise<void> {
+  const period = input.periodLabel.replace(/\s/g, "-");
+  await downloadElementAsPdf(input.elementId, `تسوية-${period}.pdf`);
+}
+
+export type SessionInvoicePdfInput = {
+  patientName: string;
+  invoiceNumber: string;
+  elementId: string;
+};
+
+/** تصدير فاتورة دفع جلسة */
+export async function downloadSessionInvoicePdf(
+  input: SessionInvoicePdfInput
+): Promise<void> {
+  const name = safePdfFilename(input.patientName, "مريض");
+  const inv = input.invoiceNumber.replace(/\s/g, "");
+  await downloadElementAsPdf(input.elementId, `فاتورة-${inv}-${name}.pdf`);
 }

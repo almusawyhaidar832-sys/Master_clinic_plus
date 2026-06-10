@@ -14,8 +14,8 @@ type RealtimeTable =
   | "appointments";
 
 const TABLE_TOPICS: Record<RealtimeTable, ClinicSyncTopic[]> = {
-  patient_operations: ["sessions", "profit"],
-  session_refunds: ["refunds", "sessions", "profit"],
+  patient_operations: ["sessions"],
+  session_refunds: ["refunds", "sessions"],
   audit_logs: ["audit"],
   appointments: ["appointments"],
 };

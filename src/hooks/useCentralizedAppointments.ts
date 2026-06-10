@@ -31,14 +31,14 @@ export function useCentralizedAppointments({
   const [appointments, setAppointments] = useState<AppointmentWithDoctor[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!enabled || !clinicId) {
       setAppointments([]);
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    if (!options?.silent) setLoading(true);
     const supabase = createClient();
     const today = todayISO();
 
@@ -68,11 +68,11 @@ export function useCentralizedAppointments({
     void load();
   }, [load]);
 
-  useAppointmentsRealtime(clinicId, load);
+  useAppointmentsRealtime(clinicId, () => void load({ silent: true }));
   useClinicSync({
-    topics: ["appointments", "all"],
+    topics: ["appointments"],
     clinicId,
-    onRefresh: load,
+    onRefresh: () => void load({ silent: true }),
     enabled: enabled && !!clinicId,
   });
 

@@ -71,7 +71,16 @@ export async function sendAppointmentUpdate(
       .eq("clinic_id", input.clinicId);
   }
 
-  if (!outcome.ok && outcome.configured) {
+  if (!outcome.configured) {
+    return {
+      sent: false,
+      skipped: true,
+      error: "whatsapp_not_configured",
+      messageBody,
+    };
+  }
+
+  if (!outcome.ok) {
     return {
       sent: false,
       error: outcome.providerError ?? "whatsapp_send_failed",
@@ -79,9 +88,5 @@ export async function sendAppointmentUpdate(
     };
   }
 
-  return {
-    sent: outcome.ok || !outcome.configured,
-    skipped: !outcome.configured,
-    messageBody,
-  };
+  return { sent: true, messageBody };
 }

@@ -85,7 +85,7 @@ export async function fetchPatientPrimaryDoctor(
   );
 }
 
-/** بعد كل جلسة — يربط المراجع والحالة بالطبيب الذي سجّلت الجلسة باسمه */
+  /** بعد كل جلسة — يثبت طبيب الحالة عند أول جلسة فقط؛ التحويل يُدار من لوحة «تحويل طبيب» */
 export async function assignPrimaryDoctorForSession(
   supabase: SupabaseClient,
   input: {
@@ -96,16 +96,25 @@ export async function assignPrimaryDoctorForSession(
 ): Promise<void> {
   if (!input.patientId || !input.doctorId) return;
 
+  const caseId = input.caseId?.trim();
+  if (caseId) {
+    const { data: caseRow } = await supabase
+      .from("patient_treatment_cases")
+      .select("primary_doctor_id")
+      .eq("id", caseId)
+      .maybeSingle();
+
+    if (!caseRow?.primary_doctor_id) {
+      await supabase
+        .from("patient_treatment_cases")
+        .update({ primary_doctor_id: input.doctorId })
+        .eq("id", caseId);
+    }
+    return;
+  }
+
   await supabase
     .from("patients")
     .update({ primary_doctor_id: input.doctorId })
     .eq("id", input.patientId);
-
-  const caseId = input.caseId?.trim();
-  if (caseId) {
-    await supabase
-      .from("patient_treatment_cases")
-      .update({ primary_doctor_id: input.doctorId })
-      .eq("id", caseId);
-  }
 }

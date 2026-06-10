@@ -68,7 +68,7 @@ export default function RefundsDashboardPage() {
   }, [loadHistory, loadDoctors]);
 
   useClinicSync({
-    topics: ["refunds", "all"],
+    topics: ["refunds"],
     clinicId,
     onRefresh: () => {
       void loadHistory();

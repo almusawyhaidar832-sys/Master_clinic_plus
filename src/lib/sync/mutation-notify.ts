@@ -9,7 +9,7 @@ export function notifySessionMutation(input: {
   patientId?: string;
 }): void {
   notifyClinicSync({
-    topic: ["sessions", "profit"],
+    topic: "sessions",
     clinicId: input.clinicId,
     doctorId: input.doctorId,
     patientId: input.patientId,
@@ -24,7 +24,7 @@ export function notifyRefundMutation(input: {
   patientId?: string;
 }): void {
   notifyClinicSync({
-    topic: ["refunds", "sessions", "profit"],
+    topic: ["refunds", "sessions"],
     clinicId: input.clinicId,
     doctorId: input.doctorId,
     patientId: input.patientId,

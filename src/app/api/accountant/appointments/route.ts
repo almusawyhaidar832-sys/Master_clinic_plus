@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const admin = getAdminClient();
-    const appointment = await createStaffAppointment(
+    const { appointment, whatsapp } = await createStaffAppointment(
       admin,
       caller.clinic_id as string,
       {
@@ -24,10 +24,14 @@ export async function POST(req: NextRequest) {
         start_time: String(body.start_time ?? ""),
         end_time: String(body.end_time ?? ""),
         notes: body.notes ?? null,
+      },
+      {
+        changedBy: caller.id as string,
+        actorName: caller.full_name ?? null,
       }
     );
 
-    return NextResponse.json({ success: true, appointment });
+    return NextResponse.json({ success: true, appointment, whatsapp });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
     return NextResponse.json({ error: msg }, { status: 500 });

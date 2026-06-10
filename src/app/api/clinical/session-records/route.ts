@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile } from "@/lib/auth/api-session";
+import { getApiCallerProfile, isApiStaffRole } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 
 const XRAY_BUCKET = "clinical-xrays";
@@ -8,13 +8,13 @@ const SIGNED_URL_TTL_SEC = 3600;
 /** GET ?patient_id= — السجل الطبي البصري لكل جلسات المريض */
 export async function GET(req: NextRequest) {
   try {
-    const profile = await getApiCallerProfile();
+    const profile = await getApiCallerProfile(req);
     if (!profile?.clinic_id) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
     }
 
     const role = String(profile.role ?? "").toLowerCase();
-    if (role !== "accountant" && role !== "super_admin" && role !== "doctor") {
+    if (!isApiStaffRole(role) && role !== "doctor") {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
@@ -130,13 +130,13 @@ export async function GET(req: NextRequest) {
 /** POST — save tooth records for a patient operation (session) */
 export async function POST(req: NextRequest) {
   try {
-    const profile = await getApiCallerProfile();
+    const profile = await getApiCallerProfile(req);
     if (!profile?.clinic_id) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
     }
 
     const role = String(profile.role ?? "").toLowerCase();
-    if (role !== "accountant" && role !== "super_admin" && role !== "doctor") {
+    if (!isApiStaffRole(role) && role !== "doctor") {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 

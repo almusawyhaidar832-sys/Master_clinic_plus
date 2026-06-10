@@ -11,17 +11,22 @@ import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { useClinicSync } from "@/hooks/useClinicSync";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
+import { buildLedgerPayUrl } from "@/lib/ledger/navigation";
+import {
+  fetchTodayLedgerOperations,
+  ledgerDisplayRemaining,
+  type TodayOperationRow,
+} from "@/lib/ledger/today-operations";
+import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { ensureAppointmentPatientClient } from "@/lib/services/ensure-appointment-patient-client";
 import { fetchPatientTreatmentCases } from "@/lib/services/patient-treatment-cases";
 import { getPatientDisplayPhone } from "@/lib/phone";
-import { opName, opDebt, type PatientOperation } from "@/types";
+import { opName, type PatientOperation } from "@/types";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
 import { RefreshCw } from "lucide-react";
 
-type RowWithJoins = PatientOperation & {
-  patient?: { full_name_ar: string };
-  doctor?: { full_name_ar: string };
-};
+type RowWithJoins = TodayOperationRow;
 
 interface LedgerPatientContext {
   patientId: string;
@@ -38,11 +43,15 @@ function LedgerPageContent() {
   const patientIdParam =
     searchParams.get("patient_id") ?? searchParams.get("patient") ?? undefined;
   const appointmentIdParam = searchParams.get("appointment_id") ?? undefined;
+  const queueEntryIdParam = searchParams.get("queue_entry_id") ?? undefined;
   const doctorIdParam = searchParams.get("doctor_id") ?? undefined;
   const presetCaseId = searchParams.get("case") ?? undefined;
 
   const { clinicId, loading: clinicLoading } = useActiveClinicId();
   const [operations, setOperations] = useState<RowWithJoins[]>([]);
+  const [caseRemainingById, setCaseRemainingById] = useState<
+    Map<string, number>
+  >(new Map());
   const [loading, setLoading] = useState(true);
   const [patientContext, setPatientContext] = useState<LedgerPatientContext | null>(
     null
@@ -60,38 +69,10 @@ function LedgerPageContent() {
     }
     setLoading(true);
     const supabase = createClient();
-
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
-
-    let { data } = await supabase
-      .from("patient_operations")
-      .select(
-        "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
-      )
-      .eq("clinic_id", clinicId)
-      .gte("operation_date", todayStart.toISOString().split("T")[0])
-      .lte("operation_date", todayEnd.toISOString().split("T")[0])
-      .order("created_at", { ascending: false })
-      .limit(100);
-
-    if (!data || data.length === 0) {
-      const fallback = await supabase
-        .from("patient_operations")
-        .select(
-          "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
-        )
-        .eq("clinic_id", clinicId)
-        .gte("created_at", todayStart.toISOString())
-        .lte("created_at", todayEnd.toISOString())
-        .order("created_at", { ascending: false })
-        .limit(100);
-      data = fallback.data;
-    }
-
-    setOperations((data as RowWithJoins[]) || []);
+    const { operations: rows, caseRemainingById: caseMap } =
+      await fetchTodayLedgerOperations(supabase, clinicId);
+    setOperations(rows);
+    setCaseRemainingById(caseMap);
     setLoading(false);
   }, [clinicId]);
 
@@ -101,7 +82,7 @@ function LedgerPageContent() {
   }, [loadOperations, clinicLoading]);
 
   useClinicSync({
-    topics: ["sessions", "all"],
+    topics: ["sessions"],
     clinicId,
     onRefresh: loadOperations,
     enabled: !clinicLoading && !!clinicId,
@@ -251,7 +232,7 @@ function LedgerPageContent() {
       key: "remaining",
       header: "المتبقي",
       render: (row) => {
-        const debt = opDebt(row);
+        const debt = ledgerDisplayRemaining(row, caseRemainingById);
         return (
           <span className={debt > 0 ? "font-semibold text-debt-text" : "text-slate-muted"}>
             {formatCurrency(debt)}
@@ -322,8 +303,36 @@ function LedgerPageContent() {
           prefetchedCases={patientContext?.treatmentCases}
           lockDoctorId={patientContext?.doctorId}
           lockDoctorName={patientContext?.doctorName}
-          onSuccess={() => {
+          onSuccess={async () => {
             loadOperations();
+
+            if ((appointmentIdParam || queueEntryIdParam) && clinicId) {
+              try {
+                await fetch("/api/operations/complete-visit", {
+                  method: "POST",
+                  credentials: "include",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...authPortalHeaders("accountant"),
+                  },
+                  body: JSON.stringify({
+                    appointment_id: appointmentIdParam,
+                    queue_entry_id: queueEntryIdParam,
+                  }),
+                });
+                notifyQueueRefresh({ scope: "clinic", clinicId });
+              } catch {
+                // الدفع سُجّل — إغلاق الزيارة اختياري
+              }
+              router.replace(
+                buildLedgerPayUrl({
+                  patientId: patientContext?.patientId ?? patientIdParam,
+                  doctorId: patientContext?.doctorId ?? doctorIdParam,
+                })
+              );
+              return;
+            }
+
             router.refresh();
           }}
         />
@@ -349,7 +358,7 @@ function LedgerPageContent() {
             columns={columns}
             data={operations}
             emptyMessage="لا توجد جلسات مسجّلة اليوم"
-            highlightDebt={(row) => opDebt(row) > 0}
+            highlightDebt={(row) => ledgerDisplayRemaining(row, caseRemainingById) > 0}
           />
         )}
       </div>

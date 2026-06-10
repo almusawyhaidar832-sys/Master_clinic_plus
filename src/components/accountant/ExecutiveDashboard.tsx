@@ -10,15 +10,12 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import {
-  fetchPaidSalariesForDisplay,
-  fetchPaidSalariesForProfitDeduction,
-  fetchPayrollAccrualsForProfitDeduction,
-  fetchReviewFeesInPeriod,
-  fetchPeriodVisitorDebt,
+  fetchExecutiveDashboardSupplement,
   mergeExecutiveDashboardMetrics,
   type ExecutiveSnapshotCore,
 } from "@/lib/services/executive-snapshot";
 import { useClinicSync } from "@/hooks/useClinicSync";
+import { Alert } from "@/components/ui/Alert";
 import { cn, localDateISO, todayISO } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, Minus,
@@ -39,6 +36,8 @@ interface Snapshot {
   materials_cost: number;
   expenses: number;
   salaries_paid: number;
+  /** ما يُخصم فعلياً من صافي الربح (رواتب مُولَّدة أو مدفوعة) */
+  salaries_deducted_from_profit?: number;
   review_fees: number;
   withdrawals_paid: number;
   net_profit: number;
@@ -131,8 +130,7 @@ function KpiCard({
 // ─────────────────────────────────────────────
 function NetProfitCard({ snap }: { snap: Snapshot }) {
   const rows = [
-    { label: "إجمالي الإيرادات",        amount: snap.revenue,       color: "text-emerald-600", sign: "+" },
-    { label: "حصص الأطباء (محافظ)",     amount: -snap.doctor_shares, color: "text-red-500",    sign: "−" },
+    { label: "حصة العيادة من العمليات", amount: snap.clinic_shares, color: "text-emerald-600", sign: "+" },
     ...(snap.review_fees > 0
       ? [{
           label: "كشفيات مراجع (ربح العيادة)",
@@ -141,9 +139,10 @@ function NetProfitCard({ snap }: { snap: Snapshot }) {
           sign: "+",
         }]
       : []),
-    { label: "تكلفة المواد المستهلكة",  amount: -snap.materials_cost,color: "text-orange-500", sign: "−" },
     { label: "المصروفات العامة",         amount: -snap.expenses,      color: "text-red-500",    sign: "−" },
-    { label: "رواتب موظفين (مُسلَّمة)",  amount: -(snap.salaries_paid ?? 0), color: "text-red-500", sign: "−" },
+    { label: "رواتب/مساعدين (خصم الربح)", amount: -(snap.salaries_deducted_from_profit ?? snap.salaries_paid ?? 0), color: "text-red-500", sign: "−" },
+    { label: "إجمالي الإيرادات (مرجع)",   amount: snap.revenue,       color: "text-slate-500", sign: "" },
+    { label: "حصص الأطباء (محافظ — مرجع)", amount: -snap.doctor_shares, color: "text-slate-400", sign: "−" },
   ];
 
   const profitColor = snap.net_profit >= 0 ? "text-emerald-600" : "text-red-600";
@@ -300,6 +299,7 @@ export function ExecutiveDashboard() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [top, setTop]   = useState<TopPerformers | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // date range
   const getRange = useCallback(() => {
@@ -322,20 +322,14 @@ export function ExecutiveDashboard() {
     }
   }, [period]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (options?: { silent?: boolean }) => {
     if (!clinicId) return;
-    setLoading(true);
+    if (!options?.silent) setLoading(true);
+    setFetchError(null);
     const { from, to } = getRange();
 
-    const [
-      snapRes,
-      topRes,
-      salariesDisplay,
-      salariesPaidLegacy,
-      payrollAccruals,
-      reviewFees,
-      visitorDebt,
-    ] = await Promise.all([
+    try {
+    const [snapRes, topRes, supplement] = await Promise.all([
       supabase.rpc("get_clinic_financial_snapshot", {
         p_clinic_id: clinicId, p_from: from, p_to: to,
       }),
@@ -344,15 +338,25 @@ export function ExecutiveDashboard() {
         p_from: from,
         p_to: to,
       }),
-      fetchPaidSalariesForDisplay(supabase, clinicId, from, to),
-      fetchPaidSalariesForProfitDeduction(supabase, clinicId, from, to),
-      fetchPayrollAccrualsForProfitDeduction(supabase, clinicId, from, to),
-      fetchReviewFeesInPeriod(supabase, clinicId, from, to),
-      fetchPeriodVisitorDebt(supabase, clinicId, from, to),
+      fetchExecutiveDashboardSupplement(supabase, clinicId, from, to),
     ]);
+
+    const {
+      salariesDisplay,
+      salariesPaidLegacy,
+      payrollAccruals,
+      visitorDebt,
+    } = supplement;
 
     const salariesDeducted =
       payrollAccruals > 0 ? payrollAccruals : salariesPaidLegacy;
+
+    if (snapRes.error) {
+      setFetchError(
+        snapRes.error.message ||
+          "تعذر تحميل ملخص الأرباح — شغّل supabase/scripts/21-fix-doctor-percentage-cast.sql في Supabase"
+      );
+    }
 
     const baseSnap: Snapshot = snapRes.data
       ? (mergeExecutiveDashboardMetrics(
@@ -360,7 +364,9 @@ export function ExecutiveDashboard() {
           {
             salariesPaid: salariesDisplay,
             salariesDeductedFromProfit: salariesDeducted,
-            reviewFees: reviewFees.total,
+            reviewFees: Number(
+              (snapRes.data as Record<string, unknown>).review_fees ?? 0
+            ),
           }
         ) as unknown as Snapshot)
       : {
@@ -372,7 +378,9 @@ export function ExecutiveDashboard() {
           materials_cost: 0,
           expenses: 0,
           salaries_paid: salariesDisplay,
-          review_fees: reviewFees.total,
+          review_fees: Number(
+            (snapRes.data as Record<string, unknown>)?.review_fees ?? 0
+          ),
           withdrawals_paid: 0,
           net_profit: 0,
           operation_count: 0,
@@ -387,6 +395,7 @@ export function ExecutiveDashboard() {
 
     setSnap({
       ...baseSnap,
+      salaries_deducted_from_profit: salariesDeducted,
       debt: visitorDebt.debt,
       patient_count:
         visitorDebt.visitorCount > 0
@@ -395,7 +404,13 @@ export function ExecutiveDashboard() {
     });
 
     if (topRes.data) setTop(topRes.data as TopPerformers);
+    } catch (err) {
+      setFetchError(
+        err instanceof Error ? err.message : "تعذر تحميل لوحة الأرباح"
+      );
+    } finally {
     setLoading(false);
+    }
   }, [clinicId, getRange, supabase]);
 
   useEffect(() => {
@@ -408,9 +423,9 @@ export function ExecutiveDashboard() {
   }, [fetchData, clinicLoading, clinicId]);
 
   useClinicSync({
-    topics: ["profit", "sessions", "refunds", "all"],
+    topics: ["profit", "sessions", "refunds"],
     clinicId,
-    onRefresh: fetchData,
+    onRefresh: () => fetchData({ silent: true }),
     enabled: !!clinicId,
   });
 
@@ -421,7 +436,7 @@ export function ExecutiveDashboard() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div id="profit-dashboard" className="space-y-6">
 
       {/* Period selector */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -443,6 +458,16 @@ export function ExecutiveDashboard() {
           ))}
         </div>
       </div>
+
+      {fetchError && (
+        <Alert variant="error">
+          {fetchError}
+          <p className="mt-2 text-sm">
+            الأرباح ما انحذفت — ما زالت في هذه الصفحة. إذا ظهر خطأ «doctor_percentage»،
+            شغّل سكربت 21 في Supabase ثم حدّث الصفحة.
+          </p>
+        </Alert>
+      )}
 
       {loading || !snap ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

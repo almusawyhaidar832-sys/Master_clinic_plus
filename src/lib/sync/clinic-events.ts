@@ -63,7 +63,8 @@ function topicMatches(
   subscribed: ClinicSyncTopic[]
 ): boolean {
   if (detailTopics.includes("all")) return true;
-  if (subscribed.includes("all")) return true;
+  // «all» وحدها = استقبال كل المواضيع؛ لا تُوسّع قائمة مواضيع محددة
+  if (subscribed.length === 1 && subscribed[0] === "all") return true;
   return detailTopics.some((t) => subscribed.includes(t));
 }
 

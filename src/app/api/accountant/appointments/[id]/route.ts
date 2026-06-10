@@ -32,6 +32,10 @@ export async function PATCH(
         end_time: body.end_time,
         notes: body.notes,
         reason_for_change: String(body.reason_for_change ?? ""),
+      },
+      {
+        changedBy: caller.id as string,
+        actorName: caller.full_name ?? null,
       }
     );
 
@@ -55,7 +59,10 @@ export async function DELETE(
     }
 
     const admin = getAdminClient();
-    await deleteStaffAppointment(admin, caller.clinic_id as string, id);
+    await deleteStaffAppointment(admin, caller.clinic_id as string, id, {
+      changedBy: caller.id as string,
+      actorName: caller.full_name ?? null,
+    });
     return NextResponse.json({ success: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";

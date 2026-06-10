@@ -191,6 +191,190 @@ export async function fetchPatientFinancialPlan(
   return emptyPlan();
 }
 
+function inferPlanFromOperationRows(
+  ops: Record<string, unknown>[],
+  patientRow?: Record<string, unknown> | null
+): PatientFinancialPlan | null {
+  if (!ops.length) return null;
+
+  let casePrice = 0;
+  for (const row of ops) {
+    const t = num(row.total_amount);
+    if (t > 0) casePrice = Math.max(casePrice, t);
+  }
+
+  if (patientRow) {
+    const fromPatient =
+      num(patientRow.original_agreed_total) ||
+      num(patientRow.previous_total) ||
+      0;
+    if (fromPatient > 0) casePrice = Math.max(casePrice, fromPatient);
+  }
+
+  const paidFromOps = ops.reduce((s, row) => s + num(row.paid_amount), 0);
+  const totalPaid = patientRow
+    ? Math.max(num(patientRow.total_paid), paidFromOps)
+    : paidFromOps;
+
+  const discount = patientRow ? num(patientRow.discount_total) : 0;
+
+  const last = ops[ops.length - 1];
+  let remaining = num(last.remaining_debt);
+  if (remaining <= 0) {
+    remaining = Math.max(0, num(last.total_amount) - num(last.paid_amount));
+  }
+
+  const finalPrice =
+    patientRow && num(patientRow.agreed_total) > 0
+      ? num(patientRow.agreed_total)
+      : casePrice > 0
+        ? Math.max(0, casePrice - discount)
+        : totalPaid + remaining;
+
+  if (casePrice <= 0 && finalPrice > 0) {
+    casePrice = finalPrice + discount;
+  }
+
+  if (finalPrice <= 0 && totalPaid <= 0 && remaining <= 0) {
+    return null;
+  }
+
+  if (remaining <= 0 && finalPrice > 0) {
+    remaining = Math.max(0, finalPrice - totalPaid);
+  }
+
+  return buildPlan({
+    case_price: casePrice,
+    discount_total: discount,
+    final_price: finalPrice,
+    doctor_share_total: patientRow ? num(patientRow.doctor_share_total) : 0,
+    clinic_share_total: patientRow ? num(patientRow.clinic_share_total) : 0,
+    total_paid: totalPaid,
+    financial_locked: true,
+    treatment_status:
+      finalPrice > 0 && totalPaid >= finalPrice ? "completed" : "active",
+  });
+}
+
+function resolvePatientFinancialPlanFromRows(
+  tp: Record<string, unknown> | null | undefined,
+  patient: Record<string, unknown> | null | undefined,
+  ops: Record<string, unknown>[]
+): PatientFinancialPlan {
+  if (tp) {
+    const casePrice = num(tp.case_price);
+    const discount = num(tp.discount_total);
+    const finalPrice = num(tp.final_price) || Math.max(0, casePrice - discount);
+    const paid = num(tp.total_paid);
+    const status = tp.status === "completed" ? "completed" : "active";
+    const fromTable = buildPlan({
+      case_price: casePrice,
+      discount_total: discount,
+      final_price: finalPrice,
+      doctor_share_total: num(tp.doctor_share_total),
+      clinic_share_total: num(tp.clinic_share_total),
+      total_paid: paid,
+      financial_locked: true,
+      treatment_status:
+        status === "completed" || (finalPrice > 0 && paid >= finalPrice)
+          ? "completed"
+          : "active",
+    });
+    if (hasTreatmentPlan(fromTable)) return fromTable;
+  }
+
+  if (patient) {
+    const casePrice =
+      num(patient.original_agreed_total) ||
+      num(patient.previous_total) ||
+      num(patient.agreed_total);
+    const discount = num(patient.discount_total);
+    const finalPrice =
+      num(patient.agreed_total) || Math.max(0, casePrice - discount);
+    const paid = num(patient.total_paid);
+    const locked =
+      Boolean(patient.financial_locked) || casePrice > 0 || finalPrice > 0;
+    const status =
+      patient.treatment_status === "completed" ? "completed" : "active";
+
+    const fromPatient = buildPlan({
+      case_price: casePrice,
+      discount_total: discount,
+      final_price: finalPrice,
+      doctor_share_total: num(patient.doctor_share_total),
+      clinic_share_total: num(patient.clinic_share_total),
+      total_paid: paid,
+      financial_locked: locked,
+      treatment_status:
+        status === "completed" || (finalPrice > 0 && paid >= finalPrice)
+          ? "completed"
+          : "active",
+    });
+
+    if (hasTreatmentPlan(fromPatient)) return fromPatient;
+  }
+
+  const inferred = inferPlanFromOperationRows(ops, patient ?? null);
+  if (inferred) return inferred;
+
+  return emptyPlan();
+}
+
+/** خطط مالية لعدة مراجعين — 3 استعلامات بدل 3×N */
+export async function fetchPatientFinancialPlansBatch(
+  supabase: SupabaseClient,
+  patientIds: string[]
+): Promise<Map<string, PatientFinancialPlan>> {
+  const result = new Map<string, PatientFinancialPlan>();
+  if (!patientIds.length) return result;
+
+  const [plansRes, patientsRes, opsRes] = await Promise.all([
+    supabase
+      .from("patient_treatment_plans")
+      .select("*")
+      .in("patient_id", patientIds),
+    supabase.from("patients").select("*").in("id", patientIds),
+    supabase
+      .from("patient_operations")
+      .select(
+        "patient_id, total_amount, paid_amount, remaining_debt, session_kind, created_at"
+      )
+      .in("patient_id", patientIds)
+      .order("created_at", { ascending: true }),
+  ]);
+
+  const planByPatient = new Map<string, Record<string, unknown>>();
+  for (const row of plansRes.data ?? []) {
+    planByPatient.set(row.patient_id as string, row as Record<string, unknown>);
+  }
+
+  const patientById = new Map<string, Record<string, unknown>>();
+  for (const row of patientsRes.data ?? []) {
+    patientById.set(row.id as string, row as Record<string, unknown>);
+  }
+
+  const opsByPatient = new Map<string, Record<string, unknown>[]>();
+  for (const row of opsRes.data ?? []) {
+    const pid = row.patient_id as string;
+    const list = opsByPatient.get(pid) ?? [];
+    list.push(row as Record<string, unknown>);
+    opsByPatient.set(pid, list);
+  }
+
+  for (const patientId of patientIds) {
+    result.set(
+      patientId,
+      resolvePatientFinancialPlanFromRows(
+        planByPatient.get(patientId),
+        patientById.get(patientId),
+        opsByPatient.get(patientId) ?? []
+      )
+    );
+  }
+
+  return result;
+}
+
 export function buildPlanFromCaseRow(p: {
   case_price: number;
   discount_total: number;

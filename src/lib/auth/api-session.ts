@@ -66,6 +66,7 @@ export async function getApiCallerProfile(req?: Request) {
 
 export {
   authPortalHeaders,
+  isApiAssistantRole,
   isApiDoctorRole,
   isApiStaffRole,
   resolvePortalFromRequest,

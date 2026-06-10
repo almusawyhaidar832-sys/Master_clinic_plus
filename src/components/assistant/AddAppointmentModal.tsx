@@ -7,6 +7,8 @@ import { createAssistantAppointmentViaApi } from "@/lib/services/assistant-appoi
 import { createAccountantAppointmentViaApi } from "@/lib/services/accountant-appointments-client";
 import { createClient } from "@/lib/supabase/client";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
+import { validatePatientPhone } from "@/lib/phone";
+import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
 import { Select } from "@/components/ui/Select";
 import type { Doctor } from "@/types";
 
@@ -33,6 +35,7 @@ export function AddAppointmentModal({
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [whatsappNotice, setWhatsappNotice] = useState("");
 
   useEffect(() => {
     if (portal !== "accountant" || !clinicId) return;
@@ -53,12 +56,18 @@ export function AddAppointmentModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setWhatsappNotice("");
     if (!name.trim()) {
       setError("اسم المريض مطلوب");
       return;
     }
     if (!phone.trim()) {
       setError("هاتف المريض مطلوب");
+      return;
+    }
+    const phoneCheck = validatePatientPhone(phone);
+    if (!phoneCheck.ok) {
+      setError(phoneCheck.message);
       return;
     }
     if (portal === "accountant" && !doctorId) {
@@ -90,6 +99,21 @@ export function AddAppointmentModal({
       setError(result.error ?? "تعذر الحفظ");
       return;
     }
+
+    if ("whatsapp" in result && result.whatsapp) {
+      const wa = result.whatsapp;
+      if (wa.sent) {
+        onSaved();
+        onClose();
+        return;
+      }
+      setWhatsappNotice(
+        `تم حفظ الموعد، لكن لم تصل رسالة واتساب: ${describeWhatsAppDeliveryError(wa.error)}`
+      );
+      onSaved();
+      return;
+    }
+
     onSaved();
     onClose();
   }
@@ -108,6 +132,25 @@ export function AddAppointmentModal({
 
         {error && (
           <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+        )}
+        {whatsappNotice && (
+          <p
+            className={`mb-3 rounded-lg px-3 py-2 text-sm ${
+              whatsappNotice.includes("لم تصل")
+                ? "bg-amber-50 text-amber-800"
+                : "bg-emerald-50 text-emerald-800"
+            }`}
+          >
+            {whatsappNotice}
+            {whatsappNotice.includes("لم تصل") && (
+              <>
+                {" "}
+                <a href="/dashboard/whatsapp" className="font-semibold underline">
+                  إعدادات واتساب
+                </a>
+              </>
+            )}
+          </p>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">

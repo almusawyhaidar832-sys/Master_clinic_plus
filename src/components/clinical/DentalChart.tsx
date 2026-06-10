@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   ALL_FDI_TEETH,
@@ -11,6 +11,14 @@ import {
   UPPER_LEFT,
   UPPER_RIGHT,
 } from "@/lib/clinical/constants";
+import {
+  anySelectedHasRecord,
+  applyProcedureToTeeth,
+  editorDefaultsForFirstSelection,
+  formatTeethLabel,
+  removeTeethFromValue,
+  toggleSelectedTeeth,
+} from "@/lib/clinical/dental-chart-logic";
 
 export interface DentalChartProps {
   value: Record<number, ToothRecordInput>;
@@ -18,6 +26,8 @@ export interface DentalChartProps {
   disabled?: boolean;
   /** عرض فقط — بدون تعديل */
   readOnly?: boolean;
+  /** يُزاد عند إعادة تعيين المسودة من الأب لمسح الاختيار الداخلي */
+  resetKey?: number;
 }
 
 function ToothButton({
@@ -56,13 +66,13 @@ function ToothButton({
 function ToothRow({
   teeth,
   value,
-  activeTooth,
+  selectedTeeth,
   disabled,
   onSelect,
 }: {
   teeth: readonly number[];
   value: Record<number, ToothRecordInput>;
-  activeTooth: number | null;
+  selectedTeeth: number[];
   disabled?: boolean;
   onSelect: (n: number) => void;
 }) {
@@ -73,7 +83,7 @@ function ToothRow({
           key={n}
           num={n}
           record={value[n]}
-          selected={activeTooth === n}
+          selected={selectedTeeth.includes(n)}
           disabled={disabled}
           onSelect={onSelect}
         />
@@ -82,46 +92,66 @@ function ToothRow({
   );
 }
 
+function clearEditorState(setters: {
+  setSelectedTeeth: (v: number[]) => void;
+  setProcedure: (v: string) => void;
+  setNote: (v: string) => void;
+}) {
+  setters.setSelectedTeeth([]);
+  setters.setProcedure(TOOTH_PROCEDURES[0]);
+  setters.setNote("");
+}
+
 export function DentalChart({
   value,
   onChange,
   disabled,
   readOnly,
+  resetKey = 0,
 }: DentalChartProps) {
-  const [activeTooth, setActiveTooth] = useState<number | null>(null);
+  const [selectedTeeth, setSelectedTeeth] = useState<number[]>([]);
   const [procedure, setProcedure] = useState<string>(TOOTH_PROCEDURES[0]);
   const [note, setNote] = useState("");
   const isLocked = disabled || readOnly;
 
-  function openTooth(n: number) {
+  useEffect(() => {
+    clearEditorState({ setSelectedTeeth, setProcedure, setNote });
+  }, [resetKey]);
+
+  useEffect(() => {
+    if (disabled) {
+      setSelectedTeeth([]);
+    }
+  }, [disabled]);
+
+  function toggleTooth(n: number) {
     if (isLocked) return;
-    setActiveTooth(n);
-    const existing = value[n];
-    setProcedure(existing?.procedure_ar ?? TOOTH_PROCEDURES[0]);
-    setNote(existing?.note ?? "");
+    setSelectedTeeth((prev) => {
+      const next = toggleSelectedTeeth(prev, n);
+      if (!prev.includes(n) && prev.length === 0) {
+        const defaults = editorDefaultsForFirstSelection(value, n);
+        setProcedure(defaults.procedure);
+        setNote(defaults.note);
+      }
+      return next;
+    });
   }
 
   function applyTooth() {
-    if (activeTooth == null) return;
-    const next = { ...value };
-    next[activeTooth] = {
-      tooth_number: activeTooth,
-      procedure_ar: procedure,
-      note: note.trim() || undefined,
-    };
-    onChange?.(next);
-    setActiveTooth(null);
+    if (selectedTeeth.length === 0) return;
+    onChange?.(applyProcedureToTeeth(value, selectedTeeth, procedure, note));
+    setSelectedTeeth([]);
   }
 
   function removeTooth() {
-    if (activeTooth == null) return;
-    const next = { ...value };
-    delete next[activeTooth];
-    onChange?.(next);
-    setActiveTooth(null);
+    if (selectedTeeth.length === 0) return;
+    onChange?.(removeTeethFromValue(value, selectedTeeth));
+    setSelectedTeeth([]);
   }
 
   const markedCount = Object.keys(value).length;
+  const hasSelection = selectedTeeth.length > 0;
+  const selectedHaveRecords = anySelectedHasRecord(value, selectedTeeth);
 
   return (
     <div className="space-y-3">
@@ -134,7 +164,8 @@ export function DentalChart({
 
       {!readOnly && (
         <p className="text-[11px] text-slate-muted">
-          اضغط على أي سن لتحديد إجراء — يعمل من الآيباد والماوس
+          اضغط على سن لاختياره — اضغط مرة أخرى لإلغاء الاختيار. يمكنك اختيار
+          عدة أسنان وتطبيق نفس الإجراء عليها.
         </p>
       )}
 
@@ -145,17 +176,17 @@ export function DentalChart({
             <ToothRow
               teeth={UPPER_RIGHT}
               value={value}
-              activeTooth={activeTooth}
+              selectedTeeth={selectedTeeth}
               disabled={isLocked}
-              onSelect={openTooth}
+              onSelect={toggleTooth}
             />
             <div className="hidden w-px bg-slate-border sm:block" />
             <ToothRow
               teeth={UPPER_LEFT}
               value={value}
-              activeTooth={activeTooth}
+              selectedTeeth={selectedTeeth}
               disabled={isLocked}
-              onSelect={openTooth}
+              onSelect={toggleTooth}
             />
           </div>
         </div>
@@ -168,26 +199,31 @@ export function DentalChart({
             <ToothRow
               teeth={LOWER_RIGHT}
               value={value}
-              activeTooth={activeTooth}
+              selectedTeeth={selectedTeeth}
               disabled={isLocked}
-              onSelect={openTooth}
+              onSelect={toggleTooth}
             />
             <div className="hidden w-px bg-slate-border sm:block" />
             <ToothRow
               teeth={LOWER_LEFT}
               value={value}
-              activeTooth={activeTooth}
+              selectedTeeth={selectedTeeth}
               disabled={isLocked}
-              onSelect={openTooth}
+              onSelect={toggleTooth}
             />
           </div>
         </div>
       </div>
 
-      {!readOnly && activeTooth != null && (
+      {!readOnly && hasSelection && (
         <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
           <p className="text-sm font-semibold text-primary tabular-nums">
-            السن {activeTooth}
+            {formatTeethLabel(selectedTeeth)}
+            {selectedTeeth.length > 1 && (
+              <span className="mr-1 text-xs font-normal text-primary/80">
+                ({selectedTeeth.length} أسنان)
+              </span>
+            )}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {TOOTH_PROCEDURES.map((p) => (
@@ -210,7 +246,11 @@ export function DentalChart({
             type="text"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="ملاحظة على هذا السن..."
+            placeholder={
+              selectedTeeth.length > 1
+                ? "ملاحظة مشتركة على الأسنان المختارة..."
+                : "ملاحظة على هذا السن..."
+            }
             className="w-full rounded-lg border border-slate-border bg-white px-3 py-2 text-sm"
           />
           <div className="flex flex-wrap gap-2">
@@ -219,20 +259,24 @@ export function DentalChart({
               onClick={applyTooth}
               className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white"
             >
-              حفظ على السن
+              {selectedTeeth.length > 1
+                ? `حفظ على ${selectedTeeth.length} أسنان`
+                : "حفظ على السن"}
             </button>
-            {value[activeTooth] && (
+            {selectedHaveRecords && (
               <button
                 type="button"
                 onClick={removeTooth}
                 className="rounded-lg border border-red-200 px-4 py-2 text-xs text-red-600"
               >
-                إزالة التحديد
+                {selectedTeeth.length > 1
+                  ? "إزالة من السجل"
+                  : "إزالة التحديد"}
               </button>
             )}
             <button
               type="button"
-              onClick={() => setActiveTooth(null)}
+              onClick={() => setSelectedTeeth([])}
               className="rounded-lg px-3 py-2 text-xs text-slate-muted"
             >
               إلغاء

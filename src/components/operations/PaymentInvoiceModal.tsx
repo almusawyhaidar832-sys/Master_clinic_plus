@@ -11,7 +11,17 @@ import type {
   DoctorPercentage,
   MaterialsCostShare,
   OperationType,
+  PatientOperation,
 } from "@/types";
+import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { SessionInvoiceModal } from "@/components/invoices/SessionInvoiceModal";
+import {
+  buildSessionInvoiceData,
+  type SessionInvoiceData,
+} from "@/lib/invoices/session-invoice";
+import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
+import { notifySessionMutation } from "@/lib/sync/mutation-notify";
+import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
 
 export interface DashboardAppointment extends Appointment {
   doctor?: { full_name_ar: string; percentage: DoctorPercentage; materials_share: MaterialsCostShare } | null;
@@ -38,6 +48,8 @@ export function PaymentInvoiceModal({
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [invoiceData, setInvoiceData] = useState<SessionInvoiceData | null>(null);
+  const { profile: clinicProfile } = useClinicProfile();
 
   useEffect(() => {
     async function loadTypes() {
@@ -123,7 +135,52 @@ export function PaymentInvoiceModal({
       }
 
       onSaved();
-      onClose();
+
+      notifySessionMutation({
+        clinicId: appointment.clinic_id,
+        doctorId: appointment.doctor_id,
+        patientId: json.patientId as string | undefined,
+      });
+      if (paid > 0) {
+        notifyClinicProfitRefresh(appointment.clinic_id);
+      }
+
+      if (paid > 0 && json.operationId) {
+        const stubOp = {
+          id: json.operationId as string,
+          clinic_id: appointment.clinic_id,
+          patient_id: json.patientId as string,
+          doctor_id: appointment.doctor_id,
+          operation_name_ar: procedureName.trim(),
+          operation_date: appointment.appointment_date ?? todayISO(),
+          total_amount: total,
+          paid_amount: paid,
+          remaining_debt: Math.max(0, total - paid),
+          notes: notes.trim() || null,
+        } as PatientOperation;
+
+        setInvoiceData(
+          buildSessionInvoiceData({
+            operation: stubOp,
+            clinic: clinicProfile ?? null,
+            patientName,
+            patientPhone: appointment.patient_phone,
+            doctorName,
+            procedureLabel: procedureName.trim(),
+            treatmentName: procedureName.trim(),
+            paidThisSession: paid,
+            caseTotalAmount: total,
+            caseTotalPaid: paid,
+            remainingBalance: Math.max(0, total - paid),
+            treatmentCompleted:
+              total > FINANCIAL_EPSILON &&
+              paid >= total - FINANCIAL_EPSILON,
+            notes: notes.trim() || null,
+          })
+        );
+      } else {
+        onClose();
+      }
     } catch {
       setError("خطأ في الاتصال");
     } finally {
@@ -133,6 +190,18 @@ export function PaymentInvoiceModal({
 
   const patientName = appointment.patient_name_ar || "مراجع";
   const doctorName = appointment.doctor?.full_name_ar || "—";
+
+  if (invoiceData) {
+    return (
+      <SessionInvoiceModal
+        data={invoiceData}
+        onClose={() => {
+          setInvoiceData(null);
+          onClose();
+        }}
+      />
+    );
+  }
 
   return (
     <div

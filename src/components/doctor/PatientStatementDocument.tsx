@@ -14,6 +14,7 @@ interface PatientStatementDocumentProps {
   treatmentCases: PatientTreatmentCase[];
   medicalLogs: (MedicalLog & { doctor?: { full_name_ar: string } })[];
   clinic?: ClinicProfile | null;
+  printId?: string;
 }
 
 export function PatientStatementDocument({
@@ -22,10 +23,11 @@ export function PatientStatementDocument({
   treatmentCases,
   medicalLogs,
   clinic,
+  printId = "patient-statement-print",
 }: PatientStatementDocumentProps) {
   return (
     <div
-      id="patient-statement-print"
+      id={printId}
       dir="rtl"
       className="rounded-xl border border-slate-border bg-white p-6 text-slate-text"
     >

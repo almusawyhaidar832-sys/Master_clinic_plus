@@ -11,7 +11,6 @@ import { useClinicModules } from "@/contexts/ClinicModulesContext";
 import { useModuleNav } from "@/hooks/useModuleNav";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { DeveloperImpersonationBanner } from "@/components/developer/DeveloperImpersonationBanner";
-import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
 import { ClinicDataSyncBridge } from "@/components/sync/ClinicDataSyncBridge";
 import type { NavItem, UserRole } from "@/types";
 
@@ -65,7 +64,7 @@ export function DashboardLayoutClient({
   }, [loadNotifications]);
 
   useClinicSync({
-    topics: ["sessions", "refunds", "queue", "appointments", "all"],
+    topics: ["sessions", "refunds", "queue", "appointments"],
     clinicId: profile?.id,
     onRefresh: loadNotifications,
     enabled: !!profile?.id,
@@ -92,7 +91,6 @@ export function DashboardLayoutClient({
       clinicId={profile?.id}
     >
       <DeveloperImpersonationBanner />
-      <QueueRealtimeBridge portal="dashboard" />
       <ClinicDataSyncBridge />
       {children}
     </DashboardShell>

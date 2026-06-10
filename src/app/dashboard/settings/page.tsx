@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -12,7 +12,9 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchClinicProfile, updateClinicProfile } from "@/lib/services/clinic-profile";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import Link from "next/link";
-import { Building2, QrCode, RefreshCw } from "lucide-react";
+import { Building2, QrCode, RefreshCw, Upload } from "lucide-react";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
+import { getAuthProfile } from "@/lib/clinic-context";
 import { useClinicModules } from "@/contexts/ClinicModulesContext";
 import type { ClinicProfile } from "@/types/clinic-profile";
 
@@ -40,6 +42,19 @@ export default function ClinicSettingsPage() {
     text: string;
   } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [userRole, setUserRole] = useState<string>("accountant");
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const isOwner = userRole === "super_admin";
+
+  useEffect(() => {
+    async function loadRole() {
+      const supabase = createClient();
+      const auth = await getAuthProfile(supabase);
+      if (auth?.role) setUserRole(String(auth.role));
+    }
+    void loadRole();
+  }, []);
 
   // Load clinic profile when clinicId is resolved
   useEffect(() => {
@@ -65,6 +80,36 @@ export default function ClinicSettingsPage() {
     }
     load();
   }, [clinicId]);
+
+  async function handleLogoUpload(file: File) {
+    if (!isOwner) return;
+    setUploadingLogo(true);
+    setMessage(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/clinic/logo-upload", {
+        method: "POST",
+        credentials: "include",
+        headers: authPortalHeaders("accountant"),
+        body: form,
+      });
+      const data = (await res.json()) as { logo_url?: string; error?: string };
+      if (!res.ok || data.error) {
+        setMessage({ type: "error", text: data.error ?? "تعذر رفع الشعار" });
+        return;
+      }
+      if (data.logo_url) {
+        setLogoUrl(data.logo_url);
+        setMessage({ type: "success", text: "✓ تم رفع الشعار بنجاح" });
+        await refreshContext();
+      }
+    } catch {
+      setMessage({ type: "error", text: "تعذر الاتصال بالسيرفر" });
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -114,8 +159,13 @@ export default function ClinicSettingsPage() {
       <div>
         <h2 className="text-2xl font-bold text-slate-text">ملف العيادة</h2>
         <p className="text-slate-muted">
-          الاسم والعنوان والشعار يظهران تلقائياً في التقارير والرسائل
+          الاسم والعنوان والشعار يظهران تلقائياً في التقارير وفواتير PDF
         </p>
+        {!isOwner && !loading && (
+          <p className="mt-2 text-xs text-amber-700">
+            التعديل ورفع الشعار متاح لمالك العيادة فقط — أنت تعرض الإعدادات للقراءة.
+          </p>
+        )}
       </div>
 
       {missingClinic && (
@@ -183,6 +233,7 @@ export default function ClinicSettingsPage() {
               onChange={(e) => setNameAr(e.target.value)}
               placeholder="مثال: عيادة الأمل للأسنان"
               required
+              disabled={!isOwner}
             />
 
             <Input
@@ -191,6 +242,7 @@ export default function ClinicSettingsPage() {
               onChange={(e) => setNameEn(e.target.value)}
               placeholder="Clinic name in English"
               required
+              disabled={!isOwner}
             />
 
             <Input
@@ -198,6 +250,7 @@ export default function ClinicSettingsPage() {
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder="العنوان الكامل للعيادة"
+              disabled={!isOwner}
             />
 
             <Input
@@ -207,16 +260,68 @@ export default function ClinicSettingsPage() {
               dir="ltr"
               className="text-left"
               placeholder="+201xxxxxxxxx"
+              disabled={!isOwner}
             />
 
-            <Input
-              label="رابط الشعار (URL)"
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-              placeholder="https://..."
-              dir="ltr"
-              className="text-left"
-            />
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-slate-text">شعار العيادة</p>
+              {logoUrl && (
+                <div className="flex justify-center rounded-lg border border-slate-border bg-surface p-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={logoUrl}
+                    alt="شعار العيادة"
+                    className="max-h-20 object-contain"
+                  />
+                </div>
+              )}
+              {isOwner ? (
+                <>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void handleLogoUpload(f);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={uploadingLogo}
+                    onClick={() => logoInputRef.current?.click()}
+                  >
+                    {uploadingLogo ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        جاري الرفع...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />
+                        رفع شعار من الجهاز
+                      </>
+                    )}
+                  </Button>
+                  <Input
+                    label="أو رابط الشعار (URL)"
+                    value={logoUrl}
+                    onChange={(e) => setLogoUrl(e.target.value)}
+                    placeholder="https://..."
+                    dir="ltr"
+                    className="text-left"
+                  />
+                </>
+              ) : (
+                logoUrl ? null : (
+                  <p className="text-xs text-slate-muted">لم يُرفع شعار بعد</p>
+                )
+              )}
+            </div>
 
             {/* Review fee — only shown when optional columns exist */}
             {hasOptionalCols && (
@@ -255,7 +360,7 @@ export default function ClinicSettingsPage() {
             <Button
               type="submit"
               className="w-full"
-              disabled={saving || !clinicId}
+              disabled={saving || !clinicId || !isOwner}
             >
               {saving ? (
                 <>

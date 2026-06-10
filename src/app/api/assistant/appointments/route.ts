@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const appointment = await createAssistantAppointment(admin, ctx, {
+    const { appointment, whatsapp } = await createAssistantAppointment(admin, ctx, {
       patient_name_ar: String(body.patient_name_ar ?? ""),
       patient_phone: String(body.patient_phone ?? ""),
       appointment_date: String(body.appointment_date ?? ""),
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       notes: body.notes ?? null,
     });
 
-    return NextResponse.json({ success: true, appointment });
+    return NextResponse.json({ success: true, appointment, whatsapp });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
     return NextResponse.json({ error: msg }, { status: 500 });

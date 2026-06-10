@@ -11,7 +11,6 @@ import { useModuleNav } from "@/hooks/useModuleNav";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { doctorModuleNav, doctorModuleQuickActions } from "@/config/navigation";
-import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
 import { ClinicDataSyncBridge } from "@/components/sync/ClinicDataSyncBridge";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile, getDoctorForCurrentUser } from "@/lib/clinic-context";
@@ -80,7 +79,6 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col bg-surface pb-20">
-      <QueueRealtimeBridge portal="doctor" />
       <ClinicDataSyncBridge />
       <header className="safe-top sticky top-0 z-30 bg-primary px-4 py-3 text-white shadow-premium">
         <div className="flex items-center gap-2">

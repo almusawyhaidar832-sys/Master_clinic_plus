@@ -23,6 +23,7 @@ export type AppointmentStatus =
   | "waiting"
   | "in_clinic"
   | "in_examination"
+  | "ready_for_payment"
   | "completed"
   | "cancelled"
   | "no_show";

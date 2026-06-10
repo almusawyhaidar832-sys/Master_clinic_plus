@@ -8,6 +8,10 @@ import {
   paymentReceiptMessage,
 } from "@/lib/whatsapp";
 import {
+  sessionInvoiceWhatsAppMessage,
+  type SessionInvoiceData,
+} from "@/lib/invoices/session-invoice";
+import {
   resolveWhatsAppClinic,
   whatsappNoClinicError,
 } from "@/lib/whatsapp/resolve-clinic";
@@ -21,9 +25,9 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const { type, phone, payload } = body as {
-    type: "appointment_confirmation" | "payment_receipt";
+    type: "appointment_confirmation" | "payment_receipt" | "session_invoice";
     phone: string;
-    payload: Record<string, string>;
+    payload: Record<string, unknown>;
   };
 
   if (!phone?.trim()) {
@@ -50,10 +54,19 @@ export async function POST(request: NextRequest) {
     });
   } else if (type === "payment_receipt") {
     messageBody = paymentReceiptMessage({
-      patientName: payload.patientName,
-      paidAmount: payload.paidAmount,
+      patientName: String(payload.patientName ?? ""),
+      paidAmount: String(payload.paidAmount ?? ""),
       clinic,
-      doctorName: payload.doctorName || null,
+      doctorName: payload.doctorName ? String(payload.doctorName) : null,
+    });
+  } else if (type === "session_invoice") {
+    const invoiceData = payload.invoiceData as SessionInvoiceData;
+    if (!invoiceData?.patientName) {
+      return NextResponse.json({ error: "بيانات الفاتورة ناقصة" }, { status: 400 });
+    }
+    messageBody = sessionInvoiceWhatsAppMessage({
+      ...invoiceData,
+      clinic: invoiceData.clinic ?? clinic,
     });
   } else {
     return NextResponse.json({ error: "نوع غير مدعوم" }, { status: 400 });

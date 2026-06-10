@@ -1,25 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getApiCallerProfile,
+  isApiAssistantRole,
   isApiDoctorRole,
   isApiStaffRole,
 } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   getDoctorByProfileId,
+  notifyAccountantsReadyForPayment,
   updateQueueStatus,
   type QueueStatus,
 } from "@/lib/queue/server";
+import { markQueueReadyForPayment } from "@/lib/services/session-checkout";
 import { syncAppointmentFromQueueStatus } from "@/lib/services/appointment-queue-sync";
 
 const NEXT_STATUS: Partial<Record<QueueStatus, QueueStatus>> = {
   waiting: "called",
   called: "in_progress",
-  in_progress: "done",
 };
 
 function staffRolesOk(role: string) {
-  return isApiStaffRole(role);
+  return isApiStaffRole(role) || isApiAssistantRole(role);
 }
 
 async function updateQueueAndSync(
@@ -48,7 +50,7 @@ export async function PATCH(
 
     const role = String(profile.role ?? "").toLowerCase();
     const body = (await req.json()) as {
-      action?: "advance" | "cancel" | "enter";
+      action?: "advance" | "cancel" | "enter" | "ready_for_payment";
     };
 
     const admin = getAdminClient();
@@ -70,7 +72,36 @@ export async function PATCH(
         return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
       }
       await updateQueueAndSync(admin, id, "in_progress", { doctorId: doctor.id });
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, status: "in_progress" });
+    }
+
+    if (body.action === "ready_for_payment") {
+      const isDoctor = isApiDoctorRole(role);
+      if (!isDoctor && !staffRolesOk(role)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+
+      if (isDoctor) {
+        const doctor = await getDoctorByProfileId(profile.id);
+        if (!doctor) {
+          return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+        }
+        const status = await markQueueReadyForPayment(admin, id, {
+          doctorId: doctor.id,
+        });
+        await notifyAccountantsReadyForPayment(id).catch((err) => {
+          console.error("[api/queue] checkout notify failed:", err);
+        });
+        return NextResponse.json({ success: true, status });
+      }
+
+      const status = await markQueueReadyForPayment(admin, id, {
+        clinicId: profile.clinic_id as string,
+      });
+      await notifyAccountantsReadyForPayment(id).catch((err) => {
+        console.error("[api/queue] checkout notify failed:", err);
+      });
+      return NextResponse.json({ success: true, status });
     }
 
     // advance (staff or doctor)

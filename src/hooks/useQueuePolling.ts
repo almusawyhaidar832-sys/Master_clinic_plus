@@ -9,6 +9,15 @@ import { resolvePatientDisplayName } from "@/lib/queue/utils";
 
 const POLL_MS = 3_000;
 
+function queueFingerprint(queue: QueueRow[]): string {
+  return (queue ?? [])
+    .map(
+      (e) =>
+        `${e.id}:${e.status}:${e.sent_to_doctor_at ?? ""}:${e.ticket_number}`
+    )
+    .join("|");
+}
+
 interface QueueRow {
   id: string;
   status: string;
@@ -40,12 +49,16 @@ async function fetchQueueRows(portal: "doctor" | "accountant"): Promise<{
  * Polls /api/queue every 3s — works even when Supabase Realtime is off.
  * Doctor: alert when new patient is sent to their queue.
  */
-export function useDoctorQueuePolling(doctorId: string | null | undefined) {
+export function useDoctorQueuePolling(
+  doctorId: string | null | undefined,
+  enabled = true
+) {
   const readyRef = useRef(false);
   const knownSentRef = useRef<Set<string>>(new Set());
+  const fingerprintRef = useRef("");
 
   useEffect(() => {
-    if (!doctorId) return;
+    if (!enabled || !doctorId) return;
 
     let active = true;
 
@@ -54,7 +67,11 @@ export function useDoctorQueuePolling(doctorId: string | null | undefined) {
         const data = await fetchQueueRows("doctor");
         if (!active) return;
 
-        notifyQueueRefresh({ scope: "doctor", doctorId });
+        const fingerprint = queueFingerprint(data.queue ?? []);
+        if (fingerprint !== fingerprintRef.current) {
+          fingerprintRef.current = fingerprint;
+          notifyQueueRefresh({ scope: "doctor", doctorId: doctorId ?? undefined });
+        }
 
         for (const entry of data.queue ?? []) {
           if (!entry.sent_to_doctor_at) continue;
@@ -89,18 +106,22 @@ export function useDoctorQueuePolling(doctorId: string | null | undefined) {
       active = false;
       clearInterval(timer);
     };
-  }, [doctorId]);
+  }, [doctorId, enabled]);
 }
 
 /**
  * Accountant: alert when doctor requests patient entry (status = called).
  */
-export function useAccountantQueuePolling(clinicId: string | null | undefined) {
+export function useAccountantQueuePolling(
+  clinicId: string | null | undefined,
+  enabled = true
+) {
   const readyRef = useRef(false);
   const statusRef = useRef<Map<string, string>>(new Map());
+  const fingerprintRef = useRef("");
 
   useEffect(() => {
-    if (!clinicId) return;
+    if (!enabled || !clinicId) return;
 
     let active = true;
 
@@ -109,7 +130,11 @@ export function useAccountantQueuePolling(clinicId: string | null | undefined) {
         const data = await fetchQueueRows("accountant");
         if (!active) return;
 
-        notifyQueueRefresh({ scope: "clinic", clinicId });
+        const fingerprint = queueFingerprint(data.queue ?? []);
+        if (fingerprint !== fingerprintRef.current) {
+          fingerprintRef.current = fingerprint;
+          notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
+        }
 
         for (const entry of data.queue ?? []) {
           const prev = statusRef.current.get(entry.id);
@@ -143,7 +168,7 @@ export function useAccountantQueuePolling(clinicId: string | null | undefined) {
       active = false;
       clearInterval(timer);
     };
-  }, [clinicId]);
+  }, [clinicId, enabled]);
 }
 
 /** Load doctor id via API (more reliable than client-side doctor lookup) */

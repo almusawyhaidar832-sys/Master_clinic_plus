@@ -3,6 +3,7 @@ export function buildLedgerPayUrl(input: {
   patientId?: string | null;
   appointmentId?: string | null;
   doctorId?: string | null;
+  queueEntryId?: string | null;
 }): string {
   const params = new URLSearchParams();
 
@@ -11,6 +12,9 @@ export function buildLedgerPayUrl(input: {
   }
   if (input.appointmentId) {
     params.set("appointment_id", input.appointmentId);
+  }
+  if (input.queueEntryId) {
+    params.set("queue_entry_id", input.queueEntryId);
   }
 
   if (input.doctorId) {

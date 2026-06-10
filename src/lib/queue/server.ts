@@ -6,6 +6,7 @@ export type QueueStatus =
   | "waiting"
   | "called"
   | "in_progress"
+  | "ready_for_payment"
   | "done"
   | "cancelled";
 
@@ -22,6 +23,7 @@ export interface QueueEntryRow {
   called_at: string | null;
   entered_at: string | null;
   sent_to_doctor_at: string | null;
+  appointment_id: string | null;
   doctor: { full_name_ar: string } | null;
   patient: { full_name_ar: string } | null;
 }
@@ -44,7 +46,7 @@ export async function fetchClinicQueue(
       `
       id, ticket_number, status, patient_name, patient_phone,
       patient_id, doctor_id, clinic_id, created_at, called_at, entered_at,
-      sent_to_doctor_at,
+      sent_to_doctor_at, appointment_id,
       doctor:doctors(full_name_ar),
       patient:patients(full_name_ar)
     `
@@ -104,6 +106,46 @@ export async function notifyDoctorNewQueuePatient(queueEntryId: string) {
       link_path: "/doctor/queue",
     },
   ]);
+}
+
+/** Notify accountants: patient ready for checkout after doctor session */
+export async function notifyAccountantsReadyForPayment(queueEntryId: string) {
+  const admin = getAdminClient();
+
+  const { data: entry, error } = await admin
+    .from("patient_queue")
+    .select(
+      "id, clinic_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar)"
+    )
+    .eq("id", queueEntryId)
+    .maybeSingle();
+
+  if (error || !entry) return;
+
+  const { data: staff } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("clinic_id", entry.clinic_id)
+    .in("role", ["accountant", "super_admin"]);
+
+  if (!staff?.length) return;
+
+  const patientRow = entry.patient as { full_name_ar?: string } | null;
+  const name = resolvePatientDisplayName({
+    patient: patientRow ? { full_name_ar: patientRow.full_name_ar ?? "" } : null,
+    patient_name: entry.patient_name,
+    ticket_number: entry.ticket_number,
+  });
+
+  await insertNotifications(
+    staff.map((s) => ({
+      clinic_id: entry.clinic_id,
+      recipient_profile_id: s.id,
+      title_ar: "جاهز للدفع",
+      body_ar: `المراجع ${name} — أنهى الطبيب الجلسة، أكمل الحساب الآن`,
+      link_path: "/dashboard/queue",
+    }))
+  );
 }
 
 /** Notify accountants: doctor ready for patient to enter */
@@ -235,7 +277,18 @@ export async function updateQueueStatus(
   if (opts?.doctorId) query = query.eq("doctor_id", opts.doctorId);
 
   const { data, error } = await query.select("id").maybeSingle();
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (
+      status === "ready_for_payment" &&
+      (error.message.includes("ready_for_payment") ||
+        error.message.includes("invalid input value"))
+    ) {
+      throw new Error(
+        "حالة ready_for_payment غير موجودة — شغّل supabase/scripts/16-queue-checkout-flow.sql"
+      );
+    }
+    throw new Error(error.message);
+  }
   if (!data) {
     throw new Error("لم يتم تحديث الدور — تحقق من الصلاحيات أو حالة المراجع");
   }

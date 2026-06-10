@@ -1,0 +1,41 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getApiCallerProfile, isApiStaffRole } from "@/lib/auth/api-session";
+import { getAdminClient } from "@/lib/supabase/admin";
+import { processSessionCheckout } from "@/lib/services/session-checkout";
+/** POST — دفع الحساب النهائي بعد جلسة الطبيب */
+export async function POST(req: NextRequest) {
+  try {
+    const profile = await getApiCallerProfile(req);
+    if (!profile?.clinic_id || !isApiStaffRole(String(profile.role))) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const appointmentId = body.appointment_id as string | undefined;
+    const queueEntryId = body.queue_entry_id as string | undefined;
+    const paidAmount = Number(body.paid_amount ?? 0);
+
+    if (!appointmentId && !queueEntryId) {
+      return NextResponse.json(
+        { error: "appointment_id أو queue_entry_id مطلوب" },
+        { status: 400 }
+      );
+    }
+
+    const admin = getAdminClient();
+    const result = await processSessionCheckout(
+      admin,
+      profile.clinic_id as string,
+      profile.id as string,
+      { appointmentId, queueEntryId, paidAmount }
+    );
+
+    return NextResponse.json({ success: true, ...result });
+  } catch (err) {
+    console.error("[checkout]", err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "تعذر إتمام الدفع" },
+      { status: 500 }
+    );
+  }
+}

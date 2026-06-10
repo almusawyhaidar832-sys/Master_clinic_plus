@@ -86,7 +86,7 @@ export default function DoctorWalletPage() {
   }, [load]);
 
   useClinicSync({
-    topics: ["sessions", "refunds", "profit", "all"],
+    topics: ["sessions", "refunds"],
     doctorId,
     onRefresh: load,
     enabled: !!doctorId,

@@ -1,6 +1,9 @@
 import "server-only";
 
 import { getAdminClient } from "@/lib/supabase/admin";
+import { validatePatientPhone } from "@/lib/phone";
+import { sendAppointmentUpdate } from "@/lib/services/appointment-updates";
+import type { SendAppointmentUpdateResult } from "@/lib/services/appointment-updates";
 import { isUuid } from "@/lib/booking/urls";
 import type {
   PublicClinicSummary,
@@ -126,6 +129,7 @@ export interface CreatePublicBookingResult {
   appointmentId: string;
   clinicId: string;
   clinicName: string;
+  whatsapp: SendAppointmentUpdateResult;
 }
 
 function timesOverlap(
@@ -154,6 +158,14 @@ export async function createPublicBooking(
   const name = input.patientName.trim();
   if (name.length < 2) {
     throw new Error("يرجى إدخال اسم المريض");
+  }
+
+  if (!input.patientPhone?.trim()) {
+    throw new Error("رقم الجوال مطلوب لتأكيد الحجز عبر واتساب");
+  }
+  const phoneCheck = validatePatientPhone(input.patientPhone);
+  if (!phoneCheck.ok) {
+    throw new Error(phoneCheck.message);
   }
 
   const admin = getAdminClient();
@@ -206,22 +218,35 @@ export async function createPublicBooking(
       clinic_id: clinicId,
       doctor_id: input.doctorId,
       patient_name_ar: name,
-      patient_phone: input.patientPhone?.trim() || null,
+      patient_phone: phoneCheck.normalized,
       appointment_date: input.appointmentDate,
       start_time: input.startTime,
       end_time: input.endTime,
       status: "pending",
       notes: input.notes?.trim() || null,
     })
-    .select("id, clinic_id")
+    .select("id, clinic_id, patient_name_ar, patient_phone, appointment_date, start_time, end_time")
     .single();
 
   if (error) throw new Error(error.message);
+
+  const whatsapp = await sendAppointmentUpdate(admin, {
+    clinicId,
+    appointmentId: inserted.id as string,
+    patientPhone: inserted.patient_phone as string,
+    patientName: inserted.patient_name_ar as string,
+    doctorName: doctor.fullNameAr,
+    appointmentDate: inserted.appointment_date as string,
+    startTime: inserted.start_time as string,
+    endTime: inserted.end_time as string,
+    action: "submitted",
+  });
 
   return {
     appointmentId: inserted.id as string,
     clinicId: inserted.clinic_id as string,
     clinicName: clinic.nameAr || clinic.name,
+    whatsapp,
   };
 }
 

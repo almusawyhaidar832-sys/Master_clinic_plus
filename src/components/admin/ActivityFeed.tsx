@@ -107,7 +107,7 @@ export function ActivityFeed({
   }, [load, pollMs]);
 
   useClinicSync({
-    topics: ["audit", "all"],
+    topics: ["audit"],
     clinicId,
     onRefresh: load,
     enabled: !!clinicId,
@@ -206,6 +206,15 @@ export function ActivityFeed({
                       {item.actorName}
                     </span>
                   </p>
+                  {item.changes.length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5 text-xs text-slate-muted">
+                      {item.changes.map((line) => (
+                        <li key={line} className="font-mono tabular-nums">
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   {item.financialAmount != null &&
                     item.financialAmount !== 0 && (
                       <p

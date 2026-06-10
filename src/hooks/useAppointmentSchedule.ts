@@ -66,7 +66,7 @@ export function useAppointmentSchedule({
 
   useAppointmentsRealtime(clinicId, load);
   useClinicSync({
-    topics: ["appointments", "all"],
+    topics: ["appointments"],
     clinicId,
     onRefresh: load,
     enabled: enabled && !!clinicId,

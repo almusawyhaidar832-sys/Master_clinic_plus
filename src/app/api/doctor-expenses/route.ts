@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile } from "@/lib/auth/api-session";
+import {
+  getApiCallerProfile,
+  isApiStaffRole,
+} from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { doctorShareFromExpense } from "@/lib/services/assistant-payroll";
-import { recordFinancialTransaction } from "@/lib/services/clinic-profit";
+import {
+  applyDoctorExpenseFinancialDeductions,
+  rollbackDoctorExpenseInsert,
+} from "@/lib/services/doctor-expense-deduction";
 
 /**
  * POST /api/doctor-expenses
@@ -15,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "يجب تسجيل الدخول أولاً" }, { status: 401 });
     }
 
-    if (!["accountant", "super_admin", "admin"].includes(caller.role)) {
+    if (!isApiStaffRole(String(caller.role ?? ""))) {
       return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
     }
 
@@ -86,41 +92,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const label = descriptionAr ?? "صرفية طبيب";
-    const doctorName = doctor.full_name_ar as string;
+    const deduction = await applyDoctorExpenseFinancialDeductions(admin, {
+      clinicId,
+      expenseId: expense.id,
+      doctorId,
+      doctorName: doctor.full_name_ar as string,
+      amount,
+      percentageSplit,
+      descriptionAr,
+      expenseDate,
+    });
 
-    if (doctorShare > 0) {
-      const doctorTx = await recordFinancialTransaction(admin, {
-        clinicId,
-        amount: -doctorShare,
-        type: "doctor_expense_doctor",
-        descriptionAr: `صرفية — ${doctorName}: ${label}`,
-        transactionDate: expenseDate,
-        doctorId,
-        referenceType: "doctor_expense_doctor",
-        referenceId: expense.id,
-      });
-      if (!doctorTx.ok) {
-        return NextResponse.json(
-          {
-            error: `حُفظت الفاتورة لكن فشل خصم الطبيب: ${doctorTx.error}`,
-            expense_id: expense.id,
-          },
-          { status: 500 }
-        );
-      }
-    }
-
-    if (clinicShare > 0) {
-      await recordFinancialTransaction(admin, {
-        clinicId,
-        amount: -clinicShare,
-        type: "doctor_expense_clinic",
-        descriptionAr: `حصة عيادة — صرفية ${doctorName}: ${label}`,
-        transactionDate: expenseDate,
-        referenceType: "doctor_expense_clinic",
-        referenceId: expense.id,
-      });
+    if (!deduction.ok) {
+      await rollbackDoctorExpenseInsert(admin, expense.id);
+      return NextResponse.json(
+        {
+          error: `تعذر حفظ الفاتورة: فشل خصم الطبيب — ${deduction.error}`,
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({

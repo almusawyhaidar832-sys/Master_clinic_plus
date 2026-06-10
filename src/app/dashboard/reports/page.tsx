@@ -6,29 +6,41 @@ import { Select } from "@/components/ui/Select";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { MasterReportDocument } from "@/components/reports/MasterReportDocument";
+import { MonthlySettlementDocument } from "@/components/reports/MonthlySettlementDocument";
 import { ReportActions } from "@/components/reports/ReportActions";
-import { downloadClinicReportPdf } from "@/lib/reports/pdf-export";
+import {
+  downloadClinicReportPdf,
+  downloadSettlementPdf,
+} from "@/lib/reports/pdf-export";
 import { createClient } from "@/lib/supabase/client";
 import {
   fetchAccountantClinicReport,
+  fetchMonthlySettlementReport,
   getReportPeriodOptions,
   type MasterClinicReport,
+  type MonthlySettlementReport,
 } from "@/lib/services/clinic-reports";
 import { currentMonthYear } from "@/lib/utils";
-import { FileText, Loader2, ClipboardList } from "lucide-react";
+import { FileText, Loader2, ClipboardList, Scale } from "lucide-react";
 
 export default function AccountantReportsPage() {
   const [monthYear, setMonthYear] = useState(currentMonthYear());
   const [report, setReport] = useState<MasterClinicReport | null>(null);
+  const [settlement, setSettlement] = useState<MonthlySettlementReport | null>(
+    null
+  );
   const [loading, setLoading] = useState(false);
+  const [settlementLoading, setSettlementLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [settlementPdfLoading, setSettlementPdfLoading] = useState(false);
 
   const periodOptions = getReportPeriodOptions();
 
   async function generateReport() {
     setLoading(true);
     setError(null);
+    setSettlement(null);
     try {
       const supabase = createClient();
       const data = await fetchAccountantClinicReport(supabase, monthYear);
@@ -37,6 +49,19 @@ export default function AccountantReportsPage() {
       setError("تعذر تجميع التقرير. تحقق من الاتصال وقاعدة البيانات.");
     }
     setLoading(false);
+  }
+
+  async function generateSettlement() {
+    setSettlementLoading(true);
+    setError(null);
+    try {
+      const supabase = createClient();
+      const data = await fetchMonthlySettlementReport(supabase, monthYear);
+      setSettlement(data);
+    } catch {
+      setError("تعذر تجميع كشف التسوية. تحقق من الاتصال وقاعدة البيانات.");
+    }
+    setSettlementLoading(false);
   }
 
   return (
@@ -72,6 +97,7 @@ export default function AccountantReportsPage() {
             onChange={(e) => {
               setMonthYear(e.target.value);
               setReport(null);
+              setSettlement(null);
             }}
             options={periodOptions}
           />
@@ -97,6 +123,41 @@ export default function AccountantReportsPage() {
         </div>
       </Card>
 
+      <Card className="border-amber-200/60 bg-amber-50/30">
+        <CardHeader>
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-amber-100 p-2">
+              <Scale className="h-6 w-6 text-amber-700" />
+            </div>
+            <div>
+              <CardTitle>كشف التسوية الشهرية</CardTitle>
+              <p className="mt-1 text-sm text-slate-muted">
+                يجمع تصفية كل الأطباء — خصم حصة العيادة والمصاريف ورواتب
+                المساعدين — ويعطي الصافي النهائي لكل طبيب وللعيادة.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <Button
+          className="w-full"
+          variant="outline"
+          onClick={generateSettlement}
+          disabled={settlementLoading}
+        >
+          {settlementLoading ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              جاري تجميع كشف التسوية...
+            </>
+          ) : (
+            <>
+              <Scale className="h-5 w-5" />
+              إصدار كشف حساب شهري (تسوية)
+            </>
+          )}
+        </Button>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">يتضمن التقرير</CardTitle>
@@ -112,6 +173,30 @@ export default function AccountantReportsPage() {
       </Card>
 
       {error && <Alert variant="error">{error}</Alert>}
+
+      {settlement && (
+        <div className="space-y-4">
+          <Alert variant="success">
+            تم إنشاء كشف التسوية — جاهز للتصدير PDF
+          </Alert>
+          <ReportActions
+            shareTitle={`تسوية شهرية — ${settlement.clinicName} — ${settlement.periodLabel}`}
+            pdfLoading={settlementPdfLoading}
+            onExportPdf={async () => {
+              setSettlementPdfLoading(true);
+              try {
+                await downloadSettlementPdf({
+                  periodLabel: settlement.periodLabel,
+                  elementId: "monthly-settlement-print",
+                });
+              } finally {
+                setSettlementPdfLoading(false);
+              }
+            }}
+          />
+          <MonthlySettlementDocument report={settlement} />
+        </div>
+      )}
 
       {report && (
         <div className="space-y-4">

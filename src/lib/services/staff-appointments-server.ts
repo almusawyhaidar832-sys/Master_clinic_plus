@@ -1,7 +1,12 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { sendAppointmentUpdate } from "@/lib/services/appointment-updates";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
+import { validatePatientPhone } from "@/lib/phone";
+import {
+  sendAppointmentUpdate,
+  type SendAppointmentUpdateResult,
+} from "@/lib/services/appointment-updates";
 import {
   enqueueApprovedAppointment,
   notifyDoctorForApprovedAppointment,
@@ -15,6 +20,24 @@ function timesOverlap(
   bEnd: string
 ): boolean {
   return aStart < bEnd && bStart < aEnd;
+}
+
+export interface AppointmentAuditActor {
+  changedBy: string;
+  actorName?: string | null;
+}
+
+function appointmentSnapshot(row: Record<string, unknown>) {
+  return {
+    patient_name_ar: row.patient_name_ar,
+    patient_phone: row.patient_phone,
+    appointment_date: row.appointment_date,
+    start_time: row.start_time,
+    end_time: row.end_time,
+    status: row.status,
+    doctor_id: row.doctor_id,
+    notes: row.notes,
+  };
 }
 
 async function fetchDoctorName(
@@ -191,7 +214,8 @@ export async function updateStaffAppointment(
     end_time?: string;
     notes?: string | null;
     reason_for_change: string;
-  }
+  },
+  audit?: AppointmentAuditActor
 ): Promise<Appointment> {
   const reason = input.reason_for_change?.trim();
   if (!reason) throw new Error("سبب التغيير مطلوب عند تعديل الموعد");
@@ -236,6 +260,20 @@ export async function updateStaffAppointment(
 
   if (error || !data) throw new Error(error?.message ?? "تعذر تحديث الموعد");
 
+  if (audit) {
+    await writeAuditLog(admin, {
+      clinicId,
+      entityType: "appointment",
+      entityId: appointmentId,
+      action: "update",
+      changedBy: audit.changedBy,
+      actorName: audit.actorName,
+      before: appointmentSnapshot(current as Record<string, unknown>),
+      after: appointmentSnapshot(data as Record<string, unknown>),
+      note: reason,
+    });
+  }
+
   const doctorName = await fetchDoctorName(admin, data.doctor_id as string);
   await sendAppointmentUpdate(admin, {
     clinicId,
@@ -272,11 +310,17 @@ export async function createStaffAppointment(
     start_time: string;
     end_time: string;
     notes?: string | null;
-  }
-): Promise<Appointment> {
+  },
+  audit?: AppointmentAuditActor
+): Promise<{
+  appointment: Appointment;
+  whatsapp: SendAppointmentUpdateResult;
+}> {
   const name = input.patient_name_ar.trim();
   if (!name) throw new Error("اسم المريض مطلوب");
   if (!input.patient_phone?.trim()) throw new Error("هاتف المريض مطلوب");
+  const phoneCheck = validatePatientPhone(input.patient_phone);
+  if (!phoneCheck.ok) throw new Error(phoneCheck.message);
   if (!input.doctor_id?.trim()) throw new Error("اختر الطبيب");
 
   const { data: doctor } = await admin
@@ -305,7 +349,7 @@ export async function createStaffAppointment(
       doctor_id: input.doctor_id,
       assistant_id: null,
       patient_name_ar: name,
-      patient_phone: input.patient_phone.trim(),
+      patient_phone: phoneCheck.normalized,
       appointment_date: input.appointment_date,
       start_time: input.start_time,
       end_time: input.end_time,
@@ -317,8 +361,21 @@ export async function createStaffAppointment(
 
   if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء الموعد");
 
+  if (audit) {
+    await writeAuditLog(admin, {
+      clinicId,
+      entityType: "appointment",
+      entityId: data.id as string,
+      action: "create",
+      changedBy: audit.changedBy,
+      actorName: audit.actorName,
+      after: appointmentSnapshot(data as Record<string, unknown>),
+      note: `حجز جديد — ${input.patient_name_ar}`,
+    });
+  }
+
   const doctorName = await fetchDoctorName(admin, input.doctor_id);
-  await sendAppointmentUpdate(admin, {
+  const whatsapp = await sendAppointmentUpdate(admin, {
     clinicId,
     appointmentId: data.id as string,
     patientPhone: data.patient_phone as string,
@@ -330,18 +387,96 @@ export async function createStaffAppointment(
     action: "created",
   });
 
-  return data as Appointment;
+  return { appointment: data as Appointment, whatsapp };
+}
+
+/** إنشاء موعد — تطبيق الطبيب (مع واتساب للمراجع) */
+export async function createDoctorAppointment(
+  admin: SupabaseClient,
+  clinicId: string,
+  doctorId: string,
+  input: {
+    patient_name_ar: string;
+    patient_phone: string;
+    appointment_date: string;
+    start_time: string;
+    end_time: string;
+    notes?: string | null;
+  }
+): Promise<{
+  appointment: Appointment;
+  whatsapp: SendAppointmentUpdateResult;
+}> {
+  const name = input.patient_name_ar.trim();
+  if (!name) throw new Error("اسم المريض مطلوب");
+  if (!input.patient_phone?.trim()) throw new Error("هاتف المريض مطلوب");
+  const phoneCheck = validatePatientPhone(input.patient_phone);
+  if (!phoneCheck.ok) throw new Error(phoneCheck.message);
+
+  const { data: doctor } = await admin
+    .from("doctors")
+    .select("id")
+    .eq("id", doctorId)
+    .eq("clinic_id", clinicId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!doctor) throw new Error("حساب الطبيب غير مربوط بهذه العيادة");
+
+  await assertNoOverlapForDoctor(
+    admin,
+    clinicId,
+    doctorId,
+    input.appointment_date,
+    input.start_time,
+    input.end_time
+  );
+
+  const { data, error } = await admin
+    .from("appointments")
+    .insert({
+      clinic_id: clinicId,
+      doctor_id: doctorId,
+      assistant_id: null,
+      patient_name_ar: name,
+      patient_phone: phoneCheck.normalized,
+      appointment_date: input.appointment_date,
+      start_time: input.start_time,
+      end_time: input.end_time,
+      status: "confirmed",
+      notes: input.notes?.trim() || null,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء الموعد");
+
+  const doctorName = await fetchDoctorName(admin, doctorId);
+  const whatsapp = await sendAppointmentUpdate(admin, {
+    clinicId,
+    appointmentId: data.id as string,
+    patientPhone: data.patient_phone as string,
+    patientName: data.patient_name_ar as string,
+    doctorName,
+    appointmentDate: data.appointment_date as string,
+    startTime: data.start_time as string,
+    endTime: data.end_time as string,
+    action: "created",
+  });
+
+  return { appointment: data as Appointment, whatsapp };
 }
 
 /** حذف موعد — محاسب / مالك */
 export async function deleteStaffAppointment(
   admin: SupabaseClient,
   clinicId: string,
-  appointmentId: string
+  appointmentId: string,
+  audit?: AppointmentAuditActor
 ): Promise<void> {
   const { data: current } = await admin
     .from("appointments")
-    .select("id, status")
+    .select("*")
     .eq("id", appointmentId)
     .eq("clinic_id", clinicId)
     .maybeSingle();
@@ -358,4 +493,17 @@ export async function deleteStaffAppointment(
     .eq("id", appointmentId);
 
   if (error) throw new Error(error.message);
+
+  if (audit) {
+    await writeAuditLog(admin, {
+      clinicId,
+      entityType: "appointment",
+      entityId: appointmentId,
+      action: "delete",
+      changedBy: audit.changedBy,
+      actorName: audit.actorName,
+      before: appointmentSnapshot(current as Record<string, unknown>),
+      note: `حذف موعد — ${(current.patient_name_ar as string) ?? "مراجع"}`,
+    });
+  }
 }

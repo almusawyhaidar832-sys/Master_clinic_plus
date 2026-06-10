@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
+import { validatePatientPhone } from "@/lib/phone";
+import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
 import { todayISO } from "@/lib/utils";
 import type { ResolvedBookingClinic } from "@/lib/booking/types";
 
@@ -63,6 +65,17 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!clinic) return;
+
+    if (!patientPhone.trim()) {
+      setError("رقم الجوال مطلوب لتأكيد الحجز عبر واتساب");
+      return;
+    }
+    const phoneCheck = validatePatientPhone(patientPhone);
+    if (!phoneCheck.ok) {
+      setError(phoneCheck.message);
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -75,7 +88,7 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
           clinic: clinic.bookingCode,
           doctorId,
           patientName,
-          patientPhone: patientPhone || null,
+          patientPhone: patientPhone.trim(),
           appointmentDate: date,
           startTime,
           endTime,
@@ -85,9 +98,15 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "تعذر إتمام الحجز");
 
-      setSuccess(
-        `تم تسجيل موعدك في ${data.clinicName} بنجاح. سيتواصل معك فريق العيادة للتأكيد.`
-      );
+      if (data.whatsapp?.sent) {
+        setSuccess(
+          `تم تسجيل طلب الحجز في ${data.clinicName} — وصلتك رسالة واتساب بالتفاصيل. سيتواصل معك الفريق قريباً للتأكيد.`
+        );
+      } else {
+        setSuccess(
+          `تم تسجيل موعدك في ${data.clinicName}. لم تصل رسالة واتساب: ${describeWhatsAppDeliveryError(data.whatsapp?.error)}`
+        );
+      }
       setPatientName("");
       setPatientPhone("");
       setNotes("");

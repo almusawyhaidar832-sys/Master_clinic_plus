@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { notifyClinicSync } from "@/lib/sync/clinic-events";
 
@@ -69,6 +70,7 @@ export async function recordFinancialTransaction(
   }
 
   const { error } = await admin.from("transactions").insert({
+    id: randomUUID(),
     clinic_id: input.clinicId,
     doctor_id: input.doctorId ?? null,
     patient_id: input.patientId ?? null,

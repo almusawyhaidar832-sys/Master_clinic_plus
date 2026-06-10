@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile } from "@/lib/auth/api-session";
+import {
+  getApiCallerProfile,
+  isApiAssistantRole,
+  isApiStaffRole,
+} from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { transferTreatmentCaseDoctor } from "@/lib/services/patient-doctor-transfer";
 import { translateDbError } from "@/lib/db-errors";
@@ -10,17 +14,50 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const profile = await getApiCallerProfile();
+    const profile = await getApiCallerProfile(req);
     if (!profile?.clinic_id) {
-      return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+      return NextResponse.json(
+        { error: "غير مصرح — سجّل الدخول من بوابة المحاسب" },
+        { status: 401 }
+      );
     }
 
-    const role = String(profile.role ?? "").toLowerCase();
-    if (role !== "accountant" && role !== "super_admin") {
-      return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json(
+        {
+          error:
+            "SUPABASE_SERVICE_ROLE_KEY غير مضبوط في .env.local — لا يمكن تنفيذ التحويل",
+        },
+        { status: 500 }
+      );
+    }
+
+    const role = String(profile.role ?? "");
+    if (!isApiStaffRole(role) && !isApiAssistantRole(role)) {
+      return NextResponse.json(
+        { error: `غير مصرح — دورك «${role || "?"}» لا يسمح بتحويل الطبيب` },
+        { status: 403 }
+      );
     }
 
     const { id: patientId } = await context.params;
+
+    const admin = getAdminClient();
+    const { data: patientRow } = await admin
+      .from("patients")
+      .select("clinic_id")
+      .eq("id", patientId)
+      .maybeSingle();
+
+    if (
+      !patientRow ||
+      String(patientRow.clinic_id) !== String(profile.clinic_id)
+    ) {
+      return NextResponse.json(
+        { error: "غير مصرح — المريض لا ينتمي لعيادتك" },
+        { status: 403 }
+      );
+    }
     const body = (await req.json()) as {
       doctor_id?: string;
       treatment_case_id?: string;
@@ -37,9 +74,8 @@ export async function POST(
       return NextResponse.json({ error: "اختر حالة العلاج أولاً" }, { status: 400 });
     }
 
-    const admin = getAdminClient();
     const result = await transferTreatmentCaseDoctor(admin, {
-      clinicId: profile.clinic_id,
+      clinicId: profile.clinic_id as string,
       patientId,
       treatmentCaseId,
       newDoctorId,

@@ -7,6 +7,9 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
+import { createDoctorAppointmentViaApi } from "@/lib/services/doctor-appointments-client";
+import { validatePatientPhone } from "@/lib/phone";
+import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
 import { formatTime, todayISO } from "@/lib/utils";
 import { DoctorAppointmentsPanel } from "@/components/appointments/DoctorAppointmentsPanel";
 import type { Doctor, ScheduleLock } from "@/types";
@@ -48,22 +51,40 @@ export default function DoctorSchedulePage() {
   async function addAppointment(e: React.FormEvent) {
     e.preventDefault();
     if (!doctor) return;
-    const supabase = createClient();
-    const { error } = await supabase.from("appointments").insert({
-      clinic_id: doctor.clinic_id,
-      doctor_id: doctor.id,
-      patient_name_ar: patientName,
-      patient_phone: patientPhone || null,
+
+    if (!patientPhone.trim()) {
+      setMessage("رقم جوال المراجع مطلوب لإرسال تأكيد واتساب");
+      return;
+    }
+    const phoneCheck = validatePatientPhone(patientPhone);
+    if (!phoneCheck.ok) {
+      setMessage(phoneCheck.message);
+      return;
+    }
+
+    const result = await createDoctorAppointmentViaApi({
+      patient_name_ar: patientName.trim(),
+      patient_phone: patientPhone.trim(),
       appointment_date: date,
       start_time: startTime,
       end_time: endTime,
-      status: "scheduled",
     });
-    setMessage(error ? "تعذر الحجز" : "تم إضافة الموعد — يظهر في الجدول فوراً");
-    if (!error) {
-      setPatientName("");
-      setPatientPhone("");
+
+    if (!result.ok) {
+      setMessage(result.error ?? "تعذر الحجز");
+      return;
     }
+
+    if (result.whatsapp?.sent) {
+      setMessage("تم إضافة الموعد وإرسال تأكيد واتساب للمراجع");
+    } else {
+      setMessage(
+        `تم إضافة الموعد — لم تصل رسالة واتساب: ${describeWhatsAppDeliveryError(result.whatsapp?.error)}`
+      );
+    }
+
+    setPatientName("");
+    setPatientPhone("");
   }
 
   async function addLock(e: React.FormEvent) {
@@ -127,6 +148,7 @@ export default function DoctorSchedulePage() {
                 onChange={(e) => setPatientPhone(e.target.value)}
                 dir="ltr"
                 className="text-left"
+                required
               />
               <Input
                 label="التاريخ"

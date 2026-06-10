@@ -74,3 +74,21 @@ export async function fetchOutstandingDebts(
 
   return debt;
 }
+
+/** حصة العيادة من صرفيات الأطباء (حركات doctor_expense_clinic) */
+export async function fetchClinicShareExpenseTotal(
+  supabase: SupabaseClient,
+  clinicId: string
+): Promise<number> {
+  const { data } = await supabase
+    .from("transactions")
+    .select("amount")
+    .eq("clinic_id", clinicId)
+    .eq("type", "doctor_expense_clinic")
+    .lt("amount", 0);
+
+  return (data ?? []).reduce(
+    (s, row) => s + Math.abs(Number(row.amount ?? 0)),
+    0
+  );
+}

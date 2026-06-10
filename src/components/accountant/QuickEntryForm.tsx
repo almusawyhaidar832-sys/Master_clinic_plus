@@ -50,10 +50,13 @@ import {
   fetchCasePrimaryDoctor,
   fetchPatientPrimaryDoctor,
   assignPrimaryDoctorForSession,
+  type PatientPrimaryDoctor,
 } from "@/lib/services/patient-primary-doctor";
 import { TreatmentCasePicker } from "@/components/accountant/TreatmentCasePicker";
 import { PatientSearchField } from "@/components/patients/PatientSearchField";
+import { TransferDoctorPanel } from "@/components/patients/TransferDoctorPanel";
 import type { Doctor, Patient, PatientOperation } from "@/types";
+import { opDebt } from "@/types";
 import {
   ensurePatientPhoneOnRecord,
   getPatientDisplayPhone,
@@ -61,6 +64,13 @@ import {
   validatePatientPhone,
 } from "@/lib/phone";
 import { notifySessionMutation } from "@/lib/sync/mutation-notify";
+import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
+import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { SessionInvoiceModal } from "@/components/invoices/SessionInvoiceModal";
+import {
+  buildSessionInvoiceData,
+  type SessionInvoiceData,
+} from "@/lib/invoices/session-invoice";
 
 /** Common dental procedure suggestions — user can also type freely */
 const DENTAL_SUGGESTIONS = [
@@ -152,6 +162,11 @@ export function QuickEntryForm({
   onSuccess,
   onTreatmentCasesChanged,
 }: QuickEntryFormProps) {
+  const { profile: clinicProfile } = useClinicProfile();
+  const [invoiceData, setInvoiceData] = useState<SessionInvoiceData | null>(null);
+  const [pendingSuccessOp, setPendingSuccessOp] = useState<PatientOperation | null>(
+    null
+  );
   const listId = "dental-suggestions";
 
   // Patient search state
@@ -172,6 +187,11 @@ export function QuickEntryForm({
   // Form fields
   const [doctorId, setDoctorId] = useState(lockDoctorId ?? "");
   const [clinical, setClinical] = useState<SessionClinicalDraft>(EMPTY_CLINICAL_DRAFT);
+  const [clinicalResetKey, setClinicalResetKey] = useState(0);
+  const resetClinical = useCallback(() => {
+    setClinical(EMPTY_CLINICAL_DRAFT);
+    setClinicalResetKey((k) => k + 1);
+  }, []);
   const [operationName, setOperationName] = useState(() => {
     if (defaultForceNewPlan && defaultNewCaseTreatmentName?.trim()) {
       return defaultNewCaseTreatmentName.trim();
@@ -210,6 +230,7 @@ export function QuickEntryForm({
   const [treatmentCases, setTreatmentCases] = useState<PatientTreatmentCase[]>(
     () => prefetchedCases ?? []
   );
+  const [activeClinicId, setActiveClinicId] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(() =>
     defaultForceNewPlan || initialCaseIsComplete
       ? null
@@ -222,6 +243,36 @@ export function QuickEntryForm({
     id: string;
     full_name_ar: string;
   } | null>(null);
+
+  const handleCaseDoctorTransferred = useCallback(
+    async (caseId: string, doc: PatientPrimaryDoctor) => {
+      const activeCase =
+        resolvePersistedCaseId(treatmentCases, selectedCaseId) ?? selectedCaseId;
+      if (activeCase === caseId || selectedCaseId === caseId) {
+        setAssignedDoctor(doc);
+        if (!lockDoctorId) setDoctorId(doc.id);
+      }
+      if (!selectedPatientId) return;
+      const supabase = createClient();
+      const clinic = await getActiveClinicId(supabase);
+      if (!clinic?.clinicId) return;
+      setActiveClinicId(clinic.clinicId);
+      const cases = await fetchPatientTreatmentCases(
+        supabase,
+        selectedPatientId,
+        clinic.clinicId
+      );
+      setTreatmentCases(cases);
+      onTreatmentCasesChanged?.(cases);
+    },
+    [
+      selectedPatientId,
+      selectedCaseId,
+      treatmentCases,
+      lockDoctorId,
+      onTreatmentCasesChanged,
+    ]
+  );
 
   const plan = financialPlan ?? EMPTY_FINANCIAL_PLAN;
   const showCasePicker =
@@ -265,10 +316,10 @@ export function QuickEntryForm({
       setDiscountAmount("");
       setAdditionalDiscountAmount("");
       setMaterialsCost("");
-      setClinical(EMPTY_CLINICAL_DRAFT);
+      resetClinical();
       setMessage(null);
     },
-    []
+    [resetClinical]
   );
 
   const parseAmount = (raw: string) =>
@@ -447,6 +498,7 @@ export function QuickEntryForm({
           if (primaryDoc) setDoctorId(primaryDoc.id);
         }
         const clinic = await getActiveClinicId(supabase);
+        if (clinic?.clinicId) setActiveClinicId(clinic.clinicId);
         const cases = await fetchPatientTreatmentCases(
           supabase,
           selectedPatientId,
@@ -590,8 +642,8 @@ export function QuickEntryForm({
   }, [isFollowUpSession, selectedCaseId]);
 
   useEffect(() => {
-    setClinical(EMPTY_CLINICAL_DRAFT);
-  }, [selectedPatientId, selectedCaseId, forceNewPlan]);
+    resetClinical();
+  }, [selectedPatientId, selectedCaseId, forceNewPlan, resetClinical]);
 
   useEffect(() => {
     if (lockDoctorId || !selectedPatientId) return;
@@ -836,6 +888,17 @@ export function QuickEntryForm({
       }
     }
 
+    let sessionDoctorId = doctorId;
+    const caseIdForDoctor =
+      resolvePersistedCaseId(treatmentCases, selectedCaseId) ??
+      (defaultCaseId && isPersistedTreatmentCaseId(defaultCaseId)
+        ? defaultCaseId
+        : null);
+    if (caseIdForDoctor) {
+      const primaryDoc = await fetchCasePrimaryDoctor(supabase, caseIdForDoctor);
+      if (primaryDoc) sessionDoctorId = primaryDoc.id;
+    }
+
     const insertSession = async (
       sessionKind: "plan" | "payment" | "discount",
       fields: Record<string, unknown>,
@@ -845,7 +908,7 @@ export function QuickEntryForm({
       const safePayload: Record<string, unknown> = {
         clinic_id: activeClinic.clinicId,
         patient_id: patientId,
-        doctor_id: doctorId,
+        doctor_id: sessionDoctorId,
         operation_date: todayISO(),
         session_kind: sessionKind,
         ...fields,
@@ -1105,7 +1168,7 @@ export function QuickEntryForm({
 
     await assignPrimaryDoctorForSession(supabase, {
       patientId: patientId!,
-      doctorId,
+      doctorId: sessionDoctorId,
       caseId:
         linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
           ? linkedCaseId
@@ -1227,6 +1290,7 @@ export function QuickEntryForm({
     }
 
     let whatsappNote = "";
+    let clinicalWarning = "";
     if (operationIdForNotify) {
       const hasClinical =
         clinical.xrayFiles.length > 0 ||
@@ -1237,12 +1301,16 @@ export function QuickEntryForm({
           clinical
         );
         if (!clinicalRes.ok) {
-          setMessage({
-            type: "error",
-            text: `تم حفظ الجلسة لكن: ${clinicalRes.error}`,
-          });
-          return;
+          clinicalWarning = ` — تحذير (مخطط/أشعة): ${clinicalRes.error ?? "تعذر الحفظ"}`;
         }
+      }
+
+      // تأكد من حفظ الملاحظات قبل إرسال واتساب
+      if (notes.trim()) {
+        await supabase
+          .from("patient_operations")
+          .update({ notes: notes.trim() })
+          .eq("id", operationIdForNotify);
       }
 
       try {
@@ -1319,7 +1387,7 @@ export function QuickEntryForm({
     }
     setMessage({
       type: "success",
-      text: successText + whatsappNote + syncWarning,
+      text: successText + whatsappNote + syncWarning + clinicalWarning,
     });
 
     setOperationName("");
@@ -1329,13 +1397,62 @@ export function QuickEntryForm({
     setAdditionalDiscountAmount("");
     setMaterialsCost("");
     setNotes("");
-    setClinical(EMPTY_CLINICAL_DRAFT);
+    resetClinical();
     notifySessionMutation({
       clinicId: activeClinic.clinicId,
       doctorId,
       patientId: patientId ?? undefined,
     });
-    onSuccess?.(op!);
+    if (paid > 0) {
+      notifyClinicProfitRefresh(activeClinic.clinicId);
+    }
+
+    if (paid > 0 && op) {
+      setPendingSuccessOp(op);
+      const finalP =
+        snap.final_price > 0
+          ? snap.final_price
+          : planFinalForWa > 0
+            ? planFinalForWa
+            : Number(op.total_amount) || paid;
+      const totalPaidCase =
+        snap.total_paid > FINANCIAL_EPSILON
+          ? snap.total_paid
+          : messageSnapshot?.caseTotalPaid ?? paid;
+      const remainingBal =
+        messageSnapshot?.remainingBalance ??
+        (finalP > 0 ? Math.max(0, finalP - totalPaidCase) : opDebt(op));
+
+      setInvoiceData(
+        buildSessionInvoiceData({
+          operation: op,
+          clinic: clinicProfile ?? null,
+          patientName:
+            patientQuery.trim() || defaultPatientName?.trim() || "مراجع",
+          patientPhone:
+            patientPhone.trim() || defaultPatientPhone?.trim() || null,
+          doctorName:
+            selectedDoctor?.full_name_ar?.trim() ||
+            lockDoctorName?.trim() ||
+            "—",
+          procedureLabel: waProcedureLabel.trim() || operationLabel,
+          treatmentName:
+            updatedCase?.treatment_name_ar ??
+            pickedCase?.treatment_name_ar ??
+            operationLabel,
+          paidThisSession: paid,
+          caseTotalAmount: finalP,
+          caseTotalPaid: totalPaidCase,
+          remainingBalance: remainingBal,
+          treatmentCompleted: justCompleted,
+          sessionNumber: messageSnapshot?.sessionNumber,
+          totalSessionsInCase: messageSnapshot?.totalSessionsInCase,
+          notes: notes.trim() || null,
+        })
+      );
+    } else {
+      onSuccess?.(op!);
+    }
 
     } catch (err) {
       console.error("[QuickEntryForm] handleSubmit", err);
@@ -1534,15 +1651,31 @@ export function QuickEntryForm({
 
         {formSchema.showAssignedDoctor && assignedDoctor && (
           <div className="sm:col-span-2 rounded-xl border border-slate-border bg-surface/80 px-4 py-3">
-            <p className="text-xs text-slate-muted">الطبيب المعالج لهذا المراجع</p>
+            <p className="text-xs text-slate-muted">الطبيب المعالج لهذه الحالة</p>
             <p className="text-base font-semibold text-slate-text">
               {assignedDoctor.full_name_ar}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-muted">
-              يُتابع تلقائياً على المتابعة والحالات الجديدة — نفس الطبيب من أول جلسة
+              الجلسة الجديدة لهذه الحالة فقط تُحسب للطبيب أعلاه — حالات أخرى
+              للمراجع لها أطباؤها. لتغيير طبيب هذه الحالة استخدم «تحويل طبيب».
             </p>
           </div>
         )}
+
+        {selectedPatientId &&
+          activeClinicId &&
+          !showCasePicker &&
+          treatmentCases.some((c) => isPersistedTreatmentCaseId(c.id)) && (
+            <div className="sm:col-span-2">
+              <TransferDoctorPanel
+                embedded
+                patientId={selectedPatientId}
+                clinicId={activeClinicId}
+                treatmentCases={treatmentCases}
+                onTransferred={handleCaseDoctorTransferred}
+              />
+            </div>
+          )}
 
         {formSchema.showCasePicker ? (
           <TreatmentCasePicker
@@ -1561,7 +1694,7 @@ export function QuickEntryForm({
                 setOperationName,
                 setForceNewPlan,
               });
-              setClinical(EMPTY_CLINICAL_DRAFT);
+              resetClinical();
               setMessage(null);
             }}
             onNewCase={(prefillTreatmentName) => {
@@ -1827,6 +1960,7 @@ export function QuickEntryForm({
           value={clinical}
           onChange={setClinical}
           disabled={loading}
+          chartResetKey={clinicalResetKey}
         />
         )}
 
@@ -1910,6 +2044,19 @@ export function QuickEntryForm({
         </>
         )}
       </form>
+
+      {invoiceData && (
+        <SessionInvoiceModal
+          data={invoiceData}
+          onClose={() => {
+            setInvoiceData(null);
+            if (pendingSuccessOp) {
+              onSuccess?.(pendingSuccessOp);
+              setPendingSuccessOp(null);
+            }
+          }}
+        />
+      )}
     </Card>
   );
 }

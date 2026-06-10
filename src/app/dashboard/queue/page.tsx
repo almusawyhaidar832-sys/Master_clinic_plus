@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { translateDbError } from "@/lib/db-errors";
 import { cn } from "@/lib/utils";
@@ -10,13 +11,21 @@ import { broadcastPatientSentToDoctor, broadcastQueueScreenRecall } from "@/lib/
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { useQueueListRefresh } from "@/hooks/useQueueListRefresh";
 import { announceArabic } from "@/lib/queue/realtime-client";
+import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
 import { TodayAppointmentsPanel } from "@/components/operations/TodayAppointmentsPanel";
+import { resolveAppointmentPaymentUrl } from "@/lib/ledger/open-appointment-payment";
 import {
   Users, Clock, CheckCircle2, UserCheck, Plus, Volume2,
-  RefreshCw, Monitor, Phone, X, ChevronRight, Send, RotateCcw,
+  RefreshCw, Monitor, Phone, X, ChevronRight, Send, RotateCcw, Receipt, LogOut,
 } from "lucide-react";
 
-type QueueStatus = "waiting" | "called" | "in_progress" | "done" | "cancelled";
+type QueueStatus =
+  | "waiting"
+  | "called"
+  | "in_progress"
+  | "ready_for_payment"
+  | "done"
+  | "cancelled";
 
 interface QueueEntry {
   id: string;
@@ -30,6 +39,7 @@ interface QueueEntry {
   called_at: string | null;
   entered_at: string | null;
   sent_to_doctor_at: string | null;
+  appointment_id: string | null;
   doctor: { full_name_ar: string } | null;
   patient: { full_name_ar: string } | null;
 }
@@ -44,6 +54,7 @@ interface QueueStats {
   waiting: number;
   called: number;
   in_progress: number;
+  ready_for_payment: number;
   done: number;
   total: number;
 }
@@ -52,20 +63,19 @@ const STATUS_CONFIG: Record<QueueStatus, { label: string; color: string; bg: str
   waiting:     { label: "انتظار",        color: "text-amber-600",  bg: "bg-amber-50",   border: "border-amber-200" },
   called:      { label: "تم النداء",     color: "text-blue-600",   bg: "bg-blue-50",    border: "border-blue-200"  },
   in_progress: { label: "داخل الكشف",   color: "text-emerald-600",bg: "bg-emerald-50", border: "border-emerald-200"},
+  ready_for_payment: { label: "جاهز للدفع", color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200" },
   done:        { label: "منتهية",        color: "text-slate-500",  bg: "bg-slate-50",   border: "border-slate-200" },
   cancelled:   { label: "ألغى",         color: "text-red-500",    bg: "bg-red-50",     border: "border-red-200"   },
 };
 
 const NEXT_STATUS: Partial<Record<QueueStatus, QueueStatus>> = {
-  waiting:     "called",
-  called:      "in_progress",
-  in_progress: "done",
+  waiting: "called",
+  called: "in_progress",
 };
 
 const NEXT_LABEL: Partial<Record<QueueStatus, string>> = {
-  waiting:     "نداء →",
-  called:      "أدخل الكشف →",
-  in_progress: "أنهِ الكشف ✓",
+  waiting: "نداء →",
+  called: "دخول →",
 };
 
 function AddToQueueModal({
@@ -202,11 +212,19 @@ async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export default function QueuePage() {
+  const router = useRouter();
   const supabase = createClient();
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [queue, setQueue]     = useState<QueueEntry[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [stats, setStats]     = useState<QueueStats>({ waiting: 0, called: 0, in_progress: 0, done: 0, total: 0 });
+  const [stats, setStats]     = useState<QueueStats>({
+    waiting: 0,
+    called: 0,
+    in_progress: 0,
+    ready_for_payment: 0,
+    done: 0,
+    total: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -231,6 +249,7 @@ export default function QueuePage() {
         waiting:     rows.filter((r) => r.status === "waiting").length,
         called:      rows.filter((r) => r.status === "called").length,
         in_progress: rows.filter((r) => r.status === "in_progress").length,
+        ready_for_payment: rows.filter((r) => r.status === "ready_for_payment").length,
         done:        rows.filter((r) => r.status === "done").length,
         total:       rows.length,
       });
@@ -259,14 +278,63 @@ export default function QueuePage() {
       const doctorName = entry.doctor?.full_name_ar ?? "";
       if (data.status === "called") {
         announceArabic(`${name}، يرجى التوجه إلى عيادة ${doctorName}`);
+        if (clinicId) {
+          void broadcastQueueScreenRecall(supabase, clinicId, {
+            name,
+            doctorName,
+            entryId: entry.id,
+          });
+        }
       } else if (data.status === "in_progress") {
         announceArabic(`${name}، تفضل بالدخول إلى عيادة ${doctorName}`);
-      } else if (data.status === "done") {
-        if (clinicId) notifyQueueRefresh({ scope: "clinic", clinicId });
+        if (clinicId) {
+          notifyQueueRefresh({ scope: "clinic", clinicId });
+          notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
+        }
       }
       await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : "تعذر تحديث الدور");
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const openPayment = async (entry: QueueEntry) => {
+    if (!clinicId) return;
+    setUpdating(entry.id);
+    try {
+      const href = await resolveAppointmentPaymentUrl({
+        clinicId,
+        appointmentId: entry.appointment_id,
+        queueEntryId: entry.id,
+        patientId: entry.patient_id,
+        doctorId: entry.doctor_id,
+        patientPhone: entry.patient_phone,
+        patientNameAr: entry.patient_name,
+      });
+      router.push(href);
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "تعذر فتح إدخال الجلسة");
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const finishExamination = async (entry: QueueEntry) => {
+    setUpdating(entry.id);
+    try {
+      await apiJson(`/api/queue/${entry.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: "ready_for_payment" }),
+      });
+      if (clinicId) {
+        notifyQueueRefresh({ scope: "clinic", clinicId });
+        notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
+      }
+      await fetchQueue();
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "تعذر إنهاء الكشف");
     } finally {
       setUpdating(null);
     }
@@ -398,13 +466,15 @@ export default function QueuePage() {
   }
 
   return (
+    <>
+      <QueueRealtimeBridge portal="dashboard" />
     <div className="mx-auto max-w-5xl space-y-6">
 
       {pageError && (
         <Alert variant="error">{pageError}</Alert>
       )}
 
-      <TodayAppointmentsPanel title="حجوزات اليوم — دفع ودخول" compact onApprovedToQueue={fetchQueue} />
+      <TodayAppointmentsPanel title="حجوزات اليوم" compact onApprovedToQueue={fetchQueue} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -440,10 +510,11 @@ export default function QueuePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <StatCard label="في الانتظار"   value={stats.waiting}     icon={Clock}        color="bg-amber-100 text-amber-600"   />
         <StatCard label="تم النداء"      value={stats.called}      icon={Volume2}      color="bg-blue-100 text-blue-600"     />
         <StatCard label="داخل الكشف"    value={stats.in_progress} icon={UserCheck}    color="bg-emerald-100 text-emerald-600"/>
+        <StatCard label="جاهز للدفع"    value={stats.ready_for_payment} icon={Receipt} color="bg-violet-100 text-violet-600"/>
         <StatCard label="منتهية اليوم"  value={stats.done}        icon={CheckCircle2} color="bg-slate-100 text-slate-600"   />
       </div>
 
@@ -490,6 +561,7 @@ export default function QueuePage() {
             const patientDisplay = entry.patient?.full_name_ar ?? entry.patient_name ?? "مراجع بدون اسم";
             const nextAction = NEXT_STATUS[entry.status];
             const nextLabel  = NEXT_LABEL[entry.status];
+            const canCheckout = entry.status === "ready_for_payment";
             const canSend = entry.status === "waiting" && !entry.sent_to_doctor_at;
             const canRecall =
               entry.status === "called" ||
@@ -568,15 +640,41 @@ export default function QueuePage() {
                       <span className="hidden sm:inline">إرسال للطبيب</span>
                     </button>
                   )}
+                  {entry.status === "in_progress" && (
+                    <button
+                      onClick={() => finishExamination(entry)}
+                      disabled={updating === entry.id}
+                      className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                      title="إنهاء الكشف — جاهز للدفع"
+                    >
+                      {updating === entry.id
+                        ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        : <LogOut className="h-3.5 w-3.5" />
+                      }
+                      <span className="hidden sm:inline">إنهاء الكشف</span>
+                    </button>
+                  )}
+                  {canCheckout && (
+                    <button
+                      onClick={() => openPayment(entry)}
+                      disabled={updating === entry.id}
+                      className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                    >
+                      {updating === entry.id ? (
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Receipt className="h-3.5 w-3.5" />
+                      )}
+                      <span className="hidden sm:inline">دفع</span>
+                    </button>
+                  )}
                   {nextAction && (
                     <button
                       onClick={() => advanceStatus(entry)}
                       disabled={updating === entry.id}
                       className={cn(
                         "flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold transition-colors",
-                        entry.status === "in_progress"
-                          ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                          : entry.status === "called"
+                        entry.status === "called"
                           ? "bg-blue-500 text-white hover:bg-blue-600"
                           : "bg-amber-500 text-white hover:bg-amber-600",
                         updating === entry.id && "opacity-60"
@@ -632,5 +730,6 @@ export default function QueuePage() {
         />
       )}
     </div>
+    </>
   );
 }

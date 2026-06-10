@@ -10,6 +10,7 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
 import type { PatientOperation } from "@/types";
 import { notifyRefundMutation } from "@/lib/sync/mutation-notify";
+import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
 
 interface SessionRefundModalProps {
   operation: PatientOperation;
@@ -85,6 +86,7 @@ export function SessionRefundModal({
         doctorId: operation.doctor_id,
         patientId: operation.patient_id,
       });
+      notifyClinicProfitRefresh(operation.clinic_id);
       onSaved({ amount: Number(data.refund?.amount ?? amount) });
       onClose();
     } catch {

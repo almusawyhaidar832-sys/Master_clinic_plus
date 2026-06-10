@@ -4,6 +4,7 @@ export type AuditEntityType =
   | "patient_operation"
   | "session_refund"
   | "patient"
+  | "appointment"
   | "operation_xray_image"
   | "operation_tooth_records"
   | "expense";

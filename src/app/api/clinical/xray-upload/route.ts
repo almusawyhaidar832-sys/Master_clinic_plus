@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile } from "@/lib/auth/api-session";
+import { getApiCallerProfile, isApiStaffRole } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 
 const BUCKET = "clinical-xrays";
@@ -8,13 +8,13 @@ const MAX_BYTES = 10 * 1024 * 1024;
 /** POST multipart — upload X-ray image for a session (operation) */
 export async function POST(req: NextRequest) {
   try {
-    const profile = await getApiCallerProfile();
+    const profile = await getApiCallerProfile(req);
     if (!profile?.clinic_id) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
     }
 
     const role = String(profile.role ?? "").toLowerCase();
-    if (role !== "accountant" && role !== "super_admin" && role !== "doctor") {
+    if (!isApiStaffRole(role) && role !== "doctor") {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 

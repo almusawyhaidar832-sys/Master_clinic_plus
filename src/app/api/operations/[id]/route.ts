@@ -84,7 +84,17 @@ export async function PATCH(
 
     const beforePaid = Number(before.paid_amount ?? 0);
     const afterPaid = Number(after.paid_amount ?? 0);
+    const beforeTotal = Number(before.total_amount ?? 0);
+    const afterTotal = Number(after.total_amount ?? 0);
     const paidDelta = Math.round((afterPaid - beforePaid) * 100) / 100;
+    const totalDelta = Math.round((afterTotal - beforeTotal) * 100) / 100;
+
+    const auditNote =
+      typeof body.audit_note === "string"
+        ? body.audit_note
+        : totalDelta !== 0
+          ? `تعديل فاتورة: الإجمالي ${beforeTotal} ← ${afterTotal}`
+          : undefined;
 
     await writeAuditLog(admin, {
       clinicId: profile.clinic_id,
@@ -93,10 +103,11 @@ export async function PATCH(
       action: "update",
       changedBy: profile.id,
       actorName: profile.full_name ?? null,
-      financialAmount: paidDelta !== 0 ? paidDelta : null,
+      financialAmount:
+        paidDelta !== 0 ? paidDelta : totalDelta !== 0 ? totalDelta : null,
       before: before as Record<string, unknown>,
       after: after as Record<string, unknown>,
-      note: typeof body.audit_note === "string" ? body.audit_note : undefined,
+      note: auditNote,
     });
 
     void runSessionSavedAutomation(id, {

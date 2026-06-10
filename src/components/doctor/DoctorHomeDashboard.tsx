@@ -60,7 +60,7 @@ export function DoctorHomeDashboard() {
   }, [load]);
 
   useClinicSync({
-    topics: ["sessions", "refunds", "profit", "notifications", "all"],
+    topics: ["sessions", "refunds", "notifications"],
     clinicId,
     doctorId,
     onRefresh: load,

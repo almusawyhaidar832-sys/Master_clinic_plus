@@ -29,9 +29,11 @@ import {
   sumCaseGroupsFinancials,
 } from "@/lib/services/patient-case-groups";
 import { PatientSessionsByCase } from "@/components/patients/PatientSessionsByCase";
+import { PatientMedicalArchive } from "@/components/patients/PatientMedicalArchive";
 import { fetchPatientClinicalRecords } from "@/lib/clinical/fetch-patient-clinical";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
-import type { Patient, PatientOperation } from "@/types";
+import type { MedicalLog, Patient, PatientOperation } from "@/types";
+import { cn } from "@/lib/utils";
 import { getPatientDisplayPhone } from "@/lib/phone";
 import { TransferDoctorPanel } from "@/components/patients/TransferDoctorPanel";
 import type { PatientPrimaryDoctor } from "@/lib/services/patient-primary-doctor";
@@ -40,7 +42,11 @@ import { ArrowRight, Plus, X } from "lucide-react";
 export default function PatientProfilePage() {
   const params = useParams();
   const id = params.id as string;
-  const { profile } = useClinicProfile();
+  const { profile, displayName } = useClinicProfile();
+  const [activeTab, setActiveTab] = useState<"file" | "archive">("file");
+  const [medicalLogs, setMedicalLogs] = useState<
+    (MedicalLog & { doctor?: { full_name_ar: string } })[]
+  >([]);
   const [patient, setPatient] = useState<Patient | null>(null);
   const [operations, setOperations] = useState<PatientOperation[]>([]);
   const [clinicalByOp, setClinicalByOp] = useState<ClinicalByOperationId>({});
@@ -166,6 +172,12 @@ export default function PatientProfilePage() {
       }
       setAccessDenied(false);
       setPatient(pRes as Patient);
+      const logsRes = await supabase
+        .from("medical_logs")
+        .select("*, doctor:doctors!doctor_id(full_name_ar)")
+        .eq("patient_id", id)
+        .order("log_date", { ascending: false });
+      setMedicalLogs((logsRes.data as typeof medicalLogs) ?? []);
       await Promise.all([loadOperations(), loadTreatmentCases()]);
     }
     if (id) load();
@@ -227,6 +239,45 @@ export default function PatientProfilePage() {
         </Button>
       </Link>
 
+      <div className="flex gap-2 border-b border-slate-border pb-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab("file")}
+          className={cn(
+            "rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
+            activeTab === "file"
+              ? "bg-primary text-white"
+              : "text-slate-muted hover:bg-surface"
+          )}
+        >
+          الملف المالي
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("archive")}
+          className={cn(
+            "rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
+            activeTab === "archive"
+              ? "bg-primary text-white"
+              : "text-slate-muted hover:bg-surface"
+          )}
+        >
+          الأرشيف الطبي
+        </button>
+      </div>
+
+      {activeTab === "archive" ? (
+        <PatientMedicalArchive
+          patient={patient}
+          operations={operations}
+          treatmentCases={treatmentCases}
+          clinicalByOp={clinicalByOp}
+          medicalLogs={medicalLogs}
+          clinic={profile}
+          clinicName={displayName}
+        />
+      ) : (
+        <>
       <Card className="overflow-hidden">
         <div className="border-b border-slate-border bg-surface/50 px-4 py-3">
           <ClinicBrandingHeader profile={profile} size="sm" className="border-0 pb-0" />
@@ -452,6 +503,8 @@ export default function PatientProfilePage() {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

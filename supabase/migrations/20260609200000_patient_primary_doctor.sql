@@ -40,9 +40,11 @@ WHERE p.id = sub.patient_id
 
 ALTER TABLE public.patient_doctor_transfers ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS patient_doctor_transfers_select ON public.patient_doctor_transfers;
 CREATE POLICY patient_doctor_transfers_select ON public.patient_doctor_transfers
   FOR SELECT USING (public.tenant_can_access(clinic_id));
 
+DROP POLICY IF EXISTS patient_doctor_transfers_insert ON public.patient_doctor_transfers;
 CREATE POLICY patient_doctor_transfers_insert ON public.patient_doctor_transfers
   FOR INSERT
   WITH CHECK (

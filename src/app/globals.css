@@ -112,7 +112,8 @@ html.dark {
 
   #patient-statement-print,
   #master-clinic-report-print,
-  #doctor-payout-statement-print {
+  #doctor-payout-statement-print,
+  #session-payment-invoice-print {
     border: none !important;
     box-shadow: none !important;
   }

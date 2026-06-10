@@ -77,10 +77,16 @@ export async function transferTreatmentCaseDoctor(
       error: "حالة العلاج غير موجودة",
     };
   }
-  if (caseRow.patient_id !== patientId || caseRow.clinic_id !== clinicId) {
+  if (caseRow.patient_id !== patientId) {
     return {
       primaryDoctor: null as unknown as PatientPrimaryDoctor,
-      error: "غير مصرح",
+      error: "هذه الحالة لا تخص هذا المريض",
+    };
+  }
+  if (String(caseRow.clinic_id) !== String(clinicId)) {
+    return {
+      primaryDoctor: null as unknown as PatientPrimaryDoctor,
+      error: "غير مصرح — الحالة من عيادة أخرى",
     };
   }
 
@@ -139,7 +145,7 @@ export async function transferTreatmentCaseDoctor(
     };
   }
 
-  await supabase.from("patient_doctor_transfers").insert({
+  const transferRow = {
     clinic_id: clinicId,
     patient_id: patientId,
     treatment_case_id: treatmentCaseId,
@@ -149,7 +155,35 @@ export async function transferTreatmentCaseDoctor(
     notes:
       input.notes?.trim() ||
       `تحويل حالة: ${String(caseRow.treatment_name_ar ?? "علاج")}`,
-  });
+  };
+
+  let { error: insertErr } = await supabase
+    .from("patient_doctor_transfers")
+    .insert(transferRow);
+
+  if (
+    insertErr &&
+    (insertErr.message.includes("treatment_case_id") ||
+      insertErr.message.includes("patient_doctor_transfers") ||
+      insertErr.message.includes("schema cache"))
+  ) {
+    const { treatment_case_id: _tc, ...legacyRow } = transferRow;
+    void _tc;
+    const retry = await supabase
+      .from("patient_doctor_transfers")
+      .insert(legacyRow);
+    insertErr = retry.error;
+  }
+
+  if (insertErr) {
+    return {
+      primaryDoctor: {
+        id: newDoctorId,
+        full_name_ar: String(newDoctor.full_name_ar ?? "الطبيب"),
+      },
+      error: `تم التحويل لكن لم يُسجَّل في السجل: ${insertErr.message}`,
+    };
+  }
 
   return {
     primaryDoctor: {
@@ -164,7 +198,7 @@ export async function fetchPatientTransferHistory(
   patientId: string,
   limit = 10
 ): Promise<DoctorTransferRecord[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("patient_doctor_transfers")
     .select(
       "id, treatment_case_id, from_doctor_id, to_doctor_id, created_at, from_doctor:doctors!from_doctor_id(full_name_ar), to_doctor:doctors!to_doctor_id(full_name_ar), treatment_case:patient_treatment_cases!treatment_case_id(treatment_name_ar, case_price)"
@@ -172,6 +206,17 @@ export async function fetchPatientTransferHistory(
     .eq("patient_id", patientId)
     .order("created_at", { ascending: false })
     .limit(limit);
+
+  if (error) {
+    if (
+      error.message.includes("patient_doctor_transfers") ||
+      error.message.includes("schema cache")
+    ) {
+      return [];
+    }
+    console.warn("[fetchPatientTransferHistory]", error.message);
+    return [];
+  }
 
   return (data ?? []).map((row) => {
     const fromDoc = row.from_doctor as

@@ -16,13 +16,18 @@ import { QueueAlertOverlay } from "@/components/queue/QueueAlertOverlay";
 
 interface QueueRealtimeBridgeProps {
   portal: "dashboard" | "doctor";
+  /** polling كل 3 ث — فقط على صفحات الطابور؛ Realtime يبقى يعمل للتنبيهات */
+  enablePolling?: boolean;
 }
 
 /**
- * Queue alerts: polling (always works) + Supabase Realtime (when enabled).
- * Mount in dashboard + doctor layouts so alerts work on every page.
+ * Queue alerts: Realtime + (optional) polling fallback.
+ * Mount on queue pages with enablePolling; avoid global layout mount.
  */
-export function QueueRealtimeBridge({ portal }: QueueRealtimeBridgeProps) {
+export function QueueRealtimeBridge({
+  portal,
+  enablePolling = true,
+}: QueueRealtimeBridgeProps) {
   const { profile } = useClinicProfile();
   const clinicId = profile?.id ?? null;
   const [doctorId, setDoctorId] = useState<string | null>(null);
@@ -54,8 +59,8 @@ export function QueueRealtimeBridge({ portal }: QueueRealtimeBridgeProps) {
 
   useDoctorQueueRealtime(activeDoctorId);
   useAccountantQueueRealtime(activeClinicId);
-  useDoctorQueuePolling(activeDoctorId);
-  useAccountantQueuePolling(activeClinicId);
+  useDoctorQueuePolling(activeDoctorId, enablePolling);
+  useAccountantQueuePolling(activeClinicId, enablePolling);
 
   return <QueueAlertOverlay />;
 }

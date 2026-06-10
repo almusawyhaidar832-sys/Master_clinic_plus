@@ -9,12 +9,15 @@ export interface SessionClinicalRecordProps {
   value: SessionClinicalDraft;
   onChange: (draft: SessionClinicalDraft) => void;
   disabled?: boolean;
+  /** يُمرَّر لمخطط الأسنان لمسح الاختيار عند إعادة تعيين المسودة */
+  chartResetKey?: number;
 }
 
 export function SessionClinicalRecord({
   value,
   onChange,
   disabled,
+  chartResetKey,
 }: SessionClinicalRecordProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -96,6 +99,7 @@ export function SessionClinicalRecord({
         value={value.teeth}
         onChange={(teeth) => onChange({ ...value, teeth })}
         disabled={disabled}
+        resetKey={chartResetKey}
       />
     </div>
   );

@@ -1,5 +1,6 @@
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { notifyAppointmentMutation } from "@/lib/sync/mutation-notify";
+import type { WhatsAppDeliveryResult } from "@/lib/whatsapp/delivery-errors";
 import type { Appointment } from "@/types";
 
 function syncAppointment(appointment?: Appointment) {
@@ -22,7 +23,12 @@ export async function createAccountantAppointmentViaApi(input: {
   start_time: string;
   end_time: string;
   notes?: string;
-}): Promise<{ ok: boolean; appointment?: Appointment; error?: string }> {
+}): Promise<{
+  ok: boolean;
+  appointment?: Appointment;
+  whatsapp?: WhatsAppDeliveryResult;
+  error?: string;
+}> {
   const res = await fetch("/api/accountant/appointments", {
     method: "POST",
     credentials: "include",
@@ -32,10 +38,17 @@ export async function createAccountantAppointmentViaApi(input: {
     },
     body: JSON.stringify(input),
   });
-  const json = await parseJson<{ appointment?: Appointment }>(res);
+  const json = await parseJson<{
+    appointment?: Appointment;
+    whatsapp?: WhatsAppDeliveryResult;
+  }>(res);
   if (!res.ok) return { ok: false, error: json.error ?? "تعذر إضافة الموعد" };
   syncAppointment(json.appointment);
-  return { ok: true, appointment: json.appointment };
+  return {
+    ok: true,
+    appointment: json.appointment,
+    whatsapp: json.whatsapp,
+  };
 }
 
 export async function updateAccountantAppointmentViaApi(

@@ -28,7 +28,7 @@ export function useQueueListRefresh(
     });
 
     const unsubSync = subscribeClinicSync(run, {
-      topics: ["queue", "all"],
+      topics: ["queue"],
       clinicId: scope === "clinic" ? id : undefined,
       doctorId: scope === "doctor" ? id : undefined,
     });

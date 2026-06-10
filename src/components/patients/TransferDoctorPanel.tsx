@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import {
   fetchCasesWithDoctors,
   fetchPatientTransferHistory,
@@ -16,6 +16,7 @@ import {
 import type { PatientPrimaryDoctor } from "@/lib/services/patient-primary-doctor";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
 import { createClient } from "@/lib/supabase/client";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { translateDbError } from "@/lib/db-errors";
 import type { Doctor } from "@/types";
 
@@ -24,6 +25,8 @@ interface TransferDoctorPanelProps {
   clinicId: string;
   treatmentCases: PatientTreatmentCase[];
   onTransferred?: (caseId: string, doctor: PatientPrimaryDoctor) => void;
+  /** داخل نموذج إدخال الجلسة */
+  embedded?: boolean;
 }
 
 export function TransferDoctorPanel({
@@ -31,6 +34,7 @@ export function TransferDoctorPanel({
   clinicId,
   treatmentCases,
   onTransferred,
+  embedded = false,
 }: TransferDoctorPanelProps) {
   const [casesWithDoctors, setCasesWithDoctors] = useState<CaseWithDoctor[]>(
     []
@@ -88,18 +92,36 @@ export function TransferDoctorPanel({
     try {
       const res = await fetch(`/api/patients/${patientId}/transfer-doctor`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...authPortalHeaders("accountant"),
+        },
         body: JSON.stringify({
           treatment_case_id: selectedCaseId,
           doctor_id: newDoctorId,
         }),
       });
-      const data = (await res.json()) as {
+      let data: {
         error?: string;
         warning?: string;
         primaryDoctor?: PatientPrimaryDoctor;
         treatmentCaseId?: string;
-      };
+      } = {};
+
+      try {
+        data = (await res.json()) as typeof data;
+      } catch {
+        if (!res.ok) {
+          setError(
+            res.status === 401
+              ? "انتهت الجلسة — سجّل الدخول من بوابة المحاسب ثم أعد المحاولة"
+              : `تعذر قراءة رد السيرفر (HTTP ${res.status})`
+          );
+          setLoading(false);
+          return;
+        }
+      }
 
       if (!res.ok || data.error) {
         setError(translateDbError(data.error ?? "تعذر التحويل"));
@@ -110,7 +132,7 @@ export function TransferDoctorPanel({
       if (data.primaryDoctor && data.treatmentCaseId) {
         onTransferred?.(data.treatmentCaseId, data.primaryDoctor);
         setSuccess(
-          `تم تحويل «${selectedCase?.caseLabel ?? "الحالة"}» إلى ${formatDoctorDisplayName(data.primaryDoctor.full_name_ar)} — الجلسات الجديدة لهذه الحالة فقط`
+          `تم تحويل «${selectedCase?.caseLabel ?? "الحالة"}» إلى ${formatDoctorDisplayName(data.primaryDoctor.full_name_ar)} — الجلسات والأرباح الجديدة لهذا الطبيب فقط؛ عمل الطبيب السابق يبقى محسوباً له`
         );
       }
       if (data.warning) {
@@ -120,8 +142,13 @@ export function TransferDoctorPanel({
       setOpen(false);
       setNewDoctorId("");
       await load();
-    } catch {
-      setError("تعذر الاتصال بالسيرفر");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      setError(
+        msg.includes("Failed to fetch") || msg.includes("NetworkError")
+          ? "تعذر الاتصال بالسيرفر — تأكد أن npm run dev يعمل وأنك مسجّل دخول كمحاسب"
+          : "تعذر الاتصال بالسيرفر"
+      );
     }
     setLoading(false);
   }
@@ -139,21 +166,41 @@ export function TransferDoctorPanel({
     }));
 
   if (casesWithDoctors.length === 0) {
-    return null;
+    const hasAnyCase = treatmentCases.length > 0;
+    if (!hasAnyCase) return null;
+    return (
+      <div className="rounded-xl border border-amber-200/80 bg-amber-50/40 px-4 py-3 text-xs text-amber-900">
+        <p className="font-semibold">تحويل طبيب</p>
+        <p className="mt-1 text-amber-800/90">
+          لا توجد حالات علاج مربوطة في النظام بعد — سجّل جلسة أولى (حالة
+          جديدة) ثم يظهر التحويل. إن كانت هناك جلسات قديمة، شغّل سكربت ربط
+          الحالات في Supabase.
+        </p>
+      </div>
+    );
   }
 
   return (
-    <div className="rounded-xl border border-slate-border bg-surface/40 px-4 py-3">
+    <div
+      className={cn(
+        "rounded-xl border px-4 py-3",
+        embedded
+          ? "border-primary/25 bg-primary/5"
+          : "border-slate-border bg-surface/40"
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-slate-muted">
-            تحويل طبيب — لكل حالة على حدة
+            تحويل طبيب — حالة واحدة فقط (لا تُحوَّل كل حالات المراجع)
           </p>
           <p className="text-sm text-slate-text">
-            {casesWithDoctors.length} حالة علاج — اختر الحالة ثم الطبيب الجديد
+            {casesWithDoctors.length} حالة — اختر <strong>الحالة</strong> ثم
+            الطبيب الجديد
           </p>
           <p className="mt-0.5 text-[11px] text-slate-muted">
-            الجلسات السابقة تبقى لطبيبها؛ التحويل يبدأ من الجلسة التالية لهذه الحالة فقط
+            مثال: مراجع عنده «تقويم» و«حشوات» — تحويل «تقويم» فقط يغيّر طبيب
+            التقويم؛ «حشوات» تبقى لطبيبها. الجلسات السابقة لا تُعدَّل.
           </p>
         </div>
         <Button

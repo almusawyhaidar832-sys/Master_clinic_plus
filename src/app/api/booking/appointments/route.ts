@@ -6,7 +6,7 @@ const bodySchema = z.object({
   clinic: z.string().min(1, "رمز العيادة مطلوب"),
   doctorId: z.string().uuid("معرّف الطبيب غير صالح"),
   patientName: z.string().min(2, "اسم المريض مطلوب"),
-  patientPhone: z.string().optional().nullable(),
+  patientPhone: z.string().min(10, "رقم الجوال مطلوب"),
   appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ غير صالح"),
   startTime: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "وقت البداية غير صالح"),
   endTime: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "وقت النهاية غير صالح"),

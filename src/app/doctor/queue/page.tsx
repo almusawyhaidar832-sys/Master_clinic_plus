@@ -13,11 +13,18 @@ import { broadcastAdmitRequest } from "@/lib/queue/broadcast";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { useQueueListRefresh } from "@/hooks/useQueueListRefresh";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
 import {
   Clock, UserCheck, RefreshCw, LogIn, CheckCircle2, Users, RotateCcw,
 } from "lucide-react";
 
-type QueueStatus = "waiting" | "called" | "in_progress" | "done" | "cancelled";
+type QueueStatus =
+  | "waiting"
+  | "called"
+  | "in_progress"
+  | "ready_for_payment"
+  | "done"
+  | "cancelled";
 
 interface QueueEntry {
   id: string;
@@ -36,6 +43,7 @@ const STATUS_CONFIG: Record<QueueStatus, { label: string; color: string; bg: str
   waiting:     { label: "في الانتظار",  color: "text-amber-600",  bg: "bg-amber-50"   },
   called:      { label: "يُرجى الإدخال", color: "text-blue-600",   bg: "bg-blue-50"    },
   in_progress: { label: "داخل الكشف",    color: "text-emerald-600",bg: "bg-emerald-50" },
+  ready_for_payment: { label: "جاهز للدفع", color: "text-violet-600", bg: "bg-violet-50" },
   done:        { label: "منتهية",        color: "text-slate-500",  bg: "bg-slate-50"   },
   cancelled:   { label: "ألغى",         color: "text-red-500",    bg: "bg-red-50"     },
 };
@@ -89,7 +97,11 @@ export default function DoctorQueuePage() {
       }>("/api/queue");
 
       setDoctorId(data.doctorId);
-      setQueue((data.queue ?? []).filter((e) => e.status !== "done"));
+      setQueue(
+        (data.queue ?? []).filter(
+          (e) => e.status !== "done" && e.status !== "ready_for_payment"
+        )
+      );
     } catch (err) {
       setPageError(err instanceof Error ? err.message : "تعذر تحميل الطابور");
     } finally {
@@ -174,13 +186,10 @@ export default function DoctorQueuePage() {
     try {
       await apiJson(`/api/queue/${entryId}`, {
         method: "PATCH",
-        body: JSON.stringify({ action: "advance" }),
+        body: JSON.stringify({ action: "ready_for_payment" }),
       });
       if (clinicId) {
         notifyQueueRefresh({ scope: "clinic", clinicId });
-      }
-      if (doctorId) {
-        notifyQueueRefresh({ scope: "doctor", doctorId });
       }
       await fetchQueue();
     } catch (err) {
@@ -202,6 +211,8 @@ export default function DoctorQueuePage() {
   const active  = queue.filter((e) => e.status === "called" || e.status === "in_progress");
 
   return (
+    <>
+      <QueueRealtimeBridge portal="doctor" />
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-bold text-slate-800">قائمة انتظاري</h2>
@@ -325,7 +336,7 @@ export default function DoctorQueuePage() {
                           ? <RefreshCw className="h-4 w-4 animate-spin" />
                           : <CheckCircle2 className="h-4 w-4" />
                         }
-                        أنهِ الكشف
+                        إنهاء الجلسة
                       </button>
                     </>
                   )}
@@ -336,5 +347,6 @@ export default function DoctorQueuePage() {
         </div>
       )}
     </div>
+    </>
   );
 }

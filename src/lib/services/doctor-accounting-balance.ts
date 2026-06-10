@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
+import {
+  fetchDoctorWalletStats,
+  fetchDoctorWalletStatsBatch,
+} from "@/lib/services/doctor-wallet";
 
 export interface DoctorAccountingBalance {
   doctorId: string;
@@ -26,19 +29,20 @@ export async function fetchDoctorAccountingBalances(
   const map = new Map<string, DoctorAccountingBalance>();
   if (!doctorIds.length) return map;
 
-  await Promise.all(
-    doctorIds.map(async (doctorId) => {
-      const stats = await fetchDoctorWalletStats(supabase, doctorId);
-      map.set(doctorId, {
-        doctorId,
-        netBalance: stats.availableBalance,
-        isDebtor: stats.isDebtor,
-        totalEarnings: stats.totalEarnings,
-        expenseDeductions: stats.expenseDeductions,
-        payrollDeductions: stats.payrollDeductions,
-      });
-    })
-  );
+  const statsMap = await fetchDoctorWalletStatsBatch(supabase, doctorIds);
+
+  for (const doctorId of doctorIds) {
+    const stats = statsMap.get(doctorId);
+    if (!stats) continue;
+    map.set(doctorId, {
+      doctorId,
+      netBalance: stats.availableBalance,
+      isDebtor: stats.isDebtor,
+      totalEarnings: stats.totalEarnings,
+      expenseDeductions: stats.expenseDeductions,
+      payrollDeductions: stats.payrollDeductions,
+    });
+  }
 
   return map;
 }

@@ -15,13 +15,14 @@ function todayIsoDate() {
 const QUEUE_TO_APPOINTMENT: Partial<Record<QueueStatus, AppointmentStatus>> = {
   waiting: "waiting",
   called: "waiting",
-  in_progress: "in_clinic",
+  in_progress: "in_examination",
+  ready_for_payment: "ready_for_payment",
   done: "completed",
   cancelled: "cancelled",
 };
 
-/** بعد الموافقة على طلب الباركود — waiting + إدراج في غرفة الانتظار */
-export async function enqueueApprovedAppointment(
+/** إدراج موعد في غرفة الانتظار (باركود / حجز يدوي / دخول) */
+export async function enqueueAppointmentToQueue(
   admin: SupabaseClient,
   appointment: {
     id: string;
@@ -30,6 +31,7 @@ export async function enqueueApprovedAppointment(
     patient_name_ar: string | null;
     patient_phone: string | null;
     patient_id?: string | null;
+    source?: "walk_in" | "appointment" | "online";
   }
 ): Promise<string> {
   const today = todayIsoDate();
@@ -51,11 +53,29 @@ export async function enqueueApprovedAppointment(
     patient_phone: appointment.patient_phone,
     patient_id: appointment.patient_id ?? null,
     appointment_id: appointment.id,
-    source: "online",
+    source: appointment.source ?? "appointment",
     send_to_doctor: true,
   });
 
   return queueId;
+}
+
+/** بعد الموافقة على طلب الباركود — waiting + إدراج في غرفة الانتظار */
+export async function enqueueApprovedAppointment(
+  admin: SupabaseClient,
+  appointment: {
+    id: string;
+    clinic_id: string;
+    doctor_id: string;
+    patient_name_ar: string | null;
+    patient_phone: string | null;
+    patient_id?: string | null;
+  }
+): Promise<string> {
+  return enqueueAppointmentToQueue(admin, {
+    ...appointment,
+    source: "online",
+  });
 }
 
 /** مزامنة حالة الموعد عند تغيّر دور الانتظار */
@@ -102,6 +122,17 @@ export async function syncAppointmentFromQueueStatus(
       return;
     }
 
+    if (
+      queueStatus === "ready_for_payment" &&
+      (error.message.includes("ready_for_payment") ||
+        error.message.includes("invalid input value"))
+    ) {
+      console.error(
+        "[appointment-queue-sync] ready_for_payment missing — run 16-queue-checkout-flow.sql"
+      );
+      return;
+    }
+
     console.error("[appointment-queue-sync] appointment update failed:", error.message);
   }
 }
@@ -131,6 +162,8 @@ export async function syncQueueFromAppointmentStatus(
 
   if (appointmentStatus === "in_clinic" || appointmentStatus === "in_examination") {
     nextQueueStatus = "in_progress";
+  } else if (appointmentStatus === "ready_for_payment") {
+    nextQueueStatus = "ready_for_payment";
   } else if (appointmentStatus === "completed") {
     nextQueueStatus = "done";
   } else if (appointmentStatus === "cancelled") {

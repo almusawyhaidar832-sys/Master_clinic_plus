@@ -3,7 +3,7 @@ import { fetchClosedPayrollMonths } from "@/lib/services/salary-payroll";
 import {
   computeOutstandingDebtFromOperations,
 } from "@/lib/services/patient-treatment-cases";
-import { fetchPatientFinancialPlan } from "@/lib/services/patient-financial-plan";
+import { fetchPatientFinancialPlansBatch } from "@/lib/services/patient-financial-plan";
 import { localDateISO, localPeriodUtcBounds } from "@/lib/utils";
 import { opDebt, type PatientOperation } from "@/types";
 
@@ -193,10 +193,13 @@ async function sumVisitorOutstandingDebt(
     needsPlan.push(pid);
   }
 
-  for (const pid of needsPlan) {
-    const plan = await fetchPatientFinancialPlan(supabase, pid);
-    if (plan.remaining_balance > 0) {
-      total += plan.remaining_balance;
+  if (needsPlan.length) {
+    const plans = await fetchPatientFinancialPlansBatch(supabase, needsPlan);
+    for (const pid of needsPlan) {
+      const remaining = plans.get(pid)?.remaining_balance ?? 0;
+      if (remaining > 0) {
+        total += remaining;
+      }
     }
   }
 
@@ -257,9 +260,8 @@ export async function fetchPaidSalariesForDisplay(
   from: string,
   to: string
 ): Promise<number> {
-  return fetchPaidSalariesInPeriod(supabase, clinicId, from, to, {
-    excludeClosedPayrollMonths: true,
-  });
+  const bundle = await fetchPaidSalariesBundle(supabase, clinicId, from, to);
+  return bundle.display;
 }
 
 /** أشهر ضمن الفترة (YYYY-MM) */
@@ -324,9 +326,68 @@ export async function fetchPaidSalariesForProfitDeduction(
   from: string,
   to: string
 ): Promise<number> {
-  return fetchPaidSalariesInPeriod(supabase, clinicId, from, to, {
-    excludeClosedPayrollMonths: false,
-  });
+  const bundle = await fetchPaidSalariesBundle(supabase, clinicId, from, to);
+  return bundle.profitDeduction;
+}
+
+export interface PaidSalariesBundle {
+  display: number;
+  profitDeduction: number;
+}
+
+/** استعلام salary_slips واحد — عرض اللوحة + خصم الربح */
+export async function fetchPaidSalariesBundle(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<PaidSalariesBundle> {
+  const [slipsRes, closedMonths] = await Promise.all([
+    supabase
+      .from("salary_slips")
+      .select("net_payout, paid_at, month_year")
+      .eq("clinic_id", clinicId)
+      .eq("status", "paid"),
+    fetchClosedPayrollMonths(supabase, clinicId),
+  ]);
+
+  const data = slipsRes.data ?? [];
+  if (slipsRes.error || !data.length) {
+    return { display: 0, profitDeduction: 0 };
+  }
+
+  return {
+    display: sumPaidSlipsInPeriod(data, from, to, closedMonths, true),
+    profitDeduction: sumPaidSlipsInPeriod(data, from, to, closedMonths, false),
+  };
+}
+
+export interface ExecutiveDashboardSupplement {
+  salariesDisplay: number;
+  salariesPaidLegacy: number;
+  payrollAccruals: number;
+  visitorDebt: { debt: number; visitorCount: number };
+}
+
+/** بيانات اللوحة التنفيذية الإضافية — 3 مسارات بدل 5 */
+export async function fetchExecutiveDashboardSupplement(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<ExecutiveDashboardSupplement> {
+  const [salaries, payrollAccruals, visitorDebt] = await Promise.all([
+    fetchPaidSalariesBundle(supabase, clinicId, from, to),
+    fetchPayrollAccrualsForProfitDeduction(supabase, clinicId, from, to),
+    fetchPeriodVisitorDebt(supabase, clinicId, from, to),
+  ]);
+
+  return {
+    salariesDisplay: salaries.display,
+    salariesPaidLegacy: salaries.profitDeduction,
+    payrollAccruals,
+    visitorDebt,
+  };
 }
 
 export async function fetchPaidSalariesInPeriod(

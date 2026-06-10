@@ -1,7 +1,11 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { sendAppointmentUpdate } from "@/lib/services/appointment-updates";
+import { validatePatientPhone } from "@/lib/phone";
+import {
+  sendAppointmentUpdate,
+  type SendAppointmentUpdateResult,
+} from "@/lib/services/appointment-updates";
 import {
   approvePendingAppointment,
   rejectPendingAppointment,
@@ -98,10 +102,15 @@ export async function createAssistantAppointment(
     end_time: string;
     notes?: string | null;
   }
-): Promise<Appointment> {
+): Promise<{
+  appointment: Appointment;
+  whatsapp: SendAppointmentUpdateResult;
+}> {
   const name = input.patient_name_ar.trim();
   if (!name) throw new Error("اسم المريض مطلوب");
   if (!input.patient_phone?.trim()) throw new Error("هاتف المريض مطلوب");
+  const phoneCheck = validatePatientPhone(input.patient_phone);
+  if (!phoneCheck.ok) throw new Error(phoneCheck.message);
 
   await assertNoOverlap(
     admin,
@@ -118,7 +127,7 @@ export async function createAssistantAppointment(
       doctor_id: ctx.doctorId,
       assistant_id: ctx.assistantId,
       patient_name_ar: name,
-      patient_phone: input.patient_phone.trim(),
+      patient_phone: phoneCheck.normalized,
       appointment_date: input.appointment_date,
       start_time: input.start_time,
       end_time: input.end_time,
@@ -131,7 +140,7 @@ export async function createAssistantAppointment(
   if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء الموعد");
 
   const doctorName = await fetchDoctorName(admin, ctx.doctorId);
-  await sendAppointmentUpdate(admin, {
+  const whatsapp = await sendAppointmentUpdate(admin, {
     clinicId: ctx.clinicId,
     appointmentId: data.id as string,
     patientPhone: data.patient_phone as string,
@@ -143,7 +152,7 @@ export async function createAssistantAppointment(
     action: "created",
   });
 
-  return data as Appointment;
+  return { appointment: data as Appointment, whatsapp };
 }
 
 export async function updateAssistantAppointment(

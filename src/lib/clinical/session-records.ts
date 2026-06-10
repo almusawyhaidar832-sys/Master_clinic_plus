@@ -1,15 +1,21 @@
 import type { SessionClinicalDraft, ToothRecordInput } from "@/lib/clinical/constants";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
+import { teethPayloadFromDraft } from "@/lib/clinical/dental-chart-logic";
 
 export async function saveSessionClinicalRecords(
   operationId: string,
   draft: SessionClinicalDraft
 ): Promise<{ ok: boolean; error?: string }> {
-  const teeth = Object.values(draft.teeth);
+  const teeth = teethPayloadFromDraft(draft.teeth);
+  const portalHeaders = authPortalHeaders("accountant");
 
   if (teeth.length > 0) {
     const res = await fetch("/api/clinical/session-records", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...portalHeaders,
+      },
       credentials: "same-origin",
       body: JSON.stringify({ operation_id: operationId, teeth }),
     });
@@ -33,6 +39,7 @@ export async function saveSessionClinicalRecords(
     const res = await fetch("/api/clinical/xray-upload", {
       method: "POST",
       credentials: "same-origin",
+      headers: portalHeaders,
       body: form,
     });
     const json = await res.json().catch(() => ({}));
@@ -50,5 +57,5 @@ export async function saveSessionClinicalRecords(
 export function teethFromDraft(
   draft: SessionClinicalDraft
 ): ToothRecordInput[] {
-  return Object.values(draft.teeth);
+  return teethPayloadFromDraft(draft.teeth);
 }

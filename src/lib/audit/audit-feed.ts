@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuditLogRow } from "@/lib/audit/write-audit-log";
+import { buildAuditChangeLines } from "@/lib/audit/audit-diff";
 
 export interface AuditFeedFilters {
   action?: string | null;
@@ -19,6 +20,7 @@ export interface AuditFeedItem {
   financialAmount: number | null;
   note: string | null;
   summary: string;
+  changes: string[];
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -32,6 +34,7 @@ const ENTITY_LABELS: Record<string, string> = {
   patient_operation: "جلسة مريض",
   session_refund: "مرتجع مالي",
   patient: "ملف مريض",
+  appointment: "موعد",
   expense: "مصروف",
 };
 
@@ -39,6 +42,18 @@ function buildSummary(row: AuditLogRow): string {
   const entity = ENTITY_LABELS[row.entity_type] ?? row.entity_type;
   const action = ACTION_LABELS[row.action] ?? row.action;
   const note = row.note?.trim();
+
+  if (row.entity_type === "appointment") {
+    const data = (row.before_data ?? row.after_data) as Record<string, unknown> | null;
+    const patient = data?.patient_name_ar as string | undefined;
+    const date = data?.appointment_date as string | undefined;
+    const time = data?.start_time as string | undefined;
+    const parts = [patient, date, time].filter(Boolean);
+    const detail = parts.length ? ` — ${parts.join(" · ")}` : "";
+    if (note) return `${action} موعد${detail}: ${note}`;
+    return `${action} موعد${detail}`;
+  }
+
   if (note) return `${action} — ${entity}: ${note}`;
   return `${action} — ${entity}`;
 }
@@ -86,6 +101,11 @@ export async function fetchAuditFeed(
         row.financial_amount != null ? Number(row.financial_amount) : null,
       note: row.note,
       summary: buildSummary(row),
+      changes: buildAuditChangeLines(
+        row.entity_type,
+        row.before_data,
+        row.after_data
+      ),
     };
   });
 }
