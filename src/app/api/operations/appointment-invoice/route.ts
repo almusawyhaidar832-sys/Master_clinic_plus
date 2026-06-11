@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     const totalRaw = form.get("total_amount") as string | null;
     const paidRaw = form.get("paid_amount") as string | null;
     const materialsRaw = form.get("materials_cost") as string | null;
+    const labNotes = form.get("lab_notes") as string | null;
     const notes = form.get("notes") as string | null;
     const file = form.get("file") as File | null;
 
@@ -110,6 +111,7 @@ export async function POST(req: NextRequest) {
         totalAmount,
         paidAmount,
         materialsCost,
+        labNotes,
         notes,
         xrayStoragePath,
         xrayFileName,

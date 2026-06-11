@@ -1,24 +1,61 @@
 /** Fixed dropdown options — no free-text for doctor agreements */
 
+const pct = (n: number) => ({ value: String(n), label: `${n}%` }) as const;
+
 export const DOCTOR_PERCENTAGE_OPTIONS = [
-  { value: "10", label: "10%" },
-  { value: "20", label: "20%" },
-  { value: "30", label: "30%" },
-  { value: "40", label: "40%" },
-  { value: "50", label: "50%" },
-  { value: "60", label: "60%" },
-  { value: "70", label: "70%" },
-  { value: "80", label: "80%" },
+  pct(10),
+  pct(20),
+  pct(30),
+  pct(40),
+  pct(50),
+  pct(60),
+  pct(70),
+  pct(80),
+  pct(90),
+  pct(100),
 ] as const;
 
 export const MATERIALS_SHARE_OPTIONS = [
   { value: "0", label: "0% — على العيادة بالكامل" },
-  { value: "10", label: "10%" },
-  { value: "20", label: "20%" },
-  { value: "30", label: "30%" },
-  { value: "40", label: "40%" },
+  pct(10),
+  pct(20),
+  pct(30),
+  pct(40),
   { value: "50", label: "50% — تقسيم مناصفة" },
+  pct(60),
+  pct(70),
+  pct(80),
+  pct(90),
+  { value: "100", label: "100% — على الطبيب بالكامل" },
 ] as const;
+
+export const VALID_DOCTOR_PERCENTAGE_VALUES = DOCTOR_PERCENTAGE_OPTIONS.map(
+  (o) => o.value
+);
+
+export const VALID_MATERIALS_SHARE_VALUES = MATERIALS_SHARE_OPTIONS.map(
+  (o) => o.value
+);
+
+export function normalizeDoctorPercentage(
+  value: unknown,
+  fallback = "50"
+): string {
+  const s = String(value ?? "").trim();
+  return (VALID_DOCTOR_PERCENTAGE_VALUES as readonly string[]).includes(s)
+    ? s
+    : fallback;
+}
+
+export function normalizeMaterialsShare(
+  value: unknown,
+  fallback = "0"
+): string {
+  const s = String(value ?? "").trim();
+  return (VALID_MATERIALS_SHARE_VALUES as readonly string[]).includes(s)
+    ? s
+    : fallback;
+}
 
 export const DOCTOR_PAYMENT_TYPE_OPTIONS = [
   { value: "percentage", label: "نسبة من الجلسات" },

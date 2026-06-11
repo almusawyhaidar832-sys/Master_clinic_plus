@@ -8,9 +8,22 @@ export type DoctorPercentage =
   | "50"
   | "60"
   | "70"
-  | "80";
+  | "80"
+  | "90"
+  | "100";
 
-export type MaterialsCostShare = "0" | "10" | "20" | "30" | "40" | "50";
+export type MaterialsCostShare =
+  | "0"
+  | "10"
+  | "20"
+  | "30"
+  | "40"
+  | "50"
+  | "60"
+  | "70"
+  | "80"
+  | "90"
+  | "100";
 
 /** الاتفاق المالي مع الطبيب — مخزّن في DB كـ payment_type */
 export type DoctorPaymentType = "percentage" | "salary";
@@ -156,6 +169,7 @@ export interface PatientOperation {
   /** May be a generated/computed column — use opDebt() helper instead of accessing directly */
   remaining_debt?: number;
   materials_cost?: number;
+  lab_notes?: string | null;
   doctor_share_amount?: number;
   clinic_share_amount?: number;
   notes?: string | null;

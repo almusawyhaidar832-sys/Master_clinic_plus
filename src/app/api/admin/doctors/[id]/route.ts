@@ -11,6 +11,10 @@ import {
 } from "@/lib/admin/profile-write";
 import { getAuthAdmin } from "@/lib/supabase/auth-helpers";
 import {
+  normalizeDoctorPercentage,
+  normalizeMaterialsShare,
+} from "@/lib/constants";
+import {
   normalizeDoctorPaymentType,
   parseSalaryAmount,
 } from "@/lib/services/doctor-payment";
@@ -128,8 +132,16 @@ export async function PATCH(
     const doctorUpdate: Record<string, unknown> = {};
     if (fullName) doctorUpdate.full_name_ar = fullName;
     if (body.specialty_ar !== undefined) doctorUpdate.specialty_ar = specialty;
-    if (percentage) doctorUpdate.percentage = String(percentage);
-    if (materialsShare) doctorUpdate.materials_share = String(materialsShare);
+    if (percentage !== undefined && percentage !== null && percentage !== "") {
+      doctorUpdate.percentage = normalizeDoctorPercentage(percentage);
+    }
+    if (
+      materialsShare !== undefined &&
+      materialsShare !== null &&
+      materialsShare !== ""
+    ) {
+      doctorUpdate.materials_share = normalizeMaterialsShare(materialsShare);
+    }
     if (paymentType) {
       doctorUpdate.payment_type = paymentType;
       if (paymentType === "salary") {

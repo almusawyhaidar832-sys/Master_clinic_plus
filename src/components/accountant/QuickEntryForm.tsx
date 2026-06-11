@@ -203,6 +203,7 @@ export function QuickEntryForm({
   const [discountAmount, setDiscountAmount] = useState("");
   const [additionalDiscountAmount, setAdditionalDiscountAmount] = useState("");
   const [materialsCost, setMaterialsCost] = useState("");
+  const [labNotes, setLabNotes] = useState("");
   const [notes, setNotes] = useState("");
   const [isReviewStatement, setIsReviewStatement] = useState(false);
   const [reviewFeeEnabled, setReviewFeeEnabled] = useState(false);
@@ -316,6 +317,7 @@ export function QuickEntryForm({
       setDiscountAmount("");
       setAdditionalDiscountAmount("");
       setMaterialsCost("");
+      setLabNotes("");
       resetClinical();
       setMessage(null);
     },
@@ -638,6 +640,7 @@ export function QuickEntryForm({
       setDiscountAmount("");
       setAdditionalDiscountAmount("");
       setMaterialsCost("");
+      setLabNotes("");
     }
   }, [isFollowUpSession, selectedCaseId]);
 
@@ -874,6 +877,7 @@ export function QuickEntryForm({
 
     const optionalCols: Record<string, unknown> = {};
     if (notes.trim()) optionalCols.notes = notes.trim();
+    if (labNotes.trim()) optionalCols.lab_notes = labNotes.trim();
     if (isReviewStatement) {
       optionalCols.is_review_statement = true;
       if (reviewFeeLive > 0) optionalCols.review_fee_amount = reviewFeeLive;
@@ -972,6 +976,7 @@ export function QuickEntryForm({
           msg.includes("Could not find")
         ) {
           if (msg.includes("notes")) delete optionalCols.notes;
+          if (msg.includes("lab_notes")) delete optionalCols.lab_notes;
           err = result.error;
           continue;
         }
@@ -1079,10 +1084,12 @@ export function QuickEntryForm({
         }
       }
     } else if (!error && entryMode === "payment" && paid > 0) {
-      const res = await insertSession("payment", {
+      const paymentCols: Record<string, unknown> = {
         total_amount: 0,
         paid_amount: paid,
-      });
+      };
+      if (materials > 0) paymentCols.materials_cost = materials;
+      const res = await insertSession("payment", paymentCols);
       op = res.op;
       error = res.error;
     }
@@ -1396,6 +1403,7 @@ export function QuickEntryForm({
     setDiscountAmount("");
     setAdditionalDiscountAmount("");
     setMaterialsCost("");
+    setLabNotes("");
     setNotes("");
     resetClinical();
     notifySessionMutation({
@@ -1448,6 +1456,8 @@ export function QuickEntryForm({
           sessionNumber: messageSnapshot?.sessionNumber,
           totalSessionsInCase: messageSnapshot?.totalSessionsInCase,
           notes: notes.trim() || null,
+          labNotes: labNotes.trim() || null,
+          materialsCost: materials > 0 ? materials : undefined,
         })
       );
     } else {
@@ -1856,12 +1866,26 @@ export function QuickEntryForm({
         )}
 
         {formSchema.showMaterials && (
+          <div className="sm:col-span-2 space-y-3">
             <CurrencyInput
-              label="تكلفة المواد / المعمل"
+              label="تكلفة عمل المختبر"
               value={materialsCost}
               onChange={setMaterialsCost}
               placeholder="0"
             />
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-text">
+                ملاحظات المختبر
+              </label>
+              <textarea
+                className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm text-slate-text outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+                rows={3}
+                value={labNotes}
+                onChange={(e) => setLabNotes(e.target.value)}
+                placeholder="تعليمات تفصيلية لعمل المختبر..."
+              />
+            </div>
+          </div>
         )}
 
         {formSchema.showPaidAmount && (

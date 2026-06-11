@@ -11,6 +11,7 @@ export interface AppointmentInvoiceInput {
   totalAmount: number;
   paidAmount: number;
   materialsCost?: number;
+  labNotes?: string | null;
   notes?: string | null;
   xrayStoragePath?: string | null;
   xrayFileName?: string | null;
@@ -82,6 +83,7 @@ export async function createAppointmentInvoice(
     total_amount: totalAmount,
     paid_amount: paidAmount,
     materials_cost: materialsCost,
+    lab_notes: input.labNotes?.trim() || null,
     notes: input.notes?.trim() || null,
     created_by: input.createdBy,
   };

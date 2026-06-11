@@ -26,6 +26,8 @@ export interface SessionInvoiceData {
   sessionNumber?: number;
   totalSessionsInCase?: number;
   notes?: string | null;
+  labNotes?: string | null;
+  materialsCost?: number;
 }
 
 export function buildInvoiceNumber(operationId: string): string {
@@ -51,6 +53,8 @@ export function buildSessionInvoiceData(input: {
   sessionNumber?: number;
   totalSessionsInCase?: number;
   notes?: string | null;
+  labNotes?: string | null;
+  materialsCost?: number;
 }): SessionInvoiceData {
   return {
     operationId: input.operation.id,
@@ -73,6 +77,10 @@ export function buildSessionInvoiceData(input: {
     sessionNumber: input.sessionNumber,
     totalSessionsInCase: input.totalSessionsInCase,
     notes: input.notes ?? input.operation.notes,
+    labNotes: input.labNotes ?? input.operation.lab_notes ?? null,
+    materialsCost:
+      (input.materialsCost ??
+        Number(input.operation.materials_cost ?? 0)) || undefined,
   };
 }
 

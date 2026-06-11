@@ -151,6 +151,17 @@ function SessionRow({
           {op.notes && (
             <p className="mt-1 text-xs text-slate-muted italic">{op.notes}</p>
           )}
+          {Number(op.materials_cost ?? 0) > 0 && (
+            <p className="mt-1 text-xs text-slate-muted tabular-nums">
+              تكلفة المختبر: {formatCurrency(Number(op.materials_cost))}
+            </p>
+          )}
+          {op.lab_notes?.trim() && (
+            <p className="mt-1 text-xs text-amber-800/90">
+              <span className="font-medium">ملاحظات المختبر: </span>
+              {op.lab_notes}
+            </p>
+          )}
         </div>
         {sessionPaid > 0 && (
           <div className="shrink-0 text-left tabular-nums" dir="ltr">

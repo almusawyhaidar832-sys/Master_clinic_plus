@@ -4,6 +4,10 @@ import { usernameToAuthEmail } from "@/lib/auth/credentials";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAuthAdmin } from "@/lib/supabase/auth-helpers";
 import {
+  normalizeDoctorPercentage,
+  normalizeMaterialsShare,
+} from "@/lib/constants";
+import {
   normalizeDoctorPaymentType,
   parseSalaryAmount,
 } from "@/lib/services/doctor-payment";
@@ -263,12 +267,8 @@ export async function POST(req: NextRequest) {
 
     // ── Step 10: create doctors record if needed ───────────────────────────
     if (role === "doctor") {
-      const validPercentages = ["10","20","30","40","50","60","70","80"];
-      const validMaterials   = ["0","10","20","30","40","50"];
-      const docPercentage    = validPercentages.includes(String(percentage))
-        ? String(percentage) : "50";
-      const docMaterials     = validMaterials.includes(String(materials_share))
-        ? String(materials_share) : "0";
+      const docPercentage = normalizeDoctorPercentage(percentage);
+      const docMaterials = normalizeMaterialsShare(materials_share);
       const docPaymentType = normalizeDoctorPaymentType(payment_type);
       const docSalaryAmount =
         docPaymentType === "salary" ? parseSalaryAmount(salary_amount) : 0;

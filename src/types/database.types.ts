@@ -58,8 +58,8 @@ export interface Database {
           full_name_ar: string;
           specialty_ar: string | null;
           phone: string | null;
-          percentage: "10" | "20" | "30" | "40" | "50" | "60" | "70" | "80";
-          materials_share: "0" | "10" | "20" | "30" | "40" | "50";
+          percentage: "10" | "20" | "30" | "40" | "50" | "60" | "70" | "80" | "90" | "100";
+          materials_share: "0" | "10" | "20" | "30" | "40" | "50" | "60" | "70" | "80" | "90" | "100";
           is_active: boolean;
           created_at: string;
           updated_at: string;
@@ -246,6 +246,7 @@ export interface Database {
           paid_amount: number;
           remaining_debt: number;
           materials_cost: number;
+          lab_notes: string | null;
           doctor_share_amount: number;
           clinic_share_amount: number;
           review_fee_amount: number;

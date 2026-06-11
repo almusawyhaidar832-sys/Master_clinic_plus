@@ -50,6 +50,7 @@ export function PaymentInvoiceModal({
   const [totalAmount, setTotalAmount] = useState("");
   const [paidAmount, setPaidAmount] = useState("");
   const [materialsCost, setMaterialsCost] = useState("0");
+  const [labNotes, setLabNotes] = useState("");
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
@@ -127,6 +128,7 @@ export function PaymentInvoiceModal({
       form.append("total_amount", String(total));
       form.append("paid_amount", String(paid));
       form.append("materials_cost", String(Number(materialsCost) || 0));
+      if (labNotes.trim()) form.append("lab_notes", labNotes.trim());
       if (notes.trim()) form.append("notes", notes.trim());
       if (file) form.append("file", file);
 
@@ -166,6 +168,8 @@ export function PaymentInvoiceModal({
           paid_amount: paid,
           remaining_debt: Math.max(0, total - paid),
           notes: notes.trim() || null,
+          lab_notes: labNotes.trim() || null,
+          materials_cost: Number(materialsCost) || 0,
         } as PatientOperation;
 
         setInvoiceData({
@@ -185,6 +189,8 @@ export function PaymentInvoiceModal({
               total > FINANCIAL_EPSILON &&
               paid >= total - FINANCIAL_EPSILON,
             notes: notes.trim() || null,
+            labNotes: labNotes.trim() || null,
+            materialsCost: Number(materialsCost) || 0,
           }),
           invoiceId: (json.invoiceId as string) ?? null,
         });
@@ -309,19 +315,33 @@ export function PaymentInvoiceModal({
             </div>
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">
-              تكلفة المواد (اختياري — للتقسيم الدقيق)
-            </label>
-            <input
-              type="number"
-              min={0}
-              step="any"
-              value={materialsCost}
-              onChange={(e) => setMaterialsCost(e.target.value)}
-              dir="ltr"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
-            />
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">
+                تكلفة عمل المختبر (اختياري — للتقسيم الدقيق)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={materialsCost}
+                onChange={(e) => setMaterialsCost(e.target.value)}
+                dir="ltr"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">
+                ملاحظات المختبر
+              </label>
+              <textarea
+                rows={3}
+                value={labNotes}
+                onChange={(e) => setLabNotes(e.target.value)}
+                placeholder="تعليمات تفصيلية لعمل المختبر..."
+                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+              />
+            </div>
           </div>
 
           {splitPreview && (

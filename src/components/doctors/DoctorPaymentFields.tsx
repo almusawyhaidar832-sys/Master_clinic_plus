@@ -82,7 +82,7 @@ export function DoctorPaymentFields({
             required
           />
           <Select
-            label="نسبة تحمل الطبيب لتكلفة المواد"
+            label="نسبة تحمل الطبيب لتكلفة المختبر"
             name="materials_share"
             value={materialsShare}
             onChange={(e) => onMaterialsShareChange(e.target.value)}
