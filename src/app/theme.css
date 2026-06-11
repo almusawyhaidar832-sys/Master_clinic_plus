@@ -1,0 +1,143 @@
+/* Master Clinic Plus — Design Tokens (load before Tailwind) */
+:root {
+  --color-primary-50:  #eff6fc;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #4d9ae8;
+  --color-primary-500: #0056b3;
+  --color-primary-600: #004494;
+  --color-primary-700: #003875;
+  --color-primary-800: #002952;
+  --color-primary-900: #001a36;
+
+  --color-primary-50-rgb:  239 246 252;
+  --color-primary-100-rgb: 219 234 254;
+  --color-primary-200-rgb: 191 219 254;
+  --color-primary-300-rgb: 147 197 253;
+  --color-primary-400-rgb: 77 154 232;
+  --color-primary-500-rgb: 0 86 179;
+  --color-primary-600-rgb: 0 68 148;
+  --color-primary-700-rgb: 0 56 117;
+  --color-primary-800-rgb: 0 41 82;
+  --color-primary-900-rgb: 0 26 54;
+
+  --color-text:          #334155;
+  --color-muted:         #64748b;
+  --color-border:        #e2e8f0;
+  --color-border-subtle: #f1f5f9;
+  --color-surface:       #f4f7fa;
+  --color-surface-card:  #ffffff;
+  --color-surface-elevated: #ffffff;
+
+  --color-debt-bg:       #fef2f2;
+  --color-debt-text:     #b91c1c;
+  --color-debt-border:   #fecaca;
+
+  --color-success-bg:    #ecfdf5;
+  --color-success-text:  #047857;
+  --color-success-border:#a7f3d0;
+
+  --color-warning-bg:    #fffbeb;
+  --color-warning-text:  #b45309;
+  --color-warning-border:#fde68a;
+
+  --color-ring:          rgb(0 86 179 / 0.22);
+  --color-ring-strong:   rgb(0 86 179 / 0.35);
+
+  --shadow-card:    0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-elevated: 0 4px 6px -1px rgb(15 23 42 / 0.06), 0 10px 24px -4px rgb(0 86 179 / 0.08);
+  --shadow-premium: 0 8px 30px -6px rgb(0 86 179 / 0.14), 0 2px 8px -2px rgb(15 23 42 / 0.06);
+
+  /* Section accents — harmonized, not rainbow */
+  --accent-history-bg:     #eef4fb;
+  --accent-history-text:   #003875;
+  --accent-history-border: #bfdbfe;
+
+  --accent-clinic-bg:      #e8f2fc;
+  --accent-clinic-text:    #004494;
+  --accent-clinic-border:  #93c5fd;
+
+  --accent-salary-bg:      #f0f7ff;
+  --accent-salary-text:    #0056b3;
+  --accent-salary-border:  #dbeafe;
+
+  --accent-general-bg:     #f4f7fa;
+  --accent-general-text:   #334155;
+  --accent-general-border: #cbd5e1;
+
+  --accent-form-bg:        #f8fafc;
+  --accent-form-border:    #e2e8f0;
+  --accent-form-label:     #475569;
+}
+
+html.dark {
+  --color-primary-50:  #0c1929;
+  --color-primary-100: #0f2744;
+  --color-primary-200: #1e3a5f;
+  --color-primary-300: #2563eb;
+  --color-primary-400: #3b82f6;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #93c5fd;
+  --color-primary-900: #dbeafe;
+
+  --color-primary-50-rgb:  12 25 41;
+  --color-primary-100-rgb: 15 39 68;
+  --color-primary-200-rgb: 30 58 95;
+  --color-primary-300-rgb: 37 99 235;
+  --color-primary-400-rgb: 59 130 246;
+  --color-primary-500-rgb: 59 130 246;
+  --color-primary-600-rgb: 37 99 235;
+  --color-primary-700-rgb: 29 78 216;
+  --color-primary-800-rgb: 147 197 253;
+  --color-primary-900-rgb: 219 234 254;
+
+  --color-text:          #e2e8f0;
+  --color-muted:         #94a3b8;
+  --color-border:        #334155;
+  --color-border-subtle: #1e293b;
+  --color-surface:       #0f172a;
+  --color-surface-card:  #1e293b;
+  --color-surface-elevated: #273549;
+
+  --color-debt-bg:       #450a0a;
+  --color-debt-text:     #fca5a5;
+  --color-debt-border:   #7f1d1d;
+
+  --color-success-bg:    #052e16;
+  --color-success-text:  #6ee7b7;
+  --color-success-border:#065f46;
+
+  --color-warning-bg:    #451a03;
+  --color-warning-text:  #fcd34d;
+  --color-warning-border:#92400e;
+
+  --color-ring:          rgb(59 130 246 / 0.35);
+  --color-ring-strong:   rgb(59 130 246 / 0.5);
+
+  --shadow-card:    0 1px 3px rgb(0 0 0 / 0.35);
+  --shadow-elevated: 0 4px 16px rgb(0 0 0 / 0.4);
+  --shadow-premium: 0 8px 32px rgb(0 0 0 / 0.45);
+
+  --accent-history-bg:     #0f2744;
+  --accent-history-text:   #93c5fd;
+  --accent-history-border: #1e3a5f;
+
+  --accent-clinic-bg:      #0c1929;
+  --accent-clinic-text:    #bfdbfe;
+  --accent-clinic-border:  #1e3a5f;
+
+  --accent-salary-bg:      #0f2744;
+  --accent-salary-text:    #dbeafe;
+  --accent-salary-border:  #2563eb;
+
+  --accent-general-bg:     #1e293b;
+  --accent-general-text:   #cbd5e1;
+  --accent-general-border: #475569;
+
+  --accent-form-bg:        #1e293b;
+  --accent-form-border:    #334155;
+  --accent-form-label:     #94a3b8;
+}

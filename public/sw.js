@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v2";
+const CACHE_NAME = "mcp-app-v3-clinical-blue";
 const SHELL_URLS = ["/login", "/doctor", "/admin"];
 
 function shouldSkipCache(url) {

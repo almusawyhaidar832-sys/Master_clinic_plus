@@ -1,21 +1,46 @@
 "use client";
 
-import { announceArabicWithBeep, speakArabic } from "@/lib/queue/web-speech";
+import {
+  announceArabicWithBeep,
+  announcePatientCallImmediate,
+  announcePatientCallWithBeep,
+  speakArabic,
+} from "@/lib/queue/web-speech";
 
-/** Arabic voice announcement via Web Speech API */
-export function announceArabic(text: string) {
+/** Arabic voice announcement — متصفح فوري (بدون انتظار السحابة) */
+export function announcePatientCall(
+  patientName: string,
+  doctorName: string,
+  variant: "called" | "enter" = "called"
+) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  void announceArabicWithBeep(text);
+  void announcePatientCallWithBeep(patientName, doctorName, variant, {
+    useCloud: false,
+  });
 }
 
-/** Same as announceArabic but waits (use after user click) */
-export async function announceArabicAsync(text: string) {
-  await announceArabicWithBeep(text);
+/** إعادة النداء — فوري بدون طابور */
+export function replayPatientCall(
+  patientName: string,
+  doctorName: string,
+  variant: "called" | "enter" = "called"
+) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  void announcePatientCallImmediate(patientName, doctorName, variant);
 }
 
 /** Speak without beep */
 export function speakArabicOnly(text: string) {
-  void speakArabic(text);
+  void speakArabic(text, { useCloud: false });
+}
+
+export function announceArabic(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  void announceArabicWithBeep(text, { useCloud: false });
+}
+
+export async function announceArabicAsync(text: string) {
+  await announceArabicWithBeep(text, { useCloud: false });
 }
 
 /** Request browser notification permission (call once on user gesture if possible) */
@@ -66,4 +91,9 @@ export function doctorQueueListChannelName(doctorId: string) {
 
 export function clinicQueueListChannelName(clinicId: string) {
   return `queue-clinic-list-${clinicId}`;
+}
+
+/** قناة شاشة انتظار المرضى (التلفاز) — منفصلة عن تنبيهات المحاسب */
+export function clinicQueueScreenChannelName(clinicId: string) {
+  return `queue-screen-${clinicId}`;
 }

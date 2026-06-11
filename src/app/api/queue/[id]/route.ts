@@ -8,12 +8,19 @@ import {
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   getDoctorByProfileId,
+  notifyAccountantsReadyForBilling,
   notifyAccountantsReadyForPayment,
   updateQueueStatus,
   type QueueStatus,
 } from "@/lib/queue/server";
-import { markQueueReadyForPayment } from "@/lib/services/session-checkout";
+import { buildLedgerPayUrl } from "@/lib/ledger/navigation";
+import {
+  completeSessionForAccounting,
+  markQueueReadyForBilling,
+} from "@/lib/services/session-checkout";
 import { syncAppointmentFromQueueStatus } from "@/lib/services/appointment-queue-sync";
+import { ensureQueueEntryPatient } from "@/lib/services/ensure-queue-entry-patient";
+import { ensureVisitSessionOperation } from "@/lib/services/visit-session";
 
 const NEXT_STATUS: Partial<Record<QueueStatus, QueueStatus>> = {
   waiting: "called",
@@ -50,7 +57,7 @@ export async function PATCH(
 
     const role = String(profile.role ?? "").toLowerCase();
     const body = (await req.json()) as {
-      action?: "advance" | "cancel" | "enter" | "ready_for_payment";
+      action?: "advance" | "cancel" | "enter" | "ready_for_billing" | "ready_for_payment";
     };
 
     const admin = getAdminClient();
@@ -72,36 +79,113 @@ export async function PATCH(
         return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
       }
       await updateQueueAndSync(admin, id, "in_progress", { doctorId: doctor.id });
-      return NextResponse.json({ success: true, status: "in_progress" });
+
+      let visitSession: Awaited<ReturnType<typeof ensureVisitSessionOperation>> | null =
+        null;
+
+      try {
+        const patientCtx = await ensureQueueEntryPatient(
+          admin,
+          id,
+          profile.clinic_id as string
+        );
+        visitSession = await ensureVisitSessionOperation(admin, {
+          clinicId: patientCtx.clinicId,
+          doctorId: doctor.id,
+          patientId: patientCtx.patientId,
+          queueEntryId: id,
+          createdBy: profile.id,
+          allowWithoutQueue: true,
+        });
+      } catch (err) {
+        console.error("[api/queue] visit session on enter failed:", err);
+      }
+
+      return NextResponse.json({
+        success: true,
+        status: "in_progress",
+        visit_session: visitSession,
+      });
     }
 
-    if (body.action === "ready_for_payment") {
+    if (body.action === "ready_for_billing") {
       const isDoctor = isApiDoctorRole(role);
       if (!isDoctor && !staffRolesOk(role)) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
 
+      const opts = isDoctor
+        ? await (async () => {
+            const doctor = await getDoctorByProfileId(profile.id);
+            if (!doctor) {
+              throw new Error("حساب الطبيب غير مربوط");
+            }
+            return { doctorId: doctor.id };
+          })()
+        : { clinicId: profile.clinic_id as string };
+
+      const status = await markQueueReadyForBilling(admin, id, opts);
+      await notifyAccountantsReadyForBilling(id).catch((err) => {
+        console.error("[api/queue] billing notify failed:", err);
+      });
+
+      const { data: entryRow } = await admin
+        .from("patient_queue")
+        .select(
+          "patient_id, appointment_id, doctor_id, patient_name, patient_phone"
+        )
+        .eq("id", id)
+        .maybeSingle();
+
+      const ledgerUrl = buildLedgerPayUrl({
+        queueEntryId: id,
+        patientId: entryRow?.patient_id as string | null,
+        appointmentId: entryRow?.appointment_id as string | null,
+        doctorId: entryRow?.doctor_id as string | null,
+        patientName: entryRow?.patient_name as string | null,
+        patientPhone: entryRow?.patient_phone as string | null,
+      });
+
+      return NextResponse.json({ success: true, status, ledger_url: ledgerUrl });
+    }
+
+    if (body.action === "ready_for_payment") {
+      const isDoctor = isApiDoctorRole(role);
       if (isDoctor) {
-        const doctor = await getDoctorByProfileId(profile.id);
-        if (!doctor) {
-          return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
-        }
-        const status = await markQueueReadyForPayment(admin, id, {
-          doctorId: doctor.id,
-        });
-        await notifyAccountantsReadyForPayment(id).catch((err) => {
-          console.error("[api/queue] checkout notify failed:", err);
-        });
-        return NextResponse.json({ success: true, status });
+        return NextResponse.json(
+          { error: "استخدم «إرسال للمحاسبة» — إنهاء الدفع من المحاسب" },
+          { status: 400 }
+        );
+      }
+      if (!staffRolesOk(role)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
 
-      const status = await markQueueReadyForPayment(admin, id, {
+      const status = await completeSessionForAccounting(admin, id, {
         clinicId: profile.clinic_id as string,
       });
       await notifyAccountantsReadyForPayment(id).catch((err) => {
         console.error("[api/queue] checkout notify failed:", err);
       });
-      return NextResponse.json({ success: true, status });
+
+      const { data: entryRow } = await admin
+        .from("patient_queue")
+        .select(
+          "patient_id, appointment_id, doctor_id, patient_name, patient_phone"
+        )
+        .eq("id", id)
+        .maybeSingle();
+
+      const ledgerUrl = buildLedgerPayUrl({
+        queueEntryId: id,
+        patientId: entryRow?.patient_id as string | null,
+        appointmentId: entryRow?.appointment_id as string | null,
+        doctorId: entryRow?.doctor_id as string | null,
+        patientName: entryRow?.patient_name as string | null,
+        patientPhone: entryRow?.patient_phone as string | null,
+      });
+
+      return NextResponse.json({ success: true, status, ledger_url: ledgerUrl });
     }
 
     // advance (staff or doctor)

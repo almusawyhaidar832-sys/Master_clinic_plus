@@ -5,8 +5,8 @@ type AlertVariant = "info" | "success" | "warning" | "error";
 
 const variants: Record<AlertVariant, string> = {
   info: "bg-primary-50 border-primary-200 text-primary-800",
-  success: "bg-green-50 border-green-200 text-green-800",
-  warning: "bg-amber-50 border-amber-200 text-amber-800",
+  success: "bg-success border-success-border text-success-text",
+  warning: "bg-warning border-warning-border text-warning-text",
   error: "bg-debt border-debt-border text-debt-text",
 };
 

@@ -1,34 +1,8 @@
+@import "./theme.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* ─────────────────────────────────────────────
-   CSS Design Tokens — Light Mode (default)
-───────────────────────────────────────────── */
-:root {
-  --color-text:          #0f172a;
-  --color-muted:         #64748b;
-  --color-border:        #e2e8f0;
-  --color-surface:       #f8fafc;
-  --color-surface-card:  #ffffff;
-  --color-debt-bg:       #fef2f2;
-  --color-debt-text:     #b91c1c;
-  --color-debt-border:   #fecaca;
-}
-
-/* ─────────────────────────────────────────────
-   Dark Mode tokens — applied when html.dark
-───────────────────────────────────────────── */
-html.dark {
-  --color-text:          #f1f5f9;
-  --color-muted:         #94a3b8;
-  --color-border:        #1e293b;
-  --color-surface:       #0f172a;
-  --color-surface-card:  #1e293b;
-  --color-debt-bg:       #450a0a;
-  --color-debt-text:     #fca5a5;
-  --color-debt-border:   #7f1d1d;
-}
 
 @layer base {
   html {
@@ -37,9 +11,38 @@ html.dark {
 
   body {
     @apply bg-surface font-arabic text-slate-text antialiased transition-colors duration-200;
+    background-image:
+      radial-gradient(
+        ellipse 120% 80% at 100% -20%,
+        rgb(0 86 179 / 0.05),
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse 80% 50% at 0% 100%,
+        rgb(0 86 179 / 0.04),
+        transparent 50%
+      );
   }
 
-  /* English (Latin) numerals for inputs and amounts — DB-safe */
+  html.dark body {
+    background-image:
+      radial-gradient(
+        ellipse 100% 60% at 100% 0%,
+        rgb(59 130 246 / 0.07),
+        transparent 50%
+      );
+  }
+
+  ::selection {
+    background-color: var(--color-primary-100);
+    color: var(--color-primary-900);
+  }
+
+  html.dark ::selection {
+    background-color: var(--color-primary-200);
+    color: var(--color-primary-900);
+  }
+
   input,
   textarea,
   .tabular-nums,
@@ -53,12 +56,235 @@ html.dark {
     @apply text-right;
   }
 
-  /* Dark mode base overrides */
   html.dark input,
   html.dark select,
   html.dark textarea {
     @apply bg-slate-800 text-slate-100 border-slate-600;
   }
+}
+
+@layer components {
+  .mc-card {
+    @apply rounded-xl border border-slate-border bg-surface-card shadow-card;
+  }
+
+  .mc-card-elevated {
+    @apply rounded-xl border border-slate-border bg-surface-card shadow-elevated;
+  }
+
+  .mc-gradient-header {
+    background: linear-gradient(
+      135deg,
+      var(--color-primary-600) 0%,
+      var(--color-primary-500) 50%,
+      var(--color-primary-700) 100%
+    );
+  }
+
+  /* ── Page titles (auto via .mc-app-main) ── */
+  .mc-page-heading {
+    @apply relative flex items-center gap-2.5 ps-3.5 text-2xl font-bold text-slate-text;
+  }
+
+  .mc-page-heading::before {
+    content: "";
+    @apply absolute inset-y-1 start-0 w-1 rounded-full;
+    background: linear-gradient(
+      180deg,
+      var(--color-primary-400),
+      var(--color-primary-700)
+    );
+  }
+
+  .mc-page-subtitle {
+    @apply mt-1 text-sm text-slate-muted;
+  }
+
+  /* ── Section headings inside forms/cards ── */
+  .mc-section-title {
+    @apply flex items-center gap-2 text-base font-semibold text-primary-700;
+  }
+
+  .mc-section-title::before {
+    content: "";
+    @apply h-4 w-1 shrink-0 rounded-full bg-primary/70;
+  }
+
+  .mc-section-box {
+    @apply rounded-xl border border-primary/15 bg-primary/[0.04] px-4 py-3;
+  }
+
+  .mc-section-box--warning {
+    @apply border-warning-border bg-warning text-warning-text;
+  }
+
+  .mc-section-box--success {
+    @apply border-success-border bg-success text-success-text;
+  }
+
+  /* ── Tab bar (صرفيات، تقارير، …) ── */
+  .mc-tab-group {
+    @apply flex flex-wrap gap-1 rounded-xl border border-primary/15 bg-primary-50/60 p-1 shadow-sm;
+  }
+
+  html.dark .mc-tab-group {
+    @apply border-primary/25 bg-primary-900/20;
+  }
+
+  .mc-tab {
+    @apply flex min-w-[calc(50%-0.25rem)] flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-xs font-medium transition-all sm:min-w-0 sm:text-sm;
+    @apply text-slate-muted hover:bg-white/70 hover:text-slate-text;
+  }
+
+  html.dark .mc-tab {
+    @apply hover:bg-surface-card hover:text-slate-text;
+  }
+
+  .mc-tab--active {
+    @apply bg-white text-primary shadow-sm ring-1 ring-primary/10;
+  }
+
+  html.dark .mc-tab--active {
+    @apply bg-surface-card text-primary-300 ring-primary/20;
+  }
+
+  .mc-tab--active.mc-tab-accent-history {
+    color: var(--accent-history-text);
+  }
+
+  .mc-tab--active.mc-tab-accent-history svg {
+    @apply text-primary;
+  }
+
+  .mc-tab--active.mc-tab-accent-clinic {
+    color: var(--accent-clinic-text);
+  }
+
+  .mc-tab--active.mc-tab-accent-clinic svg {
+    @apply text-primary-600;
+  }
+
+  .mc-tab--active.mc-tab-accent-salary {
+    color: var(--accent-salary-text);
+  }
+
+  .mc-tab--active.mc-tab-accent-salary svg {
+    @apply text-primary-500;
+  }
+
+  .mc-tab--active.mc-tab-accent-general {
+    color: var(--accent-general-text);
+  }
+
+  .mc-tab--active.mc-tab-accent-general svg {
+    @apply text-slate-muted;
+  }
+
+  /* ── Stat mini-cards ── */
+  .mc-stat-neutral {
+    @apply rounded-2xl border border-slate-border bg-surface p-4 text-center text-slate-text transition-shadow hover:shadow-card;
+  }
+
+  .mc-stat-primary {
+    @apply rounded-2xl border border-primary/20 bg-primary-50 p-4 text-center text-primary-700 transition-shadow hover:shadow-card;
+  }
+
+  .mc-stat-warning {
+    @apply rounded-2xl border border-warning-border bg-warning p-4 text-center text-warning-text transition-shadow hover:shadow-card;
+  }
+
+  .mc-stat-debt {
+    @apply rounded-2xl border border-debt-border bg-debt p-4 text-center text-debt-text transition-shadow hover:shadow-card;
+  }
+
+  .mc-stat-success {
+    @apply rounded-2xl border border-success-border bg-success p-4 text-center text-success-text transition-shadow hover:shadow-card;
+  }
+
+  .mc-stat-value {
+    @apply text-xl font-black tabular-nums;
+  }
+
+  .mc-stat-label {
+    @apply text-xs font-medium opacity-90;
+  }
+
+  /* ── Form labels ── */
+  .mc-label {
+    @apply block text-sm font-medium;
+    color: var(--accent-form-label);
+  }
+
+  /* ── Quick-link icon badge ── */
+  .mc-icon-badge {
+    @apply inline-flex rounded-lg p-2.5;
+  }
+
+  .mc-icon-badge-primary {
+    @apply inline-flex rounded-lg bg-primary/10 p-2.5 text-primary;
+  }
+
+  .mc-icon-badge-soft {
+    @apply inline-flex rounded-lg bg-primary-50 p-2.5 text-primary-600;
+  }
+
+  .mc-icon-badge-success {
+    @apply inline-flex rounded-lg bg-success p-2.5 text-success-text;
+  }
+
+  .mc-icon-badge-warning {
+    @apply inline-flex rounded-lg bg-warning p-2.5 text-warning-text;
+  }
+}
+
+/* Auto page-title accent inside app shells */
+.mc-app-main h1.text-2xl:not(.no-accent),
+.mc-app-main h2.text-2xl:not(.no-accent) {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding-inline-start: 0.875rem;
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.mc-app-main h1.text-2xl:not(.no-accent)::before,
+.mc-app-main h2.text-2xl:not(.no-accent)::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.15em;
+  bottom: 0.15em;
+  width: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    180deg,
+    var(--color-primary-400),
+    var(--color-primary-700)
+  );
+}
+
+.mc-app-main h2.text-lg.font-bold,
+.mc-app-main h3.text-lg.font-bold {
+  @apply text-primary-700;
+}
+
+html.dark .mc-app-main h2.text-lg.font-bold,
+html.dark .mc-app-main h3.text-lg.font-bold {
+  @apply text-primary-300;
+}
+
+/* Card panels — subtle border */
+.mc-app-main .rounded-2xl.border.bg-white,
+.mc-app-main .rounded-xl.border.bg-surface-card {
+  border-color: var(--color-border);
+}
+
+.mc-app-main form label.text-sm.font-medium {
+  color: var(--accent-form-label);
 }
 
 @layer utilities {
@@ -85,7 +311,6 @@ html.dark {
     padding-bottom: env(safe-area-inset-bottom, 0);
   }
 
-  /* أهداف لمس ≥ 44px — WCAG / iOS HIG */
   .touch-target {
     min-height: 2.75rem;
     min-width: 2.75rem;
@@ -96,6 +321,10 @@ html.dark {
     min-height: 3rem;
     font-size: 1rem;
     touch-action: manipulation;
+  }
+
+  .text-balance {
+    text-wrap: balance;
   }
 }
 
@@ -108,12 +337,14 @@ html.dark {
 
   body {
     background: white !important;
+    background-image: none !important;
   }
 
   #patient-statement-print,
   #master-clinic-report-print,
   #doctor-payout-statement-print,
-  #session-payment-invoice-print {
+  #session-payment-invoice-print,
+  #patient-prescription-print {
     border: none !important;
     box-shadow: none !important;
   }

@@ -38,6 +38,7 @@ export type AppointmentStatus =
   | "waiting"
   | "in_clinic"
   | "in_examination"
+  | "ready_for_billing"
   | "ready_for_payment"
   | "completed"
   | "cancelled"
@@ -116,6 +117,8 @@ export interface Patient {
   id: string;
   clinic_id: string;
   full_name_ar: string;
+  /** تشكيل الاسم للنداء الصوتي — مثل أَحْمَد */
+  speech_name_ar?: string | null;
   phone: string | null;
   /** رقم هاتف المراجع — مرجع الواتساب (+964...) */
   phone_number?: string | null;
@@ -176,6 +179,8 @@ export interface PatientOperation {
   is_review_statement?: boolean;
   session_kind?: "plan" | "payment" | "discount" | "refund";
   treatment_case_id?: string | null;
+  /** ربط بزيارة الطابور — السجل البصري للجلسة */
+  queue_entry_id?: string | null;
   invoice_status?: "pending" | "archived";
   created_at?: string;
   patient?: Patient | { full_name_ar: string };

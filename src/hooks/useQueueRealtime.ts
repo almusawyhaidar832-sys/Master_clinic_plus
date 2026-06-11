@@ -10,7 +10,10 @@ import {
   doctorQueueChannelName,
 } from "@/lib/queue/realtime-client";
 import { buildDoctorPatientUrl } from "@/lib/queue/navigation";
-import { resolvePatientDisplayName } from "@/lib/queue/utils";
+import {
+  resolvePatientSpeechName,
+} from "@/lib/queue/utils";
+import { formatNameForSpeech } from "@/lib/queue/arabic-speech-text";
 
 interface QueuePayload {
   id: string;
@@ -21,7 +24,7 @@ interface QueuePayload {
   patient_id: string | null;
   ticket_number: number;
   sent_to_doctor_at: string | null;
-  patient?: { full_name_ar: string } | null;
+  patient?: { full_name_ar: string; speech_name_ar?: string | null } | null;
 }
 
 function parseQueueRow(row: Record<string, unknown>): QueuePayload | null {
@@ -34,13 +37,14 @@ function alertDoctorNewPatient(row: QueuePayload, dedupeKey: string, seen: Set<s
   if (!shouldFireQueueAlert(`doctor-new-${row.id}`)) return;
   seen.add(dedupeKey);
 
-  const name = resolvePatientDisplayName(row);
+  const name = resolvePatientSpeechName(row);
   const msg = `لديك مراجع جديد في الانتظار: ${name}`;
   void triggerQueueAlert({
     kind: "doctor_new",
     title: "مراجع جديد 🔔",
     message: msg,
     linkPath: "/doctor/queue",
+    patientName: name,
   });
 }
 
@@ -49,13 +53,14 @@ function alertAccountantAdmit(row: QueuePayload, dedupeKey: string, seen: Set<st
   if (!shouldFireQueueAlert(`accountant-called-${row.id}`)) return;
   seen.add(dedupeKey);
 
-  const name = resolvePatientDisplayName(row);
+  const name = resolvePatientSpeechName(row);
   const msg = `المراجع ${name} — يُرجى دخوله للعيادة الآن`;
   void triggerQueueAlert({
     kind: "accountant_admit",
     title: "طلب دخول مراجع 🔔",
     message: msg,
     linkPath: "/dashboard/queue",
+    patientName: name,
   });
 }
 
@@ -64,7 +69,7 @@ function alertDoctorExamStart(row: QueuePayload, dedupeKey: string, seen: Set<st
   if (!shouldFireQueueAlert(`doctor-exam-${row.id}`)) return;
   seen.add(dedupeKey);
 
-  const name = resolvePatientDisplayName(row);
+  const name = resolvePatientSpeechName(row);
   const linkPath = row.patient_id
     ? buildDoctorPatientUrl(row.patient_id)
     : "/doctor/queue";
@@ -74,6 +79,7 @@ function alertDoctorExamStart(row: QueuePayload, dedupeKey: string, seen: Set<st
     title: "بدء الكشف",
     message: `${name} داخل العيادة — افتح ملف المريض`,
     linkPath,
+    patientName: name,
   });
 
   if (
@@ -95,12 +101,13 @@ function alertDoctorFromBroadcast(
   if (entryId && !shouldFireQueueAlert(`doctor-new-${entryId}`)) return;
   seen.add(key);
 
-  const name = payload.name?.trim() || "مراجع";
+  const name = formatNameForSpeech(payload.name?.trim() || "مراجع");
   void triggerQueueAlert({
     kind: "doctor_new",
     title: "مراجع جديد 🔔",
     message: `لديك مراجع جديد في الانتظار: ${name}`,
     linkPath: "/doctor/queue",
+    patientName: name,
   });
 }
 
@@ -114,12 +121,13 @@ function alertAccountantFromBroadcast(
   if (entryId && !shouldFireQueueAlert(`accountant-called-${entryId}`)) return;
   seen.add(key);
 
-  const name = payload.name?.trim() || "مراجع";
+  const name = formatNameForSpeech(payload.name?.trim() || "مراجع");
   void triggerQueueAlert({
     kind: "accountant_admit",
     title: "طلب دخول مراجع 🔔",
     message: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
     linkPath: "/dashboard/queue",
+    patientName: name,
   });
 }
 

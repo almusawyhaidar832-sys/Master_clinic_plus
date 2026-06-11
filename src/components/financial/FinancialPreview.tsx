@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import { splitTreatmentAndReviewFee } from "@/lib/finance";
+import type { DoctorPercentage, MaterialsCostShare } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import type { Doctor, DoctorPercentage, MaterialsCostShare } from "@/types";
 
@@ -33,16 +34,38 @@ export function FinancialPreview({
       const salary = isSalaryDoctor(doctor);
       const pct = salary ? 0 : Number(doctor.percentage);
       const matPct = salary ? 0 : Number(doctor.materials_share);
-      const doctorGross = lockedSplit.agreedTotal * (pct / 100);
+      const treatmentBase = Math.max(0, lockedSplit.agreedTotal - reviewFee);
+      const doctorGross = treatmentBase * (pct / 100);
       const doctorMaterials = materialsCost * (matPct / 100);
       const clinicMaterials = materialsCost - doctorMaterials;
+
+      let doctorShare = lockedSplit.doctorShare;
+      let clinicShare = lockedSplit.clinicShare;
+      if (doctorShare <= 0 && clinicShare <= 0) {
+        const recomputed = splitTreatmentAndReviewFee(
+          treatmentBase,
+          reviewFee,
+          materialsCost,
+          {
+            percentage: doctor.percentage as DoctorPercentage,
+            materials_share: doctor.materials_share as MaterialsCostShare,
+            payment_type: doctor.payment_type,
+            financial_agreement: doctor.financial_agreement,
+          }
+        );
+        if (recomputed) {
+          doctorShare = recomputed.doctorShare;
+          clinicShare = recomputed.clinicShare;
+        }
+      }
+
       return {
         grossTotal: lockedSplit.agreedTotal,
         doctorGross,
         doctorMaterials,
         clinicMaterials,
-        doctorShare: lockedSplit.doctorShare,
-        clinicShare: lockedSplit.clinicShare,
+        doctorShare,
+        clinicShare,
         locked: true,
         salaryDoctor: salary,
       };

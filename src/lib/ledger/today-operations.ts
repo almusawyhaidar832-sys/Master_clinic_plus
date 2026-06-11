@@ -1,11 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  caseToFinancialPlan,
+  buildPlanFromCaseRow,
   computedCaseRemaining,
-  type PatientTreatmentCase,
-} from "@/lib/services/patient-treatment-cases";
+} from "@/lib/services/patient-financial-plan";
 import { opDebt, type PatientOperation } from "@/types";
 import { localPeriodUtcBounds, todayISO } from "@/lib/utils";
+
+function num(v: unknown): number {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
 
 export type TodayOperationRow = PatientOperation & {
   patient?: { full_name_ar: string };
@@ -78,15 +82,25 @@ export async function fetchTodayLedgerOperations(
     const { data: cases } = await supabase
       .from("patient_treatment_cases")
       .select(
-        "id, treatment_name_ar, case_price, discount_total, final_price, total_paid, remaining_balance, treatment_status, financial_locked, original_agreed_total, doctor_share_total, clinic_share_total"
+        "id, case_price, discount_total, final_price, total_paid, doctor_share_total, clinic_share_total"
       )
       .in("id", caseIds);
 
     for (const row of cases ?? []) {
-      const rem = computedCaseRemaining(
-        caseToFinancialPlan(row as PatientTreatmentCase)
-      );
-      caseRemainingById.set(row.id as string, rem);
+      const r = row as Record<string, unknown>;
+      const casePrice = num(r.case_price);
+      const discount = num(r.discount_total);
+      const finalPrice =
+        num(r.final_price) || Math.max(0, casePrice - discount);
+      const plan = buildPlanFromCaseRow({
+        case_price: casePrice,
+        discount_total: discount,
+        final_price: finalPrice,
+        doctor_share_total: num(r.doctor_share_total),
+        clinic_share_total: num(r.clinic_share_total),
+        total_paid: num(r.total_paid),
+      });
+      caseRemainingById.set(r.id as string, computedCaseRemaining(plan));
     }
   }
 

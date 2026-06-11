@@ -136,7 +136,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="flex-1 px-4 py-4">{children}</main>
+      <main className="mc-app-main flex-1 px-4 py-4">{children}</main>
 
       <nav className="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-slate-border bg-surface-card px-2 py-2">
         <div className="flex justify-around">

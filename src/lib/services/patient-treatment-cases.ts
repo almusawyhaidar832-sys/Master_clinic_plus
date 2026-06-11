@@ -10,6 +10,8 @@ import {
   treatmentStatusFromAmounts,
   type PatientFinancialPlan,
 } from "@/lib/services/patient-financial-plan";
+
+export { computedCaseRemaining } from "@/lib/services/patient-financial-plan";
 import { caseBelongsToDoctor } from "@/lib/services/doctor-patients";
 
 export interface PatientTreatmentCase extends PatientFinancialPlan {
@@ -170,6 +172,8 @@ type CaseHints = {
   final_price?: number;
   /** من patient_treatment_cases — مصدر موثوق عند غياب جلسات مربوطة */
   total_paid?: number;
+  doctor_share_total?: number;
+  clinic_share_total?: number;
 };
 
 function sortOpsByDate(ops: PatientOperation[]): PatientOperation[] {
@@ -301,8 +305,8 @@ function buildCaseFromOps(
   hints?: CaseHints
 ): PatientTreatmentCase {
   const discount = hints?.discount_total ?? 0;
-  let doctorShare = 0;
-  let clinicShare = 0;
+  let doctorShare = num(hints?.doctor_share_total);
+  let clinicShare = num(hints?.clinic_share_total);
 
   const sorted = sortOpsByDate(ops);
   for (const op of sorted) {
@@ -523,6 +527,8 @@ export async function fetchPatientTreatmentCasesDirect(
           discount_total: db.discount_total,
           final_price: db.final_price,
           total_paid: db.total_paid,
+          doctor_share_total: db.doctor_share_total,
+          clinic_share_total: db.clinic_share_total,
         })
       );
     } else {
@@ -639,6 +645,8 @@ export async function fetchOpenTreatmentCasesForDoctor(
             discount_total: db.discount_total,
             final_price: db.final_price,
             total_paid: db.total_paid,
+            doctor_share_total: db.doctor_share_total,
+            clinic_share_total: db.clinic_share_total,
           })
         : finalizeTreatmentCase(db);
 
@@ -715,6 +723,34 @@ function finalizeTreatmentCase(c: PatientTreatmentCase): PatientTreatmentCase {
     remaining_balance: remaining,
     treatment_status,
   };
+}
+
+/** يملأ حصص الطبيب/العيادة في DB إن كانت صفراً (حالات قديمة) */
+export async function backfillTreatmentCaseSharesIfMissing(
+  supabase: SupabaseClient,
+  caseId: string,
+  shares: { doctorShare: number; clinicShare: number }
+): Promise<void> {
+  if (!isPersistedTreatmentCaseId(caseId)) return;
+  if (shares.doctorShare <= 0 && shares.clinicShare <= 0) return;
+
+  const { data: row } = await supabase
+    .from("patient_treatment_cases")
+    .select("doctor_share_total, clinic_share_total")
+    .eq("id", caseId)
+    .maybeSingle();
+
+  if (!row) return;
+  if (num(row.doctor_share_total) > 0 || num(row.clinic_share_total) > 0) return;
+
+  await supabase
+    .from("patient_treatment_cases")
+    .update({
+      doctor_share_total: shares.doctorShare,
+      clinic_share_total: shares.clinicShare,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", caseId);
 }
 
 export async function createTreatmentCase(

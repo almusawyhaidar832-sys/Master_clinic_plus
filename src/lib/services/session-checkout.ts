@@ -167,7 +167,7 @@ export async function fetchSessionCheckoutSummary(
   }));
 
   let totalDue = procedures.reduce((sum, line) => sum + line.remaining, 0);
-  let treatmentCaseId: string | null =
+  const treatmentCaseId: string | null =
     planRows.find((op) => op.treatment_case_id)?.treatment_case_id ?? null;
 
   if (treatmentCaseId) {
@@ -306,11 +306,11 @@ export async function processSessionCheckout(
   return { operationId, totalDue: summary.totalDue };
 }
 
-export async function markQueueReadyForPayment(
+async function loadQueueEntryForStatusChange(
   admin: SupabaseClient,
   queueEntryId: string,
   opts: { doctorId?: string; clinicId?: string }
-): Promise<QueueStatus> {
+) {
   let query = admin
     .from("patient_queue")
     .select("status, doctor_id, clinic_id")
@@ -320,10 +320,41 @@ export async function markQueueReadyForPayment(
   if (opts.clinicId) query = query.eq("clinic_id", opts.clinicId);
 
   const { data: entry } = await query.maybeSingle();
-
   if (!entry) throw new Error("الدور غير موجود");
+  return entry;
+}
+
+/** الطبيب — إرسال الجلسة للمحاسبة (داخل الكشف → جاهز للفوترة) */
+export async function markQueueReadyForBilling(
+  admin: SupabaseClient,
+  queueEntryId: string,
+  opts: { doctorId?: string; clinicId?: string }
+): Promise<QueueStatus> {
+  const entry = await loadQueueEntryForStatusChange(admin, queueEntryId, opts);
+
   if (entry.status !== "in_progress") {
-    throw new Error("يمكن إنهاء الكشف للمراجع داخل العيادة فقط");
+    throw new Error("يمكن إرسال الجلسة للمحاسبة للمراجع داخل الكشف فقط");
+  }
+
+  await updateQueueStatus(queueEntryId, "ready_for_billing", {
+    doctorId: opts.doctorId,
+    clinicId: opts.clinicId,
+  });
+  await syncAppointmentFromQueueStatus(admin, queueEntryId, "ready_for_billing");
+
+  return "ready_for_billing";
+}
+
+/** جاهز للفوترة → جاهز للدفع */
+export async function advanceQueueBillingToPayment(
+  admin: SupabaseClient,
+  queueEntryId: string,
+  opts: { doctorId?: string; clinicId?: string }
+): Promise<QueueStatus> {
+  const entry = await loadQueueEntryForStatusChange(admin, queueEntryId, opts);
+
+  if (entry.status !== "ready_for_billing") {
+    throw new Error("المراجع ليس في مرحلة جاهز للمحاسبة");
   }
 
   await updateQueueStatus(queueEntryId, "ready_for_payment", {
@@ -335,8 +366,62 @@ export async function markQueueReadyForPayment(
   return "ready_for_payment";
 }
 
+/**
+ * المحاسب/المساعد — إنهاء الجلسة وتمريرها للدفع
+ * (in_progress → ready_for_billing → ready_for_payment)
+ */
+export async function completeSessionForAccounting(
+  admin: SupabaseClient,
+  queueEntryId: string,
+  opts: { clinicId?: string; doctorId?: string }
+): Promise<QueueStatus> {
+  const entry = await loadQueueEntryForStatusChange(admin, queueEntryId, opts);
+
+  if (entry.status === "ready_for_payment") {
+    return "ready_for_payment";
+  }
+
+  if (entry.status === "ready_for_billing") {
+    return advanceQueueBillingToPayment(admin, queueEntryId, opts);
+  }
+
+  if (entry.status !== "in_progress") {
+    throw new Error("يمكن إنهاء الجلسة للمراجع داخل الكشف أو الجاهز للمحاسبة فقط");
+  }
+
+  await markQueueReadyForBilling(admin, queueEntryId, opts);
+  return advanceQueueBillingToPayment(admin, queueEntryId, opts);
+}
+
+export async function markQueueReadyForPayment(
+  admin: SupabaseClient,
+  queueEntryId: string,
+  opts: { doctorId?: string; clinicId?: string }
+): Promise<QueueStatus> {
+  return completeSessionForAccounting(admin, queueEntryId, opts);
+}
+
 function todayIsoDate() {
   return new Date().toISOString().split("T")[0];
+}
+
+/** إرسال جلسة الموعد للمحاسبة — للطبيب */
+export async function markAppointmentReadyForBilling(
+  admin: SupabaseClient,
+  clinicId: string,
+  appointmentId: string,
+  opts?: { doctorId?: string }
+): Promise<QueueStatus> {
+  const entryId = await resolveTodayQueueEntryForAppointment(
+    admin,
+    clinicId,
+    appointmentId
+  );
+
+  return markQueueReadyForBilling(admin, entryId, {
+    clinicId,
+    doctorId: opts?.doctorId,
+  });
 }
 
 /** إنهاء الكشف من الموعد — للمحاسب / المساعد */
@@ -346,9 +431,26 @@ export async function markAppointmentReadyForPayment(
   appointmentId: string,
   opts?: { doctorId?: string }
 ): Promise<QueueStatus> {
+  const entryId = await resolveTodayQueueEntryForAppointment(
+    admin,
+    clinicId,
+    appointmentId
+  );
+
+  return completeSessionForAccounting(admin, entryId, {
+    clinicId,
+    doctorId: opts?.doctorId,
+  });
+}
+
+async function resolveTodayQueueEntryForAppointment(
+  admin: SupabaseClient,
+  clinicId: string,
+  appointmentId: string
+): Promise<string> {
   const { data: entry } = await admin
     .from("patient_queue")
-    .select("id, status")
+    .select("id")
     .eq("appointment_id", appointmentId)
     .eq("clinic_id", clinicId)
     .eq("queue_date", todayIsoDate())
@@ -360,8 +462,5 @@ export async function markAppointmentReadyForPayment(
     throw new Error("لا يوجد دور في الانتظار لهذا الموعد");
   }
 
-  return markQueueReadyForPayment(admin, entry.id as string, {
-    clinicId,
-    doctorId: opts?.doctorId,
-  });
+  return entry.id as string;
 }

@@ -8,9 +8,13 @@ import {
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   getDoctorByProfileId,
+  notifyAccountantsReadyForBilling,
   notifyAccountantsReadyForPayment,
 } from "@/lib/queue/server";
-import { markAppointmentReadyForPayment } from "@/lib/services/session-checkout";
+import {
+  markAppointmentReadyForBilling,
+  markAppointmentReadyForPayment,
+} from "@/lib/services/session-checkout";
 
 /** POST { appointment_id } — إنهاء الكشف → جاهز للدفع */
 export async function POST(req: NextRequest) {
@@ -46,6 +50,33 @@ export async function POST(req: NextRequest) {
       doctorId = doctor.id;
     }
 
+    const today = new Date().toISOString().split("T")[0];
+
+    if (isDoctor) {
+      const status = await markAppointmentReadyForBilling(
+        admin,
+        profile.clinic_id as string,
+        appointmentId,
+        { doctorId }
+      );
+
+      const { data: entry } = await admin
+        .from("patient_queue")
+        .select("id")
+        .eq("appointment_id", appointmentId)
+        .eq("clinic_id", profile.clinic_id)
+        .eq("queue_date", today)
+        .maybeSingle();
+
+      if (entry?.id) {
+        await notifyAccountantsReadyForBilling(entry.id as string).catch((err) => {
+          console.error("[operations/finish-examination] billing notify failed:", err);
+        });
+      }
+
+      return NextResponse.json({ success: true, status });
+    }
+
     const status = await markAppointmentReadyForPayment(
       admin,
       profile.clinic_id as string,
@@ -53,7 +84,6 @@ export async function POST(req: NextRequest) {
       { doctorId }
     );
 
-    const today = new Date().toISOString().split("T")[0];
     const { data: entry } = await admin
       .from("patient_queue")
       .select("id")

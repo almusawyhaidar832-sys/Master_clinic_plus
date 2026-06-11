@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { isApiDoctorRole, isApiStaffRole } from "@/lib/auth/api-portal";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { searchPatientsForDoctor } from "@/lib/services/doctor-patients";
+import { getDoctorByProfileId } from "@/lib/queue/server";
 import {
   PATIENT_SEARCH_MIN_LENGTH,
   searchPatientsInClinic,
@@ -34,12 +36,38 @@ export async function GET(req: NextRequest) {
     }
 
     const admin = getAdminClient();
-    const { patients, error } = await searchPatientsInClinic(
-      admin,
-      profile.clinic_id,
-      q,
-      { limit, minLength: PATIENT_SEARCH_MIN_LENGTH }
-    );
+    let patients: Awaited<
+      ReturnType<typeof searchPatientsInClinic>
+    >["patients"] = [];
+    let error: string | undefined;
+
+    if (isApiDoctorRole(role)) {
+      const doctor = await getDoctorByProfileId(profile.id);
+      if (!doctor || doctor.clinic_id !== profile.clinic_id) {
+        return NextResponse.json(
+          { error: "حساب الطبيب غير مربوط" },
+          { status: 403 }
+        );
+      }
+      const scoped = await searchPatientsForDoctor(
+        admin,
+        profile.clinic_id,
+        doctor.id,
+        q,
+        { limit, minLength: PATIENT_SEARCH_MIN_LENGTH }
+      );
+      patients = scoped.patients;
+      error = scoped.error;
+    } else {
+      const clinicWide = await searchPatientsInClinic(
+        admin,
+        profile.clinic_id,
+        q,
+        { limit, minLength: PATIENT_SEARCH_MIN_LENGTH }
+      );
+      patients = clinicWide.patients;
+      error = clinicWide.error;
+    }
 
     if (error) {
       return NextResponse.json({ error }, { status: 400 });

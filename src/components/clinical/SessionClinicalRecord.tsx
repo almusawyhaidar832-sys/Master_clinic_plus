@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { Upload, X, Scan } from "lucide-react";
-import { DentalChart } from "@/components/clinical/DentalChart";
+import { InteractiveDentalChart } from "@/components/clinical/InteractiveDentalChart";
 import type { SessionClinicalDraft } from "@/lib/clinical/constants";
 
 export interface SessionClinicalRecordProps {
@@ -11,6 +11,7 @@ export interface SessionClinicalRecordProps {
   disabled?: boolean;
   /** يُمرَّر لمخطط الأسنان لمسح الاختيار عند إعادة تعيين المسودة */
   chartResetKey?: number;
+  showHeader?: boolean;
 }
 
 export function SessionClinicalRecord({
@@ -18,6 +19,7 @@ export function SessionClinicalRecord({
   onChange,
   disabled,
   chartResetKey,
+  showHeader = true,
 }: SessionClinicalRecordProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -39,16 +41,21 @@ export function SessionClinicalRecord({
   }
 
   return (
-    <div className="sm:col-span-2 space-y-4 rounded-xl border border-teal-200/60 bg-teal-50/30 p-4">
-      <div className="flex items-center gap-2">
-        <Scan className="h-5 w-5 text-teal-700" />
-        <h3 className="text-base font-semibold text-slate-text">
-          السجل الطبي البصري
-        </h3>
-      </div>
-      <p className="text-xs text-slate-muted">
-        خاص بهذه الجلسة فقط — كل زيارة لها أشعتها ومخططها (لا يظهر على جلسات أخرى)
-      </p>
+    <div className="space-y-4 rounded-xl border border-teal-200/60 bg-teal-50/30 p-4">
+      {showHeader && (
+        <>
+          <div className="flex items-center gap-2">
+            <Scan className="h-5 w-5 text-teal-700" />
+            <h3 className="text-base font-semibold text-slate-text">
+              السجل الطبي البصري
+            </h3>
+          </div>
+          <p className="text-xs text-slate-muted">
+            خاص بهذه الجلسة فقط — كل زيارة لها أشعتها ومخططها (لا يظهر على جلسات
+            أخرى)
+          </p>
+        </>
+      )}
 
       <div>
         <p className="mb-2 text-sm font-medium text-slate-text">صور الأشعة (X-ray)</p>
@@ -95,11 +102,13 @@ export function SessionClinicalRecord({
         )}
       </div>
 
-      <DentalChart
+      <InteractiveDentalChart
+        key={chartResetKey}
+        mode="session"
         value={value.teeth}
         onChange={(teeth) => onChange({ ...value, teeth })}
-        disabled={disabled}
-        resetKey={chartResetKey}
+        readOnly={disabled}
+        embedded
       />
     </div>
   );

@@ -1,20 +1,51 @@
 "use client";
 
+import {
+  joinPatientCallSpeech,
+  splitPatientCallSpeech,
+  type PatientCallSpeechParts,
+} from "@/lib/queue/arabic-speech-text";
+import {
+  clearCloudSpeechQueue,
+  speakViaCloudTtsText,
+} from "@/lib/queue/cloud-speech";
+
+export type SpeechPlayOptions = {
+  useCloud?: boolean;
+  clearQueue?: boolean;
+};
+
 let audioCtx: AudioContext | null = null;
 let autoPrepared = false;
+let cachedArabicVoice: SpeechSynthesisVoice | null = null;
+let browserSpeechChain: Promise<void> = Promise.resolve();
+
+const BROWSER_SPEECH_RATE = 0.95;
 
 function getSynth(): SpeechSynthesis | null {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
   return window.speechSynthesis;
 }
 
-/** Prepare audio + speech on page load — no user click required */
+/** إيقاف كل النداءات المعلّقة */
+export function stopAllSpeech(): void {
+  browserSpeechChain = Promise.resolve();
+  clearCloudSpeechQueue();
+  try {
+    getSynth()?.cancel();
+  } catch {
+    // ignore
+  }
+}
+
 export function prepareSpeechAuto(): void {
   if (typeof window === "undefined" || autoPrepared) return;
   autoPrepared = true;
 
   void (async () => {
-    await waitForVoices(3000);
+    await waitForVoices(2000);
+    const voices = getSynth()?.getVoices() ?? [];
+    cachedArabicVoice = pickArabicVoice(voices);
     try {
       if (!audioCtx) audioCtx = new AudioContext();
       if (audioCtx.state === "suspended") await audioCtx.resume();
@@ -33,42 +64,65 @@ export function isSpeechGestureUnlocked(): boolean {
   return true;
 }
 
-export async function waitForVoices(timeoutMs = 2500): Promise<SpeechSynthesisVoice[]> {
+export async function waitForVoices(timeoutMs = 2000): Promise<SpeechSynthesisVoice[]> {
   const synth = getSynth();
   if (!synth) return [];
 
-  const existing = synth.getVoices();
+  const read = () => synth.getVoices().filter(Boolean);
+  const existing = read();
   if (existing.length > 0) return existing;
 
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(synth.getVoices()), timeoutMs);
+    const timer = setTimeout(() => resolve(read()), timeoutMs);
     synth.addEventListener(
       "voiceschanged",
       () => {
         clearTimeout(timer);
-        resolve(synth.getVoices());
+        resolve(read());
       },
       { once: true }
     );
   });
 }
 
-function pickArabicVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
-  if (!voices.length) return null;
+function voiceScore(v: SpeechSynthesisVoice): number {
+  const name = v.name.toLowerCase();
+  const lang = v.lang.toLowerCase();
 
-  const rank = (v: SpeechSynthesisVoice) => {
-    if (v.lang === "ar-SA" || v.lang === "ar-sa") return 0;
-    if (v.lang.startsWith("ar")) return 1;
-    if (v.name.toLowerCase().includes("arabic")) return 2;
-    return 99;
-  };
-
-  return [...voices].sort((a, b) => rank(a) - rank(b))[0] ?? null;
+  if (lang === "ar-iq") return 0;
+  if (/bassel|basel|iraq|عراق/i.test(v.name)) return 1;
+  if (/google.*(arab|ar)/i.test(v.name)) return 2;
+  if (/naayf.*natural|natural.*naayf/i.test(name)) return 3;
+  if (/naayf|نايف/i.test(name)) return 4;
+  if (/hoda.*natural|salma.*natural|hamed.*natural|zariyah.*natural/i.test(name)) return 5;
+  if (/microsoft.*online.*natural.*ar/i.test(name)) return 6;
+  if (/microsoft.*(arabic|ar).*saudi/i.test(name)) return 7;
+  if (lang === "ar-sa") return 8;
+  if (lang === "ar-eg") return 9;
+  if (lang.startsWith("ar")) return 10;
+  if (/arabic|عرب/i.test(v.name)) return 12;
+  return 99;
 }
 
-function applyArabicVoice(utterance: SpeechSynthesisUtterance, voice: SpeechSynthesisVoice | null) {
-  utterance.lang = voice?.lang || "ar-SA";
-  utterance.rate = 0.85;
+function pickArabicVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  if (!voices.length) return null;
+  return [...voices].sort((a, b) => voiceScore(a) - voiceScore(b))[0] ?? null;
+}
+
+async function resolveArabicVoice(): Promise<SpeechSynthesisVoice | null> {
+  if (cachedArabicVoice) return cachedArabicVoice;
+  const voices = await waitForVoices();
+  cachedArabicVoice = pickArabicVoice(voices);
+  return cachedArabicVoice;
+}
+
+function applyArabicVoice(
+  utterance: SpeechSynthesisUtterance,
+  voice: SpeechSynthesisVoice | null,
+  rate = 0.76
+) {
+  utterance.lang = voice?.lang?.startsWith("ar") ? voice.lang : "ar-IQ";
+  utterance.rate = rate;
   utterance.pitch = 1;
   utterance.volume = 1;
   if (voice) utterance.voice = voice;
@@ -87,74 +141,148 @@ export async function playAttentionBeep(): Promise<void> {
     const gain = audioCtx.createGain();
     osc.type = "sine";
     osc.frequency.value = 880;
-    gain.gain.value = 0.4;
+    gain.gain.value = 0.35;
     osc.connect(gain);
     gain.connect(audioCtx.destination);
 
     const t = audioCtx.currentTime;
     osc.start(t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
-    osc.stop(t + 0.25);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    osc.stop(t + 0.22);
 
-    await new Promise((r) => setTimeout(r, 280));
+    await new Promise((r) => setTimeout(r, 180));
   } catch {
     // ignore
   }
 }
 
-export function speakArabic(text: string): Promise<void> {
+function speakPart(
+  text: string,
+  voice: SpeechSynthesisVoice | null,
+  rate: number,
+  cancelFirst: boolean
+): Promise<void> {
   return new Promise((resolve) => {
     const synth = getSynth();
-    if (!synth || !text.trim()) {
+    const trimmed = text.trim();
+    if (!synth || !trimmed) {
       resolve();
       return;
     }
 
-    prepareSpeechAuto();
-
     try {
+      if (cancelFirst) synth.cancel();
       synth.resume();
     } catch {
       // ignore
     }
 
-    const voices = synth.getVoices();
-    const voice = pickArabicVoice(voices);
-    const utterance = new SpeechSynthesisUtterance(text);
-    applyArabicVoice(utterance, voice);
+    const utterance = new SpeechSynthesisUtterance(trimmed);
+    applyArabicVoice(utterance, voice, rate);
 
-    let resumeTimer: ReturnType<typeof setInterval> | null = null;
     let settled = false;
-
     const finish = () => {
       if (settled) return;
       settled = true;
-      if (resumeTimer) clearInterval(resumeTimer);
       resolve();
     };
 
     utterance.onend = finish;
     utterance.onerror = finish;
 
-    resumeTimer = setInterval(() => {
-      if (!synth.speaking) return;
-      try {
-        synth.pause();
-        synth.resume();
-      } catch {
-        // ignore
-      }
-    }, 120);
-
     synth.speak(utterance);
-
-    setTimeout(finish, Math.max(8000, text.length * 120));
+    setTimeout(finish, Math.max(4000, trimmed.length * 80));
   });
 }
 
-export async function announceArabicWithBeep(text: string): Promise<void> {
+async function speakTextNow(text: string, options?: SpeechPlayOptions): Promise<void> {
+  if (options?.clearQueue) stopAllSpeech();
+  prepareSpeechAuto();
+
+  if (options?.useCloud) {
+    const usedCloud = await speakViaCloudTtsText(text);
+    if (usedCloud) return;
+  }
+
+  const voice = await resolveArabicVoice();
+  await speakPart(text, voice, BROWSER_SPEECH_RATE, true);
+}
+
+function enqueueBrowserSpeech(
+  task: () => Promise<void>,
+  options?: SpeechPlayOptions
+): Promise<void> {
+  if (options?.clearQueue) stopAllSpeech();
+  const run = browserSpeechChain.then(task);
+  browserSpeechChain = run.catch(() => {});
+  return run;
+}
+
+export function speakArabic(text: string, options?: SpeechPlayOptions): Promise<void> {
+  return enqueueBrowserSpeech(() => speakTextNow(text, options), options);
+}
+
+export async function speakPatientCallParts(
+  parts: PatientCallSpeechParts,
+  options?: SpeechPlayOptions
+): Promise<void> {
+  const text = joinPatientCallSpeech(parts);
+  return enqueueBrowserSpeech(() => speakTextNow(text, options), options);
+}
+
+export async function speakPatientCallImmediate(
+  patientName: string,
+  doctorName: string,
+  variant: "called" | "enter" | "queue_screen" = "called"
+): Promise<void> {
+  const parts = splitPatientCallSpeech(patientName, doctorName, variant);
+  stopAllSpeech();
   await playAttentionBeep();
-  await speakArabic(text);
+  await speakTextNow(joinPatientCallSpeech(parts), { clearQueue: true, useCloud: false });
+}
+
+export async function speakPatientCallAnnouncement(
+  patientName: string,
+  doctorName: string,
+  variant: "called" | "enter" | "queue_screen" = "called",
+  options?: SpeechPlayOptions
+): Promise<void> {
+  const parts = splitPatientCallSpeech(patientName, doctorName, variant);
+  await speakPatientCallParts(parts, options);
+}
+
+export async function announceArabicWithBeep(
+  text: string,
+  options?: SpeechPlayOptions
+): Promise<void> {
+  await playAttentionBeep();
+  await speakArabic(text, options);
+}
+
+export async function announcePatientCallWithBeep(
+  patientName: string,
+  doctorName: string,
+  variant: "called" | "enter" | "queue_screen" = "called",
+  options?: SpeechPlayOptions
+): Promise<void> {
+  await playAttentionBeep();
+  await speakPatientCallAnnouncement(patientName, doctorName, variant, options);
+}
+
+export async function announcePatientCallImmediate(
+  patientName: string,
+  doctorName: string,
+  variant: "called" | "enter" = "called"
+): Promise<void> {
+  await speakPatientCallImmediate(patientName, doctorName, variant);
+}
+
+export async function announceSpeechPartsWithBeep(
+  parts: PatientCallSpeechParts,
+  options?: SpeechPlayOptions
+): Promise<void> {
+  await playAttentionBeep();
+  await speakPatientCallParts(parts, options);
 }
 
 export function installSpeechGestureUnlock(): () => void {
@@ -182,7 +310,7 @@ export function getSpeechSupport(): {
   if (!synth) {
     return { supported: false, arabicVoice: null, unlocked: true };
   }
-  const voice = pickArabicVoice(synth.getVoices());
+  const voice = cachedArabicVoice ?? pickArabicVoice(synth.getVoices());
   return {
     supported: true,
     arabicVoice: voice?.name ?? null,

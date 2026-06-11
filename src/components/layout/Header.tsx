@@ -43,8 +43,12 @@ export function Header({
           </button>
         )}
         <div>
-          <h1 className="text-lg font-semibold text-slate-text">{title}</h1>
-          {subtitle && <p className="text-xs text-slate-muted">{subtitle}</p>}
+          <h1 className="border-s-[3px] border-primary/80 ps-2.5 text-lg font-semibold text-slate-text">
+            {title}
+          </h1>
+          {subtitle && (
+            <p className="mt-0.5 ps-2.5 text-xs text-slate-muted">{subtitle}</p>
+          )}
         </div>
       </div>
 

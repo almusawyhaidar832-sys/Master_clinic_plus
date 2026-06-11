@@ -10,7 +10,12 @@ import {
   updateQueueStatus,
 } from "@/lib/queue/server";
 
-const BLOCKED = new Set(["cancelled", "completed", "ready_for_payment"]);
+const BLOCKED = new Set([
+  "cancelled",
+  "completed",
+  "ready_for_billing",
+  "ready_for_payment",
+]);
 
 /**
  * دخول المراجع — إدراج/تفعيل غرفة الانتظار + إشعار الطبيب.

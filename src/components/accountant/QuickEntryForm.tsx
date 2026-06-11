@@ -10,7 +10,8 @@ import { formatCurrency, parseFormattedNumber, todayISO } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveClinicId } from "@/lib/clinic-context";
 import { FinancialPreview } from "@/components/financial/FinancialPreview";
-import { SessionClinicalRecord } from "@/components/clinical/SessionClinicalRecord";
+import { VisualMedicalRecord } from "@/components/clinical/VisualMedicalRecord";
+import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
 import {
   EMPTY_CLINICAL_DRAFT,
   type SessionClinicalDraft,
@@ -19,6 +20,8 @@ import { saveSessionClinicalRecords } from "@/lib/clinical/session-records";
 import {
   applyAdditionalDiscountFallback,
   computeFinalPrice,
+  computeFinalPriceWithDiscounts,
+  computePatientDebtRemaining,
   fetchPatientFinancialPlan,
   hasTreatmentPlan,
   isCaseFullySettled,
@@ -26,6 +29,7 @@ import {
   isTreatmentCaseComplete,
   FINANCIAL_EPSILON,
   previewTreatmentSplitWithReview,
+  resolveCaseFinancialSplit,
   resolveSessionKind,
   saveFirstSessionPlanFallback,
   type PatientFinancialPlan,
@@ -35,6 +39,7 @@ import {
   previewSessionFinancials,
 } from "@/lib/services/session-entry-form";
 import {
+  backfillTreatmentCaseSharesIfMissing,
   caseToFinancialPlan,
   createTreatmentCaseViaApi,
   fetchPatientTreatmentCases,
@@ -56,7 +61,6 @@ import { TreatmentCasePicker } from "@/components/accountant/TreatmentCasePicker
 import { PatientSearchField } from "@/components/patients/PatientSearchField";
 import { TransferDoctorPanel } from "@/components/patients/TransferDoctorPanel";
 import type { Doctor, Patient, PatientOperation } from "@/types";
-import { opDebt } from "@/types";
 import {
   ensurePatientPhoneOnRecord,
   getPatientDisplayPhone,
@@ -65,8 +69,13 @@ import {
 } from "@/lib/phone";
 import { notifySessionMutation } from "@/lib/sync/mutation-notify";
 import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
+import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { SessionInvoiceModal } from "@/components/invoices/SessionInvoiceModal";
+import { PrescriptionPrintModal } from "@/components/prescriptions/PrescriptionPrintModal";
+import { fetchVisitSessionByQueue } from "@/lib/clinical/visit-session-client";
+import { fetchPrescriptionByOperation } from "@/lib/prescriptions/client";
 import {
   buildSessionInvoiceData,
   type SessionInvoiceData,
@@ -108,6 +117,59 @@ const EMPTY_FINANCIAL_PLAN: PatientFinancialPlan = {
   treatment_status: "active",
 };
 
+function buildPostSaveFinancialSnap(
+  plan: PatientFinancialPlan,
+  opts: {
+    entryMode: "plan" | "payment";
+    casePrice: number;
+    discount: number;
+    paid: number;
+    additionalDiscount: number;
+  }
+): PatientFinancialPlan {
+  if (opts.entryMode === "plan" && opts.casePrice > 0) {
+    const finalPrice = computeFinalPrice(opts.casePrice, opts.discount);
+    const totalPaid = opts.paid;
+    return {
+      ...EMPTY_FINANCIAL_PLAN,
+      case_price: opts.casePrice,
+      discount_total: opts.discount,
+      final_price: finalPrice,
+      agreed_total: finalPrice,
+      original_agreed_total: opts.casePrice,
+      total_paid: totalPaid,
+      remaining_balance: Math.max(0, finalPrice - totalPaid),
+      financial_locked: true,
+      treatment_status:
+        finalPrice > FINANCIAL_EPSILON &&
+        totalPaid >= finalPrice - FINANCIAL_EPSILON
+          ? "completed"
+          : "active",
+    };
+  }
+
+  const finalPrice = computeFinalPriceWithDiscounts(plan, opts.additionalDiscount);
+  const totalPaid = plan.total_paid + opts.paid;
+  const remaining = computePatientDebtRemaining(plan, {
+    additionalDiscount: opts.additionalDiscount,
+    newPayment: opts.paid,
+  });
+
+  return {
+    ...plan,
+    discount_total: plan.discount_total + opts.additionalDiscount,
+    final_price: finalPrice,
+    agreed_total: finalPrice,
+    total_paid: totalPaid,
+    remaining_balance: remaining,
+    treatment_status:
+      finalPrice > FINANCIAL_EPSILON &&
+      totalPaid >= finalPrice - FINANCIAL_EPSILON
+        ? "completed"
+        : "active",
+  };
+}
+
 function applyTreatmentCaseSelection(
   c: PatientTreatmentCase,
   setters: {
@@ -143,6 +205,8 @@ interface QuickEntryFormProps {
   lockDoctorName?: string;
   /** بدون إطار Card — للتضمين داخل لوحة المتابعة */
   embedded?: boolean;
+  /** زيارة من الطابور — السجل البصري يُعرض في اللوحة أعلاه */
+  visitQueueEntryId?: string;
   onSuccess?: (operation: PatientOperation) => void;
   /** تحديث ملخص الحالات في الصفحة الأم فور جلب الحالات */
   onTreatmentCasesChanged?: (cases: PatientTreatmentCase[]) => void;
@@ -159,11 +223,18 @@ export function QuickEntryForm({
   lockDoctorId,
   lockDoctorName,
   embedded = false,
+  visitQueueEntryId,
   onSuccess,
   onTreatmentCasesChanged,
 }: QuickEntryFormProps) {
   const { profile: clinicProfile } = useClinicProfile();
   const [invoiceData, setInvoiceData] = useState<SessionInvoiceData | null>(null);
+  const [prescriptionModalId, setPrescriptionModalId] = useState<string | null>(
+    null
+  );
+  const [pendingPrescriptionId, setPendingPrescriptionId] = useState<
+    string | null
+  >(null);
   const [pendingSuccessOp, setPendingSuccessOp] = useState<PatientOperation | null>(
     null
   );
@@ -192,6 +263,33 @@ export function QuickEntryForm({
     setClinical(EMPTY_CLINICAL_DRAFT);
     setClinicalResetKey((k) => k + 1);
   }, []);
+
+  const openPrescriptionModalIfAny = useCallback(
+    async (
+      queueEntryId: string | null | undefined,
+      openImmediately = true
+    ) => {
+      if (!queueEntryId) return;
+      try {
+        const session = await fetchVisitSessionByQueue(queueEntryId, "accountant");
+        if (!session?.operationId) return;
+        const rx = await fetchPrescriptionByOperation(
+          session.operationId,
+          "accountant",
+          queueEntryId
+        );
+        if (rx?.medications?.length) {
+          setPendingPrescriptionId(rx.id);
+          if (openImmediately) {
+            setPrescriptionModalId(rx.id);
+          }
+        }
+      } catch {
+        /* لا وصفة — طبيعي */
+      }
+    },
+    []
+  );
   const [operationName, setOperationName] = useState(() => {
     if (defaultForceNewPlan && defaultNewCaseTreatmentName?.trim()) {
       return defaultNewCaseTreatmentName.trim();
@@ -366,11 +464,9 @@ export function QuickEntryForm({
 
   const lockedSplit =
     isFollowUpSession && plan.final_price > 0
-      ? {
-          agreedTotal: plan.final_price,
-          doctorShare: plan.doctor_share_total,
-          clinicShare: plan.clinic_share_total,
-        }
+      ? resolveCaseFinancialSplit(plan, selectedDoctor, {
+          materialsCost: materials,
+        }) ?? undefined
       : liveSplit
         ? {
             agreedTotal: liveSplit.agreedTotal,
@@ -892,13 +988,13 @@ export function QuickEntryForm({
       }
     }
 
-    let sessionDoctorId = doctorId;
+    let sessionDoctorId = assignedDoctor?.id ?? doctorId;
     const caseIdForDoctor =
       resolvePersistedCaseId(treatmentCases, selectedCaseId) ??
       (defaultCaseId && isPersistedTreatmentCaseId(defaultCaseId)
         ? defaultCaseId
         : null);
-    if (caseIdForDoctor) {
+    if (caseIdForDoctor && !assignedDoctor && !lockDoctorId) {
       const primaryDoc = await fetchCasePrimaryDoctor(supabase, caseIdForDoctor);
       if (primaryDoc) sessionDoctorId = primaryDoc.id;
     }
@@ -918,8 +1014,8 @@ export function QuickEntryForm({
         ...fields,
       };
       const opColCandidates = [
-        { key: "operation_type", val: opLabel },
         { key: "operation_name_ar", val: opLabel },
+        { key: "operation_type", val: opLabel },
       ];
       const op: PatientOperation | null = null;
       let err: { message: string } | null = null;
@@ -1113,20 +1209,18 @@ export function QuickEntryForm({
       }
       if (linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)) {
         await linkOperationToTreatmentCase(supabase, op.id, linkedCaseId);
-        const isNewPlanCase =
-          entryMode === "plan" && Boolean(savedCaseIdForWa);
-        if (!isNewPlanCase) {
-          await linkUnlinkedCaseOperations(
-            supabase,
-            linkedCaseId,
-            patientId!,
-            pickedCase?.treatment_name_ar ?? operationLabel
-          );
-        }
       }
     }
 
     let syncWarning = "";
+    const syncCaseId =
+      (linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
+        ? linkedCaseId
+        : null) ??
+      (activeCaseId && isPersistedTreatmentCaseId(activeCaseId)
+        ? activeCaseId
+        : null);
+
     if (
       !error &&
       entryMode === "payment" &&
@@ -1139,13 +1233,7 @@ export function QuickEntryForm({
         plan: activePlan,
         paidDelta: paid,
         additionalDiscount,
-        caseId:
-          (linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
-            ? linkedCaseId
-            : null) ??
-          (activeCaseId && isPersistedTreatmentCaseId(activeCaseId)
-            ? activeCaseId
-            : null),
+        caseId: syncCaseId,
       });
       if (!sync.ok) {
         syncWarning = ` — تحذير: ${sync.error ?? "تعذر تحديث ذمة الحالة"}`;
@@ -1172,208 +1260,109 @@ export function QuickEntryForm({
     }
 
     const operationIdForNotify = op!.id;
+    const savedOp = op!;
 
-    await assignPrimaryDoctorForSession(supabase, {
-      patientId: patientId!,
-      doctorId: sessionDoctorId,
-      caseId:
-        linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
-          ? linkedCaseId
-          : savedCaseIdForWa && isPersistedTreatmentCaseId(savedCaseIdForWa)
-            ? savedCaseIdForWa
-            : null,
+    let snap = buildPostSaveFinancialSnap(activePlan, {
+      entryMode,
+      casePrice,
+      discount,
+      paid,
+      additionalDiscount,
     });
 
-    setSelectedPatientId(patientId!);
-
-    const refreshedCases = await fetchPatientTreatmentCases(
-      supabase,
-      patientId!,
-      activeClinic.clinicId
-    );
-    setTreatmentCases(refreshedCases);
-    onTreatmentCasesChanged?.(refreshedCases);
-    const waCaseId =
-      savedCaseIdForWa && isPersistedTreatmentCaseId(savedCaseIdForWa)
-        ? savedCaseIdForWa
-        : linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
-          ? linkedCaseId
-          : activeCaseId && isPersistedTreatmentCaseId(activeCaseId)
-            ? activeCaseId
-            : selectedCaseId;
-    const updatedCase = waCaseId
-      ? refreshedCases.find((c) => c.id === waCaseId) ?? null
-      : null;
-    if (updatedCase) {
-      setFinancialPlan(caseToFinancialPlan(updatedCase));
-      setSelectedCaseId(updatedCase.id);
+    if (entryMode === "plan" && casePrice > 0) {
+      const split = previewTreatmentSplitWithReview(
+        computeFinalPrice(casePrice, discount),
+        reviewFeeLive,
+        materials,
+        selectedDoctor
+      );
+      if (split) {
+        snap = {
+          ...snap,
+          doctor_share_total: split.doctorShare,
+          clinic_share_total: split.clinicShare,
+        };
+      }
     } else {
-      const updatedPlan = await fetchPatientFinancialPlan(supabase, patientId!);
-      setFinancialPlan(updatedPlan);
+      const resolvedShares = resolveCaseFinancialSplit(snap, selectedDoctor, {
+        materialsCost: materials,
+        reviewFee: reviewFeeLive,
+      });
+      if (resolvedShares) {
+        snap = {
+          ...snap,
+          doctor_share_total: resolvedShares.doctorShare,
+          clinic_share_total: resolvedShares.clinicShare,
+        };
+      }
     }
+
     const planFinalForWa =
       entryMode === "plan" && casePrice > 0
         ? computeFinalPrice(casePrice, discount)
         : 0;
-    const snap = updatedCase
-      ? caseToFinancialPlan(updatedCase)
-      : planFinalForWa > 0
-        ? {
-            ...EMPTY_FINANCIAL_PLAN,
-            final_price: planFinalForWa,
-            total_paid: paid,
-            remaining_balance: Math.max(0, planFinalForWa - paid),
-          }
-        : financialPlan ?? EMPTY_FINANCIAL_PLAN;
-
     const justCompleted =
       planFinalForWa > 0
         ? paid >= planFinalForWa - FINANCIAL_EPSILON
         : hasTreatmentPlan(snap) &&
           snap.final_price > FINANCIAL_EPSILON &&
           snap.total_paid > FINANCIAL_EPSILON &&
-          Math.max(0, snap.final_price - snap.total_paid) <= FINANCIAL_EPSILON;
+          snap.remaining_balance <= FINANCIAL_EPSILON;
 
-    setForceNewPlan(false);
+    const waProcedureLabel =
+      pickedCase?.treatment_name_ar?.trim() || operationLabel;
+    const finalP =
+      snap.final_price > 0
+        ? snap.final_price
+        : planFinalForWa > 0
+          ? planFinalForWa
+          : Number(savedOp.total_amount) || paid;
+    const totalPaidCase =
+      snap.total_paid > FINANCIAL_EPSILON ? snap.total_paid : paid;
+    const remainingBal = snap.remaining_balance;
 
     const treatmentCaseIdForWa =
       savedCaseIdForWa && isPersistedTreatmentCaseId(savedCaseIdForWa)
         ? savedCaseIdForWa
-        : resolvePersistedCaseId(refreshedCases, linkedCaseId) ??
-          resolvePersistedCaseId(refreshedCases, activeCaseId) ??
-          resolvePersistedCaseId(refreshedCases, updatedCase?.id) ??
-          resolvePersistedCaseId(refreshedCases, selectedCaseId) ??
+        : syncCaseId ??
           (linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
             ? linkedCaseId
             : null);
 
-    let messageSnapshot:
-      | {
-          remainingBalance: number;
-          sessionNumber: number;
-          totalSessionsInCase: number;
-          procedureLabel: string;
-          paidThisSession: number;
-          caseFinalPrice: number;
-          caseTotalPaid: number;
-        }
-      | undefined;
+    const messageSnapshot =
+      finalP > 0 || remainingBal > 0 || paid > 0
+        ? {
+            remainingBalance: remainingBal,
+            sessionNumber: entryMode === "plan" ? 1 : 0,
+            totalSessionsInCase: entryMode === "plan" ? 1 : 0,
+            procedureLabel: waProcedureLabel,
+            paidThisSession: paid,
+            caseFinalPrice: finalP,
+            caseTotalPaid: totalPaidCase,
+          }
+        : undefined;
 
-    const waProcedureLabel =
-      updatedCase?.treatment_name_ar ??
-      pickedCase?.treatment_name_ar ??
-      operationLabel;
-    const waFinancial = updatedCase
-      ? caseToFinancialPlan(updatedCase)
-      : hasTreatmentPlan(snap)
-        ? snap
-        : null;
+    const invoicePatientName =
+      patientQuery.trim() || defaultPatientName?.trim() || "مراجع";
+    const invoicePatientPhone =
+      patientPhone.trim() || defaultPatientPhone?.trim() || null;
+    const invoiceDoctorName =
+      selectedDoctor?.full_name_ar?.trim() ||
+      lockDoctorName?.trim() ||
+      "—";
+    const invoiceNotes = notes.trim() || null;
+    const invoiceLabNotes = labNotes.trim() || null;
+    const shareSplit = resolveCaseFinancialSplit(snap, selectedDoctor, {
+      materialsCost: materials,
+    });
 
-    if (waProcedureLabel.trim()) {
-      const useFormTotals = planFinalForWa > 0 || entryMode === "plan";
-      const finalP = useFormTotals
-        ? planFinalForWa > 0
-          ? planFinalForWa
-          : computeFinalPrice(casePrice, discount)
-        : waFinancial?.final_price ?? 0;
-      const totalPaidCase = useFormTotals
-        ? paid
-        : waFinancial?.total_paid ?? paid;
-      const remaining =
-        finalP > 0
-          ? Math.max(0, finalP - totalPaidCase)
-          : waFinancial?.remaining_balance ?? 0;
-      if (finalP > 0 || remaining > 0 || paid > 0) {
-        messageSnapshot = {
-          remainingBalance: remaining,
-          sessionNumber: entryMode === "plan" ? 1 : 0,
-          totalSessionsInCase: entryMode === "plan" ? 1 : 0,
-          procedureLabel: waProcedureLabel.trim(),
-          paidThisSession: paid,
-          caseFinalPrice: finalP,
-          caseTotalPaid: totalPaidCase,
-        };
-      }
+    setSelectedPatientId(patientId!);
+    setFinancialPlan(snap);
+    if (treatmentCaseIdForWa && isPersistedTreatmentCaseId(treatmentCaseIdForWa)) {
+      setSelectedCaseId(treatmentCaseIdForWa);
     }
-
-    let whatsappNote = "";
-    let clinicalWarning = "";
-    if (operationIdForNotify) {
-      const hasClinical =
-        clinical.xrayFiles.length > 0 ||
-        Object.keys(clinical.teeth).length > 0;
-      if (hasClinical) {
-        const clinicalRes = await saveSessionClinicalRecords(
-          operationIdForNotify,
-          clinical
-        );
-        if (!clinicalRes.ok) {
-          clinicalWarning = ` — تحذير (مخطط/أشعة): ${clinicalRes.error ?? "تعذر الحفظ"}`;
-        }
-      }
-
-      // تأكد من حفظ الملاحظات قبل إرسال واتساب
-      if (notes.trim()) {
-        await supabase
-          .from("patient_operations")
-          .update({ notes: notes.trim() })
-          .eq("id", operationIdForNotify);
-      }
-
-      try {
-        const waRes = await fetch("/api/automation/dispatch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            event: "session_saved",
-            operationId: operationIdForNotify,
-            treatmentCompleted: justCompleted,
-            treatmentCaseId:
-              treatmentCaseIdForWa ??
-              (linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
-                ? linkedCaseId
-                : null),
-            messageSnapshot,
-          }),
-        });
-
-        const waData = (await waRes.json()) as {
-          whatsapp?: {
-            sent?: boolean;
-            skipped?: string;
-            pending?: boolean;
-            errors?: string[];
-          };
-          error?: string;
-        };
-        const wa = waData.whatsapp;
-
-        if (!waRes.ok) {
-          whatsappNote = ` — واتساب: ${waData.error ?? "فشل الطلب"}`;
-        } else if (waData.error && !wa?.sent) {
-          whatsappNote = ` — واتساب: ${waData.error}`;
-        } else if (wa?.sent) {
-          whatsappNote = justCompleted
-            ? " — تم إرسال واتساب: *اكتمال العلاج* ✓"
-            : " — تم إرسال واتساب للمراجع (هذه الجلسة) ✓";
-        } else if (wa?.skipped === "no_patient_phone") {
-          whatsappNote =
-            " — لم يُرسل واتساب: أضف رقم جوال المراجع في الحقل أعلاه.";
-        } else if (wa?.pending) {
-          whatsappNote =
-            " — واتساب غير مضبوط (WHATSAPP_* في .env.local).";
-        } else if (wa?.errors?.includes("operation_context_load_failed")) {
-          whatsappNote =
-            " — تعذر قراءة الجلسة للواتساب (أعد تشغيل npm run dev وجرب مرة أخرى).";
-        } else if (wa?.errors?.length) {
-          whatsappNote = ` — تعذر إرسال واتساب: ${wa.errors[0]}`;
-        } else if (!wa?.sent) {
-          whatsappNote = " — لم يُرسل واتساب (تحقق من السجلات).";
-        }
-      } catch {
-        whatsappNote = " — تعذر تشغيل إرسال واتساب تلقائياً.";
-      }
-    }
+    setForceNewPlan(false);
 
     let successText: string;
     if (justCompleted) {
@@ -1394,7 +1383,7 @@ export function QuickEntryForm({
     }
     setMessage({
       type: "success",
-      text: successText + whatsappNote + syncWarning + clinicalWarning,
+      text: successText + syncWarning,
     });
 
     setOperationName("");
@@ -1415,39 +1404,18 @@ export function QuickEntryForm({
       notifyClinicProfitRefresh(activeClinic.clinicId);
     }
 
-    if (paid > 0 && op) {
-      setPendingSuccessOp(op);
-      const finalP =
-        snap.final_price > 0
-          ? snap.final_price
-          : planFinalForWa > 0
-            ? planFinalForWa
-            : Number(op.total_amount) || paid;
-      const totalPaidCase =
-        snap.total_paid > FINANCIAL_EPSILON
-          ? snap.total_paid
-          : messageSnapshot?.caseTotalPaid ?? paid;
-      const remainingBal =
-        messageSnapshot?.remainingBalance ??
-        (finalP > 0 ? Math.max(0, finalP - totalPaidCase) : opDebt(op));
-
+    if (paid > 0) {
+      setPendingSuccessOp(savedOp);
       setInvoiceData(
         buildSessionInvoiceData({
-          operation: op,
+          operation: savedOp,
           clinic: clinicProfile ?? null,
-          patientName:
-            patientQuery.trim() || defaultPatientName?.trim() || "مراجع",
-          patientPhone:
-            patientPhone.trim() || defaultPatientPhone?.trim() || null,
-          doctorName:
-            selectedDoctor?.full_name_ar?.trim() ||
-            lockDoctorName?.trim() ||
-            "—",
-          procedureLabel: waProcedureLabel.trim() || operationLabel,
+          patientName: invoicePatientName,
+          patientPhone: invoicePatientPhone,
+          doctorName: invoiceDoctorName,
+          procedureLabel: waProcedureLabel,
           treatmentName:
-            updatedCase?.treatment_name_ar ??
-            pickedCase?.treatment_name_ar ??
-            operationLabel,
+            pickedCase?.treatment_name_ar?.trim() || operationLabel,
           paidThisSession: paid,
           caseTotalAmount: finalP,
           caseTotalPaid: totalPaidCase,
@@ -1455,14 +1423,192 @@ export function QuickEntryForm({
           treatmentCompleted: justCompleted,
           sessionNumber: messageSnapshot?.sessionNumber,
           totalSessionsInCase: messageSnapshot?.totalSessionsInCase,
-          notes: notes.trim() || null,
-          labNotes: labNotes.trim() || null,
+          notes: invoiceNotes,
+          labNotes: invoiceLabNotes,
           materialsCost: materials > 0 ? materials : undefined,
+          doctorShareTotal:
+            shareSplit?.doctorShare ??
+            lockedSplit?.doctorShare ??
+            snap.doctor_share_total,
+          clinicShareTotal:
+            shareSplit?.clinicShare ??
+            lockedSplit?.clinicShare ??
+            snap.clinic_share_total,
         })
       );
     } else {
-      onSuccess?.(op!);
+      onSuccess?.(savedOp);
     }
+
+    void openPrescriptionModalIfAny(visitQueueEntryId, paid <= 0);
+
+    const postSaveClinical = clinical;
+    const postSaveBackfillCaseId =
+      syncCaseId ??
+      (savedCaseIdForWa && isPersistedTreatmentCaseId(savedCaseIdForWa)
+        ? savedCaseIdForWa
+        : null);
+    const postSaveLinkCaseId =
+      linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
+        ? linkedCaseId
+        : null;
+    const postSaveIsNewPlanCase =
+      entryMode === "plan" && Boolean(savedCaseIdForWa);
+
+    void (async () => {
+      let whatsappNote = "";
+      let clinicalWarning = "";
+
+      try {
+        if (postSaveBackfillCaseId && shareSplit) {
+          await backfillTreatmentCaseSharesIfMissing(
+            supabase,
+            postSaveBackfillCaseId,
+            {
+              doctorShare: shareSplit.doctorShare,
+              clinicShare: shareSplit.clinicShare,
+            }
+          );
+        }
+
+        await assignPrimaryDoctorForSession(supabase, {
+          patientId: patientId!,
+          doctorId: sessionDoctorId,
+          caseId: postSaveBackfillCaseId,
+        });
+
+        if (postSaveLinkCaseId && !postSaveIsNewPlanCase) {
+          await linkUnlinkedCaseOperations(
+            supabase,
+            postSaveLinkCaseId,
+            patientId!,
+            pickedCase?.treatment_name_ar ?? operationLabel
+          );
+        }
+
+        const hasClinical =
+          postSaveClinical.xrayFiles.length > 0 ||
+          Object.keys(postSaveClinical.teeth).length > 0;
+        if (hasClinical) {
+          const clinicalRes = await saveSessionClinicalRecords(
+            operationIdForNotify,
+            postSaveClinical
+          );
+          if (!clinicalRes.ok) {
+            clinicalWarning = ` — تحذير (مخطط/أشعة): ${clinicalRes.error ?? "تعذر الحفظ"}`;
+          }
+        }
+
+        if (invoiceNotes) {
+          await supabase
+            .from("patient_operations")
+            .update({ notes: invoiceNotes })
+            .eq("id", operationIdForNotify);
+        }
+
+        try {
+          const waRes = await fetch("/api/automation/dispatch", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              ...authPortalHeaders("accountant"),
+            },
+            body: JSON.stringify({
+              event: "session_saved",
+              operationId: operationIdForNotify,
+              treatmentCompleted: justCompleted,
+              treatmentCaseId: treatmentCaseIdForWa,
+              messageSnapshot,
+              queueEntryId: visitQueueEntryId ?? null,
+              skipPatientWhatsApp: true,
+            }),
+          });
+
+          const waData = (await waRes.json()) as {
+            whatsapp?: {
+              sent?: boolean;
+              skipped?: string;
+              pending?: boolean;
+              errors?: string[];
+            };
+            error?: string;
+          };
+          const wa = waData.whatsapp;
+
+          if (!waRes.ok) {
+            whatsappNote = ` — واتساب: ${waData.error ?? "فشل الطلب"}`;
+          } else if (waData.error && !wa?.sent) {
+            whatsappNote = ` — واتساب: ${waData.error}`;
+          } else if (wa?.sent) {
+            whatsappNote = justCompleted
+              ? " — إشعار الطبيب فقط (لا واتساب تلقائي للمراجع)"
+              : " — لا واتساب تلقائي للمراجع — أرسل من نافذة الفاتورة";
+          } else if (wa?.skipped === "no_patient_phone") {
+            whatsappNote =
+              " — لم يُرسل واتساب: أضف رقم جوال المراجع في الحقل أعلاه.";
+          } else if (wa?.pending) {
+            whatsappNote =
+              " — واتساب غير مضبوط (WHATSAPP_* في .env.local).";
+          } else if (wa?.errors?.includes("operation_context_load_failed")) {
+            whatsappNote =
+              " — تعذر قراءة الجلسة للواتساب (أعد تشغيل npm run dev وجرب مرة أخرى).";
+          } else if (wa?.errors?.length) {
+            whatsappNote = ` — تعذر إرسال واتساب: ${wa.errors[0]}`;
+          } else if (!wa?.sent) {
+            whatsappNote = " — لم يُرسل واتساب (تحقق من السجلات).";
+          }
+        } catch {
+          whatsappNote = " — تعذر تشغيل إرسال واتساب تلقائياً.";
+        }
+
+        if (visitQueueEntryId && activeClinic.clinicId && paid > 0) {
+          try {
+            await fetch("/api/operations/complete-visit", {
+              method: "POST",
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+                ...authPortalHeaders("accountant"),
+              },
+              body: JSON.stringify({ queue_entry_id: visitQueueEntryId }),
+            });
+            notifyQueueRefresh({
+              scope: "clinic",
+              clinicId: activeClinic.clinicId,
+            });
+          } catch {
+            // الدفع سُجّل — إغلاق الدور اختياري
+          }
+        }
+
+        const refreshedCases = await fetchPatientTreatmentCases(
+          supabase,
+          patientId!,
+          activeClinic.clinicId
+        );
+        setTreatmentCases(refreshedCases);
+        onTreatmentCasesChanged?.(refreshedCases);
+        const refreshedCase = treatmentCaseIdForWa
+          ? refreshedCases.find((c) => c.id === treatmentCaseIdForWa) ?? null
+          : null;
+        if (refreshedCase) {
+          setFinancialPlan(caseToFinancialPlan(refreshedCase));
+        }
+
+        if (whatsappNote || clinicalWarning) {
+          setMessage((prev) =>
+            prev?.type === "success"
+              ? { ...prev, text: prev.text + whatsappNote + clinicalWarning }
+              : prev
+          );
+        }
+      } catch (bgErr) {
+        console.error("[QuickEntryForm] post-save background", bgErr);
+      }
+    })();
+
+    return;
 
     } catch (err) {
       console.error("[QuickEntryForm] handleSubmit", err);
@@ -1530,7 +1676,7 @@ export function QuickEntryForm({
         )}
 
         {forceNewPlan && !showCasePicker && (
-          <div className="sm:col-span-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+          <div className="sm:col-span-2 mc-section-box">
             <p className="text-sm font-semibold text-primary">
               حالة علاج جديدة — أدخل السعر الكلي والمبلغ المدفوع في هذه الجلسة
             </p>
@@ -1719,7 +1865,7 @@ export function QuickEntryForm({
           </p>
         )}
         {isFollowUpSession && selectedCase && !embedded && (
-          <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+          <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 mc-section-box">
             <div>
               <p className="text-xs text-slate-muted">الحالة المختارة</p>
               <p className="font-semibold text-slate-text">
@@ -1743,7 +1889,7 @@ export function QuickEntryForm({
         {formSchema.showDoctor && (
         <>
         {lockDoctorId ? (
-          <div className="sm:col-span-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+          <div className="sm:col-span-2 mc-section-box">
             <p className="text-xs text-slate-muted">طبيب الموعد / الجلسة</p>
             <p className="text-base font-semibold text-slate-text">
               {selectedDoctor?.full_name_ar ??
@@ -1755,7 +1901,7 @@ export function QuickEntryForm({
         ) : (
           <>
             {selectedDoctor && (
-              <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+              <div className="sm:col-span-2 mc-section-box--warning px-4 py-2 text-sm">
                 تأكد من <strong>الطبيب</strong> قبل الحفظ — الرصيد يُحسب لهذا الطبيب فقط
               </div>
             )}
@@ -1774,7 +1920,7 @@ export function QuickEntryForm({
         )}
 
         {formSchema.showPlanSummary && plan.final_price > 0 && (
-          <div className="sm:col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm space-y-1">
+          <div className="sm:col-span-2 mc-section-box space-y-1 text-sm">
             <p className="font-semibold text-slate-text">
               من أول جلسة (محفوظ): السعر الكلي {formatCurrency(plan.case_price)}
             </p>
@@ -1848,7 +1994,7 @@ export function QuickEntryForm({
                 placeholder="0"
               />
             )}
-            <div className="sm:col-span-2 rounded-lg border border-emerald-200 bg-emerald-50/80 px-4 py-3">
+            <div className="sm:col-span-2 mc-section-box--success">
               <p className="text-sm text-emerald-900">
                 السعر النهائي بعد الخصم:{" "}
                 <span className="text-lg font-bold tabular-nums">
@@ -1979,12 +2125,27 @@ export function QuickEntryForm({
         </div>
         )}
 
-        {formSchema.showClinicalRecord && (
-        <SessionClinicalRecord
-          value={clinical}
-          onChange={setClinical}
+        {visitQueueEntryId && (selectedPatientId || defaultPatientId) && (
+          <div className="sm:col-span-2">
+            <VisitSessionClinicalPanel
+              patientId={selectedPatientId ?? defaultPatientId ?? null}
+              queueEntryId={visitQueueEntryId}
+              portal="accountant"
+              defaultOpen={false}
+            />
+          </div>
+        )}
+
+        {formSchema.showClinicalRecord && !visitQueueEntryId && (
+        <VisualMedicalRecord
+          draft={clinical}
+          onDraftChange={setClinical}
           disabled={loading}
           chartResetKey={clinicalResetKey}
+          portal="accountant"
+          collapsible
+          defaultOpen={false}
+          className="sm:col-span-2"
         />
         )}
 
@@ -2011,7 +2172,7 @@ export function QuickEntryForm({
           doctor={selectedDoctor}
           reviewFee={reviewFeeLive}
           lockedSplit={lockedSplit}
-          isPaymentSession={false}
+          isPaymentSession={isFollowUpSession}
         />
         )}
 
@@ -2072,18 +2233,35 @@ export function QuickEntryForm({
       {invoiceData && (
         <SessionInvoiceModal
           data={invoiceData}
+          queueEntryId={visitQueueEntryId}
+          prescriptionId={pendingPrescriptionId}
           onFinalized={() => {
             if (pendingSuccessOp) {
               onSuccess?.(pendingSuccessOp);
               setPendingSuccessOp(null);
             }
+            setPendingPrescriptionId(null);
           }}
           onClose={() => {
             setInvoiceData(null);
+            setPendingPrescriptionId(null);
             if (pendingSuccessOp) {
               onSuccess?.(pendingSuccessOp);
               setPendingSuccessOp(null);
             }
+          }}
+        />
+      )}
+
+      {prescriptionModalId && !invoiceData && (
+        <PrescriptionPrintModal
+          prescriptionId={prescriptionModalId}
+          portal="accountant"
+          queueEntryId={visitQueueEntryId}
+          afterSessionSave
+          onClose={() => {
+            setPrescriptionModalId(null);
+            setPendingPrescriptionId(null);
           }}
         />
       )}

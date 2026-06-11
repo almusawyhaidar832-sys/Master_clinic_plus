@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getApiCallerProfile,
+  isApiAssistantRole,
   isApiDoctorRole,
   isApiStaffRole,
 } from "@/lib/auth/api-session";
@@ -13,6 +14,10 @@ import {
   recallAccountantNotification,
   sendQueueEntryToDoctor,
 } from "@/lib/queue/server";
+
+function staffRolesOk(role: string) {
+  return isApiStaffRole(role) || isApiAssistantRole(role);
+}
 
 /** GET — today's queue + doctors list for accountant dashboard */
 export async function GET(req: NextRequest) {
@@ -122,7 +127,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.action === "send_to_doctor") {
-      if (!isApiStaffRole(role)) {
+      if (!staffRolesOk(role)) {
         return NextResponse.json(
           { error: `غير مصرح — دورك "${profile.role ?? "?"}" لا يسمح` },
           { status: 403 }
@@ -164,7 +169,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true });
       }
 
-      if (!isApiStaffRole(role)) {
+      if (!staffRolesOk(role)) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
 
@@ -186,7 +191,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    if (!isApiStaffRole(role)) {
+    if (!staffRolesOk(role)) {
       return NextResponse.json(
         { error: `غير مصرح — دورك "${profile.role ?? "?"}" لا يسمح بإضافة مراجع` },
         { status: 403 }
@@ -198,16 +203,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "اختر الطبيب" }, { status: 400 });
     }
 
+    const sendToDoctor =
+      body.send_to_doctor !== false;
+
     const id = await insertQueueEntry({
       clinic_id: profile.clinic_id,
       doctor_id: doctorId,
       patient_name: body.patient_name,
       patient_phone: body.patient_phone,
       patient_id: body.patient_id,
-      send_to_doctor: Boolean(body.send_to_doctor),
+      send_to_doctor: sendToDoctor,
     });
 
-    return NextResponse.json({ success: true, id });
+    return NextResponse.json({ success: true, id, doctor_id: doctorId });
   } catch (err) {
     console.error("[api/queue POST]", err);
     return NextResponse.json(

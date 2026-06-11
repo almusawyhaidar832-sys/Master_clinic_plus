@@ -19,6 +19,7 @@ export type SessionSavedOptions = {
   skipPatientWhatsApp?: boolean;
   treatmentCaseId?: string | null;
   messageSnapshot?: WhatsAppMessageSnapshot | null;
+  queueEntryId?: string | null;
 };
 
 export type UnifiedWhatsAppOutcome = {
@@ -100,6 +101,7 @@ export async function runSessionSavedAutomation(
     skipPatient: Boolean(options.skipPatientWhatsApp) || !ctx.patientPhone?.trim(),
     skipDoctor: !sendDoctor,
     patientMessageType: waType,
+    queueEntryId: options.queueEntryId ?? null,
   });
 
   if (wa.skipped) {

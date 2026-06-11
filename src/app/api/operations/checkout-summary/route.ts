@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile, isApiStaffRole } from "@/lib/auth/api-session";
+import {
+  createApiSessionClient,
+  getApiCallerProfile,
+  isApiStaffRole,
+} from "@/lib/auth/api-session";
+import { getActiveClinicIdServer } from "@/lib/clinic-context.server";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { fetchSessionCheckoutSummary } from "@/lib/services/session-checkout";
 
@@ -7,7 +12,14 @@ import { fetchSessionCheckoutSummary } from "@/lib/services/session-checkout";
 export async function GET(req: NextRequest) {
   try {
     const profile = await getApiCallerProfile(req);
-    if (!profile?.clinic_id || !isApiStaffRole(String(profile.role))) {
+    if (!profile || !isApiStaffRole(String(profile.role))) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    }
+
+    const supabase = await createApiSessionClient(req);
+    const activeClinic = await getActiveClinicIdServer(supabase);
+    const clinicId = activeClinic?.clinicId ?? profile.clinic_id;
+    if (!clinicId) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
@@ -22,11 +34,10 @@ export async function GET(req: NextRequest) {
     }
 
     const admin = getAdminClient();
-    const summary = await fetchSessionCheckoutSummary(
-      admin,
-      profile.clinic_id as string,
-      { appointmentId, queueEntryId }
-    );
+    const summary = await fetchSessionCheckoutSummary(admin, clinicId, {
+      appointmentId,
+      queueEntryId,
+    });
 
     return NextResponse.json({ summary });
   } catch (err) {

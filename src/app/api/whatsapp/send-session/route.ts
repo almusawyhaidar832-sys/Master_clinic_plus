@@ -78,6 +78,8 @@ export async function POST(req: NextRequest) {
     const caseId = String(op.treatment_case_id ?? "").trim() || null;
     const clinicName = getClinicDisplayName(resolved.clinic);
 
+    const queueEntryId = String(body?.queue_entry_id ?? "").trim() || null;
+
     const wa = await sendUnifiedWhatsApp({
       supabase: admin,
       operationId,
@@ -89,6 +91,7 @@ export async function POST(req: NextRequest) {
       patientPhone: phone,
       skipDoctor: true,
       patientMessageType: "session_update",
+      queueEntryId,
     });
 
     if (!wa.patientSent && !wa.patientPending) {

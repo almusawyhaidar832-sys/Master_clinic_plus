@@ -23,9 +23,11 @@ export async function resolveAppointmentPaymentUrl(
 ): Promise<string> {
   let patientId = input.patientId ?? null;
   let doctorId = input.doctorId ?? null;
+  let patientPhone = input.patientPhone ?? null;
+
+  const supabase = createClient();
 
   if (input.appointmentId) {
-    const supabase = createClient();
     const ctx = await ensureAppointmentPatientClient(
       supabase,
       input.appointmentId,
@@ -35,9 +37,34 @@ export async function resolveAppointmentPaymentUrl(
     doctorId = doctorId ?? ctx.doctorId;
   }
 
-  if (!patientId && input.patientPhone?.trim()) {
-    const supabase = createClient();
-    const digits = input.patientPhone.replace(/\D/g, "");
+  if (!patientId && input.queueEntryId) {
+    const { data: queueEntry } = await supabase
+      .from("patient_queue")
+      .select("patient_id, doctor_id, patient_phone, appointment_id")
+      .eq("id", input.queueEntryId)
+      .eq("clinic_id", input.clinicId)
+      .maybeSingle();
+
+    patientId = (queueEntry?.patient_id as string | null) ?? patientId;
+    doctorId = doctorId ?? (queueEntry?.doctor_id as string | undefined) ?? null;
+
+    if (!patientId && queueEntry?.appointment_id) {
+      const ctx = await ensureAppointmentPatientClient(
+        supabase,
+        queueEntry.appointment_id as string,
+        input.clinicId
+      );
+      patientId = ctx.patientId;
+      doctorId = doctorId ?? ctx.doctorId;
+    }
+
+    if (!patientId && !patientPhone?.trim() && queueEntry?.patient_phone) {
+      patientPhone = queueEntry.patient_phone as string;
+    }
+  }
+
+  if (!patientId && patientPhone?.trim()) {
+    const digits = patientPhone.replace(/\D/g, "");
     if (digits) {
       const { data } = await supabase
         .from("patients")
@@ -50,7 +77,7 @@ export async function resolveAppointmentPaymentUrl(
     }
   }
 
-  if (!patientId && !input.appointmentId) {
+  if (!patientId && !input.appointmentId && !input.queueEntryId) {
     throw new Error("لا يوجد ملف مريض — سجّل الدخول أولاً أو اربط الموعد بمريض");
   }
 
@@ -59,5 +86,7 @@ export async function resolveAppointmentPaymentUrl(
     appointmentId: input.appointmentId ?? null,
     queueEntryId: input.queueEntryId ?? null,
     doctorId,
+    patientName: input.patientNameAr ?? null,
+    patientPhone,
   });
 }

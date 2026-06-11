@@ -36,6 +36,7 @@ const STATUS_CONFIG: Record<
   waiting:        { label: "في الانتظار",  color: "text-amber-800",   bg: "bg-amber-50"    },
   in_clinic:      { label: "داخل العيادة", color: "text-teal-700",    bg: "bg-teal-100"    },
   in_examination: { label: "داخل الكشف", color: "text-emerald-700", bg: "bg-emerald-100" },
+  ready_for_billing: { label: "عند المحاسب", color: "text-violet-700", bg: "bg-violet-100" },
   ready_for_payment: { label: "جاهز للدفع", color: "text-violet-700", bg: "bg-violet-100" },
   completed:      { label: "مكتمل",        color: "text-violet-600",  bg: "bg-violet-100"  },
   cancelled:      { label: "ملغي",         color: "text-red-600",     bg: "bg-red-100"     },
@@ -301,7 +302,8 @@ export function TodayAppointmentsPanel({
             const cfg = STATUS_CONFIG[a.status] ?? STATUS_CONFIG.scheduled;
             const isPending = a.status === "pending";
             const canCheckIn = ["scheduled", "confirmed", "waiting"].includes(a.status);
-            const canCheckout = a.status === "ready_for_payment";
+            const canCheckout =
+              a.status === "ready_for_billing" || a.status === "ready_for_payment";
             const inConsultation = a.status === "in_clinic" || a.status === "in_examination";
 
             return (

@@ -65,3 +65,12 @@ export async function downloadSessionInvoicePdf(
   const inv = input.invoiceNumber.replace(/\s/g, "");
   await downloadElementAsPdf(input.elementId, `فاتورة-${inv}-${name}.pdf`);
 }
+
+/** تصدير وصفة طبية */
+export async function downloadPrescriptionPdf(input: {
+  patientName: string;
+  elementId: string;
+}): Promise<void> {
+  const name = safePdfFilename(input.patientName, "مريض");
+  await downloadElementAsPdf(input.elementId, `وصفة-${name}.pdf`);
+}

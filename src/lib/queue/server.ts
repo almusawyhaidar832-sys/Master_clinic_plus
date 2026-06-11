@@ -6,6 +6,7 @@ export type QueueStatus =
   | "waiting"
   | "called"
   | "in_progress"
+  | "ready_for_billing"
   | "ready_for_payment"
   | "done"
   | "cancelled";
@@ -48,7 +49,7 @@ export async function fetchClinicQueue(
       patient_id, doctor_id, clinic_id, created_at, called_at, entered_at,
       sent_to_doctor_at, appointment_id,
       doctor:doctors(full_name_ar),
-      patient:patients(full_name_ar)
+      patient:patients(full_name_ar, speech_name_ar)
     `
     )
     .eq("clinic_id", clinicId)
@@ -76,7 +77,7 @@ export async function notifyDoctorNewQueuePatient(queueEntryId: string) {
   const { data: entry, error } = await admin
     .from("patient_queue")
     .select(
-      "id, clinic_id, doctor_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar)"
+      "id, clinic_id, doctor_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar, speech_name_ar)"
     )
     .eq("id", queueEntryId)
     .maybeSingle();
@@ -108,14 +109,14 @@ export async function notifyDoctorNewQueuePatient(queueEntryId: string) {
   ]);
 }
 
-/** Notify accountants: patient ready for checkout after doctor session */
-export async function notifyAccountantsReadyForPayment(queueEntryId: string) {
+/** Notify accountants: doctor sent session for billing */
+export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
   const admin = getAdminClient();
 
   const { data: entry, error } = await admin
     .from("patient_queue")
     .select(
-      "id, clinic_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar)"
+      "id, clinic_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar, speech_name_ar)"
     )
     .eq("id", queueEntryId)
     .maybeSingle();
@@ -126,7 +127,7 @@ export async function notifyAccountantsReadyForPayment(queueEntryId: string) {
     .from("profiles")
     .select("id")
     .eq("clinic_id", entry.clinic_id)
-    .in("role", ["accountant", "super_admin"]);
+    .in("role", ["accountant", "super_admin", "assistant"]);
 
   if (!staff?.length) return;
 
@@ -137,13 +138,57 @@ export async function notifyAccountantsReadyForPayment(queueEntryId: string) {
     ticket_number: entry.ticket_number,
   });
 
+  const ledgerPath = `/dashboard/ledger?queue_entry_id=${entry.id}`;
+
+  await insertNotifications(
+    staff.map((s) => ({
+      clinic_id: entry.clinic_id,
+      recipient_profile_id: s.id,
+      title_ar: "جلسة جاهزة للمحاسبة",
+      body_ar: `المراجع ${name} — أُرسلت الجلسة من الطبيب، أكمل الفاتورة`,
+      link_path: ledgerPath,
+    }))
+  );
+}
+
+/** Notify accountants: patient ready for checkout after doctor session */
+export async function notifyAccountantsReadyForPayment(queueEntryId: string) {
+  const admin = getAdminClient();
+
+  const { data: entry, error } = await admin
+    .from("patient_queue")
+    .select(
+      "id, clinic_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar, speech_name_ar)"
+    )
+    .eq("id", queueEntryId)
+    .maybeSingle();
+
+  if (error || !entry) return;
+
+  const { data: staff } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("clinic_id", entry.clinic_id)
+    .in("role", ["accountant", "super_admin", "assistant"]);
+
+  if (!staff?.length) return;
+
+  const patientRow = entry.patient as { full_name_ar?: string } | null;
+  const name = resolvePatientDisplayName({
+    patient: patientRow ? { full_name_ar: patientRow.full_name_ar ?? "" } : null,
+    patient_name: entry.patient_name,
+    ticket_number: entry.ticket_number,
+  });
+
+  const ledgerPath = `/dashboard/ledger?queue_entry_id=${entry.id}`;
+
   await insertNotifications(
     staff.map((s) => ({
       clinic_id: entry.clinic_id,
       recipient_profile_id: s.id,
       title_ar: "جاهز للدفع",
-      body_ar: `المراجع ${name} — أنهى الطبيب الجلسة، أكمل الحساب الآن`,
-      link_path: "/dashboard/queue",
+      body_ar: `المراجع ${name} — الجلسة جاهزة، أكمل الحساب الآن`,
+      link_path: ledgerPath,
     }))
   );
 }
@@ -155,7 +200,7 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
   const { data: entry, error } = await admin
     .from("patient_queue")
     .select(
-      "id, clinic_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar)"
+      "id, clinic_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar, speech_name_ar)"
     )
     .eq("id", queueEntryId)
     .maybeSingle();
@@ -252,6 +297,21 @@ export async function insertQueueEntry(input: {
 
   if (error) throw new Error(error.message);
 
+  const entryId = data.id as string;
+
+  if (!input.patient_id && entryId) {
+    const hasIdentity =
+      Boolean(input.patient_name?.trim()) || Boolean(input.patient_phone?.trim());
+    if (hasIdentity) {
+      const { ensureQueueEntryPatient } = await import(
+        "@/lib/services/ensure-queue-entry-patient"
+      );
+      await ensureQueueEntryPatient(admin, entryId, input.clinic_id).catch((err) => {
+        console.error("[queue] auto-link patient on insert failed:", err);
+      });
+    }
+  }
+
   if (input.send_to_doctor && data?.id) {
     await notifyDoctorNewQueuePatient(data.id).catch((err) => {
       console.error("[queue] doctor notification on insert failed:", err);
@@ -279,12 +339,15 @@ export async function updateQueueStatus(
   const { data, error } = await query.select("id").maybeSingle();
   if (error) {
     if (
-      status === "ready_for_payment" &&
+      (status === "ready_for_payment" || status === "ready_for_billing") &&
       (error.message.includes("ready_for_payment") ||
+        error.message.includes("ready_for_billing") ||
         error.message.includes("invalid input value"))
     ) {
       throw new Error(
-        "حالة ready_for_payment غير موجودة — شغّل supabase/scripts/16-queue-checkout-flow.sql"
+        status === "ready_for_billing"
+          ? "حالة ready_for_billing غير موجودة — شغّل supabase/scripts/31-ready-for-billing.sql"
+          : "حالة ready_for_payment غير موجودة — شغّل supabase/scripts/16-queue-checkout-flow.sql"
       );
     }
     throw new Error(error.message);

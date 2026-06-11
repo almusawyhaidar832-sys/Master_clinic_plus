@@ -3,26 +3,25 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { Select } from "@/components/ui/Select";
+import { PatientSearchField } from "@/components/patients/PatientSearchField";
 import { PatientStatementDocument } from "@/components/doctor/PatientStatementDocument";
 import { ReportActions } from "@/components/reports/ReportActions";
 import { downloadPatientStatementPdf } from "@/lib/reports/pdf-export";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
-import { fetchPatientsForCurrentDoctor } from "@/lib/services/doctor-patients";
 import { fetchPatientTreatmentCases } from "@/lib/services/patient-treatment-cases";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
 import type { Patient, PatientOperation, MedicalLog } from "@/types";
+import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
 
 function StatementContent() {
   const searchParams = useSearchParams();
   const preselectedId = searchParams.get("patientId");
+  const queueEntryId = searchParams.get("queue_entry_id");
   const { profile, displayName } = useClinicProfile();
 
-  const [patients, setPatients] = useState<{ value: string; label: string }[]>(
-    []
-  );
+  const [patientQuery, setPatientQuery] = useState("");
   const [patientId, setPatientId] = useState(preselectedId ?? "");
   const [patient, setPatient] = useState<Patient | null>(null);
   const [operations, setOperations] = useState<PatientOperation[]>([]);
@@ -36,21 +35,23 @@ function StatementContent() {
   const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
-    async function loadPatients() {
-      const supabase = createClient();
-      const list = await fetchPatientsForCurrentDoctor(supabase);
-      setPatients(
-        list.map((p) => ({
-          value: p.id,
-          label: p.full_name_ar,
-        }))
-      );
-    }
-    loadPatients();
-  }, []);
+    if (!preselectedId) return;
 
-  useEffect(() => {
-    if (preselectedId) setPatientId(preselectedId);
+    async function loadPreselected() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("patients")
+        .select("id, full_name_ar")
+        .eq("id", preselectedId)
+        .maybeSingle();
+
+      if (data) {
+        setPatientId(data.id);
+        setPatientQuery(String(data.full_name_ar ?? ""));
+      }
+    }
+
+    void loadPreselected();
   }, [preselectedId]);
 
   async function generate() {
@@ -89,20 +90,47 @@ function StatementContent() {
       </h2>
 
       <div className="no-print space-y-3">
-        <Select
-          label="اختر المريض"
-          value={patientId}
-          onChange={(e) => {
-            setPatientId(e.target.value);
-            setGenerated(false);
-          }}
-          options={patients}
-          placeholder="اختر مريضاً"
-        />
+        <div className="w-full space-y-1.5">
+          <label className="block text-sm font-medium text-slate-text">
+            اختر المراجع
+          </label>
+          <PatientSearchField
+            value={patientQuery}
+            onChange={(value) => {
+              setPatientQuery(value);
+              setPatientId("");
+              setGenerated(false);
+            }}
+            onSelect={(p) => {
+              setPatientId(p.id);
+              setPatientQuery(p.full_name_ar);
+              setGenerated(false);
+            }}
+            portal="doctor"
+            selectedPatientId={patientId || null}
+            placeholder="اكتب أول حرفين من اسم المراجع..."
+            inputClassName="h-10"
+          />
+          <p className="text-xs text-slate-muted">
+            ابحث بالاسم أو رقم الهاتف — يظهر مراجعوك فقط
+          </p>
+        </div>
         <Button className="w-full" onClick={generate} disabled={!patientId}>
           إنشاء الكشف
         </Button>
       </div>
+
+      {patientId && (
+        <div className="no-print rounded-2xl border border-teal-100 bg-white p-4 shadow-sm">
+          <VisitSessionClinicalPanel
+            patientId={patientId}
+            queueEntryId={queueEntryId}
+            portal="doctor"
+            showSendToAccounting
+            defaultOpen
+          />
+        </div>
+      )}
 
       {generated && patient && (
         <div className="space-y-4">

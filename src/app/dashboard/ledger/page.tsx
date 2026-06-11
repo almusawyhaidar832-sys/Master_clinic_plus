@@ -25,6 +25,7 @@ import { getPatientDisplayPhone } from "@/lib/phone";
 import { opName, type PatientOperation } from "@/types";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
 import { RefreshCw } from "lucide-react";
+import { VisualMedicalRecord } from "@/components/clinical/VisualMedicalRecord";
 
 type RowWithJoins = TodayOperationRow;
 
@@ -45,6 +46,8 @@ function LedgerPageContent() {
   const appointmentIdParam = searchParams.get("appointment_id") ?? undefined;
   const queueEntryIdParam = searchParams.get("queue_entry_id") ?? undefined;
   const doctorIdParam = searchParams.get("doctor_id") ?? undefined;
+  const patientNameParam = searchParams.get("patient_name") ?? undefined;
+  const patientPhoneParam = searchParams.get("patient_phone") ?? undefined;
   const presetCaseId = searchParams.get("case") ?? undefined;
 
   const { clinicId, loading: clinicLoading } = useActiveClinicId();
@@ -57,7 +60,7 @@ function LedgerPageContent() {
     null
   );
   const [contextLoading, setContextLoading] = useState(
-    () => !!(patientIdParam || appointmentIdParam)
+    () => !!(patientIdParam || appointmentIdParam || queueEntryIdParam)
   );
   const [contextError, setContextError] = useState<string | null>(null);
 
@@ -94,7 +97,7 @@ function LedgerPageContent() {
     let cancelled = false;
 
     async function resolvePatientContext() {
-      if (!patientIdParam && !appointmentIdParam) {
+      if (!patientIdParam && !appointmentIdParam && !queueEntryIdParam) {
         setPatientContext(null);
         setContextLoading(false);
         setContextError(null);
@@ -107,12 +110,60 @@ function LedgerPageContent() {
       try {
         const supabase = createClient();
         let resolvedPatientId = patientIdParam;
-        let patientName = "";
-        let patientPhone: string | undefined;
+        let patientName = patientNameParam?.trim() || "";
+        let patientPhone: string | undefined = patientPhoneParam ?? undefined;
         let doctorId = doctorIdParam ?? undefined;
         let doctorName: string | undefined;
+        let queueContextWarning: string | null = null;
 
-        if (appointmentIdParam) {
+        if (queueEntryIdParam || appointmentIdParam) {
+          const params = new URLSearchParams();
+          if (queueEntryIdParam) {
+            params.set("queue_entry_id", queueEntryIdParam);
+          }
+          if (appointmentIdParam) {
+            params.set("appointment_id", appointmentIdParam);
+          }
+
+          try {
+            const res = await fetch(
+              `/api/operations/checkout-summary?${params.toString()}`,
+              {
+                credentials: "include",
+                headers: authPortalHeaders("accountant"),
+              }
+            );
+            const json = (await res.json().catch(() => ({}))) as {
+              summary?: {
+                patientId: string;
+                patientName: string;
+                patientPhone: string | null;
+                doctorId: string;
+                doctorName: string;
+              };
+              error?: string;
+            };
+
+            if (res.ok && json.summary) {
+              const summary = json.summary;
+              resolvedPatientId = resolvedPatientId ?? summary.patientId;
+              patientName = patientName || summary.patientName || "";
+              patientPhone = patientPhone ?? summary.patientPhone ?? undefined;
+              doctorId = doctorId ?? summary.doctorId;
+              doctorName = doctorName ?? summary.doctorName;
+            } else if (queueEntryIdParam && !patientIdParam) {
+              queueContextWarning =
+                json.error ?? "تعذر تحميل دور الانتظار — أكمل الإدخال يدوياً";
+            }
+          } catch {
+            if (queueEntryIdParam && !patientIdParam) {
+              queueContextWarning =
+                "تعذر الاتصال بالسيرفر لتحميل دور الانتظار";
+            }
+          }
+        }
+
+        if (appointmentIdParam && !resolvedPatientId) {
           const apptCtx = await ensureAppointmentPatientClient(
             supabase,
             appointmentIdParam,
@@ -125,8 +176,44 @@ function LedgerPageContent() {
           doctorName = doctorName ?? apptCtx.doctorName;
         }
 
+        if (queueEntryIdParam && !resolvedPatientId) {
+          const { data: queueEntry } = await supabase
+            .from("patient_queue")
+            .select("patient_id, doctor_id, patient_name, patient_phone")
+            .eq("id", queueEntryIdParam)
+            .maybeSingle();
+
+          if (queueEntry) {
+            resolvedPatientId =
+              resolvedPatientId ??
+              (queueEntry.patient_id as string | null) ??
+              undefined;
+            doctorId = doctorId ?? (queueEntry.doctor_id as string | undefined);
+            patientName =
+              patientName ||
+              (queueEntry.patient_name as string | null)?.trim() ||
+              "";
+            patientPhone =
+              patientPhone ??
+              (queueEntry.patient_phone as string | null) ??
+              undefined;
+          } else if (!patientIdParam) {
+            queueContextWarning = queueContextWarning ?? "دور الانتظار غير موجود";
+          }
+        }
+
         if (!resolvedPatientId) {
-          throw new Error("معرّف المريض غير متوفر");
+          if (patientName) {
+            setPatientContext(null);
+            setContextError(
+              queueContextWarning ??
+                "لم يُعثر على ملف المريض — ابحث عن المراجع في نموذج الإدخال"
+            );
+            return;
+          }
+          throw new Error(
+            queueContextWarning ?? "معرّف المريض غير متوفر"
+          );
         }
 
         if (!patientName) {
@@ -193,7 +280,10 @@ function LedgerPageContent() {
     clinicLoading,
     patientIdParam,
     appointmentIdParam,
+    queueEntryIdParam,
     doctorIdParam,
+    patientNameParam,
+    patientPhoneParam,
   ]);
 
   const columns: Column<RowWithJoins>[] = [
@@ -241,6 +331,20 @@ function LedgerPageContent() {
       },
     },
     {
+      key: "clinical",
+      header: "السجل البصري",
+      render: (row) => (
+        <VisualMedicalRecord
+          operationId={row.id}
+          portal="accountant"
+          collapsible
+          defaultOpen={false}
+          compact
+          onSaved={loadOperations}
+        />
+      ),
+    },
+    {
       key: "profile",
       header: "",
       render: (row) => (
@@ -262,7 +366,7 @@ function LedgerPageContent() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-slate-text">إدخال جلسة</h2>
-        <p className="text-slate-muted">
+        <p className="mc-page-subtitle">
           إدخال سريع وعمليات اليوم — {formatDate(new Date())}
         </p>
       </div>
@@ -293,16 +397,21 @@ function LedgerPageContent() {
         </Alert>
       )}
 
-      {!contextLoading && !contextError && (
+      {!contextLoading && (
         <QuickEntryForm
           key={formKey}
           defaultPatientId={patientContext?.patientId ?? patientIdParam}
-          defaultPatientName={patientContext?.patientName}
-          defaultPatientPhone={patientContext?.patientPhone}
+          defaultPatientName={
+            patientContext?.patientName ?? patientNameParam
+          }
+          defaultPatientPhone={
+            patientContext?.patientPhone ?? patientPhoneParam
+          }
           defaultCaseId={presetCaseId}
           prefetchedCases={patientContext?.treatmentCases}
           lockDoctorId={patientContext?.doctorId}
           lockDoctorName={patientContext?.doctorName}
+          visitQueueEntryId={queueEntryIdParam}
           onSuccess={async () => {
             loadOperations();
 

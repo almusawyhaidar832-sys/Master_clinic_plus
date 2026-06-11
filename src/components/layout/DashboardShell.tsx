@@ -85,7 +85,7 @@ export function DashboardShell({
           showGlobalSync={showGlobalSync}
           clinicId={clinicId}
         />
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
+        <main className="mc-app-main flex-1 p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );

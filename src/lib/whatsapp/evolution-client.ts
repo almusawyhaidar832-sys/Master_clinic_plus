@@ -426,3 +426,59 @@ export async function sendEvolutionText(
 
   return { ok: true, status: res.status, data: res.data };
 }
+
+/** إرسال ملف (PDF) عبر Evolution */
+export async function sendEvolutionDocument(
+  rawPhone: string,
+  input: {
+    base64: string;
+    fileName: string;
+    caption?: string;
+    mimetype?: string;
+  },
+  options?: { clinicId?: string; instanceName?: string }
+): Promise<{ ok: boolean; status: number; error?: string; data?: unknown }> {
+  const { configured } = getWhatsAppConfig();
+  const instanceName =
+    options?.instanceName?.trim() ||
+    (options?.clinicId
+      ? await resolveWhatsAppInstanceForClinic(options.clinicId)
+      : await resolveWhatsAppInstanceName());
+  if (!configured) {
+    return { ok: false, status: 0, error: "whatsapp_not_configured" };
+  }
+
+  let number = digitsOnly(rawPhone);
+  if (number.startsWith("00")) number = number.slice(2);
+  if (number.startsWith("0")) number = `964${number.slice(1)}`;
+  if (!number.startsWith("964") && number.length >= 10) {
+    number = `964${number}`;
+  }
+
+  const media = input.base64.replace(/^data:application\/pdf;base64,/, "");
+
+  const res = await evolutionFetch(
+    `/message/sendMedia/${encodeURIComponent(instanceName)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        number,
+        mediatype: "document",
+        mimetype: input.mimetype ?? "application/pdf",
+        fileName: input.fileName,
+        caption: input.caption ?? "",
+        media,
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const err =
+      typeof res.data === "object" && res.data && "message" in (res.data as object)
+        ? String((res.data as { message: string }).message)
+        : res.text.slice(0, 400);
+    return { ok: false, status: res.status, error: err, data: res.data };
+  }
+
+  return { ok: true, status: res.status, data: res.data };
+}

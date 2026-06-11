@@ -1,10 +1,16 @@
 "use client";
 
 import {
-  announceArabic,
-  showBrowserNotification,
-} from "@/lib/queue/realtime-client";
-import { prepareSpeechAuto } from "@/lib/queue/web-speech";
+  splitAccountantAdmitSpeech,
+  splitDoctorExamSpeech,
+  splitDoctorNewPatientSpeech,
+} from "@/lib/queue/arabic-speech-text";
+import { showBrowserNotification } from "@/lib/queue/realtime-client";
+import {
+  prepareSpeechAuto,
+  speakArabic,
+  speakPatientCallParts,
+} from "@/lib/queue/web-speech";
 
 export type QueueAlertKind =
   | "doctor_new"
@@ -16,6 +22,8 @@ export interface QueueAlertDetail {
   title: string;
   message: string;
   linkPath?: string;
+  /** لنطق الاسم بمخارج أوضح */
+  patientName?: string;
 }
 
 const QUEUE_ALERT_EVENT = "master-clinic-queue-alert";
@@ -165,10 +173,44 @@ function dispatchQueueAlertUI(detail: QueueAlertDetail) {
   );
 }
 
+async function speakQueueAlertVoice(
+  detail: QueueAlertDetail,
+  options?: { clearQueue?: boolean }
+): Promise<void> {
+  prepareSpeechAuto();
+  const speechOpts = { useCloud: false as const, clearQueue: options?.clearQueue };
+
+  if (detail.patientName?.trim()) {
+    const name = detail.patientName.trim();
+    if (detail.kind === "doctor_new") {
+      await speakPatientCallParts(splitDoctorNewPatientSpeech(name), speechOpts);
+      return;
+    }
+    if (detail.kind === "doctor_exam") {
+      await speakPatientCallParts(splitDoctorExamSpeech(name), speechOpts);
+      return;
+    }
+    if (detail.kind === "accountant_admit") {
+      await speakPatientCallParts(splitAccountantAdmitSpeech(name), speechOpts);
+      return;
+    }
+  }
+
+  await speakArabic(detail.message, speechOpts);
+}
+
+/** إعادة تشغيل صوت التنبيه فوراً */
+export function replayQueueAlert(detail: QueueAlertDetail): void {
+  void (async () => {
+    await playQueueAlertSound(detail.kind);
+    await speakQueueAlertVoice(detail, { clearQueue: true });
+  })();
+}
+
 /** Sound + voice + browser notification + on-screen banner */
 export async function triggerQueueAlert(detail: QueueAlertDetail) {
   dispatchQueueAlertUI(detail);
   await playQueueAlertSound(detail.kind);
-  announceArabic(detail.message);
+  await speakQueueAlertVoice(detail);
   showBrowserNotification(detail.title, detail.message, detail.linkPath);
 }

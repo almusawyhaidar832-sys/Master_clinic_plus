@@ -1,0 +1,184 @@
+/** تجهيز النص العربي لـ TTS */
+
+import {
+  hasArabicDiacritics,
+  vocalizeArabicName,
+} from "@/lib/queue/arabic-name-pronunciation";
+import { ARABIC_TTS_LANG, ARABIC_TTS_VOICE } from "@/lib/queue/tts-config";
+const ALEF_VARIANTS = /[\u0622\u0623\u0625\u0671]/g;
+const TATWEEL = /\u0640/g;
+
+/** سرعة النطق — جملة واحدة متصلة */
+export const ARABIC_SPEECH_RATE = "+8%";
+
+export const SPEECH_INTRO_CALLED = "يُرْجَى مِنَ المُراجعِ";
+export const SPEECH_INTRO_ENTER = "يُرْجَى مِنَ المُراجعِ";
+export const SPEECH_MIDDLE_CALLED = "، التوجُّه إلى عِيادةِ الدكتورِ";
+export const SPEECH_MIDDLE_ENTER = "، تَفَضَّلْ بالدُخول إلى عِيادةِ الدكتورِ";
+
+export const SPEECH_DOCTOR_NEW_INTRO = "لَدَيْكَ مُراجعٌ جَدِيدٌ في الانتظار";
+export const SPEECH_DOCTOR_EXAM_TAIL = "داخل العيادة، افتح ملف المريض";
+export const SPEECH_ACCOUNTANT_ADMIT_TAIL = "، يُرْجَى دُخولُه إلى العيادة الآن";
+
+export function normalizeArabicForSpeech(text: string): string {
+  let s = String(text ?? "").trim();
+  if (!s) return "";
+
+  s = s.normalize("NFC");
+  s = s.replace(TATWEEL, "");
+  s = s.replace(ALEF_VARIANTS, "ا");
+  s = s.replace(/\u0649/g, "ي");
+  s = s.replace(/\u0629/g, "ه");
+  s = s.replace(/[^\u0600-\u06FF\s\u0660-\u0669A-Za-z0-9\-]/g, " ");
+  s = s.replace(/\s+/g, " ").trim();
+
+  return s;
+}
+
+/** الاسم مشكّل للنطق الصحيح — مثل أَحْمَد */
+export function formatNameForSpeech(name: string): string {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) return "";
+  if (hasArabicDiacritics(trimmed)) {
+    return trimmed.replace(/\u0640/g, "").replace(/\s+/g, " ").trim();
+  }
+  return vocalizeArabicName(trimmed);
+}
+export function buildQueueScreenAnnouncement(
+  patientName: string,
+  doctorName: string
+): string {
+  const patient = formatNameForSpeech(patientName) || "المُراجع";
+  const doctor = formatNameForSpeech(doctorName) || "الطبيب";
+  return `${SPEECH_INTRO_CALLED} ${patient}${SPEECH_MIDDLE_CALLED} ${doctor}`;
+}
+
+export function buildAccountantCallAnnouncement(
+  patientName: string,
+  doctorName: string
+): string {
+  return buildQueueScreenAnnouncement(patientName, doctorName);
+}
+
+export function buildDoctorEnterAnnouncement(
+  patientName: string,
+  doctorName: string
+): string {
+  const patient = formatNameForSpeech(patientName) || "المُراجع";
+  const doctor = formatNameForSpeech(doctorName) || "الطبيب";
+  return `${SPEECH_INTRO_ENTER} ${patient}${SPEECH_MIDDLE_ENTER} ${doctor}`;
+}
+
+export type PatientCallSpeechParts = {
+  intro: string;
+  patientName: string;
+  tail: string;
+};
+
+export function splitPatientCallSpeech(
+  patientName: string,
+  doctorName: string,
+  variant: "called" | "enter" | "queue_screen" = "called"
+): PatientCallSpeechParts {
+  const patient = formatNameForSpeech(patientName) || "المُراجع";
+  const doctor = formatNameForSpeech(doctorName) || "الطبيب";
+
+  if (variant === "enter") {
+    return {
+      intro: SPEECH_INTRO_ENTER,
+      patientName: patient,
+      tail: `${SPEECH_MIDDLE_ENTER} ${doctor}`,
+    };
+  }
+
+  return {
+    intro: SPEECH_INTRO_CALLED,
+    patientName: patient,
+    tail: `${SPEECH_MIDDLE_CALLED} ${doctor}`,
+  };
+}
+
+/** جملة نداء واحدة متصلة — بدون توقف بين الاسم الأول والثاني */
+export function joinPatientCallSpeech(parts: PatientCallSpeechParts): string {
+  const intro = parts.intro.trim();
+  const name = parts.patientName.trim();
+  const tail = parts.tail.trim();
+
+  if (!name) return [intro, tail].filter(Boolean).join(" ");
+  if (!tail) return [intro, name].filter(Boolean).join(" ");
+  return `${intro} ${name}${tail}`;
+}
+
+export function buildPatientCallAnnouncement(
+  patientName: string,
+  doctorName: string,
+  variant: "called" | "enter" | "queue_screen" = "called"
+): string {
+  return joinPatientCallSpeech(
+    splitPatientCallSpeech(patientName, doctorName, variant)
+  );
+}
+
+export function splitDoctorNewPatientSpeech(
+  patientName: string
+): PatientCallSpeechParts {
+  return {
+    intro: SPEECH_DOCTOR_NEW_INTRO,
+    patientName: formatNameForSpeech(patientName) || "مُراجع",
+    tail: "",
+  };
+}
+
+export function buildDoctorNewPatientAnnouncement(patientName: string): string {
+  return joinPatientCallSpeech(splitDoctorNewPatientSpeech(patientName));
+}
+
+export function splitDoctorExamSpeech(patientName: string): PatientCallSpeechParts {
+  return {
+    intro: "الْمُراجعُ",
+    patientName: formatNameForSpeech(patientName) || "مُراجع",
+    tail: SPEECH_DOCTOR_EXAM_TAIL,
+  };
+}
+
+export function buildDoctorExamAnnouncement(patientName: string): string {
+  return joinPatientCallSpeech(splitDoctorExamSpeech(patientName));
+}
+
+export function splitAccountantAdmitSpeech(
+  patientName: string
+): PatientCallSpeechParts {
+  return {
+    intro: "الْمُراجعُ",
+    patientName: formatNameForSpeech(patientName) || "مُراجع",
+    tail: SPEECH_ACCOUNTANT_ADMIT_TAIL,
+  };
+}
+
+export function buildAccountantAdmitAnnouncement(patientName: string): string {
+  return joinPatientCallSpeech(splitAccountantAdmitSpeech(patientName));
+}
+
+function escapeSsml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+export function buildPlainArabicSsml(
+  text: string,
+  rate: string = ARABIC_SPEECH_RATE
+): string {
+  const prepared = hasArabicDiacritics(text)
+    ? text.replace(/\u0640/g, "").replace(/\s+/g, " ").trim()
+    : vocalizeArabicName(text);
+  const safe = escapeSsml(prepared);
+  return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${ARABIC_TTS_LANG}"><voice name="${ARABIC_TTS_VOICE}"><prosody rate="${rate}">${safe}</prosody></voice></speak>`;
+}
+/** SSML لنداء مراجع — جملة واحدة سريعة ومتصلة */
+export function buildPatientCallSsml(parts: PatientCallSpeechParts): string {
+  return buildPlainArabicSsml(joinPatientCallSpeech(parts));
+}

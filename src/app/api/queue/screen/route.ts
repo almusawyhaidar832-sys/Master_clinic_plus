@@ -26,7 +26,13 @@ export async function GET(req: NextRequest) {
     }
 
     const queue = await fetchClinicQueue(clinicId, { includeDone: false });
-    const active = queue.filter((e) => e.status !== "done" && e.status !== "cancelled");
+    const hiddenOnScreen = new Set([
+      "done",
+      "cancelled",
+      "ready_for_billing",
+      "ready_for_payment",
+    ]);
+    const active = queue.filter((e) => !hiddenOnScreen.has(e.status));
 
     return NextResponse.json({
       clinicId,

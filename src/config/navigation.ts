@@ -26,8 +26,7 @@ export const accountantModuleNav: ModuleNavItem[] = [
   { href: "/dashboard/withdrawals", label: "طلبات السحب",         icon: "withdrawals", requiredModule: "doctor_wallet"      },
   { href: "/dashboard/salary",      label: "رواتب الموظفين",      icon: "salary"       },
   { href: "/dashboard/employees",  label: "إدارة الرواتب",       icon: "userCog"      },
-  // Module-gated
-  { href: "/dashboard/prescriptions",label: "الوصفات الذكية",    icon: "filePen",     requiredModule: "smart_prescriptions"},
+  // Module-gated (الوصفة الذكية داخل جلسة الكشف — لا صفحة منفصلة)
   { href: "/dashboard/lab",         label: "المختبر",             icon: "testTube",    requiredModule: "lab_integration"    },
   { href: "/dashboard/pharmacy",    label: "الصيدلية",            icon: "pill",        requiredModule: "pharmacy_link"      },
   // Always at bottom
@@ -92,7 +91,6 @@ export const doctorModuleQuickActions: ModuleNavItem[] = [
   { href: "/doctor/incomplete",  label: "علاجات غير مكتملة",     icon: "alertCircle",   requiredModule: "treatment_plans"    },
   { href: "/doctor/statement",   label: "كشف حساب مريض",         icon: "fileText",      requiredModule: "billing"            },
   { href: "/doctor/dental-chart",label: "مخطط الأسنان",          icon: "smile",         requiredModule: "dental_chart"       },
-  { href: "/doctor/prescriptions",label: "وصفة طبية",            icon: "filePen",       requiredModule: "smart_prescriptions"},
   { href: "/doctor/vital-signs", label: "العلامات الحيوية",      icon: "activity",      requiredModule: "vital_signs"        },
 ];
 

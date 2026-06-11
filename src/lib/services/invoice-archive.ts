@@ -38,6 +38,206 @@ function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function isMissingColumnError(
+  msg: string | undefined,
+  column: string
+): boolean {
+  if (!msg) return false;
+  const m = msg.toLowerCase();
+  const col = column.toLowerCase();
+  return (
+    m.includes(col) &&
+    (m.includes("column") ||
+      m.includes("schema") ||
+      m.includes("does not exist") ||
+      m.includes("could not find"))
+  );
+}
+
+type ArchiveOperationRow = {
+  id: string;
+  clinic_id: string;
+  patient_id: string | null;
+  doctor_id: string | null;
+  total_amount?: number | string | null;
+  paid_amount?: number | string | null;
+  operation_date?: string | null;
+  doctor_share_amount?: number | string | null;
+  clinic_share_amount?: number | string | null;
+  invoice_status?: string | null;
+};
+
+const OP_SELECT_ARCHIVE =
+  "id, clinic_id, patient_id, doctor_id, total_amount, paid_amount, operation_date, operation_name_ar, doctor_share_amount, clinic_share_amount, invoice_status";
+
+const OP_SELECT_ARCHIVE_BASE =
+  "id, clinic_id, patient_id, doctor_id, total_amount, paid_amount, operation_date, operation_name_ar, doctor_share_amount, clinic_share_amount";
+
+async function fetchOperationForArchive(
+  admin: SupabaseClient,
+  operationId: string
+): Promise<{ op: ArchiveOperationRow | null; error?: string }> {
+  let res = await admin
+    .from("patient_operations")
+    .select(OP_SELECT_ARCHIVE)
+    .eq("id", operationId)
+    .maybeSingle();
+
+  if (res.error?.message?.includes("invoice_status")) {
+    res = await admin
+      .from("patient_operations")
+      .select(OP_SELECT_ARCHIVE_BASE)
+      .eq("id", operationId)
+      .maybeSingle();
+  }
+
+  if (res.error) return { op: null, error: res.error.message };
+  return { op: res.data as ArchiveOperationRow | null };
+}
+
+async function loadPatientNameAr(
+  admin: SupabaseClient,
+  clinicId: string,
+  patientId: string | null
+): Promise<string> {
+  if (!patientId) return "";
+  const { data } = await admin
+    .from("patients")
+    .select("full_name_ar")
+    .eq("clinic_id", clinicId)
+    .eq("id", patientId)
+    .maybeSingle();
+  return String(data?.full_name_ar ?? "").trim();
+}
+
+async function loadDoctorNameAr(
+  admin: SupabaseClient,
+  doctorId: string | null
+): Promise<string> {
+  if (!doctorId) return "";
+  const { data } = await admin
+    .from("doctors")
+    .select("full_name_ar")
+    .eq("id", doctorId)
+    .maybeSingle();
+  return String(data?.full_name_ar ?? "").trim();
+}
+
+async function resolveDoctorShareForArchive(
+  admin: SupabaseClient,
+  doctorId: string | null,
+  op: Pick<
+    ArchiveOperationRow,
+    "doctor_share_amount" | "clinic_share_amount" | "paid_amount"
+  >,
+  paid: number
+): Promise<{ doctorShare: number; clinicShare: number }> {
+  const storedDoc = roundMoney(Number(op.doctor_share_amount ?? 0));
+  const storedClinic = roundMoney(Number(op.clinic_share_amount ?? 0));
+
+  if (storedDoc !== 0 || storedClinic !== 0) {
+    return {
+      doctorShare: storedDoc,
+      clinicShare:
+        storedClinic > 0 ? storedClinic : roundMoney(Math.max(paid - storedDoc, 0)),
+    };
+  }
+
+  if (!doctorId || paid <= 0) {
+    return { doctorShare: 0, clinicShare: roundMoney(paid) };
+  }
+
+  const { data: doctor } = await admin
+    .from("doctors")
+    .select("percentage")
+    .eq("id", doctorId)
+    .maybeSingle();
+
+  const pct = Number(doctor?.percentage ?? 50) / 100;
+  const doctorShare = roundMoney(paid * pct);
+  return {
+    doctorShare,
+    clinicShare: roundMoney(Math.max(paid - doctorShare, 0)),
+  };
+}
+
+async function markOperationArchived(
+  admin: SupabaseClient,
+  operationId: string
+): Promise<void> {
+  const { error } = await admin
+    .from("patient_operations")
+    .update({ invoice_status: "archived" })
+    .eq("id", operationId);
+
+  if (error?.message?.includes("invoice_status")) {
+    return;
+  }
+}
+
+async function insertSessionHistoryRow(
+  admin: SupabaseClient,
+  payload: Record<string, unknown>
+): Promise<{ id: string } | { error: string }> {
+  const withKind = { ...payload, record_kind: "session_invoice" };
+  let res = await admin
+    .from("invoices_history")
+    .insert(withKind)
+    .select("id")
+    .single();
+
+  if (res.error && isMissingColumnError(res.error.message, "record_kind")) {
+    const { record_kind: _rk, ...withoutKind } = withKind;
+    res = await admin
+      .from("invoices_history")
+      .insert(withoutKind)
+      .select("id")
+      .single();
+  }
+
+  if (res.error || !res.data?.id) {
+    const msg = res.error?.message ?? "";
+    if (
+      msg.includes("invoices_history") &&
+      (msg.includes("does not exist") || msg.includes("schema cache"))
+    ) {
+      return {
+        error:
+          "جدول السجل التاريخي غير موجود. شغّل سكربت 25-invoices-history.sql على Supabase",
+      };
+    }
+    return { error: msg || "تعذر أرشفة الفاتورة في السجل التاريخي" };
+  }
+
+  return { id: res.data.id as string };
+}
+
+async function finalizeInvoiceRecord(
+  admin: SupabaseClient,
+  invoiceId: string,
+  input: {
+    finalizedBy: string;
+    invoiceNumber: string;
+    total: number;
+    paid: number;
+  }
+): Promise<string | null> {
+  const now = new Date().toISOString();
+  const { error } = await admin
+    .from("invoices")
+    .update({
+      status: "finalized",
+      finalized_at: now,
+      finalized_by: input.finalizedBy,
+      invoice_number: input.invoiceNumber,
+      total_amount: input.total,
+      paid_amount: input.paid,
+    })
+    .eq("id", invoiceId);
+
+  return error?.message ?? null;
+}
+
 /** إنشاء أو إرجاع مسودة فاتورة مرتبطة بجلسة */
 export async function ensureDraftInvoiceForOperation(
   admin: SupabaseClient,
@@ -48,16 +248,13 @@ export async function ensureDraftInvoiceForOperation(
     snapshot?: Partial<SessionInvoiceData>;
   }
 ): Promise<{ ok: true; invoiceId: string } | { ok: false; error: string }> {
-  const { data: op, error: opErr } = await admin
-    .from("patient_operations")
-    .select(
-      "id, clinic_id, patient_id, doctor_id, total_amount, paid_amount, operation_date, operation_name_ar, operation_type, doctor_share_amount, clinic_share_amount, invoice_status"
-    )
-    .eq("id", input.operationId)
-    .maybeSingle();
+  const { op, error: opErr } = await fetchOperationForArchive(
+    admin,
+    input.operationId
+  );
 
   if (opErr || !op) {
-    return { ok: false, error: "الجلسة غير موجودة" };
+    return { ok: false, error: opErr ?? "الجلسة غير موجودة" };
   }
   if (op.clinic_id !== input.clinicId) {
     return { ok: false, error: "غير مصرح" };
@@ -135,15 +332,45 @@ export async function finalizeInvoiceToHistory(
 
   const { data: existingHistory } = await admin
     .from("invoices_history")
-    .select("id")
+    .select("id, doctor_id, paid_amount")
     .eq("operation_id", operationId)
     .maybeSingle();
 
   if (existingHistory?.id) {
-    await admin
-      .from("patient_operations")
-      .update({ invoice_status: "archived" })
-      .eq("id", operationId);
+    const doctorId =
+      input.snapshot.doctorId ??
+      (existingHistory.doctor_id as string | null) ??
+      null;
+
+    if (doctorId && !existingHistory.doctor_id) {
+      await admin
+        .from("invoices_history")
+        .update({ doctor_id: doctorId })
+        .eq("id", existingHistory.id);
+    }
+
+    await markOperationArchived(admin, operationId);
+
+    if (input.invoiceId) {
+      const paid = roundMoney(
+        Math.max(
+          Number(input.snapshot.paidThisSession ?? 0),
+          Number(existingHistory.paid_amount ?? 0)
+        )
+      );
+      const total = roundMoney(
+        input.snapshot.caseTotalAmount > 0
+          ? input.snapshot.caseTotalAmount
+          : paid
+      );
+      await finalizeInvoiceRecord(admin, input.invoiceId, {
+        finalizedBy: input.finalizedBy,
+        invoiceNumber: input.snapshot.invoiceNumber,
+        total,
+        paid,
+      });
+    }
+
     return {
       ok: true,
       historyId: existingHistory.id,
@@ -151,16 +378,13 @@ export async function finalizeInvoiceToHistory(
     };
   }
 
-  const { data: op, error: opErr } = await admin
-    .from("patient_operations")
-    .select(
-      "id, clinic_id, patient_id, doctor_id, total_amount, paid_amount, operation_date, doctor_share_amount, clinic_share_amount, invoice_status"
-    )
-    .eq("id", operationId)
-    .maybeSingle();
+  const { op, error: opErr } = await fetchOperationForArchive(
+    admin,
+    operationId
+  );
 
   if (opErr || !op) {
-    return { ok: false, error: "الجلسة غير موجودة" };
+    return { ok: false, error: opErr ?? "الجلسة غير موجودة" };
   }
   if (op.clinic_id !== input.clinicId) {
     return { ok: false, error: "غير مصرح" };
@@ -178,75 +402,86 @@ export async function finalizeInvoiceToHistory(
     invoiceId = draft.invoiceId;
   }
 
-  const paid = roundMoney(input.snapshot.paidThisSession);
+  const doctorId = op.doctor_id ?? input.snapshot.doctorId ?? null;
+  const paid = roundMoney(
+    Math.max(
+      Number(input.snapshot.paidThisSession ?? 0),
+      Number(op.paid_amount ?? 0)
+    )
+  );
   const total = roundMoney(
     input.snapshot.caseTotalAmount > 0
       ? input.snapshot.caseTotalAmount
-      : paid
+      : Number(op.total_amount ?? 0) > 0
+        ? Number(op.total_amount)
+        : paid
   );
-  const remaining = roundMoney(input.snapshot.remainingBalance);
-  const doctorShare = roundMoney(Number(op.doctor_share_amount ?? 0));
-  const clinicShare = roundMoney(Number(op.clinic_share_amount ?? 0));
+  const remaining = roundMoney(
+    input.snapshot.remainingBalance > 0
+      ? input.snapshot.remainingBalance
+      : Math.max(total - paid, 0)
+  );
+  const { doctorShare, clinicShare } = await resolveDoctorShareForArchive(
+    admin,
+    doctorId,
+    op,
+    paid
+  );
   const invoiceDate =
     input.snapshot.sessionDate ??
     (op.operation_date as string) ??
     new Date().toISOString().slice(0, 10);
 
-  const { data: history, error: histErr } = await admin
-    .from("invoices_history")
-    .insert({
-      clinic_id: input.clinicId,
-      doctor_id: op.doctor_id,
-      patient_id: op.patient_id,
-      operation_id: operationId,
-      invoice_id: invoiceId,
-      invoice_number: input.snapshot.invoiceNumber,
-      patient_name_ar: input.snapshot.patientName,
-      doctor_name_ar: input.snapshot.doctorName,
-      procedure_label: input.snapshot.procedureLabel,
-      treatment_name: input.snapshot.treatmentName,
-      total_amount: total,
-      paid_amount: paid,
-      remaining_amount: remaining,
-      doctor_share: doctorShare,
-      clinic_share: clinicShare,
-      invoice_date: invoiceDate,
-      finalized_at: new Date().toISOString(),
-      finalized_by: input.finalizedBy,
-      record_kind: "session_invoice",
-      snapshot_json: input.snapshot,
-    })
-    .select("id")
-    .single();
+  const patientName =
+    String(input.snapshot.patientName ?? "").trim() ||
+    (await loadPatientNameAr(admin, input.clinicId, op.patient_id));
+  const doctorName =
+    String(input.snapshot.doctorName ?? "").trim() ||
+    (await loadDoctorNameAr(admin, doctorId));
 
-  if (histErr || !history?.id) {
+  const historyResult = await insertSessionHistoryRow(admin, {
+    clinic_id: input.clinicId,
+    doctor_id: doctorId,
+    patient_id: op.patient_id,
+    operation_id: operationId,
+    invoice_id: invoiceId,
+    invoice_number: input.snapshot.invoiceNumber,
+    patient_name_ar: patientName || "مراجع",
+    doctor_name_ar: doctorName,
+    procedure_label: input.snapshot.procedureLabel,
+    treatment_name: input.snapshot.treatmentName,
+    total_amount: total,
+    paid_amount: paid,
+    remaining_amount: remaining,
+    doctor_share: doctorShare,
+    clinic_share: clinicShare,
+    invoice_date: invoiceDate,
+    finalized_at: new Date().toISOString(),
+    finalized_by: input.finalizedBy,
+    snapshot_json: { ...input.snapshot, doctorId, paidThisSession: paid },
+  });
+
+  if ("error" in historyResult) {
+    return { ok: false, error: historyResult.error };
+  }
+
+  const invoiceUpdateErr = await finalizeInvoiceRecord(admin, invoiceId, {
+    finalizedBy: input.finalizedBy,
+    invoiceNumber: input.snapshot.invoiceNumber,
+    total,
+    paid,
+  });
+
+  await markOperationArchived(admin, operationId);
+
+  if (invoiceUpdateErr && !invoiceUpdateErr.includes("finalized_at")) {
     return {
       ok: false,
-      error: histErr?.message ?? "تعذر أرشفة الفاتورة",
+      error: `تم الترحيل للسجل التاريخي لكن تعذر تحديث حالة الفاتورة: ${invoiceUpdateErr}`,
     };
   }
 
-  const now = new Date().toISOString();
-
-  await Promise.all([
-    admin
-      .from("invoices")
-      .update({
-        status: "finalized",
-        finalized_at: now,
-        finalized_by: input.finalizedBy,
-        invoice_number: input.snapshot.invoiceNumber,
-        total_amount: total,
-        paid_amount: paid,
-      })
-      .eq("id", invoiceId),
-    admin
-      .from("patient_operations")
-      .update({ invoice_status: "archived" })
-      .eq("id", operationId),
-  ]);
-
-  return { ok: true, historyId: history.id };
+  return { ok: true, historyId: historyResult.id };
 }
 
 /** تسمية الإجراء من الجلسة */
@@ -330,37 +565,51 @@ export async function archiveDoctorExpenseToHistory(
     invoice_file_name: expense.invoice_file_name,
   };
 
-  const { data: history, error: histErr } = await admin
+  const expensePayload = {
+    clinic_id: input.clinicId,
+    doctor_id: expense.doctor_id,
+    doctor_expense_id: expense.id,
+    invoice_number: buildDoctorExpenseInvoiceNumber(expense.id, expenseDate),
+    patient_name_ar: "",
+    doctor_name_ar: String(doctor?.full_name_ar ?? ""),
+    procedure_label: label,
+    treatment_name: "صرفية",
+    total_amount: amount,
+    paid_amount: amount,
+    remaining_amount: 0,
+    doctor_share: doctorShare,
+    clinic_share: clinicShare,
+    invoice_date: expenseDate,
+    finalized_at: new Date().toISOString(),
+    finalized_by: input.finalizedBy,
+    snapshot_json: snapshot,
+    record_kind: "doctor_expense",
+  };
+
+  let histRes = await admin
     .from("invoices_history")
-    .insert({
-      clinic_id: input.clinicId,
-      doctor_id: expense.doctor_id,
-      doctor_expense_id: expense.id,
-      record_kind: "doctor_expense",
-      invoice_number: buildDoctorExpenseInvoiceNumber(expense.id, expenseDate),
-      patient_name_ar: "",
-      doctor_name_ar: String(doctor?.full_name_ar ?? ""),
-      procedure_label: label,
-      treatment_name: "صرفية",
-      total_amount: amount,
-      paid_amount: amount,
-      remaining_amount: 0,
-      doctor_share: doctorShare,
-      clinic_share: clinicShare,
-      invoice_date: expenseDate,
-      finalized_at: new Date().toISOString(),
-      finalized_by: input.finalizedBy,
-      snapshot_json: snapshot,
-    })
+    .insert(expensePayload)
     .select("id")
     .single();
 
-  if (histErr || !history?.id) {
+  if (histRes.error && isMissingColumnError(histRes.error.message, "record_kind")) {
+    const { record_kind: _rk, doctor_expense_id: _de, ...fallback } =
+      expensePayload;
+    histRes = await admin
+      .from("invoices_history")
+      .insert(fallback)
+      .select("id")
+      .single();
+  }
+
+  if (histRes.error || !histRes.data?.id) {
     return {
       ok: false,
-      error: histErr?.message ?? "تعذر نقل فاتورة الصرف للسجل التاريخي",
+      error: histRes.error?.message ?? "تعذر نقل فاتورة الصرف للسجل التاريخي",
     };
   }
+
+  const history = histRes.data;
 
   await admin
     .from("doctor_expenses")

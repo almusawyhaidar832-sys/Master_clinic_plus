@@ -11,6 +11,7 @@ import {
   patientPhoneColumns,
   validatePatientPhone,
 } from "@/lib/phone";
+import { suggestSpeechName } from "@/lib/queue/arabic-name-pronunciation";
 import { UserPlus } from "lucide-react";
 
 export function AddPatientForm() {
@@ -50,6 +51,7 @@ export function AddPatientForm() {
       .from("patients")
       .insert({
         full_name_ar: trimmedName,
+        speech_name_ar: suggestSpeechName(trimmedName),
         clinic_id: activeClinic.clinicId,
         notes: notes.trim() || null,
         ...patientPhoneColumns(phoneCheck.normalized),
@@ -65,6 +67,23 @@ export function AddPatientForm() {
         setError(
           "عمود phone_number غير موجود — شغّل supabase/scripts/fix-patient-phone-number.sql في Supabase"
         );
+      } else if (msg.includes("speech_name_ar")) {
+        const retry = await supabase
+          .from("patients")
+          .insert({
+            full_name_ar: trimmedName,
+            clinic_id: activeClinic.clinicId,
+            notes: notes.trim() || null,
+            ...patientPhoneColumns(phoneCheck.normalized),
+          })
+          .select("id")
+          .single();
+        if (retry.error || !retry.data) {
+          setError(retry.error?.message ?? "تعذر حفظ المراجع");
+          return;
+        }
+        router.push(`/dashboard/patients/${retry.data.id}`);
+        return;
       } else {
         setError(insertErr?.message ?? "تعذر حفظ المراجع");
       }

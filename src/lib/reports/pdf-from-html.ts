@@ -2,13 +2,10 @@
  * تصدير PDF من عنصر HTML — يعتمد على خطوط المتصفح (Noto Sans Arabic)
  * بدلاً من jsPDF + TTF الذي يفشل في Next.js / jsPDF 4.
  */
-export async function downloadElementAsPdf(
-  elementId: string,
-  filename: string
-): Promise<void> {
+async function renderElementToPdf(elementId: string) {
   const element = document.getElementById(elementId);
   if (!element) {
-    throw new Error("تعذر العثور على محتوى الكشف للتصدير");
+    throw new Error("تعذر العثور على محتوى المستند للتصدير");
   }
 
   if (document.fonts?.ready) {
@@ -62,6 +59,23 @@ export async function downloadElementAsPdf(
     heightLeft -= pageHeight;
   }
 
+  return pdf;
+}
+
+export async function generateElementPdfBase64(
+  elementId: string
+): Promise<string> {
+  const pdf = await renderElementToPdf(elementId);
+  const dataUri = pdf.output("datauristring");
+  const comma = dataUri.indexOf(",");
+  return comma >= 0 ? dataUri.slice(comma + 1) : dataUri;
+}
+
+export async function downloadElementAsPdf(
+  elementId: string,
+  filename: string
+): Promise<void> {
+  const pdf = await renderElementToPdf(elementId);
   const safeName = filename.endsWith(".pdf") ? filename : `${filename}.pdf`;
   pdf.save(safeName);
 }

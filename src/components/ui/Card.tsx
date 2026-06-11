@@ -38,7 +38,10 @@ export function CardTitle({
 }: HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h3
-      className={cn("text-lg font-semibold text-slate-text", className)}
+      className={cn(
+        "mc-section-title text-lg font-semibold text-slate-text",
+        className
+      )}
       {...props}
     >
       {children}

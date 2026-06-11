@@ -113,8 +113,8 @@ export function Sidebar({
               className={cn(
                 "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
                 active
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-slate-muted hover:bg-surface hover:text-slate-text"
+                  ? "bg-primary text-white shadow-sm ring-1 ring-primary/20"
+                  : "text-slate-muted hover:bg-primary/5 hover:text-primary-700"
               )}
             >
               <Icon className="h-4.5 w-4.5 flex-shrink-0" />

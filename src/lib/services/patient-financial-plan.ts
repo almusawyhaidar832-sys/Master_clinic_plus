@@ -563,6 +563,41 @@ export function previewTreatmentSplit(
   return calculateDoctorShareForDoctor(finalPrice, doctorShareInput(doctor), materialsCost);
 }
 
+/** حصة الطبيب/العيادة — من الحالة المحفوظة أو حساب مباشر من اتفاق الطبيب */
+export function resolveCaseFinancialSplit(
+  plan: PatientFinancialPlan,
+  doctor: Doctor | null,
+  opts?: { materialsCost?: number; reviewFee?: number }
+): { doctorShare: number; clinicShare: number; agreedTotal: number } | null {
+  if (plan.final_price <= 0) return null;
+
+  const agreedTotal = plan.final_price;
+  const storedDoctor = plan.doctor_share_total;
+  const storedClinic = plan.clinic_share_total;
+
+  if (storedDoctor > 0 || storedClinic > 0) {
+    return {
+      agreedTotal,
+      doctorShare: storedDoctor,
+      clinicShare:
+        storedClinic > 0
+          ? storedClinic
+          : Math.max(0, agreedTotal - storedDoctor),
+    };
+  }
+
+  const reviewFee = opts?.reviewFee ?? 0;
+  const materials = opts?.materialsCost ?? 0;
+  const treatmentFinal = Math.max(0, agreedTotal - reviewFee);
+
+  return previewTreatmentSplitWithReview(
+    treatmentFinal,
+    reviewFee,
+    materials,
+    doctor
+  );
+}
+
 /** علاج + كشفية: الكشفية بالكامل للعيادة */
 export function previewTreatmentSplitWithReview(
   treatmentFinal: number,

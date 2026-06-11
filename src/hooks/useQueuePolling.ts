@@ -5,7 +5,7 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { shouldFireQueueAlert } from "@/lib/queue/alert-dedupe";
 import { triggerQueueAlert } from "@/lib/queue/audio-alerts";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
-import { resolvePatientDisplayName } from "@/lib/queue/utils";
+import { resolvePatientSpeechName } from "@/lib/queue/utils";
 
 const POLL_MS = 3_000;
 
@@ -24,7 +24,7 @@ interface QueueRow {
   sent_to_doctor_at: string | null;
   patient_name: string | null;
   ticket_number: number;
-  patient?: { full_name_ar: string } | null;
+  patient?: { full_name_ar: string; speech_name_ar?: string | null } | null;
 }
 
 async function fetchQueueRows(portal: "doctor" | "accountant"): Promise<{
@@ -85,12 +85,13 @@ export function useDoctorQueuePolling(
           const alertKey = `doctor-new-${entry.id}`;
           if (!shouldFireQueueAlert(alertKey)) continue;
 
-          const name = resolvePatientDisplayName(entry);
+          const name = resolvePatientSpeechName(entry);
           void triggerQueueAlert({
             kind: "doctor_new",
             title: "مراجع جديد 🔔",
             message: `لديك مراجع جديد في الانتظار: ${name}`,
             linkPath: "/doctor/queue",
+            patientName: name,
           });
         }
 
@@ -147,12 +148,13 @@ export function useAccountantQueuePolling(
           const alertKey = `accountant-called-${entry.id}`;
           if (!shouldFireQueueAlert(alertKey)) continue;
 
-          const name = resolvePatientDisplayName(entry);
+          const name = resolvePatientSpeechName(entry);
           void triggerQueueAlert({
             kind: "accountant_admit",
             title: "طلب دخول مراجع 🔔",
             message: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
             linkPath: "/dashboard/queue",
+            patientName: name,
           });
         }
 

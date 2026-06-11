@@ -45,6 +45,43 @@ type ClinicalBundle = {
   pdfUrl: string | null;
 };
 
+function clinicalBundleHasData(bundle: ClinicalBundle): boolean {
+  return Boolean(
+    bundle.sessionNote?.trim() ||
+      bundle.teethChartText?.trim() ||
+      bundle.chartImageUrl ||
+      bundle.pdfUrl ||
+      bundle.xrayUrls.length > 0
+  );
+}
+
+function mergeClinicalBundles(
+  primary: ClinicalBundle,
+  extra: ClinicalBundle
+): ClinicalBundle {
+  return {
+    sessionNote: primary.sessionNote?.trim() || extra.sessionNote,
+    teethChartText: primary.teethChartText?.trim() || extra.teethChartText,
+    chartImageUrl: primary.chartImageUrl || extra.chartImageUrl,
+    xrayUrls: primary.xrayUrls.length > 0 ? primary.xrayUrls : extra.xrayUrls,
+    pdfUrl: primary.pdfUrl || extra.pdfUrl,
+  };
+}
+
+async function findVisitSessionOperationByQueueEntry(
+  supabase: SupabaseClient,
+  queueEntryId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("patient_operations")
+    .select("id")
+    .eq("queue_entry_id", queueEntryId)
+    .maybeSingle();
+
+  if (error || !data?.id) return null;
+  return String(data.id);
+}
+
 function formatToothLine(row: {
   tooth_number: number;
   procedure_ar?: string | null;
@@ -410,6 +447,49 @@ function formatClinicalBlock(currentCase: CurrentCase): string {
   return lines.join("\n");
 }
 
+/** ملحق نصي: مخطط أسنان + ملاحظات + روابط أشعة — لرسالة المحاسبة اليدوية */
+export async function buildClinicalWhatsAppAppendix(
+  supabase: SupabaseClient,
+  operationId: string,
+  queueEntryId?: string | null
+): Promise<string> {
+  let clinical = await fetchClinicalBundleForOperation(supabase, operationId);
+  const queueId = queueEntryId?.trim();
+  if (queueId) {
+    const visitOpId = await findVisitSessionOperationByQueueEntry(
+      supabase,
+      queueId
+    );
+    if (visitOpId && visitOpId !== operationId) {
+      const visitClinical = await fetchClinicalBundleForOperation(
+        supabase,
+        visitOpId
+      );
+      clinical = mergeClinicalBundles(clinical, visitClinical);
+    }
+  }
+
+  const stub: CurrentCase = {
+    id: operationId,
+    treatment_name_ar: "",
+    total_price: 0,
+    status: "active",
+    notes: clinical.sessionNote,
+    teeth_chart_text: clinical.teethChartText,
+    fdi_chart_url: clinical.chartImageUrl,
+    xrays_url: clinical.xrayUrls[0] ?? null,
+    xray_urls: clinical.xrayUrls,
+    pdf_url: clinical.pdfUrl,
+    sessions: [],
+    remaining_balance: 0,
+    paid_this_session: 0,
+    session_number: 1,
+    total_sessions: 1,
+  };
+
+  return formatClinicalBlock(stub);
+}
+
 /** قالب موحّد احترافي — المراجع والطبيب */
 function buildUnifiedWhatsAppBody(
   currentCase: CurrentCase,
@@ -477,6 +557,8 @@ export type SendUnifiedWhatsAppInput = {
   skipPatient?: boolean;
   skipDoctor?: boolean;
   patientMessageType?: "session_update" | "treatment_completed";
+  /** جلسة الكشف — لدمج مخطط الأسنان/الأشعة التي سجّلها الطبيب */
+  queueEntryId?: string | null;
 };
 
 export type SendUnifiedWhatsAppResult = {
@@ -530,10 +612,28 @@ export async function sendUnifiedWhatsApp(
     };
   }
 
-  const clinical = await fetchClinicalBundleForOperation(
+  let clinical = await fetchClinicalBundleForOperation(
     input.supabase,
     input.operationId
   );
+
+  if (!clinicalBundleHasData(clinical)) {
+    const queueEntryId = input.queueEntryId?.trim();
+    if (queueEntryId) {
+      const visitOpId = await findVisitSessionOperationByQueueEntry(
+        input.supabase,
+        queueEntryId
+      );
+      if (visitOpId && visitOpId !== input.operationId) {
+        const visitClinical = await fetchClinicalBundleForOperation(
+          input.supabase,
+          visitOpId
+        );
+        clinical = mergeClinicalBundles(clinical, visitClinical);
+      }
+    }
+  }
+
   currentCase = applyClinicalBundleToCase(currentCase, clinical);
 
   const meta = {

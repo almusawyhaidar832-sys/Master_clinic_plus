@@ -13,8 +13,7 @@ import {
 } from "@/lib/services/patient-case-groups";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
 import { isPersistedTreatmentCaseId } from "@/lib/services/patient-treatment-cases";
-import { AddSessionClinicalPanel } from "@/components/clinical/AddSessionClinicalPanel";
-import { SessionClinicalView } from "@/components/clinical/SessionClinicalView";
+import { VisualMedicalRecord } from "@/components/clinical/VisualMedicalRecord";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
 import { hasClinicalData } from "@/lib/clinical/types";
 import { opName, type PatientOperation } from "@/types";
@@ -195,13 +194,13 @@ function SessionRow({
       )}
 
       <div className="mt-2 border-t border-slate-border/50 pt-2">
-        {hasClinical && (
-          <SessionClinicalView data={clinical} alwaysShow={false} />
-        )}
-        <AddSessionClinicalPanel
+        <VisualMedicalRecord
           operationId={op.id}
-          existing={clinical}
+          portal="doctor"
+          initialData={clinical}
           onSaved={onClinicalSaved}
+          collapsible
+          defaultOpen={hasClinical}
         />
         <div className="mt-2 flex flex-wrap gap-2">
           {canRefund && (

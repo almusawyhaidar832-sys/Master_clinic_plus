@@ -1,8 +1,10 @@
 import type { ActiveClinicResult } from "@/lib/clinic-types";
+import { DEVELOPER_COOKIE } from "@/lib/auth/developer-token";
 
 /** يقرأ العيادة النشطة من كوكي المطور (للمتصفح فقط) */
 export async function fetchDeveloperActingClinic(): Promise<ActiveClinicResult | null> {
   if (typeof window === "undefined") return null;
+  if (!document.cookie.includes(`${DEVELOPER_COOKIE}=`)) return null;
   try {
     const res = await fetch("/api/developer/session", {
       credentials: "include",

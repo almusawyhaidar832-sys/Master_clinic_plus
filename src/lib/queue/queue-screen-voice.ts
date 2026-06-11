@@ -1,26 +1,21 @@
 "use client";
 
+import { splitPatientCallSpeech } from "@/lib/queue/arabic-speech-text";
 import {
   installSpeechGestureUnlock,
   playAttentionBeep,
   prepareSpeechAuto,
-  speakArabic,
+  speakPatientCallParts,
+  stopAllSpeech,
   waitForVoices,
 } from "@/lib/queue/web-speech";
+
+export { buildQueueScreenAnnouncement } from "@/lib/queue/arabic-speech-text";
 
 type AnnouncementJob = { patientName: string; doctorName: string };
 
 const pendingJobs: AnnouncementJob[] = [];
 let speaking = false;
-
-export function buildQueueScreenAnnouncement(
-  patientName: string,
-  doctorName: string
-): string {
-  const patient = patientName.trim() || "المراجع";
-  const doctor = doctorName.trim() || "الطبيب";
-  return `يرجى من المراجع ${patient} التوجه لعيادة الدكتور ${doctor}`;
-}
 
 async function drainQueue() {
   if (speaking || pendingJobs.length === 0) return;
@@ -28,12 +23,14 @@ async function drainQueue() {
 
   while (pendingJobs.length > 0) {
     const job = pendingJobs.shift()!;
-    const text = buildQueueScreenAnnouncement(job.patientName, job.doctorName);
+    const parts = splitPatientCallSpeech(
+      job.patientName,
+      job.doctorName,
+      "queue_screen"
+    );
 
     await playAttentionBeep();
-    await speakArabic(text);
-    await new Promise((r) => setTimeout(r, 500));
-    await speakArabic(text);
+    await speakPatientCallParts(parts, { useCloud: false });
     await new Promise((r) => setTimeout(r, 400));
   }
 
@@ -55,7 +52,7 @@ export function speakQueueScreenAnnouncement(
   enabled = true
 ): void {
   if (!enabled) return;
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  if (typeof window === "undefined") return;
   enqueue({ patientName, doctorName });
 }
 
@@ -64,9 +61,15 @@ export function repeatQueueScreenAnnouncement(
   doctorName: string,
   enabled = true
 ): void {
-  if (!enabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  pendingJobs.unshift({ patientName, doctorName });
-  void drainQueue();
+  if (!enabled || typeof window === "undefined") return;
+  stopAllSpeech();
+  pendingJobs.length = 0;
+  speaking = false;
+  const parts = splitPatientCallSpeech(patientName, doctorName, "queue_screen");
+  void (async () => {
+    await playAttentionBeep();
+    await speakPatientCallParts(parts, { clearQueue: true, useCloud: false });
+  })();
 }
 
 export function stopQueueScreenSpeech(): void {
@@ -90,7 +93,7 @@ export function warmUpSpeechVoices(onReady?: () => void): () => void {
 
   prepareSpeechAuto();
 
-  void waitForVoices(3000).then(() => {
+  void waitForVoices(4000).then(() => {
     onReady?.();
     void drainQueue();
   });

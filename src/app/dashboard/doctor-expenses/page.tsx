@@ -62,11 +62,32 @@ const TAB_ITEMS: {
   id: ExpensesTab;
   label: string;
   icon: typeof History;
+  accent: string;
 }[] = [
-  { id: "invoice_history", label: "السجل التاريخي", icon: History },
-  { id: "clinic_expenses", label: "صرفيات العيادة", icon: Receipt },
-  { id: "doctor_salary", label: "صرف رواتب الأطباء", icon: Banknote },
-  { id: "general_expenses", label: "مصروفات عامة", icon: Wallet },
+  {
+    id: "invoice_history",
+    label: "السجل التاريخي",
+    icon: History,
+    accent: "mc-tab-accent-history",
+  },
+  {
+    id: "clinic_expenses",
+    label: "صرفيات العيادة",
+    icon: Receipt,
+    accent: "mc-tab-accent-clinic",
+  },
+  {
+    id: "doctor_salary",
+    label: "صرف رواتب الأطباء",
+    icon: Banknote,
+    accent: "mc-tab-accent-salary",
+  },
+  {
+    id: "general_expenses",
+    label: "مصروفات عامة",
+    icon: Wallet,
+    accent: "mc-tab-accent-general",
+  },
 ];
 
 export default function DoctorExpensesPage() {
@@ -260,7 +281,7 @@ export default function DoctorExpensesPage() {
             <Receipt className="h-7 w-7 text-primary" />
             صرفيات عامة
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="mc-page-subtitle">
             السجل التاريخي · صرفيات العيادة · رواتب الأطباء · مصروفات عامة
           </p>
         </div>
@@ -277,17 +298,16 @@ export default function DoctorExpensesPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
-        {TAB_ITEMS.map(({ id, label, icon: Icon }) => (
+      <div className="mc-tab-group">
+        {TAB_ITEMS.map(({ id, label, icon: Icon, accent }) => (
           <button
             key={id}
             type="button"
             onClick={() => selectTab(id)}
             className={cn(
-              "flex min-w-[calc(50%-0.25rem)] flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors sm:min-w-0 sm:text-sm",
-              activeTab === id
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-600 hover:text-slate-800"
+              "mc-tab",
+              activeTab === id && "mc-tab--active",
+              activeTab === id && accent
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />
@@ -325,25 +345,22 @@ export default function DoctorExpensesPage() {
               {
                 label: "عدد الفواتير",
                 value: expenses.length,
-                color: "bg-slate-50 text-slate-700",
+                color: "mc-stat-neutral",
               },
               {
                 label: "إجمالي الصرف",
                 value: formatCurrency(totalAmount),
-                color: "bg-red-50 text-red-700",
+                color: "mc-stat-debt",
               },
               {
                 label: "حصة الأطباء",
                 value: formatCurrency(totalDoctorShare),
-                color: "bg-amber-50 text-amber-700",
+                color: "mc-stat-warning",
               },
             ].map((s) => (
-              <div
-                key={s.label}
-                className={cn("rounded-2xl p-4 text-center", s.color)}
-              >
-                <p className="text-xl font-black">{s.value}</p>
-                <p className="text-xs font-medium">{s.label}</p>
+              <div key={s.label} className={s.color}>
+                <p className="mc-stat-value">{s.value}</p>
+                <p className="mc-stat-label">{s.label}</p>
               </div>
             ))}
           </div>

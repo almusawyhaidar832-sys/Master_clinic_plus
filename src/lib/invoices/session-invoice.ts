@@ -28,6 +28,9 @@ export interface SessionInvoiceData {
   notes?: string | null;
   labNotes?: string | null;
   materialsCost?: number;
+  /** حصة الطبيب والعيادة على السعر النهائي للحالة (للمراجعة الداخلية) */
+  doctorShareTotal?: number;
+  clinicShareTotal?: number;
 }
 
 export function buildInvoiceNumber(operationId: string): string {
@@ -55,6 +58,8 @@ export function buildSessionInvoiceData(input: {
   notes?: string | null;
   labNotes?: string | null;
   materialsCost?: number;
+  doctorShareTotal?: number;
+  clinicShareTotal?: number;
 }): SessionInvoiceData {
   return {
     operationId: input.operation.id,
@@ -81,6 +86,8 @@ export function buildSessionInvoiceData(input: {
     materialsCost:
       (input.materialsCost ??
         Number(input.operation.materials_cost ?? 0)) || undefined,
+    doctorShareTotal: input.doctorShareTotal,
+    clinicShareTotal: input.clinicShareTotal,
   };
 }
 

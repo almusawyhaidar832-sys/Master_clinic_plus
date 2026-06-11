@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, X } from "lucide-react";
+import { Bell, BellOff, Volume2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  replayQueueAlert,
   subscribeQueueAlerts,
   type QueueAlertDetail,
 } from "@/lib/queue/audio-alerts";
@@ -75,6 +76,17 @@ export function QueueAlertOverlay() {
               اضغط لفتح الصفحة
             </p>
           )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              replayQueueAlert(alert);
+            }}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-white/80 px-3 py-1.5 text-xs font-semibold shadow-sm hover:bg-white"
+          >
+            <Volume2 className="h-3.5 w-3.5" />
+            إعادة الصوت
+          </button>
         </div>
         <button
           type="button"

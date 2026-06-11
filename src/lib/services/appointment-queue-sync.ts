@@ -16,6 +16,7 @@ const QUEUE_TO_APPOINTMENT: Partial<Record<QueueStatus, AppointmentStatus>> = {
   waiting: "waiting",
   called: "waiting",
   in_progress: "in_examination",
+  ready_for_billing: "ready_for_billing",
   ready_for_payment: "ready_for_payment",
   done: "completed",
   cancelled: "cancelled",
@@ -123,12 +124,13 @@ export async function syncAppointmentFromQueueStatus(
     }
 
     if (
-      queueStatus === "ready_for_payment" &&
+      (queueStatus === "ready_for_payment" || queueStatus === "ready_for_billing") &&
       (error.message.includes("ready_for_payment") ||
+        error.message.includes("ready_for_billing") ||
         error.message.includes("invalid input value"))
     ) {
       console.error(
-        "[appointment-queue-sync] ready_for_payment missing — run 16-queue-checkout-flow.sql"
+        `[appointment-queue-sync] ${queueStatus} missing — run queue checkout/billing SQL scripts`
       );
       return;
     }
@@ -162,6 +164,8 @@ export async function syncQueueFromAppointmentStatus(
 
   if (appointmentStatus === "in_clinic" || appointmentStatus === "in_examination") {
     nextQueueStatus = "in_progress";
+  } else if (appointmentStatus === "ready_for_billing") {
+    nextQueueStatus = "ready_for_billing";
   } else if (appointmentStatus === "ready_for_payment") {
     nextQueueStatus = "ready_for_payment";
   } else if (appointmentStatus === "completed") {

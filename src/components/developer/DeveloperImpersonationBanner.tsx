@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Shield, X } from "lucide-react";
+import { DEVELOPER_COOKIE } from "@/lib/auth/developer-token";
 
 export function DeveloperImpersonationBanner() {
   const [state, setState] = useState<{
@@ -12,6 +13,8 @@ export function DeveloperImpersonationBanner() {
   const [exiting, setExiting] = useState(false);
 
   useEffect(() => {
+    if (!document.cookie.includes(`${DEVELOPER_COOKIE}=`)) return;
+
     fetch("/api/developer/session", { credentials: "include", cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {

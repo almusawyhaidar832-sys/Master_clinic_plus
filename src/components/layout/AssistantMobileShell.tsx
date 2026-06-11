@@ -70,7 +70,7 @@ export function AssistantMobileShell({ children }: { children: React.ReactNode }
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-lg flex-1 px-4 py-4">{children}</main>
+      <main className="mc-app-main mx-auto w-full max-w-lg flex-1 px-4 py-4">{children}</main>
 
       <nav className="safe-bottom sticky bottom-0 border-t border-slate-200 bg-white px-2 py-2">
         <div className="mx-auto flex max-w-lg justify-center gap-2">

@@ -1,13 +1,38 @@
 import type { SessionClinicalDraft, ToothRecordInput } from "@/lib/clinical/constants";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { teethPayloadFromDraft } from "@/lib/clinical/dental-chart-logic";
+import type { OperationClinicalData } from "@/lib/clinical/types";
+
+export async function fetchOperationClinicalRecord(
+  operationId: string,
+  portal: AuthPortalId = "accountant"
+): Promise<OperationClinicalData | null> {
+  try {
+    const res = await fetch(
+      `/api/clinical/session-records?operation_id=${encodeURIComponent(operationId)}`,
+      {
+        credentials: "include",
+        headers: authPortalHeaders(portal),
+      }
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      clinical?: OperationClinicalData | null;
+    };
+    return json.clinical ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export async function saveSessionClinicalRecords(
   operationId: string,
-  draft: SessionClinicalDraft
+  draft: SessionClinicalDraft,
+  portal: AuthPortalId = "accountant"
 ): Promise<{ ok: boolean; error?: string }> {
   const teeth = teethPayloadFromDraft(draft.teeth);
-  const portalHeaders = authPortalHeaders("accountant");
+  const portalHeaders = authPortalHeaders(portal);
 
   if (teeth.length > 0) {
     const res = await fetch("/api/clinical/session-records", {

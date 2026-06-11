@@ -3,6 +3,7 @@
 import type { AppSupabaseClient } from "@/lib/supabase/app-client";
 import {
   clinicQueueChannelName,
+  clinicQueueScreenChannelName,
   doctorQueueChannelName,
 } from "@/lib/queue/realtime-client";
 
@@ -68,16 +69,25 @@ export function broadcastAdmitRequest(
   );
 }
 
-/** Tell waiting-room TV to repeat voice announcement */
-export function broadcastQueueScreenRecall(
+/** نداء صوتي على شاشة انتظار المرضى (التلفاز) */
+export function broadcastQueueScreenCall(
   supabase: AppSupabaseClient,
   clinicId: string,
   payload: { name: string; doctorName: string; entryId?: string }
 ) {
   return sendBroadcast(
     supabase,
-    clinicQueueChannelName(clinicId),
-    "queue_screen_recall",
+    clinicQueueScreenChannelName(clinicId),
+    "queue_screen_call",
     payload
   );
+}
+
+/** @deprecated استخدم broadcastQueueScreenCall */
+export function broadcastQueueScreenRecall(
+  supabase: AppSupabaseClient,
+  clinicId: string,
+  payload: { name: string; doctorName: string; entryId?: string }
+) {
+  return broadcastQueueScreenCall(supabase, clinicId, payload);
 }

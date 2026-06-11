@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       skipPatientWhatsApp,
       treatmentCaseId,
       messageSnapshot: rawSnapshot,
+      queueEntryId,
     } = body as {
       event: string;
       operationId?: string;
@@ -43,6 +44,7 @@ export async function POST(req: NextRequest) {
       storagePath?: string;
       fileName?: string | null;
       skipPatientWhatsApp?: boolean;
+      queueEntryId?: string | null;
     };
 
     let messageSnapshot: WhatsAppMessageSnapshot | null = null;
@@ -93,6 +95,10 @@ export async function POST(req: NextRequest) {
               ? treatmentCaseId.trim()
               : null,
           messageSnapshot,
+          queueEntryId:
+            typeof queueEntryId === "string" && queueEntryId.trim()
+              ? queueEntryId.trim()
+              : null,
         });
         return NextResponse.json({
           success: true,

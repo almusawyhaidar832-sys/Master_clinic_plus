@@ -13,56 +13,56 @@ const quickLinks = [
     title: "إدخال عملية جديدة",
     desc: "سجل مريض — حساب المتبقي تلقائياً",
     icon: Users,
-    color: "bg-primary/10 text-primary",
+    color: "mc-icon-badge-primary",
   },
   {
     href: "/dashboard/queue",
     title: "غرفة الانتظار",
     desc: "نداء صوتي — تتبع حي للمرضى",
     icon: ListOrdered,
-    color: "bg-amber-50 text-amber-600",
+    color: "mc-icon-badge-warning",
   },
   {
     href: "/dashboard/appointments",
     title: "الحجوزات",
     desc: "حجز فوري + جدول المواعيد لكل الأطباء",
     icon: CalendarClock,
-    color: "bg-teal-50 text-teal-700",
+    color: "mc-icon-badge-soft",
   },
   {
     href: "/dashboard/withdrawals",
     title: "طلبات السحب",
     desc: "إشعارات الأطباء الفورية",
     icon: Wallet,
-    color: "bg-violet-50 text-violet-600",
+    color: "mc-icon-badge-primary",
   },
   {
     href: "/dashboard/doctor-expenses",
     title: "صرفيات عامة",
     desc: "صرفيات العيادة + رواتب الأطباء + مصروفات",
     icon: Receipt,
-    color: "bg-purple-50 text-purple-600",
+    color: "mc-icon-badge-soft",
   },
   {
     href: "/dashboard/doctors",
     title: "إدارة الأطباء",
     desc: "المحافظ والحصص واتفاقيات مالية",
     icon: Stethoscope,
-    color: "bg-blue-50 text-blue-600",
+    color: "mc-icon-badge-primary",
   },
   {
     href: "/dashboard/reports",
     title: "تقرير للمالك",
     desc: "تقرير شامل بنقرة واحدة",
     icon: FileText,
-    color: "bg-teal-50 text-teal-700",
+    color: "mc-icon-badge-soft",
   },
   {
     href: "/dashboard/booking",
     title: "باركود الحجوزات",
     desc: "عرض وتحميل باركود عيادتك للمرضى",
     icon: QrCode,
-    color: "bg-emerald-50 text-emerald-600",
+    color: "mc-icon-badge-success",
   },
 ];
 
@@ -72,7 +72,7 @@ export default function DashboardPage() {
 
       {/* Quick actions */}
       <div>
-        <h2 className="mb-4 text-lg font-bold text-slate-700">الإجراءات السريعة</h2>
+        <h2 className="mb-4 text-lg font-bold text-primary-700">الإجراءات السريعة</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {quickLinks.map(({ href, title, desc, icon: Icon, color }) => (
             <Link key={href} href={href}>

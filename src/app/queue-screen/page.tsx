@@ -9,13 +9,17 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import { clinicQueueChannelName } from "@/lib/queue/realtime-client";
+import { clinicQueueChannelName, clinicQueueScreenChannelName } from "@/lib/queue/realtime-client";
 import {
   repeatQueueScreenAnnouncement,
   speakQueueScreenAnnouncement,
   warmUpSpeechVoices,
 } from "@/lib/queue/queue-screen-voice";
 import { playAttentionBeep } from "@/lib/queue/web-speech";
+import {
+  resolveDoctorSpeechName,
+  resolvePatientSpeechName,
+} from "@/lib/queue/utils";
 import { cn } from "@/lib/utils";
 import { Volume2, Clock, CheckCircle2, Monitor, Copy, RotateCcw } from "lucide-react";
 
@@ -25,16 +29,16 @@ interface QueueEntry {
   status: "waiting" | "called" | "in_progress" | "done" | "cancelled";
   patient_name: string | null;
   doctor: { full_name_ar: string } | null;
-  patient: { full_name_ar: string } | null;
+  patient: { full_name_ar: string; speech_name_ar?: string | null } | null;
   called_at: string | null;
 }
 
 function resolvePatientName(entry: QueueEntry): string {
-  return entry.patient?.full_name_ar ?? entry.patient_name ?? `رقم ${entry.ticket_number}`;
+  return resolvePatientSpeechName(entry);
 }
 
 function resolveDoctorName(entry: QueueEntry): string {
-  return entry.doctor?.full_name_ar ?? "الطبيب";
+  return resolveDoctorSpeechName(entry.doctor);
 }
 
 function SetupScreen({ onClinicResolved }: { onClinicResolved: (id: string) => void }) {
@@ -107,6 +111,7 @@ function QueueScreenContent() {
 
   const voiceEnabledRef = useRef(true);
   const prevCalledRef = useRef<Set<string>>(new Set());
+  const prevCalledAtRef = useRef<Map<string, string>>(new Map());
   const prevWaitingRef = useRef<Set<string>>(new Set());
   const queueReadyRef = useRef(false);
 
@@ -139,6 +144,18 @@ function QueueScreenContent() {
     return () => clearInterval(t);
   }, []);
 
+  const handleQueueScreenCall = useCallback(
+    (name?: string, doctorName?: string) => {
+      if (!name?.trim() || !doctorName?.trim()) return;
+      speakQueueScreenAnnouncement(
+        name.trim(),
+        doctorName.trim(),
+        voiceEnabledRef.current
+      );
+    },
+    []
+  );
+
   const fetchQueue = useCallback(async () => {
     if (!clinicId) return;
 
@@ -162,21 +179,26 @@ function QueueScreenContent() {
       );
       const waitingRows = rows.filter((r) => r.status === "waiting");
 
-      const newlyCalled = calledRows.filter(
-        (r) => !prevCalledRef.current.has(r.id) && r.status === "called"
-      );
-
       const newlyWaiting = waitingRows.filter(
         (r) => !prevWaitingRef.current.has(r.id)
       );
 
       if (queueReadyRef.current) {
-        for (const entry of newlyCalled) {
-          speakQueueScreenAnnouncement(
-            resolvePatientName(entry),
-            resolveDoctorName(entry),
-            voiceEnabledRef.current
-          );
+        for (const entry of calledRows) {
+          const prevAt = prevCalledAtRef.current.get(entry.id);
+          const at = entry.called_at ?? "";
+          const isFirstCall =
+            !prevCalledRef.current.has(entry.id) && entry.status === "called";
+          const isRecall = Boolean(at && prevAt && at !== prevAt);
+
+          if (isFirstCall || isRecall) {
+            handleQueueScreenCall(
+              resolvePatientName(entry),
+              resolveDoctorName(entry)
+            );
+          }
+
+          if (at) prevCalledAtRef.current.set(entry.id, at);
         }
         if (newlyWaiting.length > 0) {
           void playAttentionBeep();
@@ -192,12 +214,12 @@ function QueueScreenContent() {
     } catch {
       // retry on next poll
     }
-  }, [clinicId]);
+  }, [clinicId, handleQueueScreenCall]);
 
   useEffect(() => {
     if (!clinicId) return;
     void fetchQueue();
-    const poll = setInterval(fetchQueue, 4000);
+    const poll = setInterval(fetchQueue, 2500);
     return () => clearInterval(poll);
   }, [fetchQueue, clinicId]);
 
@@ -205,18 +227,21 @@ function QueueScreenContent() {
     if (!clinicId) return;
 
     const supabase = createClient();
-    const channel = supabase
-      .channel(`${clinicQueueChannelName(clinicId)}-screen`)
-      .on("broadcast", { event: "queue_screen_recall" }, ({ payload }) => {
-        const p = payload as { name?: string; doctorName?: string };
-        if (p.name && p.doctorName) {
-          speakQueueScreenAnnouncement(
-            p.name,
-            p.doctorName,
-            voiceEnabledRef.current
-          );
-        }
-      })
+    const screenChannel = clinicQueueScreenChannelName(clinicId);
+
+    const onScreenCall = ({ payload }: { payload: Record<string, unknown> }) => {
+      const p = payload as { name?: string; doctorName?: string };
+      handleQueueScreenCall(p.name, p.doctorName);
+    };
+
+    const screenChannelRef = supabase
+      .channel(screenChannel, { config: { broadcast: { self: false } } })
+      .on("broadcast", { event: "queue_screen_call" }, onScreenCall)
+      .on("broadcast", { event: "queue_screen_recall" }, onScreenCall)
+      .subscribe();
+
+    const dataChannel = supabase
+      .channel(`${clinicQueueChannelName(clinicId)}-screen-sync`)
       .on(
         "postgres_changes",
         {
@@ -244,9 +269,10 @@ function QueueScreenContent() {
       .subscribe();
 
     return () => {
-      void supabase.removeChannel(channel);
+      void supabase.removeChannel(screenChannelRef);
+      void supabase.removeChannel(dataChannel);
     };
-  }, [clinicId, fetchQueue]);
+  }, [clinicId, fetchQueue, handleQueueScreenCall]);
 
   function handleClinicResolved(id: string) {
     setClinicId(id);

@@ -75,6 +75,7 @@ export interface Database {
           id: string;
           clinic_id: string;
           full_name_ar: string;
+          speech_name_ar: string | null;
           phone: string | null;
           phone_number: string | null;
           notes: string | null;
