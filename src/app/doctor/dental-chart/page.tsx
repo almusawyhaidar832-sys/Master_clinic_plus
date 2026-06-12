@@ -7,6 +7,7 @@ import { Alert } from "@/components/ui/Alert";
 import { PatientSearchField } from "@/components/patients/PatientSearchField";
 import { InteractiveDentalChart } from "@/components/clinical/InteractiveDentalChart";
 import { ModuleGuard } from "@/components/layout/ModuleGuard";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   chartMapFromRows,
   type PatientToothChartMap,
@@ -21,6 +22,7 @@ import {
 function DentalChartContent() {
   const searchParams = useSearchParams();
   const preselectedId = searchParams.get("patientId");
+  const { t, bi } = useLanguage();
 
   const [patientQuery, setPatientQuery] = useState("");
   const [patientId, setPatientId] = useState(preselectedId ?? "");
@@ -42,7 +44,7 @@ function DentalChartContent() {
     if (tablesMissing) {
       setMessage({
         type: "info",
-        text: "جدول مخطط الأسنان غير مُنشأ بعد — شغّل سكربت 30-patient-tooth-states.sql في Supabase. سجل الجلسات الحالي يعمل كالمعتاد.",
+        text: t("docDentalChartMissing"),
       });
       setChart({});
       return;
@@ -54,7 +56,7 @@ function DentalChartContent() {
     }
 
     setChart(chartMapFromRows(teeth));
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!preselectedId) return;
@@ -103,7 +105,13 @@ function DentalChartContent() {
       ...prev,
       [update.tooth_number]: update,
     }));
-    setMessage({ type: "success", text: `تم حفظ السن ${update.tooth_number}` });
+    setMessage({
+      type: "success",
+      text: bi(
+        `تم حفظ السن ${update.tooth_number}`,
+        `Tooth ${update.tooth_number} saved`
+      ),
+    });
   }
 
   async function resetTooth(toothNumber: number) {
@@ -135,22 +143,30 @@ function DentalChartContent() {
       delete next[toothNumber];
       return next;
     });
-    setMessage({ type: "success", text: `تمت إعادة السن ${toothNumber} إلى سليم` });
+    setMessage({
+      type: "success",
+      text: bi(
+        `تمت إعادة السن ${toothNumber} إلى سليم`,
+        `Tooth ${toothNumber} reset to healthy`
+      ),
+    });
   }
 
   return (
     <ModuleGuard module="dental_chart">
       <div className="space-y-4">
         <div>
-          <h2 className="text-lg font-bold text-slate-text">مخطط الأسنان</h2>
+          <h2 className="text-lg font-bold text-slate-text">
+            {t("docDentalChartTitle")}
+          </h2>
           <p className="text-sm text-slate-muted">
-            مخطط تراكمي للمريض — منفصل عن سجل الجلسات
+            {t("docDentalChartSubtitle")}
           </p>
         </div>
 
         <div className="space-y-1.5">
           <label className="block text-sm font-medium text-slate-text">
-            اختر المراجع
+            {t("docSelectPatient")}
           </label>
           <PatientSearchField
             value={patientQuery}
@@ -168,14 +184,14 @@ function DentalChartContent() {
             }}
             portal="doctor"
             selectedPatientId={patientId || null}
-            placeholder="اكتب أول حرفين من اسم المراجع..."
+            placeholder={t("docStatementSearchPlaceholder")}
             inputClassName="h-10"
           />
         </div>
 
         {patientId && patientName && (
           <p className="text-sm text-slate-text">
-            المراجع: <strong>{patientName}</strong>
+            {t("docPatientLabel")} <strong>{patientName}</strong>
           </p>
         )}
 
@@ -194,7 +210,7 @@ function DentalChartContent() {
         )}
 
         {loading && (
-          <p className="text-sm text-slate-muted">جاري تحميل المخطط...</p>
+          <p className="text-sm text-slate-muted">{t("docLoadingChart")}</p>
         )}
 
         {patientId && !loading && (
@@ -209,7 +225,7 @@ function DentalChartContent() {
 
         {!patientId && (
           <p className="rounded-xl border border-dashed border-slate-border p-6 text-center text-sm text-slate-muted">
-            اختر مراجعاً لعرض مخطط أسنانه
+            {t("docSelectPatientForChart")}
           </p>
         )}
       </div>
@@ -218,8 +234,10 @@ function DentalChartContent() {
 }
 
 export default function DoctorDentalChartPage() {
+  const { t } = useLanguage();
+
   return (
-    <Suspense fallback={<p className="text-slate-muted">جاري التحميل...</p>}>
+    <Suspense fallback={<p className="text-slate-muted">{t("loading")}</p>}>
       <DentalChartContent />
     </Suspense>
   );

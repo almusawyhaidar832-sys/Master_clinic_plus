@@ -239,6 +239,9 @@ DROP POLICY IF EXISTS clinic_tenant_select ON public.clinics;
 DROP POLICY IF EXISTS clinic_tenant_update ON public.clinics;
 DROP POLICY IF EXISTS clinics_platform_select ON public.clinics;
 DROP POLICY IF EXISTS clinics_platform_mutate ON public.clinics;
+DROP POLICY IF EXISTS clinics_platform_insert ON public.clinics;
+DROP POLICY IF EXISTS clinics_platform_update ON public.clinics;
+DROP POLICY IF EXISTS clinics_platform_delete ON public.clinics;
 
 CREATE POLICY clinics_platform_select ON public.clinics
   FOR SELECT TO authenticated
@@ -379,6 +382,8 @@ DROP POLICY IF EXISTS withdrawals_doctor_insert ON public.doctor_withdrawals;
 DROP POLICY IF EXISTS withdrawals_accountant_update ON public.doctor_withdrawals;
 DROP POLICY IF EXISTS doctor_withdrawals_tenant_select ON public.doctor_withdrawals;
 DROP POLICY IF EXISTS doctor_withdrawals_tenant_mutate ON public.doctor_withdrawals;
+DROP POLICY IF EXISTS doctor_withdrawals_insert ON public.doctor_withdrawals;
+DROP POLICY IF EXISTS doctor_withdrawals_update ON public.doctor_withdrawals;
 
 CREATE POLICY doctor_withdrawals_tenant_select ON public.doctor_withdrawals
   FOR SELECT TO authenticated
@@ -452,37 +457,76 @@ CREATE POLICY patients_tenant_mutate ON public.patients
 
 -- patient_operations / treatments — الأطباء يقرأون ويُدرجون ضمن عيادتهم
 DROP POLICY IF EXISTS operations_all ON public.patient_operations;
+DROP POLICY IF EXISTS patient_operations_tenant ON public.patient_operations;
 CREATE POLICY patient_operations_tenant ON public.patient_operations
   FOR ALL TO authenticated
   USING (public.tenant_can_access(clinic_id))
   WITH CHECK (public.tenant_can_access(clinic_id));
 
 DROP POLICY IF EXISTS treatments_all ON public.treatments;
+DROP POLICY IF EXISTS treatments_tenant ON public.treatments;
 CREATE POLICY treatments_tenant ON public.treatments
   FOR ALL TO authenticated
   USING (public.tenant_can_access(clinic_id))
   WITH CHECK (public.tenant_can_access(clinic_id));
 
 DROP POLICY IF EXISTS medical_logs_all ON public.medical_logs;
+DROP POLICY IF EXISTS medical_logs_tenant ON public.medical_logs;
 CREATE POLICY medical_logs_tenant ON public.medical_logs
   FOR ALL TO authenticated
   USING (public.tenant_can_access(clinic_id))
   WITH CHECK (public.tenant_can_access(clinic_id));
 
 DROP POLICY IF EXISTS appointments_all ON public.appointments;
+DROP POLICY IF EXISTS appointments_tenant ON public.appointments;
 CREATE POLICY appointments_tenant ON public.appointments
   FOR ALL TO authenticated
   USING (public.tenant_can_access(clinic_id))
   WITH CHECK (public.tenant_can_access(clinic_id));
 
 DROP POLICY IF EXISTS schedule_locks_all ON public.schedule_locks;
+DROP POLICY IF EXISTS schedule_locks_tenant ON public.schedule_locks;
 CREATE POLICY schedule_locks_tenant ON public.schedule_locks
   FOR ALL TO authenticated
   USING (public.tenant_can_access(clinic_id))
   WITH CHECK (public.tenant_can_access(clinic_id));
 
 -- -----------------------------------------------------------------------------
--- 8) دالة إنشاء عيادة + مالك (للاستدعاء من التطبيق أو يدوياً)
+-- 8) دالة ربط حساب قديم بأول عيادة (للحسابات بدون clinic_id)
+-- -----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.link_profile_to_first_clinic()
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_clinic_id UUID;
+  v_current UUID;
+BEGIN
+  SELECT clinic_id INTO v_current
+  FROM public.profiles WHERE id = auth.uid();
+
+  IF v_current IS NOT NULL THEN
+    RETURN 'already_linked:' || v_current;
+  END IF;
+
+  SELECT id INTO v_clinic_id FROM public.clinics ORDER BY created_at LIMIT 1;
+
+  IF v_clinic_id IS NULL THEN
+    RETURN 'no_clinic_found';
+  END IF;
+
+  UPDATE public.profiles
+  SET clinic_id = v_clinic_id, role = COALESCE(role, 'accountant')
+  WHERE id = auth.uid();
+
+  RETURN 'linked:' || v_clinic_id;
+END;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- 9) دالة إنشاء عيادة + مالك (للاستدعاء من التطبيق أو يدوياً)
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.platform_create_clinic(
   p_name TEXT,
@@ -532,10 +576,10 @@ GRANT EXECUTE ON FUNCTION public.platform_create_clinic TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_platform_admin_email TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_platform_admin TO authenticated;
 GRANT EXECUTE ON FUNCTION public.tenant_can_access TO authenticated;
-GRANT EXECUTE ON FUNCTION public.link_profile_to_first_clinic TO authenticated;
+GRANT EXECUTE ON FUNCTION public.link_profile_to_first_clinic() TO authenticated;
 
 -- -----------------------------------------------------------------------------
--- 9) تحقق سريع
+-- 10) تحقق سريع
 -- -----------------------------------------------------------------------------
 DO $$
 DECLARE

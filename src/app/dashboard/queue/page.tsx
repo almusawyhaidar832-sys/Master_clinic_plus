@@ -21,6 +21,9 @@ import { InProgressOverridePanel } from "@/components/queue/InProgressOverridePa
 import { resolveAppointmentPaymentUrl } from "@/lib/ledger/open-appointment-payment";
 import { PatientSearchField } from "@/components/patients/PatientSearchField";
 import { getPatientDisplayPhone } from "@/lib/phone";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { getQueueStatusLabel, type QueueStatusKey } from "@/i18n/localized-labels";
+import type { Language, TranslationKey } from "@/i18n/translations";
 import type { PatientSearchResult } from "@/lib/services/patient-search";
 import {
   Users, Clock, CheckCircle2, UserCheck, Plus, Volume2,
@@ -73,24 +76,19 @@ interface QueueStats {
   total: number;
 }
 
-const STATUS_CONFIG: Record<QueueStatus, { label: string; color: string; bg: string; border: string }> = {
-  waiting:     { label: "انتظار",        color: "text-amber-600",  bg: "bg-amber-50",   border: "border-amber-200" },
-  called:      { label: "تم النداء",     color: "text-blue-600",   bg: "bg-blue-50",    border: "border-blue-200"  },
-  in_progress: { label: "داخل الكشف",   color: "text-emerald-600",bg: "bg-emerald-50", border: "border-emerald-200"},
-  ready_for_billing: { label: "عند المحاسب", color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200" },
-  ready_for_payment: { label: "جاهز للدفع", color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200" },
-  done:        { label: "منتهية",        color: "text-slate-500",  bg: "bg-slate-50",   border: "border-slate-200" },
-  cancelled:   { label: "ألغى",         color: "text-red-500",    bg: "bg-red-50",     border: "border-red-200"   },
+const STATUS_STYLE: Record<QueueStatus, { color: string; bg: string; border: string }> = {
+  waiting:     { color: "text-amber-600",  bg: "bg-amber-50",   border: "border-amber-200" },
+  called:      { color: "text-blue-600",   bg: "bg-blue-50",    border: "border-blue-200"  },
+  in_progress: { color: "text-emerald-600",bg: "bg-emerald-50", border: "border-emerald-200"},
+  ready_for_billing: { color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200" },
+  ready_for_payment: { color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200" },
+  done:        { color: "text-slate-500",  bg: "bg-slate-50",   border: "border-slate-200" },
+  cancelled:   { color: "text-red-500",    bg: "bg-red-50",     border: "border-red-200"   },
 };
 
 const NEXT_STATUS: Partial<Record<QueueStatus, QueueStatus>> = {
   waiting: "called",
   called: "in_progress",
-};
-
-const NEXT_LABEL: Partial<Record<QueueStatus, string>> = {
-  waiting: "نداء →",
-  called: "دخول →",
 };
 
 function AddToQueueModal({
@@ -108,6 +106,7 @@ function AddToQueueModal({
     send_to_doctor: boolean;
   }) => void;
 }) {
+  const { t } = useLanguage();
   const [doctorId, setDoctorId] = useState(doctors[0]?.id ?? "");
   const [name, setName]   = useState("");
   const [phone, setPhone] = useState("");
@@ -124,7 +123,7 @@ function AddToQueueModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
       <div className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">إضافة مراجع للطابور</h2>
+          <h2 className="text-lg font-bold text-slate-800">{t("addToQueue")}</h2>
           <button onClick={onClose} className="rounded-lg p-1 hover:bg-slate-100">
             <X className="h-5 w-5 text-slate-500" />
           </button>
@@ -132,7 +131,7 @@ function AddToQueueModal({
 
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">الطبيب</label>
+            <label className="mb-1 block text-sm font-medium text-slate-600">{t("selectDoctor")}</label>
             <select
               value={doctorId}
               onChange={(e) => setDoctorId(e.target.value)}
@@ -144,7 +143,7 @@ function AddToQueueModal({
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">اسم المراجع</label>
+            <label className="mb-1 block text-sm font-medium text-slate-600">{t("patientName")}</label>
             <PatientSearchField
               portal="accountant"
               value={name}
@@ -154,15 +153,15 @@ function AddToQueueModal({
                 setSelectedPatientId(null);
               }}
               onSelect={handlePatientSelect}
-              placeholder="ابحث بالاسم أو أدخل مراجع جديداً"
+              placeholder={t("queueSearchPlaceholder")}
               inputClassName="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pr-10 pl-4 text-sm focus:border-primary focus:outline-none"
             />
             {selectedPatientId && (
-              <p className="mt-1 text-xs text-emerald-600">مربوط بملف مريض موجود</p>
+              <p className="mt-1 text-xs text-emerald-600">{t("queueLinkedPatient")}</p>
             )}
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">رقم الهاتف</label>
+            <label className="mb-1 block text-sm font-medium text-slate-600">{t("patientPhone")}</label>
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
@@ -177,7 +176,7 @@ function AddToQueueModal({
               onChange={(e) => setSendNow(e.target.checked)}
               className="h-4 w-4 rounded border-slate-300 text-primary"
             />
-            إرسال إشعار فوري للطبيب
+            {t("queueNotifyDoctor")}
           </label>
         </div>
 
@@ -186,7 +185,7 @@ function AddToQueueModal({
             onClick={onClose}
             className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
-            إلغاء
+            {t("cancel")}
           </button>
           <button
             onClick={() => {
@@ -201,7 +200,7 @@ function AddToQueueModal({
             }}
             className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-bold text-white hover:bg-primary/90"
           >
-            {sendNow ? "إضافة وإرسال للطبيب" : "إضافة للطابور"}
+            {sendNow ? t("queueAddAndSend") : t("queueAddOnly")}
           </button>
         </div>
       </div>
@@ -225,7 +224,12 @@ function StatCard({ label, value, icon: Icon, color }: {
   );
 }
 
-async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
+async function apiJson<T>(
+  url: string,
+  lang: Language,
+  t: (key: TranslationKey) => string,
+  init?: RequestInit
+): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, {
@@ -238,18 +242,18 @@ async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
       },
     });
   } catch {
-    throw new Error("تعذر الاتصال بالسيرفر — تأكد أن التطبيق يعمل");
+    throw new Error(t("errServerConnection"));
   }
 
   let data: T & { error?: string };
   try {
     data = (await res.json()) as T & { error?: string };
   } catch {
-    throw new Error("استجابة غير متوقعة من السيرفر");
+    throw new Error(t("errUnexpectedResponse"));
   }
 
   if (!res.ok) {
-    throw new Error(translateDbError(data.error ?? "تعذر تنفيذ العملية"));
+    throw new Error(translateDbError(data.error ?? t("errOperationFailed"), lang));
   }
   return data;
 }
@@ -257,6 +261,7 @@ async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
 export default function QueuePage() {
   const router = useRouter();
   const supabase = createClient();
+  const { t, lang, bi, dateLocale } = useLanguage();
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [queue, setQueue]     = useState<QueueEntry[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -282,7 +287,7 @@ export default function QueuePage() {
         queue: QueueEntry[];
         doctors: Doctor[];
         clinicId: string;
-      }>("/api/queue");
+      }>("/api/queue", lang, t);
 
       setClinicId(data.clinicId);
       const rows = data.queue ?? [];
@@ -299,11 +304,11 @@ export default function QueuePage() {
         total:       rows.length,
       });
     } catch (err) {
-      setPageError(err instanceof Error ? err.message : "تعذر تحميل الطابور");
+      setPageError(err instanceof Error ? err.message : t("errQueueLoad"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [lang, t]);
 
   useEffect(() => {
     fetchQueue();
@@ -314,7 +319,7 @@ export default function QueuePage() {
   const advanceStatus = async (entry: QueueEntry) => {
     setUpdating(entry.id);
     try {
-      const data = await apiJson<{ status: QueueStatus }>(`/api/queue/${entry.id}`, {
+      const data = await apiJson<{ status: QueueStatus }>(`/api/queue/${entry.id}`, lang, t, {
         method: "PATCH",
         body: JSON.stringify({ action: "advance" }),
       });
@@ -338,7 +343,7 @@ export default function QueuePage() {
       }
       await fetchQueue();
     } catch (err) {
-      setPageError(err instanceof Error ? err.message : "تعذر تحديث الدور");
+      setPageError(err instanceof Error ? err.message : t("errQueueUpdate"));
     } finally {
       setUpdating(null);
     }
@@ -349,7 +354,7 @@ export default function QueuePage() {
     setUpdating(entry.id);
     try {
       if (entry.status === "ready_for_billing") {
-        await apiJson(`/api/queue/${entry.id}`, {
+        await apiJson(`/api/queue/${entry.id}`, lang, t, {
           method: "PATCH",
           body: JSON.stringify({ action: "ready_for_payment" }),
         });
@@ -366,7 +371,7 @@ export default function QueuePage() {
       });
       router.push(href);
     } catch (err) {
-      setPageError(err instanceof Error ? err.message : "تعذر فتح إدخال الجلسة");
+      setPageError(err instanceof Error ? err.message : t("errOpenSession"));
     } finally {
       setUpdating(null);
     }
@@ -375,7 +380,7 @@ export default function QueuePage() {
   const finishExamination = async (entry: QueueEntry, openLedger = false) => {
     setUpdating(entry.id);
     try {
-      const result = await apiJson<{ ledger_url?: string }>(`/api/queue/${entry.id}`, {
+      const result = await apiJson<{ ledger_url?: string }>(`/api/queue/${entry.id}`, lang, t, {
         method: "PATCH",
         body: JSON.stringify({ action: "ready_for_payment" }),
       });
@@ -389,7 +394,7 @@ export default function QueuePage() {
       }
       await fetchQueue();
     } catch (err) {
-      setPageError(err instanceof Error ? err.message : "تعذر إنهاء الكشف");
+      setPageError(err instanceof Error ? err.message : t("errFinishExam"));
     } finally {
       setUpdating(null);
     }
@@ -398,12 +403,12 @@ export default function QueuePage() {
   const sendToDoctor = async (entry: QueueEntry) => {
     setUpdating(entry.id);
     try {
-      await apiJson("/api/queue", {
+      await apiJson("/api/queue", lang, t, {
         method: "POST",
         body: JSON.stringify({ action: "send_to_doctor", queue_entry_id: entry.id }),
       });
       const name =
-        entry.patient?.full_name_ar ?? entry.patient_name ?? `رقم ${entry.ticket_number}`;
+        entry.patient?.full_name_ar ?? entry.patient_name ?? `${bi("رقم", "Ticket #")} ${entry.ticket_number}`;
       void broadcastPatientSentToDoctor(supabase, entry.doctor_id, {
         name,
         entryId: entry.id,
@@ -411,7 +416,7 @@ export default function QueuePage() {
       notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
       await fetchQueue();
     } catch (err) {
-      setPageError(err instanceof Error ? err.message : "تعذر الإرسال للطبيب");
+      setPageError(err instanceof Error ? err.message : t("errSendDoctor"));
     } finally {
       setUpdating(null);
     }
@@ -424,7 +429,7 @@ export default function QueuePage() {
 
     try {
       if (entry.status === "called" || entry.status === "in_progress") {
-        await apiJson("/api/queue/screen/call", {
+        await apiJson("/api/queue/screen/call", lang, t, {
           method: "POST",
           body: JSON.stringify({ entry_id: entry.id }),
         });
@@ -439,7 +444,7 @@ export default function QueuePage() {
       }
 
       if (entry.status === "waiting" && entry.sent_to_doctor_at) {
-        await apiJson("/api/queue", {
+        await apiJson("/api/queue", lang, t, {
           method: "POST",
           body: JSON.stringify({ action: "recall", queue_entry_id: entry.id }),
         });
@@ -450,7 +455,7 @@ export default function QueuePage() {
         notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
       }
     } catch (err) {
-      setPageError(err instanceof Error ? err.message : "تعذر إعادة النداء");
+      setPageError(err instanceof Error ? err.message : t("errReCall"));
     } finally {
       setUpdating(null);
     }
@@ -458,25 +463,33 @@ export default function QueuePage() {
 
   const cancelEntry = async (id: string) => {
     try {
-      await apiJson(`/api/queue/${id}`, {
+      await apiJson(`/api/queue/${id}`, lang, t, {
         method: "PATCH",
         body: JSON.stringify({ action: "cancel" }),
       });
       await fetchQueue();
     } catch (err) {
-      setPageError(err instanceof Error ? err.message : "تعذر الإلغاء");
+      setPageError(err instanceof Error ? err.message : t("errCancel"));
     }
   };
 
   const confirmTransfer = async (entry: QueueEntry) => {
-    const target = entry.transfer_to_doctor?.full_name_ar ?? "الطبيب الجديد";
+    const target = entry.transfer_to_doctor?.full_name_ar ?? t("queueNewDoctor");
     const patient =
-      entry.patient?.full_name_ar ?? entry.patient_name ?? `رقم ${entry.ticket_number}`;
-    if (!confirm(`تأكيد تحويل «${patient}» إلى ${target}؟`)) return;
+      entry.patient?.full_name_ar ?? entry.patient_name ?? `${bi("رقم", "Ticket #")} ${entry.ticket_number}`;
+    if (
+      !confirm(
+        bi(
+          `تأكيد تحويل «${patient}» إلى ${target}؟`,
+          `Confirm transfer of "${patient}" to ${target}?`
+        )
+      )
+    )
+      return;
 
     setUpdating(entry.id);
     try {
-      await apiJson(`/api/queue/${entry.id}`, {
+      await apiJson(`/api/queue/${entry.id}`, lang, t, {
         method: "PATCH",
         body: JSON.stringify({ action: "confirm_transfer" }),
       });
@@ -494,7 +507,7 @@ export default function QueuePage() {
       }
       await fetchQueue();
     } catch (err) {
-      setPageError(err instanceof Error ? err.message : "تعذر تأكيد التحويل");
+      setPageError(err instanceof Error ? err.message : t("errTransferConfirm"));
     } finally {
       setUpdating(null);
     }
@@ -503,7 +516,7 @@ export default function QueuePage() {
   const dismissTransfer = async (entry: QueueEntry) => {
     setUpdating(entry.id);
     try {
-      await apiJson(`/api/queue/${entry.id}`, {
+      await apiJson(`/api/queue/${entry.id}`, lang, t, {
         method: "PATCH",
         body: JSON.stringify({ action: "dismiss_transfer" }),
       });
@@ -513,7 +526,7 @@ export default function QueuePage() {
       }
       await fetchQueue();
     } catch (err) {
-      setPageError(err instanceof Error ? err.message : "تعذر إلغاء طلب التحويل");
+      setPageError(err instanceof Error ? err.message : t("errTransferCancel"));
     } finally {
       setUpdating(null);
     }
@@ -527,7 +540,7 @@ export default function QueuePage() {
     send_to_doctor: boolean;
   }) => {
     try {
-      const result = await apiJson<{ id: string; doctor_id?: string }>("/api/queue", {
+      const result = await apiJson<{ id: string; doctor_id?: string }>("/api/queue", lang, t, {
         method: "POST",
         body: JSON.stringify({
           doctor_id: data.doctor_id,
@@ -538,7 +551,7 @@ export default function QueuePage() {
         }),
       });
       const targetDoctorId = result.doctor_id ?? data.doctor_id;
-      const name = data.patient_name.trim() || "مراجع";
+      const name = data.patient_name.trim() || t("queueDefaultPatient");
       void broadcastPatientSentToDoctor(supabase, targetDoctorId, {
         name,
         entryId: result.id,
@@ -548,7 +561,7 @@ export default function QueuePage() {
       setShowAdd(false);
       await fetchQueue();
     } catch (err) {
-      setPageError(err instanceof Error ? err.message : "تعذر الإضافة");
+      setPageError(err instanceof Error ? err.message : t("errAddQueue"));
     }
   };
 
@@ -572,7 +585,7 @@ export default function QueuePage() {
     return (
       <Alert variant="error">
         {pageError}
-        <p className="mt-2 text-sm">تأكد من تسجيل الدخول كمحاسب وأن جدول patient_queue موجود في Supabase.</p>
+        <p className="mt-2 text-sm">{t("queueClinicSetupHint")}</p>
       </Alert>
     );
   }
@@ -586,13 +599,13 @@ export default function QueuePage() {
         <Alert variant="error">{pageError}</Alert>
       )}
 
-      <TodayAppointmentsPanel title="حجوزات اليوم" compact onApprovedToQueue={fetchQueue} />
+      <TodayAppointmentsPanel compact onApprovedToQueue={fetchQueue} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">غرفة الانتظار</h1>
+          <h1 className="text-2xl font-bold text-slate-800">{t("queueTitle")}</h1>
           <p className="text-sm text-slate-500">
-            {new Date().toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            {new Date().toLocaleDateString(dateLocale, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
         </div>
         <div className="flex gap-2">
@@ -603,32 +616,32 @@ export default function QueuePage() {
             className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
           >
             <Monitor className="h-4 w-4" />
-            شاشة المرضى
+            {t("queuePatientScreen")}
           </a>
           <button
             onClick={() => fetchQueue()}
             className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
           >
             <RefreshCw className="h-4 w-4" />
-            تحديث
+            {t("queueRefresh")}
           </button>
           <button
             onClick={() => setShowAdd(true)}
             className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
-            مراجع جديد
+            {t("queueAddPatientBtn")}
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard label="في الانتظار"   value={stats.waiting}     icon={Clock}        color="bg-amber-100 text-amber-600"   />
-        <StatCard label="تم النداء"      value={stats.called}      icon={Volume2}      color="bg-blue-100 text-blue-600"     />
-        <StatCard label="داخل الكشف"    value={stats.in_progress} icon={UserCheck}    color="bg-emerald-100 text-emerald-600"/>
-        <StatCard label="عند المحاسب"   value={stats.ready_for_billing} icon={Receipt} color="bg-violet-100 text-violet-600"/>
-        <StatCard label="جاهز للدفع"    value={stats.ready_for_payment} icon={Receipt} color="bg-violet-100 text-violet-600"/>
-        <StatCard label="منتهية اليوم"  value={stats.done}        icon={CheckCircle2} color="bg-slate-100 text-slate-600"   />
+        <StatCard label={t("waitingCount")}   value={stats.waiting}     icon={Clock}        color="bg-amber-100 text-amber-600"   />
+        <StatCard label={t("calledStatus")}      value={stats.called}      icon={Volume2}      color="bg-blue-100 text-blue-600"     />
+        <StatCard label={t("inProgressStatus")}    value={stats.in_progress} icon={UserCheck}    color="bg-emerald-100 text-emerald-600"/>
+        <StatCard label={t("apptStatus_ready_for_billing")}   value={stats.ready_for_billing} icon={Receipt} color="bg-violet-100 text-violet-600"/>
+        <StatCard label={t("apptStatus_ready_for_payment")}    value={stats.ready_for_payment} icon={Receipt} color="bg-violet-100 text-violet-600"/>
+        <StatCard label={t("doneToday")}  value={stats.done}        icon={CheckCircle2} color="bg-slate-100 text-slate-600"   />
       </div>
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
@@ -653,7 +666,7 @@ export default function QueuePage() {
                 : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
             )}
           >
-            الكل
+            {t("queueAllDoctors")}
           </button>
           {doctors.map((d) => (
             <button
@@ -676,15 +689,22 @@ export default function QueuePage() {
         {activeEntries.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white py-16 text-center">
             <Users className="mb-3 h-10 w-10 text-slate-300" />
-            <p className="font-medium text-slate-500">لا يوجد مراجعون في الطابور</p>
-            <p className="text-sm text-slate-400">اضغط &quot;مراجع جديد&quot; لإضافة مريض</p>
+            <p className="font-medium text-slate-500">{t("queueEmpty")}</p>
+            <p className="text-sm text-slate-400">{t("queueEmptyHint")}</p>
           </div>
         ) : (
           activeEntries.map((entry) => {
-            const cfg = STATUS_CONFIG[entry.status];
-            const patientDisplay = entry.patient?.full_name_ar ?? entry.patient_name ?? "مراجع بدون اسم";
+            const style = STATUS_STYLE[entry.status];
+            const statusLabel = getQueueStatusLabel(t, entry.status as QueueStatusKey);
+            const cfg = { ...style, label: statusLabel };
+            const patientDisplay = entry.patient?.full_name_ar ?? entry.patient_name ?? t("queueUnnamedPatient");
             const nextAction = NEXT_STATUS[entry.status];
-            const nextLabel  = NEXT_LABEL[entry.status];
+            const nextLabel =
+              entry.status === "waiting"
+                ? t("callNext")
+                : entry.status === "called"
+                  ? t("queueEnterArrow")
+                  : undefined;
             const canCheckout =
               entry.status === "ready_for_billing" ||
               entry.status === "ready_for_payment";
@@ -720,14 +740,14 @@ export default function QueuePage() {
                     {entry.sent_to_doctor_at && (
                       <>
                         <span>•</span>
-                        <span className="text-emerald-600">أُرسل للطبيب</span>
+                        <span className="text-emerald-600">{t("queueSentToDoctor")}</span>
                       </>
                     )}
                     {transferPending && (
                       <>
                         <span>•</span>
                         <span className="font-medium text-violet-700">
-                          طلب تحويل إلى {entry.transfer_to_doctor?.full_name_ar ?? "—"}
+                          {t("queueTransferTo")} {entry.transfer_to_doctor?.full_name_ar ?? "—"}
                         </span>
                       </>
                     )}
@@ -762,14 +782,14 @@ export default function QueuePage() {
                         ) : (
                           <ArrowRightLeft className="h-3.5 w-3.5" />
                         )}
-                        <span className="hidden sm:inline">تأكيد التحويل</span>
+                        <span className="hidden sm:inline">{t("queueConfirmTransfer")}</span>
                       </button>
                       <button
                         onClick={() => void dismissTransfer(entry)}
                         disabled={updating === entry.id}
                         className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
                       >
-                        رفض التحويل
+                        {t("queueRejectTransferBtn")}
                       </button>
                     </>
                   )}
@@ -778,13 +798,13 @@ export default function QueuePage() {
                       onClick={() => recallPatient(entry)}
                       disabled={updating === entry.id}
                       className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-60"
-                      title="إعادة النداء"
+                      title={t("queueReCallTitle")}
                     >
                       {updating === entry.id
                         ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                         : <RotateCcw className="h-3.5 w-3.5" />
                       }
-                      <span className="hidden sm:inline">إعادة النداء</span>
+                      <span className="hidden sm:inline">{t("queueReCallTitle")}</span>
                     </button>
                   )}
                   {canSend && (
@@ -792,13 +812,13 @@ export default function QueuePage() {
                       onClick={() => sendToDoctor(entry)}
                       disabled={updating === entry.id}
                       className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
-                      title="إرسال إلى الطبيب"
+                      title={t("queueSendDoctorTitle")}
                     >
                       {updating === entry.id
                         ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                         : <Send className="h-3.5 w-3.5" />
                       }
-                      <span className="hidden sm:inline">إرسال للطبيب</span>
+                      <span className="hidden sm:inline">{t("queueSendDoctorTitle")}</span>
                     </button>
                   )}
                   {entry.status === "in_progress" && (
@@ -806,13 +826,13 @@ export default function QueuePage() {
                       onClick={() => finishExamination(entry, true)}
                       disabled={updating === entry.id}
                       className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
-                      title="إنهاء الجلسة وتحويل للمحاسبة"
+                      title={t("queueFinishTitle")}
                     >
                       {updating === entry.id
                         ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                         : <LogOut className="h-3.5 w-3.5" />
                       }
-                      <span className="hidden sm:inline">إنهاء وتحويل</span>
+                      <span className="hidden sm:inline">{t("queueFinishShort")}</span>
                     </button>
                   )}
                   {canCheckout && (
@@ -826,7 +846,7 @@ export default function QueuePage() {
                       ) : (
                         <Receipt className="h-3.5 w-3.5" />
                       )}
-                      <span className="hidden sm:inline">دفع</span>
+                      <span className="hidden sm:inline">{t("apptPay")}</span>
                     </button>
                   )}
                   {nextAction && !transferPending && (
@@ -851,7 +871,7 @@ export default function QueuePage() {
                   <button
                     onClick={() => cancelEntry(entry.id)}
                     className="rounded-xl p-2 text-slate-400 hover:bg-red-50 hover:text-red-500"
-                    title="إلغاء الدور"
+                    title={t("queueCancelTitle")}
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -865,7 +885,7 @@ export default function QueuePage() {
       {doneEntries.length > 0 && (
         <details className="group rounded-2xl border border-slate-100 bg-white">
           <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium text-slate-500 hover:text-slate-700">
-            <span>منتهية اليوم ({doneEntries.length})</span>
+            <span>{t("queueDoneTodaySection")} ({doneEntries.length})</span>
             <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
           </summary>
           <div className="border-t border-slate-100 p-2 space-y-1">

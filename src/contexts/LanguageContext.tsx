@@ -28,6 +28,10 @@ interface LanguageContextValue {
   setLang: (l: Language) => void;
   toggleLang: () => void;
   t: (key: TranslationKey) => string;
+  /** Pick Arabic or English string based on current language */
+  bi: (ar: string, en: string) => string;
+  formatMoney: (amount: number) => string;
+  dateLocale: string;
   langLabel: string;
 }
 
@@ -58,8 +62,13 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleLang = useCallback(() => {
-    setLang(lang === "ar" ? "en" : "ar");
-  }, [lang, setLang]);
+    setLangState((prev) => {
+      const next: Language = prev === "ar" ? "en" : "ar";
+      localStorage.setItem(STORAGE_KEY, next);
+      applyLang(next);
+      return next;
+    });
+  }, []);
 
   const t = useCallback(
     (key: TranslationKey): string => {
@@ -68,6 +77,25 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     [lang]
   );
 
+  const bi = useCallback(
+    (ar: string, en: string): string => (lang === "en" ? en : ar),
+    [lang]
+  );
+
+  const formatMoney = useCallback(
+    (amount: number): string => {
+      const n = new Intl.NumberFormat("en-US", {
+        numberingSystem: "latn",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount);
+      return `${n} ${t("currency")}`;
+    },
+    [t]
+  );
+
+  const dateLocale = lang === "en" ? "en-US" : "ar-EG";
+
   const value = useMemo<LanguageContextValue>(
     () => ({
       lang,
@@ -75,9 +103,12 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       setLang,
       toggleLang,
       t,
+      bi,
+      formatMoney,
+      dateLocale,
       langLabel: LANG_LABELS[lang],
     }),
-    [lang, setLang, toggleLang, t]
+    [lang, setLang, toggleLang, t, bi, formatMoney, dateLocale]
   );
 
   return (
@@ -90,8 +121,18 @@ export function useLanguage(): LanguageContextValue {
   if (!ctx) {
     const t = (key: TranslationKey): string =>
       (translations.ar as Record<string, string>)[key] ?? key;
+    const bi = (ar: string, en: string) => ar;
+    const formatMoney = (amount: number) =>
+      `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(amount)} ${t("currency")}`;
     return {
-      lang: "ar", isRTL: true, setLang: () => {}, toggleLang: () => {}, t,
+      lang: "ar",
+      isRTL: true,
+      setLang: () => {},
+      toggleLang: () => {},
+      t,
+      bi,
+      formatMoney,
+      dateLocale: "ar-EG",
       langLabel: LANG_LABELS.ar,
     };
   }

@@ -9,7 +9,8 @@ import {
   suggestPatientNames,
   type DoctorLedgerPatientRow,
 } from "@/lib/services/doctor-financial-ledger";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { cn, formatDate } from "@/lib/utils";
 import { RefreshCw } from "lucide-react";
 
 interface DoctorLedgerPatientsTabProps {
@@ -19,6 +20,7 @@ interface DoctorLedgerPatientsTabProps {
 export function DoctorLedgerPatientsTab({
   refreshKey = 0,
 }: DoctorLedgerPatientsTabProps) {
+  const { t, formatMoney, dateLocale } = useLanguage();
   const [search, setSearch] = useState("");
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
@@ -52,7 +54,7 @@ export function DoctorLedgerPatientsTab({
       };
 
       if (!res.ok) {
-        setError(json.error ?? "تعذر تحميل المراجعين");
+        setError(json.error ?? t("docLoadPatientsFailed"));
         setAllRows([]);
         setTotal(0);
         return;
@@ -61,11 +63,11 @@ export function DoctorLedgerPatientsTab({
       setAllRows(json.rows ?? []);
       setTotal(json.total ?? json.rows?.length ?? 0);
     } catch {
-      setError("تعذر الاتصال بالسيرفر");
+      setError(t("errServerConnection"));
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, t]);
 
   useEffect(() => {
     void load();
@@ -100,12 +102,12 @@ export function DoctorLedgerPatientsTab({
   const columns: Column<DoctorLedgerPatientRow>[] = [
     {
       key: "date",
-      header: "التاريخ",
-      render: (row) => formatDate(row.payment_date),
+      header: t("docColDate"),
+      render: (row) => formatDate(row.payment_date, dateLocale),
     },
     {
       key: "name",
-      header: "المراجع",
+      header: t("docColPatient"),
       render: (row) => (
         <div className="flex flex-wrap items-center gap-1">
           <span className="font-medium text-slate-text">
@@ -113,7 +115,7 @@ export function DoctorLedgerPatientsTab({
           </span>
           {row.is_first_payment && (
             <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-              جديد
+              {t("docNewPatientBadge")}
             </span>
           )}
         </div>
@@ -121,26 +123,26 @@ export function DoctorLedgerPatientsTab({
     },
     {
       key: "procedure",
-      header: "الجلسة",
+      header: t("docColSession"),
       render: (row) => (
         <span className="text-slate-700">{row.procedure_label}</span>
       ),
     },
     {
       key: "paid",
-      header: "المدفوع",
+      header: t("docColPaid"),
       render: (row) => (
         <span className="font-semibold text-primary tabular-nums">
-          {formatCurrency(row.paid_amount)}
+          {formatMoney(row.paid_amount)}
         </span>
       ),
     },
     {
       key: "share",
-      header: "حصتك",
+      header: t("docColYourShare"),
       render: (row) => (
         <span className="font-bold text-emerald-600 tabular-nums">
-          {formatCurrency(row.doctor_share)}
+          {formatMoney(row.doctor_share)}
         </span>
       ),
     },
@@ -148,13 +150,11 @@ export function DoctorLedgerPatientsTab({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-muted">
-        دفعات المراجعين — اكتب حرفين من الاسم لاقتراح الأسماء
-      </p>
+      <p className="text-sm text-slate-muted">{t("docLedgerPatientsIntro")}</p>
 
       <div ref={searchWrapRef} className="relative">
         <Input
-          label="بحث بالاسم"
+          label={t("docSearchByName")}
           name="patient_search"
           value={search}
           onChange={(e) => {
@@ -162,7 +162,7 @@ export function DoctorLedgerPatientsTab({
             setSuggestOpen(true);
           }}
           onFocus={() => setSuggestOpen(true)}
-          placeholder="اكتب أول حرفين من الاسم..."
+          placeholder={t("docSearchNameHint")}
           autoComplete="off"
         />
         {suggestOpen && suggestions.length > 0 && (
@@ -189,7 +189,7 @@ export function DoctorLedgerPatientsTab({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Input
-          label="من تاريخ"
+          label={t("docFromDate")}
           type="date"
           value={dateFrom}
           onChange={(e) => setDateFrom(e.target.value)}
@@ -197,7 +197,7 @@ export function DoctorLedgerPatientsTab({
           className="text-left"
         />
         <Input
-          label="إلى تاريخ"
+          label={t("docToDate")}
           type="date"
           value={dateTo}
           onChange={(e) => setDateTo(e.target.value)}
@@ -210,12 +210,12 @@ export function DoctorLedgerPatientsTab({
         <p className="text-sm text-slate-600">
           {search.trim() ? (
             <>
-              نتائج البحث: <strong>{rows.length}</strong> من{" "}
-              <strong>{total}</strong>
+              {t("docSearchResultsCount")} <strong>{rows.length}</strong>{" "}
+              {t("docFromTotal")} <strong>{total}</strong>
             </>
           ) : (
             <>
-              الدفعات: <strong>{total}</strong>
+              {t("docPaymentsCount")} <strong>{total}</strong>
             </>
           )}
         </p>
@@ -225,7 +225,7 @@ export function DoctorLedgerPatientsTab({
           className="flex items-center gap-1 rounded-lg border border-slate-border px-3 py-1.5 text-sm text-slate-muted hover:bg-surface-card"
         >
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          تحديث
+          {t("refresh")}
         </button>
       </div>
 
@@ -244,9 +244,7 @@ export function DoctorLedgerPatientsTab({
           columns={columns}
           data={rows}
           emptyMessage={
-            search.trim()
-              ? "لا يوجد مراجع بهذا الاسم — اختر من الاقتراحات أو جرّب جزءاً آخر"
-              : "لا توجد دفعات في الفترة المحددة"
+            search.trim() ? t("docNoPatientByName") : t("docNoPatientsInPeriod")
           }
         />
       )}

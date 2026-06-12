@@ -7,6 +7,7 @@ import { logoutFromCurrentPortal } from "@/lib/auth/logout-portal";
 import { cn } from "@/lib/utils";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { assistantModuleNav } from "@/config/navigation";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
 import {
   getAssistantForCurrentUser,
@@ -20,6 +21,7 @@ export function AssistantMobileShell({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const router = useRouter();
   const { displayName } = useClinicProfile();
+  const { t, isRTL } = useLanguage();
   const [assistant, setAssistant] = useState<Assistant | null>(null);
   const [doctorName, setDoctorName] = useState("");
 
@@ -47,7 +49,7 @@ export function AssistantMobileShell({ children }: { children: React.ReactNode }
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50" dir="rtl">
+    <div className="flex min-h-screen flex-col bg-slate-50" dir={isRTL ? "rtl" : "ltr"}>
       <ClinicDataSyncBridge />
       <header className="safe-top sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
@@ -65,7 +67,7 @@ export function AssistantMobileShell({ children }: { children: React.ReactNode }
             className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50"
           >
             <LogOut className="h-3.5 w-3.5" />
-            خروج
+            {t("logout")}
           </button>
         </div>
       </header>
@@ -88,7 +90,7 @@ export function AssistantMobileShell({ children }: { children: React.ReactNode }
                 )}
               >
                 <CalendarClock className="h-5 w-5" />
-                {item.label}
+                {t(item.labelKey)}
               </Link>
             );
           })}

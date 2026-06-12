@@ -14,6 +14,8 @@ import { broadcastPatientSentToDoctor } from "@/lib/queue/broadcast";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { cn, formatTime, todayISO } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useAppointmentStatusLabels } from "@/i18n/localized-labels";
 import type { AppointmentStatus } from "@/types";
 import {
   CalendarClock,
@@ -26,21 +28,21 @@ import {
   Pencil,
 } from "lucide-react";
 
-const STATUS_CONFIG: Record<
+const STATUS_STYLE: Record<
   AppointmentStatus,
-  { label: string; color: string; bg: string }
+  { color: string; bg: string }
 > = {
-  pending:        { label: "قيد المراجعة", color: "text-amber-700",   bg: "bg-amber-100"   },
-  scheduled:      { label: "مجدول",        color: "text-slate-600",   bg: "bg-slate-100"   },
-  confirmed:      { label: "مؤكد",         color: "text-blue-600",    bg: "bg-blue-100"    },
-  waiting:        { label: "في الانتظار",  color: "text-amber-800",   bg: "bg-amber-50"    },
-  in_clinic:      { label: "داخل العيادة", color: "text-teal-700",    bg: "bg-teal-100"    },
-  in_examination: { label: "داخل الكشف", color: "text-emerald-700", bg: "bg-emerald-100" },
-  ready_for_billing: { label: "عند المحاسب", color: "text-violet-700", bg: "bg-violet-100" },
-  ready_for_payment: { label: "جاهز للدفع", color: "text-violet-700", bg: "bg-violet-100" },
-  completed:      { label: "مكتمل",        color: "text-violet-600",  bg: "bg-violet-100"  },
-  cancelled:      { label: "ملغي",         color: "text-red-600",     bg: "bg-red-100"     },
-  no_show:        { label: "لم يحضر",      color: "text-amber-600",   bg: "bg-amber-100"   },
+  pending:        { color: "text-amber-700",   bg: "bg-amber-100"   },
+  scheduled:      { color: "text-slate-600",   bg: "bg-slate-100"   },
+  confirmed:      { color: "text-blue-600",    bg: "bg-blue-100"    },
+  waiting:        { color: "text-amber-800",   bg: "bg-amber-50"    },
+  in_clinic:      { color: "text-teal-700",    bg: "bg-teal-100"    },
+  in_examination: { color: "text-emerald-700", bg: "bg-emerald-100" },
+  ready_for_billing: { color: "text-violet-700", bg: "bg-violet-100" },
+  ready_for_payment: { color: "text-violet-700", bg: "bg-violet-100" },
+  completed:      { color: "text-violet-600",  bg: "bg-violet-100"  },
+  cancelled:      { color: "text-red-600",     bg: "bg-red-100"     },
+  no_show:        { color: "text-amber-600",   bg: "bg-amber-100"   },
 };
 
 interface TodayAppointmentsPanelProps {
@@ -52,10 +54,13 @@ interface TodayAppointmentsPanelProps {
 }
 
 export function TodayAppointmentsPanel({
-  title = "حجوزات اليوم",
+  title,
   compact = false,
   onApprovedToQueue,
 }: TodayAppointmentsPanelProps) {
+  const { t, bi } = useLanguage();
+  const statusLabels = useAppointmentStatusLabels();
+  const panelTitle = title ?? t("todayBookingsTitle");
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<DashboardAppointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,13 +100,13 @@ export function TodayAppointmentsPanel({
       .order("start_time");
 
     if (error) {
-      setMessage("تعذر تحميل الحجوزات");
+      setMessage(t("msgLoadAppointmentsFailed"));
       setAppointments([]);
     } else {
       setAppointments((data as DashboardAppointment[]) ?? []);
     }
     setLoading(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -111,8 +116,8 @@ export function TodayAppointmentsPanel({
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
   }, [toast]);
 
   async function handleApprove(appointment: DashboardAppointment) {
@@ -124,10 +129,10 @@ export function TodayAppointmentsPanel({
         "accept"
       );
       if (!result.ok) {
-        setMessage(result.error ?? "تعذر الموافقة");
+        setMessage(result.error ?? t("msgApproveFailed"));
         return;
       }
-      setToast("تم نقل المريض لغرفة الانتظار");
+      setToast(t("toastPatientToQueue"));
       if (clinicId) {
         notifyQueueRefresh({ scope: "clinic", clinicId });
       }
@@ -154,18 +159,23 @@ export function TodayAppointmentsPanel({
           body: JSON.stringify({ appointment_id: appointment.id }),
         });
       } catch {
-        setMessage("تعذر الاتصال بالسيرفر — تأكد أن التطبيق يعمل");
+        setMessage(t("errServerConnection"));
         return;
       }
 
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMessage(json.error ?? "تعذر تسجيل الدخول");
+        setMessage(json.error ?? t("msgCheckInFailed"));
         return;
       }
 
-      const name = appointment.patient_name_ar || "المراجع";
-      setToast(`تم دخول ${name} لغرفة الانتظار — أُشعر الطبيب`);
+      const name = appointment.patient_name_ar || t("entityPatient");
+      setToast(
+        bi(
+          `تم دخول ${name} لغرفة الانتظار — أُشعر الطبيب`,
+          `${name} checked in — doctor notified`
+        )
+      );
 
       const supabase = createClient();
       void broadcastPatientSentToDoctor(supabase, appointment.doctor_id, {
@@ -199,7 +209,7 @@ export function TodayAppointmentsPanel({
       });
       router.push(href);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "تعذر فتح إدخال الجلسة");
+      setMessage(err instanceof Error ? err.message : t("errOpenSession"));
     } finally {
       setPayingId(null);
     }
@@ -221,17 +231,17 @@ export function TodayAppointmentsPanel({
           body: JSON.stringify({ appointment_id: appointment.id }),
         });
       } catch {
-        setMessage("تعذر الاتصال بالسيرفر — تأكد أن التطبيق يعمل");
+        setMessage(t("errServerConnection"));
         return;
       }
 
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMessage(json.error ?? "تعذر إنهاء الكشف");
+        setMessage(json.error ?? t("msgFinishExamFailed"));
         return;
       }
 
-      setToast("انتهى الكشف — المراجع جاهز للدفع");
+      setToast(t("toastExamFinishedPayment"));
       if (clinicId) {
         notifyQueueRefresh({ scope: "clinic", clinicId });
         notifyQueueRefresh({ scope: "doctor", doctorId: appointment.doctor_id });
@@ -256,9 +266,9 @@ export function TodayAppointmentsPanel({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
           <CalendarClock className="h-5 w-5 text-primary" />
-          {title}
+          {panelTitle}
           <span className="text-sm font-normal text-slate-400">
-            ({pending.length} نشط)
+            ({pending.length} {t("todayActiveSuffix")})
           </span>
         </h2>
         <button
@@ -278,7 +288,7 @@ export function TodayAppointmentsPanel({
 
       {pendingReview.length > 0 && (
         <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          <strong>{pendingReview.length}</strong> طلب باركود بانتظار الموافقة
+          <strong>{pendingReview.length}</strong> {t("todayBarcodePending")}
         </p>
       )}
 
@@ -294,12 +304,13 @@ export function TodayAppointmentsPanel({
         </div>
       ) : pending.length === 0 ? (
         <p className="py-6 text-center text-sm text-slate-400">
-          لا توجد حجوزات نشطة لليوم
+          {t("todayNoActiveBookings")}
         </p>
       ) : (
         <div className="space-y-2">
           {pending.map((a) => {
-            const cfg = STATUS_CONFIG[a.status] ?? STATUS_CONFIG.scheduled;
+            const cfg = STATUS_STYLE[a.status] ?? STATUS_STYLE.scheduled;
+            const statusLabel = statusLabels[a.status] ?? a.status;
             const isPending = a.status === "pending";
             const canCheckIn = ["scheduled", "confirmed", "waiting"].includes(a.status);
             const canCheckout =
@@ -319,7 +330,7 @@ export function TodayAppointmentsPanel({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-slate-800">
-                      {a.patient_name_ar || "مراجع"}
+                      {a.patient_name_ar || t("entityPatient")}
                     </span>
                     <span
                       className={cn(
@@ -328,12 +339,12 @@ export function TodayAppointmentsPanel({
                         cfg.color
                       )}
                     >
-                      {cfg.label}
+                      {statusLabel}
                     </span>
                   </div>
                   <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
                     <Stethoscope className="h-3 w-3" />
-                    {a.doctor?.full_name_ar ?? "طبيب"}
+                    {a.doctor?.full_name_ar ?? t("entityDoctor")}
                     <span>·</span>
                     {formatTime(a.start_time)}
                   </p>
@@ -353,7 +364,7 @@ export function TodayAppointmentsPanel({
                         ) : (
                           <Check className="h-3 w-3" />
                         )}
-                        موافقة
+                        {t("apptApprove")}
                       </button>
                       <button
                         type="button"
@@ -361,7 +372,7 @@ export function TodayAppointmentsPanel({
                         className="flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50"
                       >
                         <X className="h-3 w-3" />
-                        رفض
+                        {t("apptReject")}
                       </button>
                       <button
                         type="button"
@@ -369,7 +380,7 @@ export function TodayAppointmentsPanel({
                         className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
                       >
                         <Pencil className="h-3 w-3" />
-                        تعديل
+                        {t("edit")}
                       </button>
                     </>
                   )}
@@ -385,7 +396,7 @@ export function TodayAppointmentsPanel({
                       ) : (
                         <DoorOpen className="h-3 w-3" />
                       )}
-                      دخول
+                      {t("apptCheckIn")}
                     </button>
                   )}
                   {inConsultation && (
@@ -400,7 +411,7 @@ export function TodayAppointmentsPanel({
                       ) : (
                         <Receipt className="h-3 w-3" />
                       )}
-                      إنهاء الكشف
+                      {t("apptFinishExam")}
                     </button>
                   )}
                   {canCheckout && (
@@ -415,7 +426,7 @@ export function TodayAppointmentsPanel({
                       ) : (
                         <Receipt className="h-3 w-3" />
                       )}
-                      دفع
+                      {t("apptPay")}
                     </button>
                   )}
                 </div>
@@ -431,7 +442,7 @@ export function TodayAppointmentsPanel({
           portal="accountant"
           onClose={() => setEditing(null)}
           onSaved={() => {
-            setMessage("تم تعديل الموعد");
+            setMessage(t("msgAppointmentUpdated"));
             load();
           }}
         />
@@ -443,7 +454,7 @@ export function TodayAppointmentsPanel({
           portal="accountant"
           onClose={() => setRejecting(null)}
           onSaved={() => {
-            setMessage("تم رفض الطلب");
+            setMessage(t("msgAppointmentRejected"));
             load();
           }}
         />

@@ -7,11 +7,13 @@ import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import { useClinicSync } from "@/hooks/useClinicSync";
+import { useLanguage } from "@/contexts/LanguageContext";
+import type { TranslationKey } from "@/i18n/translations";
 import { DoctorLedgerInvoicesTab } from "@/components/doctor/DoctorLedgerInvoicesTab";
 import { DoctorLedgerPatientsTab } from "@/components/doctor/DoctorLedgerPatientsTab";
 import { DoctorLedgerOperationsTab } from "@/components/doctor/DoctorLedgerOperationsTab";
 import { DoctorFinancialReportPanel } from "@/components/doctor/DoctorFinancialReportPanel";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   FileText,
   Users,
@@ -31,17 +33,18 @@ function parseTab(value: string | null): LedgerTab {
 
 const TAB_ITEMS: {
   id: LedgerTab;
-  label: string;
+  labelKey: TranslationKey;
   icon: typeof FileText;
 }[] = [
-  { id: "invoices", label: "الفواتير", icon: FileText },
-  { id: "patients", label: "المراجعون", icon: Users },
-  { id: "operations", label: "العمليات المالية", icon: ArrowDownToLine },
+  { id: "invoices", labelKey: "docTabInvoices", icon: FileText },
+  { id: "patients", labelKey: "docTabLedgerPatients", icon: Users },
+  { id: "operations", labelKey: "docTabFinancialOps", icon: ArrowDownToLine },
 ];
 
 export default function DoctorFinancialLedgerPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t, formatMoney } = useLanguage();
 
   const [doctorId, setDoctorId] = useState<string | null>(null);
   const [salaryDoctor, setSalaryDoctor] = useState(false);
@@ -99,32 +102,30 @@ export default function DoctorFinancialLedgerPage() {
       <div>
         <h1 className="flex items-center gap-2 text-lg font-bold text-slate-text">
           <ScrollText className="h-5 w-5 text-primary" />
-          السجل المالي
+          {t("docFinancialLedgerTitle")}
         </h1>
-        <p className="text-sm text-slate-muted">
-          فواتير معتمدة · دفعات المراجعين · سحوباتك
-        </p>
+        <p className="text-sm text-slate-muted">{t("docFinancialLedgerSubtitle")}</p>
       </div>
 
       {balance !== null && (
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-xl bg-gradient-to-br from-primary to-primary-700 p-4 text-white">
             <p className="text-xs opacity-90">
-              {salaryDoctor ? "المتبقي من الراتب" : "الرصيد القابل للسحب"}
+              {salaryDoctor ? t("docRemainingSalary") : t("docWithdrawableBalanceLabel")}
             </p>
             <p className="mt-1 text-xl font-bold tabular-nums">
-              {formatCurrency(Math.abs(balance))}
+              {formatMoney(Math.abs(balance))}
               {balance < 0 && (
-                <span className="mr-1 text-xs">(مدين)</span>
+                <span className="mr-1 text-xs">{t("debtLabel")}</span>
               )}
             </p>
           </div>
           <div className="rounded-xl border border-slate-border bg-surface-card p-4">
             <p className="text-xs text-slate-muted">
-              {salaryDoctor ? "الراتب المستحق" : "إجمالي الأرباح"}
+              {salaryDoctor ? t("docSalaryDue") : t("docTotalEarningsLabel")}
             </p>
             <p className="mt-1 text-xl font-bold text-emerald-600 tabular-nums">
-              {formatCurrency(earnings ?? 0)}
+              {formatMoney(earnings ?? 0)}
             </p>
           </div>
         </div>
@@ -133,7 +134,7 @@ export default function DoctorFinancialLedgerPage() {
       <DoctorFinancialReportPanel />
 
       <div className="flex gap-1 rounded-xl border border-slate-border bg-surface-card p-1">
-        {TAB_ITEMS.map(({ id, label, icon: Icon }) => (
+        {TAB_ITEMS.map(({ id, labelKey, icon: Icon }) => (
           <button
             key={id}
             type="button"
@@ -146,7 +147,7 @@ export default function DoctorFinancialLedgerPage() {
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />
-            {label}
+            {t(labelKey)}
           </button>
         ))}
       </div>

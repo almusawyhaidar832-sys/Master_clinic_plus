@@ -15,6 +15,7 @@ import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicModules } from "@/contexts/ClinicModulesContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { SessionPrescriptionPanel } from "@/components/prescriptions/SessionPrescriptionPanel";
 
 interface VisitSessionClinicalPanelProps {
@@ -35,6 +36,7 @@ export function VisitSessionClinicalPanel({
   defaultOpen = true,
   className,
 }: VisitSessionClinicalPanelProps) {
+  const { t } = useLanguage();
   const { profile } = useClinicProfile();
   const clinicId = profile?.id ?? null;
   const { hasModule } = useClinicModules();
@@ -66,7 +68,7 @@ export function VisitSessionClinicalPanel({
         if (existing) {
           setSession(existing);
           if (existing.withoutQueue) {
-            setInfo("السجل البصري جاهز — الربط بالطابور اختياري لهذه الجلسة");
+            setInfo(t("docVisualRecordReadyOptional"));
           }
           return;
         }
@@ -87,19 +89,19 @@ export function VisitSessionClinicalPanel({
       setSession(created);
 
       if (created.withoutQueue) {
-        setInfo(
-          "تم فتح السجل البصري — لإرسال الجلسة للمحاسبة ابدأ الكشف من قائمة الانتظار أولاً"
-        );
+        setInfo(t("docVisualRecordOpenFromQueue"));
       } else if (!created.queueEntryId) {
-        setInfo("السجل البصري جاهز — اربط الزيارة من الطابور لإرسالها للمحاسبة");
+        setInfo(t("docVisualRecordReadyLinkQueue"));
       }
     } catch (e) {
       setSession(null);
-      setError(e instanceof Error ? e.message : "تعذر تحميل جلسة الكشف");
+      setError(
+        e instanceof Error ? e.message : t("docLoadExamSessionFailed")
+      );
     } finally {
       setLoading(false);
     }
-  }, [patientId, queueEntryId, portal]);
+  }, [patientId, queueEntryId, portal, t]);
 
   useEffect(() => {
     void loadSession();
@@ -125,17 +127,19 @@ export function VisitSessionClinicalPanel({
         error?: string;
       };
       if (!res.ok) {
-        throw new Error(json.error ?? "تعذر الإرسال للمحاسبة");
+        throw new Error(json.error ?? t("docSendToAccountingFailed"));
       }
 
       if (clinicId) {
         notifyQueueRefresh({ scope: "clinic", clinicId });
       }
 
-      setSendMessage("✓ أُرسلت الجلسة للمحاسبة");
+      setSendMessage(t("docSessionSentToAccounting"));
       await loadSession();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "تعذر الإرسال للمحاسبة");
+      setError(
+        e instanceof Error ? e.message : t("docSendToAccountingFailed")
+      );
     } finally {
       setSending(false);
     }
@@ -155,10 +159,10 @@ export function VisitSessionClinicalPanel({
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="text-base font-bold text-slate-800">
-              مراجعة السجل البصري
+              {t("docReviewVisualRecord")}
             </h3>
             <p className="text-xs text-slate-500">
-              ما سجّله الطبيب أثناء الكشف — اضغط الزر أدناه للعرض بعد إدخال الجلسة
+              {t("docReviewVisualRecordHint")}
             </p>
           </div>
           <Button
@@ -174,9 +178,11 @@ export function VisitSessionClinicalPanel({
       ) : (
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h3 className="text-base font-bold text-slate-800">السجل الطبي البصري</h3>
+            <h3 className="text-base font-bold text-slate-800">
+              {t("docVisualMedicalRecord")}
+            </h3>
             <p className="text-xs text-slate-500">
-              مخطط الأسنان وصور الأشعة — تُحفظ على جلسة اليوم وتظهر للمحاسب
+              {t("docVisualMedicalRecordHint")}
             </p>
           </div>
           <div className="flex gap-2">
@@ -201,7 +207,7 @@ export function VisitSessionClinicalPanel({
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
-                إرسال للمحاسبة
+                {t("docSendToAccounting")}
               </Button>
             )}
           </div>
@@ -209,7 +215,7 @@ export function VisitSessionClinicalPanel({
       )}
 
       {loading && (
-        <p className="text-sm text-slate-muted">جاري تجهيز جلسة الكشف...</p>
+        <p className="text-sm text-slate-muted">{t("docPreparingExamSession")}</p>
       )}
 
       {error && <Alert variant="error">{error}</Alert>}
@@ -246,14 +252,13 @@ export function VisitSessionClinicalPanel({
 
       {!loading && !session?.operationId && !error && isAccountantView && (
         <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-muted">
-          لا يوجد سجل بصري من الطبيب لهذه الزيارة بعد — يمكنك إكمال إدخال الجلسة
-          والدفع أعلاه.
+          {t("docNoVisualRecordYet")}
         </p>
       )}
 
       {session?.queueStatus === "ready_for_billing" && !isAccountantView && (
         <p className="mt-2 text-xs text-violet-700">
-          الجلسة عند المحاسب — يمكنه إكمال الفاتورة من الطابور.
+          {t("docSessionAtAccountant")}
         </p>
       )}
     </div>

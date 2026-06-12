@@ -14,11 +14,13 @@ import { useClinicModules } from "@/contexts/ClinicModulesContext";
 import type { ClinicModuleKey } from "@/types/modules";
 import type { UserRole } from "@/types";
 
+import type { TranslationKey } from "@/i18n/translations";
+
 export interface ModuleNavItem {
   href: string;
-  label: string;
+  labelKey: TranslationKey;
   icon: string;
-  desc?: string;
+  descKey?: TranslationKey;
   /** If set, this nav item is hidden when the module is disabled */
   requiredModule?: ClinicModuleKey;
   /** Restrict to specific roles */

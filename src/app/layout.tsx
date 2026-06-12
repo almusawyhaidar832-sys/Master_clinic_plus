@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
-import { APP_NAME } from "@/lib/constants";
+import { APP_NAME, DEVELOPER } from "@/lib/constants";
 import { PWAProvider } from "@/components/pwa/PWAProvider";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 
 const notoArabic = Noto_Sans_Arabic({
   subsets: ["arabic"],
@@ -16,8 +17,8 @@ export const metadata: Metadata = {
     template: `%s | ${APP_NAME}`,
   },
   description: "نظام إدارة عيادات متعدد المستأجرين — ماستر كلينك بلس",
-  authors: [{ name: "Haider Hazim Al-Mousawi" }],
-  creator: "Haider Hazim Al-Mousawi",
+  authors: [{ name: DEVELOPER.nameEn }],
+  creator: DEVELOPER.nameEn,
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -41,10 +42,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ar" dir="rtl" className={notoArabic.variable}>
+    <html lang="ar" dir="rtl" suppressHydrationWarning className={notoArabic.variable}>
       <body className="min-h-screen">
-        {children}
-        <PWAProvider />
+        <LanguageProvider>
+          {children}
+          <PWAProvider />
+        </LanguageProvider>
       </body>
     </html>
   );

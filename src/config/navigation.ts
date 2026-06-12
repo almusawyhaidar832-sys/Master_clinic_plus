@@ -1,68 +1,62 @@
 /**
  * Navigation definitions — module-aware
- * Each item can declare a `requiredModule` that must be enabled
- * for it to appear in the sidebar/bottom-nav.
- * useModuleNav() filters this list at runtime.
+ * Labels come from i18n via labelKey (useLanguage().t)
  */
 
+import type { TranslationKey } from "@/i18n/translations";
 import type { ModuleNavItem } from "@/hooks/useModuleNav";
 
 // =============================================================================
 // ACCOUNTANT / DASHBOARD nav
 // =============================================================================
 export const accountantModuleNav: ModuleNavItem[] = [
-  // Core — always visible
-  { href: "/dashboard",             label: "الربح والتحكم",      icon: "dashboard"    },
-  { href: "/dashboard/ledger",      label: "إدخال جلسة",         icon: "patients",    requiredModule: "billing"            },
-  { href: "/dashboard/queue",       label: "غرفة الانتظار",      icon: "listOrdered", requiredModule: "patient_queue"      },
-  { href: "/dashboard/appointments", label: "الحجوزات",          icon: "calendarClock", requiredModule: "appointments"     },
-  { href: "/dashboard/assistants",  label: "إدارة المساعدين",    icon: "userRound"                                      },
-  { href: "/dashboard/doctor-expenses", label: "صرفيات عامة",    icon: "expenses"                                     },
-  { href: "/dashboard/patients",    label: "ملفات المرضى",        icon: "patients",    requiredModule: "patients"           },
-  { href: "/dashboard/reports",     label: "تقارير العيادة",      icon: "profits",     requiredModule: "reports"            },
-  { href: "/dashboard/refunds",     label: "إدارة المرتجعات",     icon: "refunds",     requiredModule: "billing"            },
-  { href: "/dashboard/activity",    label: "سجل المراقبة",        icon: "activity"                                      },
-  { href: "/dashboard/doctors",     label: "الأطباء",             icon: "doctors"      },
-  { href: "/dashboard/withdrawals", label: "طلبات السحب",         icon: "withdrawals", requiredModule: "doctor_wallet"      },
-  { href: "/dashboard/salary",      label: "رواتب الموظفين",      icon: "salary"       },
-  { href: "/dashboard/employees",  label: "إدارة الرواتب",       icon: "userCog"      },
-  // Module-gated (الوصفة الذكية داخل جلسة الكشف — لا صفحة منفصلة)
-  { href: "/dashboard/lab",         label: "المختبر",             icon: "testTube",    requiredModule: "lab_integration"    },
-  { href: "/dashboard/pharmacy",    label: "الصيدلية",            icon: "pill",        requiredModule: "pharmacy_link"      },
-  // Always at bottom
-  { href: "/dashboard/users",       label: "المستخدمون",          icon: "userCog"                                          },
-  { href: "/dashboard/whatsapp",    label: "واتساب",              icon: "whatsapp",    requiredModule: "whatsapp"           },
-  { href: "/dashboard/booking",     label: "بوابة الحجوزات",      icon: "calendarClock", requiredModule: "online_booking" },
-  { href: "/dashboard/settings",    label: "ملف العيادة",         icon: "dashboard"    },
+  { href: "/dashboard",              labelKey: "navExecutiveDashboard", icon: "dashboard" },
+  { href: "/dashboard/ledger",       labelKey: "navAddSession",       icon: "patients",    requiredModule: "billing" },
+  { href: "/dashboard/queue",        labelKey: "navWaitingRoom",      icon: "listOrdered", requiredModule: "patient_queue" },
+  { href: "/dashboard/appointments", labelKey: "navAppointments",     icon: "calendarClock", requiredModule: "appointments" },
+  { href: "/dashboard/assistants",   labelKey: "navAssistants",       icon: "userRound" },
+  { href: "/dashboard/doctor-expenses", labelKey: "navGeneralExpenses", icon: "expenses" },
+  { href: "/dashboard/patients",     labelKey: "navPatientFiles",     icon: "patients",    requiredModule: "patients" },
+  { href: "/dashboard/reports",      labelKey: "navClinicReports",    icon: "profits",     requiredModule: "reports" },
+  { href: "/dashboard/refunds",      labelKey: "navRefunds",          icon: "refunds",     requiredModule: "billing" },
+  { href: "/dashboard/activity",     labelKey: "navAuditLog",         icon: "activity" },
+  { href: "/dashboard/doctors",      labelKey: "navDoctors",          icon: "doctors" },
+  { href: "/dashboard/withdrawals",  labelKey: "navWithdrawals",      icon: "withdrawals", requiredModule: "doctor_wallet" },
+  { href: "/dashboard/salary",       labelKey: "navStaffSalaries",    icon: "salary" },
+  { href: "/dashboard/employees",    labelKey: "navPayrollManage",    icon: "userCog" },
+  { href: "/dashboard/lab",          labelKey: "navLab",              icon: "testTube",    requiredModule: "lab_integration" },
+  { href: "/dashboard/pharmacy",     labelKey: "navPharmacy",         icon: "pill",        requiredModule: "pharmacy_link" },
+  { href: "/dashboard/users",        labelKey: "navUsers",            icon: "userCog" },
+  { href: "/dashboard/whatsapp",     labelKey: "navWhatsApp",         icon: "whatsapp",    requiredModule: "whatsapp" },
+  { href: "/dashboard/booking",      labelKey: "navBookingPortal",    icon: "calendarClock", requiredModule: "online_booking" },
+  { href: "/dashboard/settings",     labelKey: "navClinicProfile",    icon: "dashboard" },
 ];
 
-/** المالك فقط — ليس للمحاسب */
 export const ownerProfileNavItem: ModuleNavItem = {
   href: "/dashboard/profile",
-  label: "الملف الشخصي",
+  labelKey: "navPersonalProfile",
   icon: "userCog",
   roles: ["super_admin"],
 };
 
-/** Super admin sees all + platform admin link */
 export const superAdminModuleNav: ModuleNavItem[] = [
   ...accountantModuleNav,
   ownerProfileNavItem,
   {
     href: "/admin",
-    label: "لوحة المالك (جوال)",
+    labelKey: "navOwnerMobile",
     icon: "profits",
     roles: ["super_admin"],
   },
 ];
 
 // =============================================================================
-// ASSISTANT nav — حجوزات الطبيب فقط
+// ASSISTANT nav
 // =============================================================================
 export const assistantModuleNav: ModuleNavItem[] = [
   {
     href: "/assistant/dashboard",
-    label: "حجوزات طبيبي",
+    labelKey: "navAssistantBookings",
     icon: "calendarClock",
   },
 ];
@@ -71,46 +65,45 @@ export const assistantModuleNav: ModuleNavItem[] = [
 // DOCTOR mobile nav
 // =============================================================================
 export const doctorModuleNav: ModuleNavItem[] = [
-  { href: "/doctor",           label: "الرئيسية",    icon: "home"         },
-  { href: "/doctor/financial-ledger", label: "السجل المالي", icon: "scrollText", requiredModule: "doctor_wallet" },
-  { href: "/doctor/queue",     label: "الانتظار",    icon: "listOrdered", requiredModule: "patient_queue"  },
-  { href: "/doctor/wallet",    label: "المحفظة",     icon: "wallet",      requiredModule: "doctor_wallet"  },
-  { href: "/doctor/patients",  label: "المرضى",      icon: "users",       requiredModule: "patients"       },
-  { href: "/doctor/schedule",  label: "المواعيد",    icon: "calendarClock",requiredModule: "appointments"  },
-  { href: "/doctor/profile",   label: "حسابي",       icon: "userCog"      },
+  { href: "/doctor",                  labelKey: "navHome",             icon: "home" },
+  { href: "/doctor/financial-ledger", labelKey: "navFinancialLedger",  icon: "scrollText",    requiredModule: "doctor_wallet" },
+  { href: "/doctor/queue",            labelKey: "navWaiting",          icon: "listOrdered",   requiredModule: "patient_queue" },
+  { href: "/doctor/wallet",           labelKey: "wallet",              icon: "wallet",        requiredModule: "doctor_wallet" },
+  { href: "/doctor/patients",         labelKey: "navPatientsShort",    icon: "users",         requiredModule: "patients" },
+  { href: "/doctor/schedule",         labelKey: "schedule",            icon: "calendarClock", requiredModule: "appointments" },
+  { href: "/doctor/profile",          labelKey: "navMyAccount",        icon: "userCog" },
 ];
 
-// Doctor quick actions — shown on home screen grid
 export const doctorModuleQuickActions: ModuleNavItem[] = [
-  { href: "/doctor/financial-ledger", label: "السجل المالي",          icon: "scrollText",    requiredModule: "doctor_wallet"      },
-  { href: "/doctor/wallet",      label: "المحفظة",               icon: "wallet",        requiredModule: "doctor_wallet"      },
-  { href: "/doctor/withdraw",    label: "طلب سحب",               icon: "arrowDownToLine",requiredModule: "doctor_wallet"     },
-  { href: "/doctor/patients",    label: "رعاية المرضى",          icon: "users",         requiredModule: "patients"           },
-  { href: "/doctor/filter",      label: "تصفية بالتاريخ",        icon: "calendar",      requiredModule: "reports"            },
-  { href: "/doctor/schedule",    label: "إدارة المواعيد",        icon: "calendarClock", requiredModule: "appointments"       },
-  { href: "/doctor/incomplete",  label: "علاجات غير مكتملة",     icon: "alertCircle",   requiredModule: "treatment_plans"    },
-  { href: "/doctor/statement",   label: "كشف حساب مريض",         icon: "fileText",      requiredModule: "billing"            },
-  { href: "/doctor/dental-chart",label: "مخطط الأسنان",          icon: "smile",         requiredModule: "dental_chart"       },
-  { href: "/doctor/vital-signs", label: "العلامات الحيوية",      icon: "activity",      requiredModule: "vital_signs"        },
+  { href: "/doctor/financial-ledger", labelKey: "navFinancialLedger",   icon: "scrollText",    requiredModule: "doctor_wallet" },
+  { href: "/doctor/wallet",           labelKey: "wallet",               icon: "wallet",        requiredModule: "doctor_wallet" },
+  { href: "/doctor/withdraw",         labelKey: "navWithdrawRequest",   icon: "arrowDownToLine", requiredModule: "doctor_wallet" },
+  { href: "/doctor/patients",         labelKey: "navPatientCare",       icon: "users",         requiredModule: "patients" },
+  { href: "/doctor/filter",           labelKey: "navFilterByDate",      icon: "calendar",      requiredModule: "reports" },
+  { href: "/doctor/schedule",         labelKey: "navManageAppointments", icon: "calendarClock", requiredModule: "appointments" },
+  { href: "/doctor/incomplete",       labelKey: "navIncompleteTreatments", icon: "alertCircle", requiredModule: "treatment_plans" },
+  { href: "/doctor/statement",        labelKey: "navPatientStatement",  icon: "fileText",      requiredModule: "billing" },
+  { href: "/doctor/dental-chart",     labelKey: "navDentalChart",       icon: "smile",         requiredModule: "dental_chart" },
+  { href: "/doctor/vital-signs",      labelKey: "navVitalSigns",        icon: "activity",      requiredModule: "vital_signs" },
 ];
 
-// =============================================================================
-// Legacy re-exports (backward compat — existing pages import these)
-// =============================================================================
+// Legacy re-exports — labels are keys; resolve with t() at render time
 import type { NavItem } from "@/types";
 
-/** @deprecated Use accountantModuleNav + useModuleNav() instead */
+/** @deprecated Use accountantModuleNav + useModuleNav() + t(labelKey) */
 export const accountantNav: NavItem[] = accountantModuleNav.map((i) => ({
   href: i.href,
-  label: i.label,
+  label: i.labelKey,
   icon: i.icon,
   roles: i.roles,
 }));
 
-/** @deprecated Use superAdminModuleNav + useModuleNav() instead */
+/** @deprecated Use superAdminModuleNav + useModuleNav() + t(labelKey) */
 export const superAdminNav: NavItem[] = superAdminModuleNav.map((i) => ({
   href: i.href,
-  label: i.label,
+  label: i.labelKey,
   icon: i.icon,
   roles: i.roles,
 }));
+
+export type { TranslationKey };

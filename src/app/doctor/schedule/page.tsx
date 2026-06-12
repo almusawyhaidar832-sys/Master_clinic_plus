@@ -14,9 +14,11 @@ import { formatTime, todayISO } from "@/lib/utils";
 import { DoctorAppointmentsPanel } from "@/components/appointments/DoctorAppointmentsPanel";
 import { PatientSearchField } from "@/components/patients/PatientSearchField";
 import { getPatientDisplayPhone } from "@/lib/phone";
+import { useLanguage } from "@/contexts/LanguageContext";
 import type { Doctor, ScheduleLock } from "@/types";
 
 export default function DoctorSchedulePage() {
+  const { t, bi } = useLanguage();
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [locks, setLocks] = useState<ScheduleLock[]>([]);
   const [view, setView] = useState<"appointments" | "lock">("appointments");
@@ -56,7 +58,7 @@ export default function DoctorSchedulePage() {
     if (!doctor) return;
 
     if (!patientPhone.trim()) {
-      setMessage("رقم جوال المراجع مطلوب لإرسال تأكيد واتساب");
+      setMessage(t("docPhoneRequiredWhatsApp"));
       return;
     }
     const phoneCheck = validatePatientPhone(patientPhone);
@@ -74,15 +76,15 @@ export default function DoctorSchedulePage() {
     });
 
     if (!result.ok) {
-      setMessage(result.error ?? "تعذر الحجز");
+      setMessage(result.error ?? t("docBookingFailed"));
       return;
     }
 
     if (result.whatsapp?.sent) {
-      setMessage("تم إضافة الموعد وإرسال تأكيد واتساب للمراجع");
+      setMessage(t("docAppointmentAddedWhatsApp"));
     } else {
       setMessage(
-        `تم إضافة الموعد — لم تصل رسالة واتساب: ${describeWhatsAppDeliveryError(result.whatsapp?.error)}`
+        `${t("docAppointmentAddedNoWhatsApp")} ${describeWhatsAppDeliveryError(result.whatsapp?.error)}`
       );
     }
 
@@ -101,9 +103,9 @@ export default function DoctorSchedulePage() {
       lock_date: date,
       start_time: startTime,
       end_time: endTime,
-      reason_ar: lockReason || "محجوز",
+      reason_ar: lockReason || t("docReservedDefault"),
     });
-    setMessage(error ? "تعذر قفل الوقت" : "تم قفل الفترة");
+    setMessage(error ? t("docLockFailed") : t("docLockSuccess"));
     if (!error) {
       setLockReason("");
       loadLocks();
@@ -112,7 +114,7 @@ export default function DoctorSchedulePage() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-bold text-slate-text">إدارة المواعيد</h2>
+      <h2 className="text-lg font-bold text-slate-text">{t("docScheduleTitle")}</h2>
 
       <div className="flex gap-2">
         <Button
@@ -120,14 +122,14 @@ export default function DoctorSchedulePage() {
           variant={view === "appointments" ? "primary" : "outline"}
           onClick={() => setView("appointments")}
         >
-          مواعيد
+          {t("docTabAppointments")}
         </Button>
         <Button
           size="sm"
           variant={view === "lock" ? "primary" : "outline"}
           onClick={() => setView("lock")}
         >
-          قفل وقت
+          {t("docTabLockTime")}
         </Button>
       </div>
 
@@ -137,12 +139,12 @@ export default function DoctorSchedulePage() {
         <>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">موعد جديد</CardTitle>
+              <CardTitle className="text-base">{t("docNewAppointment")}</CardTitle>
             </CardHeader>
             <form onSubmit={addAppointment} className="space-y-3">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-text">
-                  اسم المريض
+                  {t("docPatientNameLabel")}
                 </label>
                 <PatientSearchField
                   portal="doctor"
@@ -150,7 +152,7 @@ export default function DoctorSchedulePage() {
                   selectedPatientId={selectedPatientId}
                   showIcon={false}
                   required
-                  placeholder="اكتب حرفين من اسم مراجع سبق أن عالجته..."
+                  placeholder={t("docSearchPastPatient")}
                   onChange={(v) => {
                     setPatientName(v);
                     setSelectedPatientId(null);
@@ -163,7 +165,7 @@ export default function DoctorSchedulePage() {
                 />
               </div>
               <Input
-                label="الهاتف"
+                label={t("phone")}
                 value={patientPhone}
                 onChange={(e) => setPatientPhone(e.target.value)}
                 dir="ltr"
@@ -171,7 +173,7 @@ export default function DoctorSchedulePage() {
                 required
               />
               <Input
-                label="التاريخ"
+                label={t("expenseDate")}
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
@@ -180,7 +182,7 @@ export default function DoctorSchedulePage() {
               />
               <div className="grid grid-cols-2 gap-2">
                 <Input
-                  label="من"
+                  label={bi("من", "From")}
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
@@ -188,7 +190,7 @@ export default function DoctorSchedulePage() {
                   className="text-left"
                 />
                 <Input
-                  label="إلى"
+                  label={bi("إلى", "To")}
                   type="time"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
@@ -197,7 +199,7 @@ export default function DoctorSchedulePage() {
                 />
               </div>
               <Button type="submit" className="w-full">
-                حفظ الموعد
+                {t("docSaveAppointment")}
               </Button>
             </form>
           </Card>
@@ -207,11 +209,11 @@ export default function DoctorSchedulePage() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">قفل فترة زمنية</CardTitle>
+            <CardTitle className="text-base">{t("docLockTimeSlot")}</CardTitle>
           </CardHeader>
           <form onSubmit={addLock} className="space-y-3">
             <Input
-              label="التاريخ"
+              label={t("expenseDate")}
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -220,7 +222,7 @@ export default function DoctorSchedulePage() {
             />
             <div className="grid grid-cols-2 gap-2">
               <Input
-                label="من"
+                label={bi("من", "From")}
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
@@ -228,7 +230,7 @@ export default function DoctorSchedulePage() {
                 className="text-left"
               />
               <Input
-                label="إلى"
+                label={bi("إلى", "To")}
                 type="time"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
@@ -237,12 +239,12 @@ export default function DoctorSchedulePage() {
               />
             </div>
             <Input
-              label="السبب"
+              label={t("docReasonLabel")}
               value={lockReason}
               onChange={(e) => setLockReason(e.target.value)}
             />
             <Button type="submit" className="w-full">
-              قفل الفترة
+              {t("docLockPeriodBtn")}
             </Button>
           </form>
           {locks.length > 0 && (

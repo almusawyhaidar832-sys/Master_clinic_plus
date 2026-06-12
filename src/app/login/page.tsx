@@ -15,99 +15,104 @@ import {
   loginPortalToAuthPortalId,
   normalizeRole,
 } from "@/lib/auth/portal-access";
-import { Eye, EyeOff } from "lucide-react";
-import { DEVELOPER } from "@/lib/constants";
+import { Eye, EyeOff, Languages } from "lucide-react";
+import { DeveloperCredit } from "@/components/layout/DeveloperCredit";
 import { DeveloperFooterLink } from "@/components/layout/DeveloperFooterLink";
+import { useLanguage } from "@/contexts/LanguageContext";
+import type { TranslationKey } from "@/i18n/translations";
 
-/**
- * Each portal has a fixed destination path.
- * After successful signIn the user is pushed directly to that path —
- * no role reading, no middleware redirect, no guessing.
- */
 type Portal = {
   id: string;
-  title: string;
-  subtitle: string;
+  titleKey: TranslationKey;
+  subtitleKey: TranslationKey;
   emoji: string;
   color: string;
   btnColor: string;
-  destination: string; // where to go after successful login
+  destination: string;
 };
 
 const PORTALS: Portal[] = [
   {
-    id:          "admin",
-    title:       "لوحة الإدارة",
-    subtitle:    "مدير العيادة / المالك",
-    emoji:       "🏥",
-    color:       "border-primary/30 bg-primary/5",
-    btnColor:    "bg-primary hover:bg-primary/90",
+    id: "admin",
+    titleKey: "portalAdminTitle",
+    subtitleKey: "portalAdminSubtitle",
+    emoji: "🏥",
+    color: "border-primary/30 bg-primary/5",
+    btnColor: "bg-primary hover:bg-primary/90",
     destination: "/admin",
   },
   {
-    id:          "accountant",
-    title:       "واجهة المحاسب",
-    subtitle:    "الاستقبال والحسابات",
-    emoji:       "💼",
-    color:       "border-violet-200 bg-violet-50/50",
-    btnColor:    "bg-violet-600 hover:bg-violet-700",
+    id: "accountant",
+    titleKey: "portalAccountantTitle",
+    subtitleKey: "portalAccountantSubtitle",
+    emoji: "💼",
+    color: "border-violet-200 bg-violet-50/50",
+    btnColor: "bg-violet-600 hover:bg-violet-700",
     destination: "/dashboard",
   },
   {
-    id:          "doctor",
-    title:       "تطبيق الطبيب",
-    subtitle:    "الكشفيات والمحفظة",
-    emoji:       "👨‍⚕️",
-    color:       "border-blue-200 bg-blue-50/50",
-    btnColor:    "bg-blue-600 hover:bg-blue-700",
+    id: "doctor",
+    titleKey: "portalDoctorTitle",
+    subtitleKey: "portalDoctorSubtitle",
+    emoji: "👨‍⚕️",
+    color: "border-blue-200 bg-blue-50/50",
+    btnColor: "bg-blue-600 hover:bg-blue-700",
     destination: "/doctor",
   },
   {
-    id:          "assistant",
-    title:       "بوابة المساعد",
-    subtitle:    "حجوزات الطبيب",
-    emoji:       "🧑‍💼",
-    color:       "border-teal-200 bg-teal-50/50",
-    btnColor:    "bg-teal-600 hover:bg-teal-700",
+    id: "assistant",
+    titleKey: "portalAssistantTitle",
+    subtitleKey: "portalAssistantSubtitle",
+    emoji: "🧑‍💼",
+    color: "border-teal-200 bg-teal-50/50",
+    btnColor: "bg-teal-600 hover:bg-teal-700",
     destination: "/assistant/dashboard",
   },
   {
-    id:          "booking",
-    title:       "بوابة الحجوزات",
-    subtitle:    "حجز المرضى أونلاين",
-    emoji:       "📅",
-    color:       "border-teal-200 bg-teal-50/50",
-    btnColor:    "bg-teal-600 hover:bg-teal-700",
+    id: "booking",
+    titleKey: "portalBookingTitle",
+    subtitleKey: "portalBookingSubtitle",
+    emoji: "📅",
+    color: "border-teal-200 bg-teal-50/50",
+    btnColor: "bg-teal-600 hover:bg-teal-700",
     destination: "/booking",
   },
 ];
 
-// ── Portal card ────────────────────────────────────────────────────────────
-function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boolean }) {
+function PortalCard({
+  portal,
+  highlighted,
+}: {
+  portal: Portal;
+  highlighted?: boolean;
+}) {
   const router = useRouter();
+  const { t } = useLanguage();
+  const title = t(portal.titleKey);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
-  const [error,    setError]    = useState("");
-  const [loading,  setLoading]  = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // Booking has no login form — direct link
   if (portal.id === "booking") {
     return (
-      <div className={`flex flex-col rounded-2xl border-2 p-5 transition-shadow hover:shadow-md ${portal.color}`}>
+      <div
+        className={`flex flex-col rounded-2xl border-2 p-5 transition-shadow hover:shadow-md ${portal.color}`}
+      >
         <div className="mb-4 flex items-center gap-3">
           <span className="text-3xl">{portal.emoji}</span>
           <div>
-            <h3 className="font-bold text-slate-800">{portal.title}</h3>
-            <p className="text-xs text-slate-500">{portal.subtitle}</p>
+            <h3 className="font-bold text-slate-800">{title}</h3>
+            <p className="text-xs text-slate-500">{t(portal.subtitleKey)}</p>
           </div>
         </div>
         <a
           href="/booking"
           className={`touch-target mt-auto flex w-full items-center justify-center rounded-xl py-3 text-base font-bold text-white transition-colors ${portal.btnColor}`}
         >
-          فتح بوابة الحجز
+          {t("openBookingPortal")}
         </a>
       </div>
     );
@@ -116,7 +121,7 @@ function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boo
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     if (!username.trim() || !password) {
-      setError("أدخل اسم المستخدم وكلمة المرور");
+      setError(t("loginCredentialsRequired"));
       return;
     }
 
@@ -126,7 +131,7 @@ function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boo
     try {
       const authPortal = loginPortalToAuthPortalId(portal.id);
       if (!authPortal) {
-        setError("بوابة غير معروفة");
+        setError(t("loginUnknownPortal"));
         setLoading(false);
         return;
       }
@@ -136,7 +141,7 @@ function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boo
         !trimmedUser.includes("@") &&
         !isValidSanitizedUsername(sanitizeUsername(trimmedUser))
       ) {
-        setError("اسم المستخدم: 3 أحرف إنجليزية على الأقل (مثل dr_ahmed)");
+        setError(t("loginInvalidUsername"));
         setLoading(false);
         return;
       }
@@ -154,9 +159,7 @@ function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boo
       if (!role || !isRoleAllowedForPath(role, portal.destination)) {
         await signOutUser(supabase);
         setError(
-          role
-            ? `هذا الحساب لا يناسب بوابة «${portal.title}» — استخدم البوابة الصحيحة لدورك`
-            : "تم الدخول لكن لم يُعثر على دور الحساب — راجع مدير العيادة لربط الحساب"
+          role ? t("loginWrongPortal") : t("loginNoRole")
         );
         setLoading(false);
         return;
@@ -165,7 +168,7 @@ function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boo
       router.refresh();
       window.location.assign(portal.destination);
     } catch {
-      setError("خطأ في الاتصال — تحقق من اتصالك بالإنترنت");
+      setError(t("loginConnectionError"));
     } finally {
       setLoading(false);
     }
@@ -175,18 +178,17 @@ function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boo
     <div
       className={`flex flex-col rounded-2xl border-2 p-5 transition-shadow hover:shadow-md ${portal.color} ${highlighted ? "ring-2 ring-teal-500 ring-offset-2" : ""}`}
     >
-
       <div className="mb-4 flex items-center gap-3">
         <span className="text-3xl">{portal.emoji}</span>
         <div>
-          <h3 className="font-bold text-slate-800">{portal.title}</h3>
-          <p className="text-xs text-slate-500">{portal.subtitle}</p>
+          <h3 className="font-bold text-slate-800">{title}</h3>
+          <p className="text-xs text-slate-500">{t(portal.subtitleKey)}</p>
         </div>
       </div>
 
       <form onSubmit={handleLogin} className="flex flex-col gap-3">
         {error && (
-          <p className="rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600 text-center">
+          <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-center text-xs text-red-600">
             {error}
           </p>
         )}
@@ -195,7 +197,7 @@ function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boo
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="اسم المستخدم"
+          placeholder={t("username")}
           disabled={loading}
           required
           dir="ltr"
@@ -207,7 +209,7 @@ function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boo
             type={showPass ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="كلمة المرور"
+            placeholder={t("password")}
             disabled={loading}
             required
             dir="ltr"
@@ -218,7 +220,11 @@ function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boo
             onClick={() => setShowPass(!showPass)}
             className="touch-target absolute left-1 top-1/2 -translate-y-1/2 text-slate-400"
           >
-            {showPass ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            {showPass ? (
+              <EyeOff className="h-3.5 w-3.5" />
+            ) : (
+              <Eye className="h-3.5 w-3.5" />
+            )}
           </button>
         </div>
 
@@ -229,82 +235,96 @@ function PortalCard({ portal, highlighted }: { portal: Portal; highlighted?: boo
         >
           {loading ? (
             <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8z"
+              />
             </svg>
-          ) : "دخول"}
+          ) : (
+            t("loginButton")
+          )}
         </button>
       </form>
     </div>
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────────
 function LoginPageContent() {
   const searchParams = useSearchParams();
+  const { t, lang, toggleLang, isRTL } = useLanguage();
   const mismatch = searchParams.get("reason") === "role_mismatch";
   const portalHint = searchParams.get("portal");
 
   return (
-    <div className="safe-top safe-bottom min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden">
+    <div
+      className="safe-top safe-bottom relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-50 p-4 sm:p-6"
+      dir={isRTL ? "rtl" : "ltr"}
+    >
+      <button
+        type="button"
+        onClick={toggleLang}
+        className="absolute end-4 top-4 z-20 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm backdrop-blur hover:bg-white"
+      >
+        <Languages className="h-4 w-4" />
+        {lang === "ar" ? "EN" : "عر"}
+      </button>
+
       <div className="pointer-events-none absolute right-[-10%] top-[-10%] h-[500px] w-[500px] rounded-full bg-teal-500/5 blur-3xl" />
       <div className="pointer-events-none absolute bottom-[-10%] left-[-10%] h-[400px] w-[400px] rounded-full bg-cyan-500/5 blur-3xl" />
 
       <div className="z-10 w-full max-w-4xl">
-
         <div className="mb-8 flex flex-col items-center gap-2">
           <div className="text-primary drop-shadow-sm">
             <FaTooth size={60} className="animate-pulse" />
           </div>
-          <h1 className="text-3xl font-extrabold tracking-widest text-slate-800 font-mono">
+          <h1 className="font-mono text-3xl font-extrabold tracking-widest text-slate-800">
             MASTER CLINIC PLUS
           </h1>
-          <p className="text-xs font-bold tracking-widest text-primary uppercase">
-            نظام إدارة العيادات الذكي
+          <p className="text-xs font-bold uppercase tracking-widest text-primary">
+            {t("appTagline")}
           </p>
         </div>
 
         {mismatch && (
           <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-800">
-            تم تسجيل الخروج — هذا الحساب لا يطابق بوابة الدخول. سجّل دخولك من البوابة الصحيحة لدورك.
+            {t("loginRoleMismatch")}
           </p>
         )}
 
         {portalHint === "assistant" && (
           <p className="mb-4 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-center text-sm text-teal-800">
-            مساعدو الأطباء: سجّل الدخول من بوابة «المساعد» — ستُوجَّه مباشرة لحجوزات طبيبك فقط.
+            {t("loginAssistantHint")}
           </p>
         )}
 
         {portalHint === "doctor" && (
           <p className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-center text-sm text-blue-800">
-            أطباء: استخدم اسم المستخدم الإنجليزي الذي أنشأه المحاسب (مثل dr_ahmed) وليس الاسم العربي.
-            إذا ظهر «بدون حساب دخول» في قائمة الأطباء، اطلب من المحاسب إنشاء حساب من إدارة المستخدمين.
+            {t("loginDoctorHint")}
           </p>
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" dir="rtl">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {PORTALS.map((p) => (
             <PortalCard key={p.id} portal={p} highlighted={portalHint === p.id} />
           ))}
         </div>
 
-        <div className="mt-8 flex items-center justify-center gap-2 select-none">
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/80 px-5 py-2.5 shadow-sm backdrop-blur">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-[10px] font-black text-white">
-              ح
-            </div>
-            <div className="text-right">
-              <p className="text-xs font-bold text-slate-700">{DEVELOPER.nameAr}</p>
-              <p className="text-[9px] text-slate-400">{DEVELOPER.roleAr} · {DEVELOPER.year}</p>
-            </div>
-          </div>
+        <div className="mt-8 flex flex-col items-center gap-3">
+          <DeveloperCredit variant="login" />
         </div>
 
         <footer className="mt-6 flex min-h-[2rem] items-center justify-center pb-6">
           <DeveloperFooterLink />
         </footer>
-
       </div>
     </div>
   );

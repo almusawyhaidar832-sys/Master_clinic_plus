@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { logoutFromCurrentPortal } from "@/lib/auth/logout-portal";
 import { cn } from "@/lib/utils";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import type { TranslationKey } from "@/i18n/translations";
 import {
   Home,
   TrendingUp,
@@ -17,15 +19,19 @@ import {
   Activity,
 } from "lucide-react";
 
-const adminNav = [
-  { href: "/admin",           label: "الرئيسية", icon: Home        },
-  { href: "/admin/activity",  label: "المراقبة", icon: Activity    },
-  { href: "/admin/profits",   label: "الأرباح",  icon: TrendingUp  },
-  { href: "/admin/doctors",   label: "الأطباء",  icon: Stethoscope },
-  { href: "/admin/team",      label: "الفريق",   icon: Users       },
-  { href: "/admin/withdrawals",label: "السحب",   icon: Wallet      },
-  { href: "/admin/report",    label: "التقرير",  icon: FileText    },
-  { href: "/admin/profile",   label: "حسابي",    icon: UserCog     },
+const adminNav: Array<{
+  href: string;
+  labelKey: TranslationKey;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  { href: "/admin",            labelKey: "adminNavHome",     icon: Home        },
+  { href: "/admin/activity",   labelKey: "adminNavMonitor",  icon: Activity    },
+  { href: "/admin/profits",    labelKey: "adminNavProfits",  icon: TrendingUp  },
+  { href: "/admin/doctors",    labelKey: "adminNavDoctors",  icon: Stethoscope },
+  { href: "/admin/team",       labelKey: "adminNavTeam",     icon: Users       },
+  { href: "/admin/withdrawals",labelKey: "adminNavWithdraw", icon: Wallet      },
+  { href: "/admin/report",     labelKey: "adminNavReport",   icon: FileText    },
+  { href: "/admin/profile",    labelKey: "adminNavAccount",  icon: UserCog     },
 ];
 
 interface AdminMobileShellProps {
@@ -40,6 +46,7 @@ export function AdminMobileShell({
   const pathname = usePathname();
   const router = useRouter();
   const { displayName, profile } = useClinicProfile();
+  const { t } = useLanguage();
 
   return (
     <div className="flex min-h-screen flex-col bg-surface pb-[4.5rem]">
@@ -55,7 +62,7 @@ export function AdminMobileShell({
               />
             )}
             <div className="min-w-0">
-              <p className="text-[10px] opacity-80">عرض المالك</p>
+              <p className="text-[10px] opacity-80">{t("adminOwnerView")}</p>
               <h1 className="truncate text-base font-bold sm:text-lg">
                 {displayName}
               </h1>
@@ -65,16 +72,16 @@ export function AdminMobileShell({
             <Link
               href="/admin/profile"
               className="touch-target inline-flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20"
-              title="الملف الشخصي — كلمة المرور"
-              aria-label="الملف الشخصي"
+              title={t("adminProfileTitle")}
+              aria-label={t("adminNavAccount")}
             >
               <UserCog className="h-5 w-5" />
             </Link>
             <Link
               href="/admin/withdrawals"
               className="touch-target relative inline-flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20"
-              title="طلبات السحب"
-              aria-label="طلبات السحب"
+              title={t("adminWithdrawalsTitle")}
+              aria-label={t("adminWithdrawalsTitle")}
             >
               <Wallet className="h-5 w-5" />
               {notificationCount > 0 && (
@@ -87,8 +94,8 @@ export function AdminMobileShell({
               type="button"
               onClick={() => void logoutFromCurrentPortal(router)}
               className="touch-target inline-flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20"
-              title="تسجيل الخروج"
-              aria-label="تسجيل الخروج"
+              title={t("logout")}
+              aria-label={t("logout")}
             >
               <LogOut className="h-5 w-5" />
             </button>
@@ -100,7 +107,7 @@ export function AdminMobileShell({
 
       <nav className="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-slate-border bg-surface-card shadow-[0_-4px_20px_rgba(15,23,42,0.08)]">
         <div className="mx-auto flex max-w-lg justify-around px-1 py-1.5">
-          {adminNav.map(({ href, label, icon: Icon }) => {
+          {adminNav.map(({ href, labelKey, icon: Icon }) => {
             const active =
               pathname === href ||
               (href !== "/admin" && pathname.startsWith(href));
@@ -114,7 +121,7 @@ export function AdminMobileShell({
                 )}
               >
                 <Icon className={cn("h-5 w-5", active && "stroke-[2.5]")} />
-                {label}
+                {t(labelKey)}
               </Link>
             );
           })}

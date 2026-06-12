@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Input } from "@/components/ui/Input";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { cn, formatDate } from "@/lib/utils";
 import type {
   DoctorLedgerOperationKind,
   DoctorLedgerOperationRow,
@@ -20,32 +21,32 @@ interface DoctorLedgerOperationsTabProps {
   refreshKey?: number;
 }
 
-const KIND_META: Record<
+const KIND_KEYS: Record<
   DoctorLedgerOperationKind,
-  { label: string; color: string; icon: typeof ArrowDownToLine }
+  { labelKey: "docKindWithdraw" | "docKindSalary" | "docKindSalaryEntry" | "docKindExpenseDeduction" | "docKindAssistant"; color: string; icon: typeof ArrowDownToLine }
 > = {
   withdrawal: {
-    label: "سحب",
+    labelKey: "docKindWithdraw",
     color: "bg-violet-100 text-violet-800",
     icon: ArrowDownToLine,
   },
   salary_payout: {
-    label: "راتب",
+    labelKey: "docKindSalary",
     color: "bg-emerald-100 text-emerald-800",
     icon: Banknote,
   },
   salary_adjustment: {
-    label: "حركة راتب",
+    labelKey: "docKindSalaryEntry",
     color: "bg-sky-100 text-sky-800",
     icon: Banknote,
   },
   expense_deduction: {
-    label: "خصم صرفية",
+    labelKey: "docKindExpenseDeduction",
     color: "bg-amber-100 text-amber-800",
     icon: Receipt,
   },
   payroll_deduction: {
-    label: "مساعد",
+    labelKey: "docKindAssistant",
     color: "bg-slate-100 text-slate-700",
     icon: Users,
   },
@@ -54,6 +55,7 @@ const KIND_META: Record<
 export function DoctorLedgerOperationsTab({
   refreshKey = 0,
 }: DoctorLedgerOperationsTabProps) {
+  const { t, formatMoney, dateLocale } = useLanguage();
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [rows, setRows] = useState<DoctorLedgerOperationRow[]>([]);
@@ -84,7 +86,7 @@ export function DoctorLedgerOperationsTab({
       };
 
       if (!res.ok) {
-        setError(json.error ?? "تعذر تحميل العمليات");
+        setError(json.error ?? t("docLoadOperationsFailed"));
         setRows([]);
         setTotal(0);
         return;
@@ -93,11 +95,11 @@ export function DoctorLedgerOperationsTab({
       setRows(json.rows ?? []);
       setTotal(json.total ?? 0);
     } catch {
-      setError("تعذر الاتصال بالسيرفر");
+      setError(t("errServerConnection"));
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, t]);
 
   useEffect(() => {
     void load();
@@ -107,14 +109,11 @@ export function DoctorLedgerOperationsTab({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-muted">
-        سحوباتك ورواتبك وحركات الراتب (سلفة/خصم/مكافأة) وخصومات المساعدين —
-        صرفيات العيادة في تبويب الفواتير
-      </p>
+      <p className="text-sm text-slate-muted">{t("docLedgerOpsIntro")}</p>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Input
-          label="من تاريخ"
+          label={t("docFromDate")}
           type="date"
           value={dateFrom}
           onChange={(e) => setDateFrom(e.target.value)}
@@ -122,7 +121,7 @@ export function DoctorLedgerOperationsTab({
           className="text-left"
         />
         <Input
-          label="إلى تاريخ"
+          label={t("docToDate")}
           type="date"
           value={dateTo}
           onChange={(e) => setDateTo(e.target.value)}
@@ -133,10 +132,10 @@ export function DoctorLedgerOperationsTab({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-600">
-          العمليات: <strong>{total}</strong>
+          {t("docOperationsCountLabel")} <strong>{total}</strong>
           {rows.length > 0 && (
             <span className="mr-2 text-red-600">
-              — إجمالي: {formatCurrency(totalOut)}
+              — {t("docTotalLabel")} {formatMoney(totalOut)}
             </span>
           )}
         </p>
@@ -146,7 +145,7 @@ export function DoctorLedgerOperationsTab({
           className="flex items-center gap-1 rounded-lg border border-slate-border px-3 py-1.5 text-sm text-slate-muted hover:bg-surface-card"
         >
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          تحديث
+          {t("refresh")}
         </button>
       </div>
 
@@ -162,12 +161,12 @@ export function DoctorLedgerOperationsTab({
         </div>
       ) : rows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-border p-8 text-center text-sm text-slate-muted">
-          لا توجد عمليات مالية في الفترة المحددة
+          {t("docNoFinancialOps")}
         </div>
       ) : (
         <div className="space-y-2">
           {rows.map((row) => {
-            const meta = KIND_META[row.kind];
+            const meta = KIND_KEYS[row.kind];
             const Icon = meta.icon;
             const isSalaryBonus =
               row.kind === "salary_adjustment" && row.status === "bonus";
@@ -186,15 +185,15 @@ export function DoctorLedgerOperationsTab({
                       )}
                     >
                       <Icon className="h-3 w-3" />
-                      {meta.label}
+                      {t(meta.labelKey)}
                     </span>
                     {row.status === "pending" && (
-                      <span className="text-xs text-amber-600">معلّق</span>
+                      <span className="text-xs text-amber-600">{t("pendingShort")}</span>
                     )}
                   </div>
                   <p className="mt-1 text-sm text-slate-text">{row.label}</p>
                   <p className="text-xs text-slate-muted">
-                    {formatDate(row.operation_date)}
+                    {formatDate(row.operation_date, dateLocale)}
                   </p>
                 </div>
                 <p
@@ -204,7 +203,7 @@ export function DoctorLedgerOperationsTab({
                   )}
                 >
                   {showAsCredit ? "+" : "−"}
-                  {formatCurrency(row.amount)}
+                  {formatMoney(row.amount)}
                 </p>
               </div>
             );

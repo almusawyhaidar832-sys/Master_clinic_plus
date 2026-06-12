@@ -2,7 +2,7 @@ import { DoctorMobileShell } from "@/components/layout/DoctorMobileShell";
 import { AppProviders } from "@/components/providers/AppProviders";
 
 export const metadata = {
-  title: "تطبيق الطبيب",
+  title: "Doctor App | Master Clinic Plus",
 };
 
 export default function DoctorLayout({

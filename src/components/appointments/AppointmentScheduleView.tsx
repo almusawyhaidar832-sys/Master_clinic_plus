@@ -6,8 +6,8 @@ import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { useAppointmentSchedule } from "@/hooks/useAppointmentSchedule";
 import {
   APPOINTMENT_STATUS_COLORS,
-  APPOINTMENT_STATUS_LABELS,
 } from "@/components/appointments/appointment-constants";
+import { useAppointmentStatusLabels } from "@/i18n/localized-labels";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { formatDate, formatTime, localDateISO, todayISO } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -37,6 +37,7 @@ const PRESET_LABELS: Record<Exclude<RangePreset, "custom">, string> = {
 };
 
 export function AppointmentScheduleView() {
+  const statusLabels = useAppointmentStatusLabels();
   const { clinicId, loading: clinicLoading, missingClinic } = useActiveClinicId();
   const [preset, setPreset] = useState<RangePreset>("this_week");
   const [dateFrom, setDateFrom] = useState(todayISO());
@@ -283,7 +284,7 @@ export function AppointmentScheduleView() {
                           APPOINTMENT_STATUS_COLORS.scheduled
                       )}
                     >
-                      {APPOINTMENT_STATUS_LABELS[a.status] ?? a.status}
+                      {statusLabels[a.status] ?? a.status}
                     </span>
                   </td>
                 </tr>

@@ -26,7 +26,7 @@ export function Header({
   clinicId,
 }: HeaderProps) {
   const { isDark, toggleTheme } = useTheme();
-  const { lang, toggleLang } = useLanguage();
+  const { lang, toggleLang, t } = useLanguage();
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-border bg-surface-card/95 px-4 backdrop-blur sm:px-6">
@@ -37,7 +37,7 @@ export function Header({
             type="button"
             onClick={onMenuClick}
             className="rounded-lg p-2 text-slate-muted hover:bg-surface lg:hidden"
-            aria-label="القائمة"
+            aria-label={t("ariaMenu")}
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -61,7 +61,7 @@ export function Header({
         <button
           type="button"
           onClick={toggleLang}
-          title={lang === "ar" ? "Switch to English" : "التبديل للعربية"}
+          title={lang === "ar" ? t("switchToEnglish") : t("switchToArabic")}
           className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-bold text-slate-muted transition-colors hover:bg-surface hover:text-slate-text"
         >
           <Languages className="h-4 w-4" />
@@ -72,14 +72,14 @@ export function Header({
         <button
           type="button"
           onClick={toggleTheme}
-          title={isDark ? "وضع النهار" : "وضع الليل"}
+          title={isDark ? t("themeDayMode") : t("themeNightMode")}
           className={cn(
             "relative flex h-8 w-14 items-center rounded-full border px-1 transition-all duration-300",
             isDark
               ? "border-slate-600 bg-slate-700"
               : "border-slate-200 bg-slate-100"
           )}
-          aria-label="تبديل المظهر"
+          aria-label={t("ariaToggleTheme")}
         >
           {/* Track icons */}
           <Sun  className="h-3.5 w-3.5 text-amber-400 opacity-80" />
@@ -104,7 +104,7 @@ export function Header({
         <Link
           href="/dashboard/notifications"
           className="relative rounded-lg p-2 text-slate-muted hover:bg-surface"
-          aria-label="الإشعارات"
+          aria-label={t("ariaNotifications")}
         >
           <Bell className="h-5 w-5" />
           {notificationCount > 0 && (

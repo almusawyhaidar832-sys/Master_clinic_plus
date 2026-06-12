@@ -9,8 +9,8 @@ import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { formatDate, formatTime } from "@/lib/utils";
 import {
   APPOINTMENT_STATUS_COLORS,
-  APPOINTMENT_STATUS_LABELS,
 } from "@/components/appointments/appointment-constants";
+import { useAppointmentStatusLabels } from "@/i18n/localized-labels";
 import { cn } from "@/lib/utils";
 import type { AppointmentWithDoctor } from "@/hooks/useCentralizedAppointments";
 
@@ -36,6 +36,7 @@ export function AppointmentScheduleActionsModal({
   onClose,
   onEdit,
 }: AppointmentScheduleActionsModalProps) {
+  const statusLabels = useAppointmentStatusLabels();
   const router = useRouter();
   const [openingPatient, setOpeningPatient] = useState(false);
   const [error, setError] = useState("");
@@ -104,7 +105,7 @@ export function AppointmentScheduleActionsModal({
               APPOINTMENT_STATUS_COLORS.scheduled
           )}
         >
-          {APPOINTMENT_STATUS_LABELS[appointment.status] ?? appointment.status}
+          {statusLabels[appointment.status] ?? appointment.status}
         </span>
 
         {error && (

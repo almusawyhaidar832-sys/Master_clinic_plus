@@ -11,7 +11,7 @@ import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import {
   patientBelongsToDoctor,
 } from "@/lib/services/doctor-patients";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import type { Doctor, Patient, MedicalLog, Treatment, PatientOperation } from "@/types";
 import { QuickEntryForm } from "@/components/accountant/QuickEntryForm";
@@ -32,6 +32,7 @@ import { PatientSessionsByCase } from "@/components/patients/PatientSessionsByCa
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { ArrowRight, FileText, Plus, X } from "lucide-react";
 import { useClinicSync } from "@/hooks/useClinicSync";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 function treatmentCasesForDoctor(
   cases: PatientTreatmentCase[],
@@ -46,6 +47,7 @@ function treatmentCasesForDoctor(
 }
 
 export default function DoctorPatientDetailPage() {
+  const { t, formatMoney, dateLocale } = useLanguage();
   const params = useParams();
   const id = params.id as string;
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -183,18 +185,18 @@ export default function DoctorPatientDetailPage() {
         <Link href="/doctor/patients">
           <Button variant="ghost" size="sm">
             <ArrowRight className="h-4 w-4" />
-            قائمة المرضى
+            {t("docPatientList")}
           </Button>
         </Link>
         <p className="text-sm text-slate-muted">
-          هذا المراجع غير مرتبط بحسابك.
+          {t("docPatientNotLinked")}
         </p>
       </div>
     );
   }
 
   if (!patient) {
-    return <p className="text-slate-muted">جاري التحميل...</p>;
+    return <p className="text-slate-muted">{t("loading")}</p>;
   }
 
   return (
@@ -202,7 +204,7 @@ export default function DoctorPatientDetailPage() {
       <Link href="/doctor/patients">
         <Button variant="ghost" size="sm">
           <ArrowRight className="h-4 w-4" />
-          قائمة المرضى
+          {t("docPatientList")}
         </Button>
       </Link>
 
@@ -221,13 +223,13 @@ export default function DoctorPatientDetailPage() {
             <p className="text-lg font-bold text-slate-text">
               {clinicalSessionCount}
             </p>
-            <p className="text-xs text-slate-muted">جلسات علاجية</p>
+            <p className="text-xs text-slate-muted">{t("docTreatmentSessions")}</p>
           </div>
           <div className="rounded-lg bg-surface p-3 text-center">
             <p className="text-lg font-bold text-primary">
-              {formatCurrency(totalPaid)}
+              {formatMoney(totalPaid)}
             </p>
-            <p className="text-xs text-slate-muted">مدفوع</p>
+            <p className="text-xs text-slate-muted">{t("paid")}</p>
           </div>
           <div
             className={`rounded-lg p-3 text-center ${totalDebt > FINANCIAL_EPSILON ? "bg-debt/40" : "bg-emerald-50"}`}
@@ -235,10 +237,10 @@ export default function DoctorPatientDetailPage() {
             <p
               className={`text-lg font-bold ${totalDebt > FINANCIAL_EPSILON ? "text-debt-text" : "text-emerald-700"}`}
             >
-              {formatCurrency(totalDebt)}
+              {formatMoney(totalDebt)}
             </p>
             <p className="text-xs text-slate-muted">
-              {totalDebt > FINANCIAL_EPSILON ? "ذمة متبقية" : "لا ذمة"}
+              {totalDebt > FINANCIAL_EPSILON ? t("docRemainingDebt") : t("docNoDebt")}
             </p>
           </div>
         </div>
@@ -253,19 +255,19 @@ export default function DoctorPatientDetailPage() {
             {showSessionForm ? (
               <>
                 <X className="h-4 w-4" />
-                إغلاق إدخال الجلسة
+                {t("docCloseSessionEntry")}
               </>
             ) : (
               <>
                 <Plus className="h-4 w-4" />
-                إدخال جلسة (سجل بصري)
+                {t("docOpenSessionEntry")}
               </>
             )}
           </Button>
           <Link href={`/doctor/statement?patientId=${id}`}>
             <Button variant="outline" size="sm" className="w-full">
               <FileText className="h-4 w-4" />
-              كشف حساب ومشاركة
+              {t("docStatementShare")}
             </Button>
           </Link>
         </div>
@@ -289,7 +291,7 @@ export default function DoctorPatientDetailPage() {
       {treatments.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">علاجات نشطة</CardTitle>
+            <CardTitle className="text-base">{t("docActiveTreatments")}</CardTitle>
           </CardHeader>
           <ul className="space-y-2 px-4 pb-4 text-sm">
             {treatments.map((t) => (
@@ -303,15 +305,14 @@ export default function DoctorPatientDetailPage() {
 
       <div>
         <h3 className="mb-1 text-lg font-semibold text-slate-text">
-          سجل الجلسات حسب الحالة
+          {t("docSessionsByCase")}
         </h3>
         <p className="mb-3 text-xs text-slate-muted">
-          الملخص المالي في رأس كل حالة — الجلسات تعرض العمل الطبي فقط بدون مبالغ
-          الدفع
+          {t("docSessionsByCaseHint")}
         </p>
 
         {operations.length === 0 && doctorCases.length === 0 ? (
-          <Alert variant="info">لا توجد حالات أو جلسات مسجّلة لهذا المراجع معك</Alert>
+          <Alert variant="info">{t("docNoCasesWithYou")}</Alert>
         ) : (
           <PatientSessionsByCase
             patientId={id}
@@ -328,7 +329,7 @@ export default function DoctorPatientDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">إضافة ملاحظة طبية</CardTitle>
+          <CardTitle className="text-base">{t("docAddMedicalNote")}</CardTitle>
         </CardHeader>
         <div className="px-4 pb-4">
           <textarea
@@ -336,17 +337,17 @@ export default function DoctorPatientDetailPage() {
             rows={3}
             value={newLog}
             onChange={(e) => setNewLog(e.target.value)}
-            placeholder="سجل زيارة، تشخيص، خطة علاج..."
+            placeholder={t("docVisitNotesPlaceholder")}
           />
           <Button size="sm" onClick={addLog} disabled={saving}>
-            {saving ? "جاري الحفظ..." : "حفظ السجل"}
+            {saving ? t("saving") : t("docSaveRecord")}
           </Button>
           {logs.length > 0 && (
             <ul className="mt-4 space-y-2 text-sm">
               {logs.map((log) => (
                 <li key={log.id} className="rounded bg-surface p-2">
                   <p className="text-xs text-slate-muted">
-                    {formatDate(log.log_date)}
+                    {formatDate(log.log_date, dateLocale)}
                   </p>
                   <p className="mb-1 text-xs text-primary">
                     {formatDoctorDisplayName(

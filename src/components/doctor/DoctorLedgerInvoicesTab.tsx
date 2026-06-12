@@ -4,16 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 import { Input } from "@/components/ui/Input";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { cn, formatDate } from "@/lib/utils";
 import type { DoctorLedgerInvoiceRow } from "@/lib/services/doctor-financial-ledger";
 import { RefreshCw } from "lucide-react";
 
-function invoiceStatement(row: DoctorLedgerInvoiceRow): string {
+function invoiceStatement(
+  row: DoctorLedgerInvoiceRow,
+  clinicExpenseLabel: string
+): string {
   const label = row.procedure_label?.trim();
   if (label && label !== "—") return label;
   const treatment = row.treatment_name?.trim();
   if (treatment) return treatment;
-  return row.record_kind === "doctor_expense" ? "صرفية عيادة" : "—";
+  return row.record_kind === "doctor_expense" ? clinicExpenseLabel : "—";
 }
 
 interface DoctorLedgerInvoicesTabProps {
@@ -23,12 +27,15 @@ interface DoctorLedgerInvoicesTabProps {
 export function DoctorLedgerInvoicesTab({
   refreshKey = 0,
 }: DoctorLedgerInvoicesTabProps) {
+  const { t, formatMoney, dateLocale } = useLanguage();
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [rows, setRows] = useState<DoctorLedgerInvoiceRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const clinicExpenseLabel = t("docKindClinicExpense");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,7 +60,7 @@ export function DoctorLedgerInvoicesTab({
       };
 
       if (!res.ok) {
-        setError(json.error ?? "تعذر تحميل الفواتير");
+        setError(json.error ?? t("docLoadInvoicesFailed"));
         setRows([]);
         setTotal(0);
         return;
@@ -62,11 +69,11 @@ export function DoctorLedgerInvoicesTab({
       setRows(json.rows ?? []);
       setTotal(json.total ?? 0);
     } catch {
-      setError("تعذر الاتصال بالسيرفر");
+      setError(t("errServerConnection"));
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, t]);
 
   useEffect(() => {
     void load();
@@ -75,12 +82,12 @@ export function DoctorLedgerInvoicesTab({
   const columns: Column<DoctorLedgerInvoiceRow>[] = [
     {
       key: "date",
-      header: "التاريخ",
-      render: (row) => formatDate(row.invoice_date),
+      header: t("docColDate"),
+      render: (row) => formatDate(row.invoice_date, dateLocale),
     },
     {
       key: "invoice",
-      header: "الفاتورة",
+      header: t("docColInvoice"),
       render: (row) => (
         <span className="font-mono text-xs" dir="ltr">
           {row.invoice_number}
@@ -89,31 +96,33 @@ export function DoctorLedgerInvoicesTab({
     },
     {
       key: "type",
-      header: "النوع",
+      header: t("docColType"),
       render: (row) =>
         row.record_kind === "doctor_expense" ? (
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-            صرفية
+            {t("docKindClinicExpenseShort")}
           </span>
         ) : (
           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-            جلسة
+            {t("docKindSession")}
           </span>
         ),
     },
     {
       key: "statement",
-      header: "البيان",
+      header: t("docColDescription"),
       render: (row) => (
-        <span className="text-slate-700">{invoiceStatement(row)}</span>
+        <span className="text-slate-700">
+          {invoiceStatement(row, clinicExpenseLabel)}
+        </span>
       ),
     },
     {
       key: "amount",
-      header: "مبلغ الفاتورة",
+      header: t("docColInvoiceAmount"),
       render: (row) => (
         <span className="font-semibold text-primary tabular-nums">
-          {formatCurrency(
+          {formatMoney(
             row.total_amount > 0 ? row.total_amount : row.paid_amount
           )}
         </span>
@@ -121,7 +130,7 @@ export function DoctorLedgerInvoicesTab({
     },
     {
       key: "share",
-      header: "حصتك",
+      header: t("docColYourShare"),
       render: (row) => (
         <span
           className={cn(
@@ -132,7 +141,7 @@ export function DoctorLedgerInvoicesTab({
           )}
         >
           {row.record_kind === "doctor_expense" ? "−" : ""}
-          {formatCurrency(row.doctor_share)}
+          {formatMoney(row.doctor_share)}
         </span>
       ),
     },
@@ -140,13 +149,11 @@ export function DoctorLedgerInvoicesTab({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-muted">
-        فواتير معتمدة من المحاسب فقط (رقم فاتورة) — جلسات وصرفيات
-      </p>
+      <p className="text-sm text-slate-muted">{t("docLedgerInvoicesIntro")}</p>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Input
-          label="من تاريخ"
+          label={t("docFromDate")}
           type="date"
           value={dateFrom}
           onChange={(e) => setDateFrom(e.target.value)}
@@ -154,7 +161,7 @@ export function DoctorLedgerInvoicesTab({
           className="text-left"
         />
         <Input
-          label="إلى تاريخ"
+          label={t("docToDate")}
           type="date"
           value={dateTo}
           onChange={(e) => setDateTo(e.target.value)}
@@ -165,7 +172,7 @@ export function DoctorLedgerInvoicesTab({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-slate-600">
-          النتائج: <strong>{total}</strong>
+          {t("docResultsCount")} <strong>{total}</strong>
         </p>
         <button
           type="button"
@@ -173,7 +180,7 @@ export function DoctorLedgerInvoicesTab({
           className="flex items-center gap-1 rounded-lg border border-slate-border px-3 py-1.5 text-sm text-slate-muted hover:bg-surface-card"
         >
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          تحديث
+          {t("refresh")}
         </button>
       </div>
 
@@ -191,7 +198,7 @@ export function DoctorLedgerInvoicesTab({
         <DataTable
           columns={columns}
           data={rows}
-          emptyMessage="لا توجد فواتير معتمدة في الفترة المحددة"
+          emptyMessage={t("docNoInvoicesInPeriod")}
         />
       )}
     </div>

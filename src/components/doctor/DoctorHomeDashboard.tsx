@@ -6,13 +6,17 @@ import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser, getAuthProfile } from "@/lib/clinic-context";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
 import { fetchUnreadNotificationCount } from "@/lib/services/clinic-stats";
-import { formatCurrency, todayISO } from "@/lib/utils";
+import { todayISO } from "@/lib/utils";
 import { doctorQuickActions, QUICK_ACTION_ICON_MAP } from "@/components/layout/DoctorMobileShell";
+import { useModuleNav } from "@/hooks/useModuleNav";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 import { Bell, TrendingUp, Wallet, ArrowDownToLine } from "lucide-react";
 import { useClinicSync } from "@/hooks/useClinicSync";
 
 export function DoctorHomeDashboard() {
+  const { t, formatMoney } = useLanguage();
+  const quickActions = useModuleNav(doctorQuickActions);
   const [doctorName, setDoctorName] = useState("");
   const [specialty, setSpecialty]   = useState("");
   const [wallet, setWallet] = useState<{
@@ -71,7 +75,7 @@ export function DoctorHomeDashboard() {
     <div className="space-y-5 animate-fade-in">
       {doctorName && (
         <div className="rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
-          <p className="text-xs text-slate-500">مرحباً</p>
+          <p className="text-xs text-slate-500">{t("welcome")}</p>
           <p className="text-lg font-bold text-slate-text">{doctorName}</p>
           {specialty && (
             <p className="text-xs text-primary">{specialty}</p>
@@ -82,14 +86,14 @@ export function DoctorHomeDashboard() {
       <div className="rounded-2xl bg-gradient-to-br from-primary to-primary-700 p-5 text-white shadow-premium">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs opacity-90">رصيدك الحالي</p>
+            <p className="text-xs opacity-90">{t("currentBalance")}</p>
             <p className="mt-1 text-3xl font-bold tabular-nums">
               {wallet ? (
                 <>
                   {wallet.availableBalance < 0 ? "−" : ""}
-                  {formatCurrency(Math.abs(wallet.availableBalance))}
+                  {formatMoney(Math.abs(wallet.availableBalance))}
                   {wallet.availableBalance < 0 && (
-                    <span className="mr-1 text-sm font-bold">(مدين)</span>
+                    <span className="mr-1 text-sm font-bold">{t("debtLabel")}</span>
                   )}
                 </>
               ) : (
@@ -101,21 +105,21 @@ export function DoctorHomeDashboard() {
         </div>
         <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[10px]">
           <div className="rounded-lg bg-white/10 p-2">
-            <p className="opacity-80">الأرباح</p>
+            <p className="opacity-80">{t("earningsShort")}</p>
             <p className="font-semibold">
-              {wallet ? formatCurrency(wallet.totalEarnings) : "—"}
+              {wallet ? formatMoney(wallet.totalEarnings) : "—"}
             </p>
           </div>
           <div className="rounded-lg bg-white/10 p-2">
-            <p className="opacity-80">مسحوب</p>
+            <p className="opacity-80">{t("withdrawnShort")}</p>
             <p className="font-semibold">
-              {wallet ? formatCurrency(wallet.totalWithdrawn) : "—"}
+              {wallet ? formatMoney(wallet.totalWithdrawn) : "—"}
             </p>
           </div>
           <div className="rounded-lg bg-white/10 p-2">
-            <p className="opacity-80">معلّق</p>
+            <p className="opacity-80">{t("pendingShort")}</p>
             <p className="font-semibold">
-              {wallet ? formatCurrency(wallet.pendingAmount) : "—"}
+              {wallet ? formatMoney(wallet.pendingAmount) : "—"}
             </p>
           </div>
         </div>
@@ -127,21 +131,21 @@ export function DoctorHomeDashboard() {
           className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 transition active:scale-[0.98]"
         >
           <ArrowDownToLine className="h-5 w-5 text-primary" />
-          <span className="text-sm font-semibold text-slate-text">طلب سحب</span>
+          <span className="text-sm font-semibold text-slate-text">{t("navWithdrawRequest")}</span>
         </Link>
         <Link
           href="/doctor/wallet"
           className="flex items-center gap-3 rounded-xl border border-slate-border bg-surface-card p-3 transition active:scale-[0.98]"
         >
           <TrendingUp className="h-5 w-5 text-primary" />
-          <span className="text-sm font-semibold text-slate-text">تفاصيل المحفظة</span>
+          <span className="text-sm font-semibold text-slate-text">{t("walletDetails")}</span>
         </Link>
       </div>
 
       <div className="flex gap-3 text-sm">
         <div className="flex-1 rounded-xl border border-slate-border bg-surface-card p-3 text-center">
           <p className="text-2xl font-bold text-primary">{todayOps}</p>
-          <p className="text-xs text-slate-muted">عمليات اليوم</p>
+          <p className="text-xs text-slate-muted">{t("todayOperations")}</p>
         </div>
         <Link
           href="/doctor/notifications"
@@ -153,13 +157,13 @@ export function DoctorHomeDashboard() {
               {notifications > 9 ? "9+" : notifications}
             </span>
           ) : null}
-          <span className="text-xs text-slate-muted">إشعارات</span>
+          <span className="text-xs text-slate-muted">{t("notifications")}</span>
         </Link>
       </div>
 
-      <p className="text-sm text-slate-muted">المهام</p>
+      <p className="text-sm text-slate-muted">{t("tasks")}</p>
       <div className="grid gap-3">
-        {doctorQuickActions.map(({ href, label, icon, desc }) => {
+        {quickActions.map(({ href, labelKey, icon }) => {
           const Icon = QUICK_ACTION_ICON_MAP[icon] ?? Wallet;
           return (
           <Link
@@ -173,8 +177,7 @@ export function DoctorHomeDashboard() {
               <Icon className="h-6 w-6" />
             </div>
             <div>
-              <p className="font-semibold text-slate-text">{label}</p>
-              <p className="text-xs text-slate-muted">{desc ?? ""}</p>
+              <p className="font-semibold text-slate-text">{t(labelKey)}</p>
             </div>
           </Link>
           );

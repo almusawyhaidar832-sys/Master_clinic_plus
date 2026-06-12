@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { cn, formatDate } from "@/lib/utils";
 import {
   buildPatientCaseGroups,
   sumCaseGroupsFinancials,
@@ -18,41 +19,45 @@ interface PatientStatementByCaseProps {
 }
 
 function CaseStatusBadge({ group }: { group: PatientCaseGroup }) {
+  const { t } = useLanguage();
+
   if (group.isComplete) {
     return (
       <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-        مكتمل
+        {t("stmtCaseComplete")}
       </span>
     );
   }
   if (group.remaining > FINANCIAL_EPSILON) {
     return (
       <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
-        مستمر — يتطلب دفعات
+        {t("stmtCaseOngoingPayments")}
       </span>
     );
   }
   return (
     <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-      مستمر
+      {t("stmtCaseOngoing")}
     </span>
   );
 }
 
 function CaseFinancialLine({ group }: { group: PatientCaseGroup }) {
+  const { t, formatMoney } = useLanguage();
+
   return (
     <p className="text-xs tabular-nums text-slate-muted leading-relaxed">
-      الإجمالي:{" "}
+      {t("stmtTotal")}{" "}
       <span className="font-semibold text-slate-text">
-        {formatCurrency(group.total)}
+        {formatMoney(group.total)}
       </span>
       {" · "}
-      المدفوع:{" "}
+      {t("paid")}:{" "}
       <span className="font-semibold text-primary">
-        {formatCurrency(group.totalPaid)}
+        {formatMoney(group.totalPaid)}
       </span>
       {" · "}
-      المتبقي:{" "}
+      {t("stmtRemaining")}{" "}
       <span
         className={cn(
           "font-bold",
@@ -61,7 +66,7 @@ function CaseFinancialLine({ group }: { group: PatientCaseGroup }) {
             : "text-emerald-700"
         )}
       >
-        {formatCurrency(group.remaining)}
+        {formatMoney(group.remaining)}
       </span>
     </p>
   );
@@ -74,6 +79,7 @@ function StatementCaseCard({
   group: PatientCaseGroup;
   defaultOpen: boolean;
 }) {
+  const { t, formatMoney, dateLocale } = useLanguage();
   const [open, setOpen] = useState(defaultOpen);
   const paymentSessions = group.sessions.filter(
     (s) => s.amountPaid > FINANCIAL_EPSILON
@@ -109,7 +115,7 @@ function StatementCaseCard({
             </div>
             {group.total > 0 && (
               <p className="mt-0.5 text-sm text-slate-muted tabular-nums">
-                السعر الكلي: {formatCurrency(group.total)}
+                {t("stmtCaseTotalPrice")} {formatMoney(group.total)}
               </p>
             )}
             <div className="mt-2">
@@ -126,15 +132,13 @@ function StatementCaseCard({
         )}
       >
         {paymentSessions.length === 0 ? (
-          <p className="text-xs text-slate-muted">
-            لا توجد دفعات مسجّلة لهذه الحالة بعد.
-          </p>
+          <p className="text-xs text-slate-muted">{t("stmtNoPaymentsYet")}</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-right text-xs text-slate-muted">
-                <th className="pb-2 font-medium">التاريخ</th>
-                <th className="pb-2 font-medium">المبلغ المدفوع</th>
+                <th className="pb-2 font-medium">{t("docColDate")}</th>
+                <th className="pb-2 font-medium">{t("stmtColAmountPaid")}</th>
               </tr>
             </thead>
             <tbody>
@@ -144,10 +148,10 @@ function StatementCaseCard({
                   className="border-b border-slate-border/30 last:border-0"
                 >
                   <td className="py-2 tabular-nums">
-                    {session.date ? formatDate(session.date) : "—"}
+                    {session.date ? formatDate(session.date, dateLocale) : "—"}
                   </td>
                   <td className="py-2 font-semibold text-primary tabular-nums">
-                    {formatCurrency(session.amountPaid)}
+                    {formatMoney(session.amountPaid)}
                   </td>
                 </tr>
               ))}
@@ -163,6 +167,8 @@ export function PatientStatementByCase({
   operations,
   treatmentCases,
 }: PatientStatementByCaseProps) {
+  const { t, formatMoney } = useLanguage();
+
   const caseGroups = useMemo(
     () => buildPatientCaseGroups(operations, treatmentCases),
     [operations, treatmentCases]
@@ -180,7 +186,7 @@ export function PatientStatementByCase({
   if (caseGroups.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-slate-border py-8 text-center text-sm text-slate-muted">
-        لا توجد حالات علاج أو جلسات مسجّلة لهذا الكشف.
+        {t("stmtNoCases")}
       </p>
     );
   }
@@ -188,22 +194,22 @@ export function PatientStatementByCase({
   return (
     <div className="space-y-4">
       <section>
-        <h2 className="mb-2 text-base font-semibold">الملخص العام</h2>
+        <h2 className="mb-2 text-base font-semibold">{t("stmtGeneralSummary")}</h2>
         <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
           <div className="rounded-lg bg-surface p-3 text-center">
-            <p className="text-xs text-slate-muted">عدد الحالات</p>
+            <p className="text-xs text-slate-muted">{t("stmtCaseCount")}</p>
             <p className="text-lg font-bold">{caseGroups.length}</p>
           </div>
           <div className="rounded-lg bg-surface p-3 text-center">
-            <p className="text-xs text-slate-muted">إجمالي المتفق</p>
+            <p className="text-xs text-slate-muted">{t("stmtTotalAgreed")}</p>
             <p className="text-lg font-bold tabular-nums">
-              {formatCurrency(totals.totalAgreed)}
+              {formatMoney(totals.totalAgreed)}
             </p>
           </div>
           <div className="rounded-lg bg-surface p-3 text-center">
-            <p className="text-xs text-slate-muted">إجمالي المدفوع</p>
+            <p className="text-xs text-slate-muted">{t("stmtTotalPaid")}</p>
             <p className="text-lg font-bold text-primary tabular-nums">
-              {formatCurrency(totals.totalPaid)}
+              {formatMoney(totals.totalPaid)}
             </p>
           </div>
           <div
@@ -214,7 +220,7 @@ export function PatientStatementByCase({
                 : "bg-emerald-50"
             )}
           >
-            <p className="text-xs text-slate-muted">إجمالي المتبقي</p>
+            <p className="text-xs text-slate-muted">{t("stmtTotalRemaining")}</p>
             <p
               className={cn(
                 "text-lg font-bold tabular-nums",
@@ -223,17 +229,15 @@ export function PatientStatementByCase({
                   : "text-emerald-700"
               )}
             >
-              {formatCurrency(totals.totalRemaining)}
+              {formatMoney(totals.totalRemaining)}
             </p>
           </div>
         </div>
       </section>
 
       <section>
-        <h2 className="mb-1 text-base font-semibold">الحالات والدفعات</h2>
-        <p className="mb-3 text-xs text-slate-muted">
-          كل حالة معزولة — الملخص المالي محسوب من جلساتها فقط
-        </p>
+        <h2 className="mb-1 text-base font-semibold">{t("stmtCasesAndPayments")}</h2>
+        <p className="mb-3 text-xs text-slate-muted">{t("stmtCasesIsolatedHint")}</p>
         <div className="space-y-3">
           {caseGroups.map((group) => (
             <StatementCaseCard

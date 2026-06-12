@@ -10,6 +10,7 @@ import {
 } from "@/lib/push/client";
 import { triggerQueueAlert } from "@/lib/queue/audio-alerts";
 import { formatNameForSpeech } from "@/lib/queue/arabic-speech-text";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const DISMISS_KEY = "mcp-doctor-alerts-banner-dismissed";
 
@@ -18,11 +19,8 @@ function alertsEnabled(): boolean {
   return Notification.permission === "granted";
 }
 
-/**
- * يفعّل إذن الإشعارات + Web Push للطبيب على الموبايل.
- * يستمع لرسائل Service Worker لتشغيل النداء حتى خارج صفحة الانتظار.
- */
 export function DoctorAlertsSetup() {
+  const { t, bi } = useLanguage();
   const [showBanner, setShowBanner] = useState(false);
   const [activating, setActivating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -40,16 +38,18 @@ export function DoctorAlertsSetup() {
 
   useEffect(() => {
     return listenForPushAlertMessages((payload) => {
-      const name = formatNameForSpeech(payload.patientName?.trim() || "مراجع");
+      const name = formatNameForSpeech(payload.patientName?.trim() || t("entityPatient"));
       void triggerQueueAlert({
         kind: "doctor_new",
-        title: payload.title ?? "مراجع جديد 🔔",
-        message: payload.body ?? `لديك مراجع جديد في الانتظار: ${name}`,
+        title: payload.title ?? t("docNewPatientAlert"),
+        message:
+          payload.body ??
+          `${t("docNewPatientAlertBody")} ${name}`,
         linkPath: payload.url ?? "/doctor/queue",
         patientName: name,
       });
     });
-  }, []);
+  }, [t]);
 
   const activate = useCallback(async () => {
     setActivating(true);
@@ -57,26 +57,26 @@ export function DoctorAlertsSetup() {
     try {
       const granted = await ensureNotificationPermission();
       if (!granted) {
-        setMessage("لم يُمنح إذن الإشعارات — فعّله من إعدادات المتصفح");
+        setMessage(t("docAlertsPermissionDenied"));
         return;
       }
 
       if (isWebPushSupported()) {
         const ok = await registerDoctorWebPush(false);
         if (!ok) {
-          setMessage("تعذر تفعيل تنبيهات الموبايل — جرّب إعادة فتح التطبيق");
+          setMessage(t("docAlertsPushFailed"));
           return;
         }
       }
 
       setShowBanner(false);
       localStorage.removeItem(DISMISS_KEY);
-      setMessage("تم تفعيل التنبيهات — ستصلك حتى لو لم تكن في غرفة الانتظار");
+      setMessage(t("docAlertsEnabled"));
       window.setTimeout(() => setMessage(null), 6000);
     } finally {
       setActivating(false);
     }
-  }, []);
+  }, [t]);
 
   function dismiss() {
     localStorage.setItem(DISMISS_KEY, "1");
@@ -97,11 +97,9 @@ export function DoctorAlertsSetup() {
               <Bell className="h-5 w-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="font-bold text-violet-950">فعّل تنبيهات المراجع على موبايلك</p>
+              <p className="font-bold text-violet-950">{t("docAlertsTitle")}</p>
               <p className="mt-1 text-xs leading-relaxed text-violet-900/90">
-                عند إدخال المحاسب مراجعاً لغرفة الانتظار — يصلك إشعار ونداء صوتي
-                حتى لو كنت في صفحة أخرى أو التطبيق بالخلفية. يُفضّل تثبيت التطبيق
-                على الشاشة الرئيسية.
+                {t("docAlertsDesc")}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -110,14 +108,14 @@ export function DoctorAlertsSetup() {
                   onClick={() => void activate()}
                   className="touch-target rounded-xl bg-violet-700 px-4 py-2 text-sm font-bold text-white hover:bg-violet-800 disabled:opacity-60"
                 >
-                  {activating ? "جاري التفعيل…" : "تفعيل التنبيهات"}
+                  {activating ? t("docActivatingAlerts") : t("docEnableAlerts")}
                 </button>
                 <button
                   type="button"
                   onClick={dismiss}
                   className="touch-target rounded-xl border border-violet-200 px-4 py-2 text-sm text-violet-800"
                 >
-                  لاحقاً
+                  {t("docLater")}
                 </button>
               </div>
             </div>
@@ -125,7 +123,7 @@ export function DoctorAlertsSetup() {
               type="button"
               onClick={dismiss}
               className="touch-target shrink-0 rounded-lg p-1 text-violet-500 hover:bg-violet-100"
-              aria-label="إغلاق"
+              aria-label={t("close")}
             >
               <X className="h-4 w-4" />
             </button>

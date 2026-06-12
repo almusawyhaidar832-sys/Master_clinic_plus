@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { APP_NAME, DEVELOPER } from "@/lib/constants";
+import { DeveloperCredit } from "@/components/layout/DeveloperCredit";
 import { DeveloperFooterLink } from "@/components/layout/DeveloperFooterLink";
 import type { NavItem } from "@/types";
 import {
@@ -86,7 +86,7 @@ export function Sidebar({
           )}
           <div className="min-w-0">
             <p className="truncate font-semibold text-slate-text leading-tight">
-              {clinicName || APP_NAME}
+              {clinicName || t("appName")}
             </p>
             {staffName ? (
               <p className="truncate text-xs font-medium text-primary">
@@ -135,19 +135,8 @@ export function Sidebar({
           {t("logout")}
         </button>
 
-        {/* Developer attribution */}
-        <div className="rounded-xl border border-slate-border/60 bg-surface px-3 py-2 text-center">
-          <p className="text-[10px] text-slate-muted leading-relaxed">
-            تطوير وتصميم
-          </p>
-          <p className="text-xs font-bold text-primary">
-            {DEVELOPER.nameAr}
-          </p>
-          <p className="text-[9px] text-slate-muted/70 mt-0.5">
-            {DEVELOPER.roleAr} · {DEVELOPER.year}
-          </p>
-          <DeveloperFooterLink />
-        </div>
+        <DeveloperCredit variant="sidebar" className="mb-1" />
+        <DeveloperFooterLink />
       </div>
     </aside>
   );

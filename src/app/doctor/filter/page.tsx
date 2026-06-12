@@ -7,10 +7,12 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Calendar } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
-import { formatCurrency, formatDate, todayISO } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { formatDate, todayISO } from "@/lib/utils";
 import type { PatientOperation } from "@/types";
 
 export default function DoctorFilterPage() {
+  const { t, formatMoney, dateLocale } = useLanguage();
   const [from, setFrom] = useState(todayISO());
   const [to, setTo] = useState(todayISO());
   const [operations, setOperations] = useState<PatientOperation[]>([]);
@@ -57,11 +59,11 @@ export default function DoctorFilterPage() {
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-slate-text">
         <Calendar className="h-5 w-5 text-primary" />
-        <h2 className="text-lg font-bold">تصفية بالتاريخ</h2>
+        <h2 className="text-lg font-bold">{t("docFilterByDateTitle")}</h2>
       </div>
 
       <Input
-        label="من تاريخ"
+        label={t("docFromDate")}
         type="date"
         value={from}
         onChange={(e) => setFrom(e.target.value)}
@@ -69,7 +71,7 @@ export default function DoctorFilterPage() {
         className="text-left"
       />
       <Input
-        label="إلى تاريخ"
+        label={t("docToDate")}
         type="date"
         value={to}
         onChange={(e) => setTo(e.target.value)}
@@ -77,7 +79,7 @@ export default function DoctorFilterPage() {
         className="text-left"
       />
       <Button className="w-full" onClick={applyFilter} disabled={loading}>
-        {loading ? "جاري التصفية..." : "تطبيق التصفية"}
+        {loading ? t("docApplyingFilter") : t("docApplyFilter")}
       </Button>
 
       {applied && (
@@ -85,28 +87,28 @@ export default function DoctorFilterPage() {
           <div className="grid grid-cols-3 gap-2 text-center text-sm">
             <Card className="p-3">
               <p className="font-bold text-primary">{stats.count}</p>
-              <p className="text-xs text-slate-muted">عمليات</p>
+              <p className="text-xs text-slate-muted">{t("operations")}</p>
             </Card>
             <Card className="p-3">
               <p className="font-bold text-slate-text">
-                {formatCurrency(stats.totalPaid)}
+                {formatMoney(stats.totalPaid)}
               </p>
-              <p className="text-xs text-slate-muted">محصّل</p>
+              <p className="text-xs text-slate-muted">{t("execCollectedSub")}</p>
             </Card>
             <Card className="p-3">
               <p className="font-bold text-primary">
-                {formatCurrency(stats.totalEarned)}
+                {formatMoney(stats.totalEarned)}
               </p>
-              <p className="text-xs text-slate-muted">حصتك</p>
+              <p className="text-xs text-slate-muted">{t("docYourShare")}</p>
             </Card>
           </div>
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">العمليات</CardTitle>
+              <CardTitle className="text-base">{t("operations")}</CardTitle>
             </CardHeader>
             {operations.length === 0 ? (
-              <p className="text-sm text-slate-muted">لا توجد عمليات في هذه الفترة</p>
+              <p className="text-sm text-slate-muted">{t("docNoOperationsInPeriod")}</p>
             ) : (
               <ul className="space-y-2 text-sm">
                 {operations.map((op) => (
@@ -119,11 +121,11 @@ export default function DoctorFilterPage() {
                       {op.operation_type || op.operation_name_ar || "—"}
                       <br />
                       <span className="text-xs text-slate-muted">
-                        {formatDate(op.operation_date ?? "")}
+                        {formatDate(op.operation_date ?? "", dateLocale)}
                       </span>
                     </span>
                     <span className="font-medium text-primary">
-                      {formatCurrency(op.doctor_share_amount ?? 0)}
+                      {formatMoney(op.doctor_share_amount ?? 0)}
                     </span>
                   </li>
                 ))}

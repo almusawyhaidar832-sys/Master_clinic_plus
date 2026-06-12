@@ -12,9 +12,11 @@ import {
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import type { DoctorFinancialReportData } from "@/lib/services/doctor-financial-ledger";
 import { downloadElementAsPdf } from "@/lib/reports/pdf-from-html";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { FileBarChart, Loader2 } from "lucide-react";
 
 export function DoctorFinancialReportPanel() {
+  const { t, bi } = useLanguage();
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [report, setReport] = useState<DoctorFinancialReportData | null>(null);
@@ -45,7 +47,7 @@ export function DoctorFinancialReportPanel() {
       };
 
       if (!res.ok) {
-        setError(json.error ?? "تعذر إنشاء التقرير");
+        setError(json.error ?? t("docReportFailed"));
         setReport(null);
         return;
       }
@@ -53,25 +55,27 @@ export function DoctorFinancialReportPanel() {
       setReport(json.report ?? null);
       setOpen(true);
     } catch {
-      setError("تعذر الاتصال بالسيرفر");
+      setError(t("errServerConnection"));
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, t]);
 
   return (
     <div className="rounded-xl border border-slate-border bg-surface-card p-4">
       <div className="mb-3 flex items-center gap-2">
         <FileBarChart className="h-5 w-5 text-primary" />
-        <h2 className="text-sm font-bold text-slate-text">تقرير مالي</h2>
+        <h2 className="text-sm font-bold text-slate-text">
+          {t("docFinancialReportShort")}
+        </h2>
       </div>
       <p className="mb-3 text-xs text-slate-muted">
-        تقرير شامل لحسابك — فواتير، مراجعون، سحوبات وخصومات
+        {t("docFinancialReportDesc")}
       </p>
 
       <div className="mb-3 grid gap-2 sm:grid-cols-2">
         <Input
-          label="من تاريخ"
+          label={t("docFromDate")}
           type="date"
           value={dateFrom}
           onChange={(e) => setDateFrom(e.target.value)}
@@ -79,7 +83,7 @@ export function DoctorFinancialReportPanel() {
           className="text-left"
         />
         <Input
-          label="إلى تاريخ"
+          label={t("docToDate")}
           type="date"
           value={dateTo}
           onChange={(e) => setDateTo(e.target.value)}
@@ -105,13 +109,16 @@ export function DoctorFinancialReportPanel() {
         ) : (
           <FileBarChart className="h-4 w-4" />
         )}
-        {loading ? "جارٍ التجهيز..." : "إنشاء التقرير"}
+        {loading ? t("docPreparingReport") : t("docGenerateReport")}
       </Button>
 
       {open && report && (
         <div className="mt-4 space-y-3 border-t border-slate-border pt-4">
           <ReportActions
-            shareTitle={`تقرير مالي — ${report.doctor_name_ar}`}
+            shareTitle={bi(
+              `تقرير مالي — ${report.doctor_name_ar}`,
+              `Financial report — ${report.doctor_name_ar}`
+            )}
             printTargetId={DOCTOR_FINANCIAL_REPORT_PRINT_ID}
             pdfLoading={pdfLoading}
             onExportPdf={async () => {

@@ -8,6 +8,7 @@ import { PatientStatementDocument } from "@/components/doctor/PatientStatementDo
 import { ReportActions } from "@/components/reports/ReportActions";
 import { downloadPatientStatementPdf } from "@/lib/reports/pdf-export";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { fetchPatientTreatmentCases } from "@/lib/services/patient-treatment-cases";
@@ -20,6 +21,7 @@ function StatementContent() {
   const preselectedId = searchParams.get("patientId");
   const queueEntryId = searchParams.get("queue_entry_id");
   const { profile, displayName } = useClinicProfile();
+  const { t, bi, dateLocale } = useLanguage();
 
   const [patientQuery, setPatientQuery] = useState("");
   const [patientId, setPatientId] = useState(preselectedId ?? "");
@@ -86,13 +88,13 @@ function StatementContent() {
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-bold text-slate-text no-print">
-        كشف حساب مريض
+        {t("docStatementTitle")}
       </h2>
 
       <div className="no-print space-y-3">
         <div className="w-full space-y-1.5">
           <label className="block text-sm font-medium text-slate-text">
-            اختر المراجع
+            {t("docSelectPatient")}
           </label>
           <PatientSearchField
             value={patientQuery}
@@ -108,15 +110,15 @@ function StatementContent() {
             }}
             portal="doctor"
             selectedPatientId={patientId || null}
-            placeholder="اكتب أول حرفين من اسم المراجع..."
+            placeholder={t("docStatementSearchPlaceholder")}
             inputClassName="h-10"
           />
           <p className="text-xs text-slate-muted">
-            ابحث بالاسم أو رقم الهاتف — يظهر مراجعوك فقط
+            {t("docSearchPatientPhoneHint")}
           </p>
         </div>
         <Button className="w-full" onClick={generate} disabled={!patientId}>
-          إنشاء الكشف
+          {t("docGenerateStatement")}
         </Button>
       </div>
 
@@ -135,7 +137,10 @@ function StatementContent() {
       {generated && patient && (
         <div className="space-y-4">
           <ReportActions
-            shareTitle={`كشف حساب ${patient.full_name_ar} — ${displayName}`}
+            shareTitle={bi(
+              `كشف حساب ${patient.full_name_ar} — ${displayName}`,
+              `Statement for ${patient.full_name_ar} — ${displayName}`
+            )}
             printTargetId="patient-statement-print"
             pdfLoading={pdfLoading}
             onExportPdf={async () => {
@@ -144,8 +149,8 @@ function StatementContent() {
                 await downloadPatientStatementPdf({
                   clinicName: displayName,
                   patientName: patient.full_name_ar,
-                  periodLabel: "كشف حساب كامل",
-                  generatedAt: new Date().toLocaleString("ar-IQ"),
+                  periodLabel: t("docFullStatement"),
+                  generatedAt: new Date().toLocaleString(dateLocale),
                   elementId: "patient-statement-print",
                 });
               } finally {
@@ -167,8 +172,10 @@ function StatementContent() {
 }
 
 export default function PatientStatementPage() {
+  const { t } = useLanguage();
+
   return (
-    <Suspense fallback={<p className="text-slate-muted">جاري التحميل...</p>}>
+    <Suspense fallback={<p className="text-slate-muted">{t("loading")}</p>}>
       <StatementContent />
     </Suspense>
   );

@@ -10,6 +10,7 @@ import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicModules } from "@/contexts/ClinicModulesContext";
 import { useModuleNav } from "@/hooks/useModuleNav";
 import { useClinicSync } from "@/hooks/useClinicSync";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { DeveloperImpersonationBanner } from "@/components/developer/DeveloperImpersonationBanner";
 import { ClinicDataSyncBridge } from "@/components/sync/ClinicDataSyncBridge";
 import type { NavItem, UserRole } from "@/types";
@@ -24,6 +25,7 @@ export function DashboardLayoutClient({
   const [staffName, setStaffName] = useState<string>("");
   const { displayName, profile } = useClinicProfile();
   const { specialtyLabel } = useClinicModules();
+  const { t } = useLanguage();
 
   // Pick the right base nav by role, then filter by enabled modules
   const baseNav = userRole === "super_admin" ? superAdminModuleNav : accountantModuleNav;
@@ -38,7 +40,7 @@ export function DashboardLayoutClient({
     )
     .map((i) => ({
       href: i.href,
-      label: i.label,
+      label: t(i.labelKey),
       icon: i.icon,
       roles: i.roles,
     }));
@@ -73,10 +75,10 @@ export function DashboardLayoutClient({
   const isOwner = userRole === "super_admin";
   const headerTitle =
     staffName ||
-    (isOwner ? "مدير العيادة" : "المحاسب");
+    (isOwner ? t("clinicOwner") : t("accountantStaff"));
   const headerSubtitle = isOwner
-    ? `${displayName} — لوحة الإدارة`
-    : `${displayName} — لوحة المحاسب${specialtyLabel ? ` · ${specialtyLabel}` : ""}`;
+    ? `${displayName} — ${t("ownerDashboardSubtitle")}`
+    : `${displayName} — ${t("accountantDashboardSubtitle")}${specialtyLabel ? ` · ${specialtyLabel}` : ""}`;
 
   return (
     <DashboardShell
@@ -85,7 +87,7 @@ export function DashboardLayoutClient({
       subtitle={headerSubtitle}
       clinicLogoUrl={profile?.logo_url}
       clinicName={displayName}
-      staffLabel={isOwner ? "المالك" : "المحاسب"}
+      staffLabel={isOwner ? t("ownerLabel") : t("accountantStaff")}
       notificationCount={notificationCount}
       showGlobalSync={userRole === "super_admin"}
       clinicId={profile?.id}

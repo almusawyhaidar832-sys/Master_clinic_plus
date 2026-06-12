@@ -51,10 +51,14 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
   const { displayName, profile } = useClinicProfile();
   const { specialtyLabel, loading: modulesLoading } = useClinicModules();
   const { isDark, toggleTheme } = useTheme();
-  const { lang, toggleLang } = useLanguage();
+  const { lang, toggleLang, t, bi } = useLanguage();
 
   const [doctor, setDoctor]       = useState<Doctor | null>(null);
   const [profileName, setProfileName] = useState<string>("");
+
+  useEffect(() => {
+    document.title = t("docAppTitle");
+  }, [t]);
 
   useEffect(() => {
     async function loadDoctor() {
@@ -72,7 +76,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
   const doctorName =
     doctor?.full_name_ar?.trim() ||
     profileName.trim() ||
-    "طبيب";
+    t("docDefaultName");
 
   const doctorSpecialty =
     doctor?.specialty_ar?.trim() ||
@@ -105,8 +109,8 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
             <Link
               href="/doctor/profile"
               className="touch-target inline-flex items-center justify-center rounded-lg text-white/90 hover:bg-white/10"
-              title="الملف الشخصي — كلمة المرور"
-              aria-label="الملف الشخصي"
+              title={t("docProfileTitle")}
+              aria-label={t("navMyAccount")}
             >
               <UserCog className="h-5 w-5" />
             </Link>
@@ -114,8 +118,8 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
               type="button"
               onClick={() => void logoutFromCurrentPortal(router)}
               className="touch-target inline-flex items-center justify-center rounded-lg text-white/90 hover:bg-white/10"
-              title="تسجيل الخروج"
-              aria-label="تسجيل الخروج"
+              title={t("logout")}
+              aria-label={t("logout")}
             >
               <LogOut className="h-5 w-5" />
             </button>
@@ -123,15 +127,15 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
               onClick={toggleLang}
               className="touch-target inline-flex items-center justify-center rounded-lg text-white/80 hover:bg-white/10"
               title={lang === "ar" ? "EN" : "عر"}
-              aria-label="تغيير اللغة"
+              aria-label={t("docChangeLang")}
             >
               <Languages className="h-5 w-5" />
             </button>
             <button
               onClick={toggleTheme}
               className="touch-target inline-flex items-center justify-center rounded-lg text-white/80 hover:bg-white/10"
-              title={isDark ? "Light" : "Dark"}
-              aria-label="تغيير المظهر"
+              title={isDark ? t("themeDayMode") : t("themeNightMode")}
+              aria-label={t("docChangeTheme")}
             >
               {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
@@ -146,7 +150,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
 
       <nav className="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-slate-border bg-surface-card px-2 py-2">
         <div className="flex justify-around">
-          {filteredNav.map(({ href, label, icon }) => {
+          {filteredNav.map(({ href, labelKey, icon }) => {
             const active = pathname === href;
             const Icon = NAV_ICON_MAP[icon] ?? Home;
             return (
@@ -159,7 +163,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
                 )}
               >
                 <Icon className="h-5 w-5" />
-                {label}
+                {t(labelKey)}
               </Link>
             );
           })}

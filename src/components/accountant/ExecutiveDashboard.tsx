@@ -15,6 +15,7 @@ import {
   type ExecutiveSnapshotCore,
 } from "@/lib/services/executive-snapshot";
 import { useClinicSync } from "@/hooks/useClinicSync";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Alert } from "@/components/ui/Alert";
 import { cn, localDateISO, todayISO } from "@/lib/utils";
 import {
@@ -129,20 +130,21 @@ function KpiCard({
 // Net Profit Breakdown card
 // ─────────────────────────────────────────────
 function NetProfitCard({ snap }: { snap: Snapshot }) {
+  const { t } = useLanguage();
   const rows = [
-    { label: "حصة العيادة من العمليات", amount: snap.clinic_shares, color: "text-emerald-600", sign: "+" },
+    { label: t("execClinicShareOps"), amount: snap.clinic_shares, color: "text-emerald-600", sign: "+" },
     ...(snap.review_fees > 0
       ? [{
-          label: "كشفيات مراجع (ربح العيادة)",
+          label: t("execReviewFeesProfit"),
           amount: snap.review_fees,
           color: "text-emerald-600",
           sign: "+",
         }]
       : []),
-    { label: "المصروفات العامة",         amount: -snap.expenses,      color: "text-red-500",    sign: "−" },
-    { label: "رواتب/مساعدين (خصم الربح)", amount: -(snap.salaries_deducted_from_profit ?? snap.salaries_paid ?? 0), color: "text-red-500", sign: "−" },
-    { label: "إجمالي الإيرادات (مرجع)",   amount: snap.revenue,       color: "text-slate-500", sign: "" },
-    { label: "حصص الأطباء (محافظ — مرجع)", amount: -snap.doctor_shares, color: "text-slate-400", sign: "−" },
+    { label: t("execGeneralExpenses"), amount: -snap.expenses, color: "text-red-500", sign: "−" },
+    { label: t("execSalariesDeduct"), amount: -(snap.salaries_deducted_from_profit ?? snap.salaries_paid ?? 0), color: "text-red-500", sign: "−" },
+    { label: t("execTotalRevenueRef"), amount: snap.revenue, color: "text-slate-500", sign: "" },
+    { label: t("execDoctorSharesRef"), amount: -snap.doctor_shares, color: "text-slate-400", sign: "−" },
   ];
 
   const profitColor = snap.net_profit >= 0 ? "text-emerald-600" : "text-red-600";
@@ -152,7 +154,7 @@ function NetProfitCard({ snap }: { snap: Snapshot }) {
     <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
       <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-700">
         <DollarSign className="h-5 w-5 text-primary" />
-        تحليل صافي الربح
+        {t("profitBreakdown")}
       </h3>
       <div className="space-y-2">
         {rows.map((row) => (
@@ -164,7 +166,7 @@ function NetProfitCard({ snap }: { snap: Snapshot }) {
           </div>
         ))}
         <div className={cn("mt-3 flex items-center justify-between rounded-xl border p-3", profitBg)}>
-          <span className="font-bold text-slate-700">صافي ربح العيادة</span>
+          <span className="font-bold text-slate-700">{t("execNetClinicProfit")}</span>
           <span className={cn("text-xl font-black tabular-nums", profitColor)}>
             {snap.net_profit >= 0 ? "+" : ""}{fmt(snap.net_profit)}
           </span>
@@ -178,23 +180,54 @@ function NetProfitCard({ snap }: { snap: Snapshot }) {
 // Smart Alerts
 // ─────────────────────────────────────────────
 function SmartAlerts({ snap }: { snap: Snapshot }) {
+  const { t, bi } = useLanguage();
   const alerts: { msg: string; type: "warn" | "info" | "danger" }[] = [];
 
   if (snap.debt > snap.collected * 0.3)
-    alerts.push({ msg: `الديون (${fmt(snap.debt)}) تجاوزت 30% من المتحصل — تحقق من المتأخرات`, type: "warn" });
+    alerts.push({
+      msg: bi(
+        `الديون (${fmt(snap.debt)}) تجاوزت 30% من المتحصل — تحقق من المتأخرات`,
+        `Debts (${fmt(snap.debt)}) exceed 30% of collected — check overdue balances`
+      ),
+      type: "warn",
+    });
 
   if (snap.revenue_growth !== null && snap.revenue_growth < -10)
-    alerts.push({ msg: `الإيرادات انخفضت ${Math.abs(snap.revenue_growth)}% مقارنة بالفترة السابقة`, type: "danger" });
+    alerts.push({
+      msg: bi(
+        `الإيرادات انخفضت ${Math.abs(snap.revenue_growth)}% مقارنة بالفترة السابقة`,
+        `Revenue dropped ${Math.abs(snap.revenue_growth)}% compared to the previous period`
+      ),
+      type: "danger",
+    });
 
   const salariesPaid = snap.salaries_paid ?? 0;
   if (snap.expenses > snap.clinic_shares * 0.7)
-    alerts.push({ msg: `المصروفات تجاوزت 70% من حصة العيادة — راجع بنود الصرف`, type: "warn" });
+    alerts.push({
+      msg: bi(
+        `المصروفات تجاوزت 70% من حصة العيادة — راجع بنود الصرف`,
+        `Expenses exceeded 70% of clinic share — review spending items`
+      ),
+      type: "warn",
+    });
 
   if (salariesPaid > 0 && salariesPaid > snap.clinic_shares * 0.5)
-    alerts.push({ msg: `الرواتب المدفوعة (${fmt(salariesPaid)}) مرتفعة — راجع قسائم الشهر`, type: "warn" });
+    alerts.push({
+      msg: bi(
+        `الرواتب المدفوعة (${fmt(salariesPaid)}) مرتفعة — راجع قسائم الشهر`,
+        `Salaries paid (${fmt(salariesPaid)}) are high — review monthly payroll`
+      ),
+      type: "warn",
+    });
 
   if (snap.new_patients === 0)
-    alerts.push({ msg: "لا مرضى جدد في هذه الفترة — فكّر بحملة تسويقية", type: "info" });
+    alerts.push({
+      msg: bi(
+        "لا مرضى جدد في هذه الفترة — فكّر بحملة تسويقية",
+        "No new patients in this period — consider a marketing campaign"
+      ),
+      type: "info",
+    });
 
   if (alerts.length === 0) return null;
 
@@ -208,7 +241,7 @@ function SmartAlerts({ snap }: { snap: Snapshot }) {
     <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
       <h3 className="mb-3 flex items-center gap-2 font-bold text-slate-700">
         <AlertCircle className="h-5 w-5 text-amber-500" />
-        تنبيهات ذكية
+        {t("smartAlerts")}
       </h3>
       <div className="space-y-2">
         {alerts.map((a, i) => (
@@ -225,13 +258,14 @@ function SmartAlerts({ snap }: { snap: Snapshot }) {
 // Top Doctors
 // ─────────────────────────────────────────────
 function TopDoctorsCard({ doctors }: { doctors: TopPerformers["top_doctors"] }) {
+  const { t } = useLanguage();
   if (!doctors.length) return null;
   const max = doctors[0].revenue;
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
       <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-700">
         <Star className="h-5 w-5 text-amber-500" />
-        أفضل الأطباء
+        {t("topDoctors")}
       </h3>
       <div className="space-y-3">
         {doctors.map((d, i) => (
@@ -252,7 +286,7 @@ function TopDoctorsCard({ doctors }: { doctors: TopPerformers["top_doctors"] }) 
                 style={{ width: `${(d.revenue / max) * 100}%` }}
               />
             </div>
-            <p className="mt-0.5 text-xs text-slate-400">{d.op_count} عملية · حصة الطبيب {fmt(d.doctor_share)}</p>
+            <p className="mt-0.5 text-xs text-slate-400">{d.op_count} {t("execTopDoctorOps")} {fmt(d.doctor_share)}</p>
           </div>
         ))}
       </div>
@@ -264,23 +298,24 @@ function TopDoctorsCard({ doctors }: { doctors: TopPerformers["top_doctors"] }) 
 // Top Services
 // ─────────────────────────────────────────────
 function TopServicesCard({ services }: { services: TopPerformers["top_services"] }) {
+  const { t } = useLanguage();
   if (!services.length) return null;
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
       <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-700">
         <Package className="h-5 w-5 text-primary" />
-        أكثر الخدمات مبيعاً
+        {t("topServices")}
       </h3>
       <div className="space-y-2">
         {services.map((s) => (
           <div key={s.service_name} className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
             <div className="flex-1 min-w-0">
               <p className="truncate text-sm font-semibold text-slate-700">{s.service_name}</p>
-              <p className="text-xs text-slate-400">{s.count} مرة · متوسط {fmt(s.avg_price)}</p>
+              <p className="text-xs text-slate-400">{s.count} {t("execServiceTimes")} {fmt(s.avg_price)}</p>
             </div>
             <div className="text-left">
               <p className="text-sm font-bold text-slate-800 tabular-nums">{fmt(s.revenue)}</p>
-              <p className="text-xs text-emerald-600">هامش {s.clinic_margin_pct}%</p>
+              <p className="text-xs text-emerald-600">{t("execMarginPct")} {s.clinic_margin_pct}%</p>
             </div>
           </div>
         ))}
@@ -295,6 +330,7 @@ function TopServicesCard({ services }: { services: TopPerformers["top_services"]
 export function ExecutiveDashboard() {
   const supabase = createClient();
   const { clinicId, loading: clinicLoading } = useActiveClinicId();
+  const { t, formatMoney } = useLanguage();
   const [period, setPeriod] = useState<Period>("month");
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [top, setTop]   = useState<TopPerformers | null>(null);
@@ -353,8 +389,7 @@ export function ExecutiveDashboard() {
 
     if (snapRes.error) {
       setFetchError(
-        snapRes.error.message ||
-          "تعذر تحميل ملخص الأرباح — شغّل supabase/scripts/21-fix-doctor-percentage-cast.sql في Supabase"
+        snapRes.error.message || t("execLoadSummaryError")
       );
     }
 
@@ -406,12 +441,12 @@ export function ExecutiveDashboard() {
     if (topRes.data) setTop(topRes.data as TopPerformers);
     } catch (err) {
       setFetchError(
-        err instanceof Error ? err.message : "تعذر تحميل لوحة الأرباح"
+        err instanceof Error ? err.message : t("execLoadProfitError")
       );
     } finally {
     setLoading(false);
     }
-  }, [clinicId, getRange, supabase]);
+  }, [clinicId, getRange, supabase, t]);
 
   useEffect(() => {
     if (clinicLoading || clinicId === undefined) return;
@@ -430,9 +465,9 @@ export function ExecutiveDashboard() {
   });
 
   const PERIODS = [
-    { key: "today" as Period, label: "اليوم"    },
-    { key: "week"  as Period, label: "الأسبوع"  },
-    { key: "month" as Period, label: "هذا الشهر"},
+    { key: "today" as Period, label: t("today") },
+    { key: "week"  as Period, label: t("thisWeek") },
+    { key: "month" as Period, label: t("thisMonth") },
   ];
 
   return (
@@ -440,7 +475,7 @@ export function ExecutiveDashboard() {
 
       {/* Period selector */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-bold text-slate-800">لوحة التحكم التنفيذية</h2>
+        <h2 className="text-xl font-bold text-slate-800">{t("executiveDashboard")}</h2>
         <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
           {PERIODS.map((p) => (
             <button
@@ -462,10 +497,7 @@ export function ExecutiveDashboard() {
       {fetchError && (
         <Alert variant="error">
           {fetchError}
-          <p className="mt-2 text-sm">
-            الأرباح ما انحذفت — ما زالت في هذه الصفحة. إذا ظهر خطأ «doctor_percentage»،
-            شغّل سكربت 21 في Supabase ثم حدّث الصفحة.
-          </p>
+          <p className="mt-2 text-sm">{t("execDoctorPctHint")}</p>
         </Alert>
       )}
 
@@ -480,81 +512,81 @@ export function ExecutiveDashboard() {
           {/* KPI grid */}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <KpiCard
-              label="صافي الربح الحقيقي"
-              value={`${fmt(snap.net_profit)} د.ع`}
+              label={t("netProfit")}
+              value={formatMoney(snap.net_profit)}
               icon={TrendingUp}
               color={snap.net_profit >= 0 ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-600"}
               growth={snap.revenue_growth}
               highlight
             />
             <KpiCard
-              label="إجمالي الإيرادات"
-              value={`${fmt(snap.revenue)} د.ع`}
-              sub={`محصّل: ${fmt(snap.collected)}`}
+              label={t("totalRevenue")}
+              value={formatMoney(snap.revenue)}
+              sub={`${t("execCollectedSub")}: ${fmt(snap.collected)}`}
               icon={DollarSign}
               color="bg-blue-100 text-blue-600"
               growth={snap.revenue_growth}
             />
             <KpiCard
-              label="ديون المراجعين"
-              value={`${fmt(snap.debt)} د.ع`}
+              label={t("execPatientDebts")}
+              value={formatMoney(snap.debt)}
               sub={
                 snap.debt > 0
-                  ? `ذمة ${snap.patient_count} مراجع في الفترة`
-                  : "لا ذمة لمراجعي هذه الفترة"
+                  ? `${t("execDebtSub")} ${snap.patient_count} ${t("execPatientsInPeriod")}`
+                  : t("execNoDebtSub")
               }
               icon={Receipt}
               color="bg-amber-100 text-amber-600"
             />
             <KpiCard
-              label="المصروفات"
-              value={`${fmt(snap.expenses)} د.ع`}
+              label={t("totalExpenses")}
+              value={formatMoney(snap.expenses)}
               sub={
                 (snap.salaries_paid ?? 0) > 0
-                  ? `رواتب مُسلَّمة: ${fmt(snap.salaries_paid ?? 0)}`
+                  ? `${t("execSalariesInExpenses")}: ${fmt(snap.salaries_paid ?? 0)}`
                   : undefined
               }
               icon={Wallet}
               color="bg-red-100 text-red-500"
             />
             <KpiCard
-              label="رواتب مُسلَّمة"
-              value={`${fmt(snap.salaries_paid ?? 0)} د.ع`}
-              sub="تُصفَّر بعد تصفير شهر الرواتب — الربح يبقى مخصوماً"
+              label={t("execSalariesPaid")}
+              value={formatMoney(snap.salaries_paid ?? 0)}
+              sub={t("execSalariesPaidSub")}
               icon={UserCog}
               color="bg-rose-100 text-rose-600"
             />
             <KpiCard
-              label="كشفيات مراجع"
-              value={`${fmt(snap.review_fees ?? 0)} د.ع`}
-              sub="تُضاف عند تسجيل الجلسة — للعيادة فقط"
+              label={t("execReviewVisits")}
+              value={formatMoney(snap.review_fees ?? 0)}
+              sub={t("execReviewVisitsSub")}
               icon={Receipt}
               color="bg-teal-100 text-teal-700"
             />
             <KpiCard
-              label="المرضى المُعالَجون"
+              label={t("treatedPatients")}
               value={String(snap.patient_count)}
-              sub={`${snap.operation_count} عملية`}
+              sub={`${snap.operation_count} ${t("execOperationsCount")}`}
               icon={Users}
               color="bg-violet-100 text-violet-600"
             />
             <KpiCard
-              label="مرضى جدد"
+              label={t("newPatients")}
               value={String(snap.new_patients)}
               icon={UserPlus}
               color="bg-pink-100 text-pink-600"
             />
             <KpiCard
-              label="حصة العيادة الصافية"
-              value={`${fmt(snap.clinic_shares)} د.ع`}
-              sub="قبل المصروفات"
+              label={t("clinicNetShare")}
+              value={formatMoney(snap.clinic_shares)}
+              sub={t("execBeforeExpenses")}
               icon={ArrowUpRight}
               color="bg-emerald-100 text-emerald-600"
             />
             <KpiCard
-              label="أرباح الأطباء (محافظ)"
-              value={`${fmt(snap.doctor_shares)} د.ع`}
-              sub={`مسحوب: ${fmt(snap.withdrawals_paid)}`}
+              label={t("execDoctorWalletsRef")}
+              value={formatMoney(snap.doctor_shares)}
+              sub={`${t("execWithdrawnSub")}: ${fmt(snap.withdrawals_paid)}`}
               icon={ListOrdered}
               color="bg-orange-100 text-orange-500"
             />

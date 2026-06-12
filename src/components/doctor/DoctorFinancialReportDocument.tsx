@@ -3,7 +3,8 @@
 import type { DoctorFinancialReportData } from "@/lib/services/doctor-financial-ledger";
 import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { formatDate } from "@/lib/utils";
 
 export const DOCTOR_FINANCIAL_REPORT_PRINT_ID = "doctor-financial-report-print";
 
@@ -15,12 +16,14 @@ interface DoctorFinancialReportDocumentProps {
 function ReportTable({
   headers,
   rows,
+  emptyMessage,
 }: {
   headers: string[];
   rows: string[][];
+  emptyMessage: string;
 }) {
   if (!rows.length) {
-    return <p className="text-sm text-slate-500">لا توجد بيانات في الفترة</p>;
+    return <p className="text-sm text-slate-500">{emptyMessage}</p>;
   }
   return (
     <table className="w-full text-xs">
@@ -56,130 +59,159 @@ export function DoctorFinancialReportDocument({
   printId = DOCTOR_FINANCIAL_REPORT_PRINT_ID,
 }: DoctorFinancialReportDocumentProps) {
   const { profile } = useClinicProfile();
+  const { t, formatMoney, dateLocale, isRTL } = useLanguage();
 
   const periodLabel =
     report.date_from || report.date_to
-      ? `${report.date_from ? formatDate(report.date_from) : "—"} → ${report.date_to ? formatDate(report.date_to) : "—"}`
-      : "كل الفترات";
+      ? `${report.date_from ? formatDate(report.date_from, dateLocale) : "—"} → ${report.date_to ? formatDate(report.date_to, dateLocale) : "—"}`
+      : t("docAllPeriods");
+
+  const tableHeaders = [
+    t("docColDate"),
+    t("docColPatient"),
+    t("docColSession"),
+    t("docColPaid"),
+    t("docColYourShare"),
+  ];
+
+  const invoiceHeaders = [
+    t("docColDate"),
+    t("docColType"),
+    t("docColDescription"),
+    t("docColAmount"),
+    t("docColDeduction"),
+  ];
+
+  const withdrawalHeaders = [
+    t("docColDate"),
+    t("docColDescription"),
+    t("docColAmount"),
+  ];
 
   return (
     <div
       id={printId}
-      dir="rtl"
+      dir={isRTL ? "rtl" : "ltr"}
       className="rounded-xl border border-slate-border bg-white p-6 text-slate-text"
     >
       <ClinicBrandingHeader
         profile={profile}
-        title="التقرير المالي للطبيب"
-        meta={`${report.doctor_name_ar} — ${periodLabel} — ${formatDate(new Date())}`}
+        title={t("docFinancialReportTitle")}
+        meta={`${report.doctor_name_ar} — ${periodLabel} — ${formatDate(new Date(), dateLocale)}`}
         size="md"
         className="mb-6"
       />
 
       <section className="mb-6 rounded-lg border border-primary/20 bg-primary/5 p-4">
-        <h2 className="mb-3 text-sm font-bold text-primary">الملخص المالي</h2>
+        <h2 className="mb-3 text-sm font-bold text-primary">
+          {t("docFinancialSummary")}
+        </h2>
         <div className="grid gap-2 text-sm sm:grid-cols-2">
           <p>
-            <span className="text-slate-500">إجمالي أرباحك (محفظة):</span>{" "}
-            <strong>{formatCurrency(report.total_earnings)}</strong>
+            <span className="text-slate-500">{t("docWalletTotalEarnings")}</span>{" "}
+            <strong>{formatMoney(report.total_earnings)}</strong>
           </p>
           <p>
-            <span className="text-slate-500">الرصيد الحالي:</span>{" "}
-            <strong>{formatCurrency(report.available_balance)}</strong>
+            <span className="text-slate-500">{t("docCurrentBalance")}</span>{" "}
+            <strong>{formatMoney(report.available_balance)}</strong>
           </p>
           <p>
-            <span className="text-slate-500">حصتك من جلسات المراجعين:</span>{" "}
+            <span className="text-slate-500">{t("docShareFromSessions")}</span>{" "}
             <strong className="text-emerald-700">
-              {formatCurrency(report.total_doctor_share_from_sessions)}
+              {formatMoney(report.total_doctor_share_from_sessions)}
             </strong>
           </p>
           <p>
-            <span className="text-slate-500">إجمالي محصّل من المراجعين:</span>{" "}
-            <strong>{formatCurrency(report.total_collected_from_patients)}</strong>
+            <span className="text-slate-500">{t("docTotalCollected")}</span>{" "}
+            <strong>{formatMoney(report.total_collected_from_patients)}</strong>
           </p>
           <p>
-            <span className="text-slate-500">مسحوب (موافق/مدفوع):</span>{" "}
+            <span className="text-slate-500">{t("docWithdrawnApproved")}</span>{" "}
             <strong className="text-red-600">
-              −{formatCurrency(report.total_withdrawn)}
+              −{formatMoney(report.total_withdrawn)}
             </strong>
           </p>
           <p>
-            <span className="text-slate-500">رواتب مُصرفة:</span>{" "}
+            <span className="text-slate-500">{t("docSalariesPaidOut")}</span>{" "}
             <strong className="text-red-600">
-              −{formatCurrency(report.total_salary_paid)}
+              −{formatMoney(report.total_salary_paid)}
             </strong>
           </p>
           <p>
-            <span className="text-slate-500">خصومات صرفيات العيادة:</span>{" "}
+            <span className="text-slate-500">{t("docClinicExpenseDeductions")}</span>{" "}
             <strong className="text-red-600">
-              −{formatCurrency(report.total_expense_deductions)}
+              −{formatMoney(report.total_expense_deductions)}
             </strong>
           </p>
           <p>
-            <span className="text-slate-500">خصومات مساعدين:</span>{" "}
+            <span className="text-slate-500">{t("docAssistantDeductions")}</span>{" "}
             <strong className="text-red-600">
-              −{formatCurrency(report.total_payroll_deductions)}
+              −{formatMoney(report.total_payroll_deductions)}
             </strong>
           </p>
         </div>
         <p className="mt-3 border-t border-primary/10 pt-2 text-xs text-slate-600">
-          تقريب: حصة الجلسات − السحوبات − الرواتب − الخصومات ≈{" "}
-          <strong>{formatCurrency(report.net_calc_hint)}</strong>
+          {t("docApproxFormula")}{" "}
+          <strong>{formatMoney(report.net_calc_hint)}</strong>
         </p>
       </section>
 
       <section className="mb-6">
         <h2 className="mb-2 border-b border-slate-200 pb-1 text-sm font-bold">
-          أرباحك من المراجعين ({report.patient_payments.length})
+          {t("docYourPatientEarnings")} ({report.patient_payments.length})
         </h2>
         <ReportTable
-          headers={["التاريخ", "المراجع", "الجلسة", "المدفوع", "حصتك"]}
+          headers={tableHeaders}
+          emptyMessage={t("docNoDataInPeriod")}
           rows={report.patient_payments.slice(0, 50).map((row) => [
-            formatDate(row.payment_date),
+            formatDate(row.payment_date, dateLocale),
             row.patient_name_ar,
             row.procedure_label,
-            formatCurrency(row.paid_amount),
-            formatCurrency(row.doctor_share),
+            formatMoney(row.paid_amount),
+            formatMoney(row.doctor_share),
           ])}
         />
       </section>
 
       <section className="mb-6">
         <h2 className="mb-2 border-b border-slate-200 pb-1 text-sm font-bold">
-          فواتيرك من المحاسب ({report.invoices.length})
+          {t("docYourInvoicesFromAccountant")} ({report.invoices.length})
         </h2>
         <ReportTable
-          headers={["التاريخ", "النوع", "البيان", "المبلغ", "حصتك/الخصم"]}
+          headers={invoiceHeaders}
+          emptyMessage={t("docNoDataInPeriod")}
           rows={report.invoices.slice(0, 50).map((row) => [
-            formatDate(row.invoice_date),
-            row.record_kind === "doctor_expense" ? "صرفية" : "جلسة",
+            formatDate(row.invoice_date, dateLocale),
+            row.record_kind === "doctor_expense"
+              ? t("docKindClinicExpenseShort")
+              : t("docKindSession"),
             row.record_kind === "doctor_expense"
               ? row.procedure_label
               : `${row.patient_name_ar} — ${row.procedure_label}`,
-            formatCurrency(row.paid_amount),
+            formatMoney(row.paid_amount),
             row.record_kind === "doctor_expense"
-              ? `−${formatCurrency(row.doctor_share)}`
-              : formatCurrency(row.doctor_share),
+              ? `−${formatMoney(row.doctor_share)}`
+              : formatMoney(row.doctor_share),
           ])}
         />
       </section>
 
       <section className="mb-6">
         <h2 className="mb-2 border-b border-slate-200 pb-1 text-sm font-bold">
-          سحوباتك ({report.withdrawals.length})
+          {t("docYourWithdrawals")} ({report.withdrawals.length})
         </h2>
         {report.withdrawals.length === 0 ? (
           <p className="text-sm text-slate-500">
-            لا توجد سحوبات في الفترة المحددة — جرّب ترك التواريخ فارغة لعرض كل
-            السحوبات.
+            {t("docNoWithdrawalsInPeriod")}
           </p>
         ) : (
           <ReportTable
-            headers={["التاريخ", "البيان", "المبلغ"]}
+            headers={withdrawalHeaders}
+            emptyMessage={t("docNoDataInPeriod")}
             rows={report.withdrawals.map((op) => [
-              formatDate(op.operation_date),
+              formatDate(op.operation_date, dateLocale),
               op.label,
-              `−${formatCurrency(op.amount)}`,
+              `−${formatMoney(op.amount)}`,
             ])}
           />
         )}
@@ -188,15 +220,16 @@ export function DoctorFinancialReportDocument({
       {report.salary_adjustments.length > 0 && (
         <section className="mb-6">
           <h2 className="mb-2 border-b border-slate-200 pb-1 text-sm font-bold">
-            حركات الراتب ({report.salary_adjustments.length})
+            {t("docSalaryAdjustmentsTitle")} ({report.salary_adjustments.length})
           </h2>
           <ReportTable
-            headers={["التاريخ", "النوع", "البيان", "المبلغ"]}
+            headers={withdrawalHeaders}
+            emptyMessage={t("docNoDataInPeriod")}
             rows={report.salary_adjustments.map((op) => [
-              formatDate(op.operation_date),
-              "راتب ثابت",
+              formatDate(op.operation_date, dateLocale),
+              t("docKindFixedSalary"),
               op.label,
-              formatCurrency(op.amount),
+              formatMoney(op.amount),
             ])}
           />
         </section>
@@ -207,28 +240,29 @@ export function DoctorFinancialReportDocument({
         report.payroll_deductions.length > 0) && (
         <section className="mb-6">
           <h2 className="mb-2 border-b border-slate-200 pb-1 text-sm font-bold">
-            خصومات ورواتب
+            {t("docDeductionsAndSalaries")}
           </h2>
           <ReportTable
-            headers={["التاريخ", "النوع", "البيان", "المبلغ"]}
+            headers={invoiceHeaders.slice(0, 4)}
+            emptyMessage={t("docNoDataInPeriod")}
             rows={[
               ...report.salary_payouts.map((op) => [
-                formatDate(op.operation_date),
-                "راتب",
+                formatDate(op.operation_date, dateLocale),
+                t("docKindSalary"),
                 op.label,
-                `−${formatCurrency(op.amount)}`,
+                `−${formatMoney(op.amount)}`,
               ]),
               ...report.expense_deductions.map((op) => [
-                formatDate(op.operation_date),
-                "صرفية عيادة",
+                formatDate(op.operation_date, dateLocale),
+                t("docKindClinicExpense"),
                 op.label,
-                `−${formatCurrency(op.amount)}`,
+                `−${formatMoney(op.amount)}`,
               ]),
               ...report.payroll_deductions.map((op) => [
-                formatDate(op.operation_date),
-                "مساعد",
+                formatDate(op.operation_date, dateLocale),
+                t("docKindAssistant"),
                 op.label,
-                `−${formatCurrency(op.amount)}`,
+                `−${formatMoney(op.amount)}`,
               ]),
             ]}
           />

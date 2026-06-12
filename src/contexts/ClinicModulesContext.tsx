@@ -27,8 +27,10 @@ import {
   type ClinicSettings,
   type ClinicSpecialty,
   SPECIALTY_DEFAULT_MODULES,
-  SPECIALTY_LABELS,
 } from "@/types/modules";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { getSpecialtyLabel } from "@/i18n/localized-labels";
+import { translations } from "@/i18n/translations";
 
 // =============================================================================
 // Context shape
@@ -58,6 +60,7 @@ const ClinicModulesContext = createContext<ClinicModulesContextValue | null>(nul
 export function ClinicModulesProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<ClinicSettings | null>(null);
   const [loading, setLoading] = useState(true);
+  const { t } = useLanguage();
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -130,12 +133,12 @@ export function ClinicModulesProvider({ children }: { children: ReactNode }) {
       loading,
       settings,
       specialty,
-      specialtyLabel: SPECIALTY_LABELS[specialty],
+      specialtyLabel: getSpecialtyLabel(t, specialty),
       hasModule,
       enabledModules,
       refresh,
     }),
-    [loading, settings, specialty, hasModule, enabledModules, refresh]
+    [loading, settings, specialty, hasModule, enabledModules, refresh, t]
   );
 
   return (
@@ -156,7 +159,10 @@ export function useClinicModules(): ClinicModulesContextValue {
       loading: false,
       settings: null,
       specialty: "dental",
-      specialtyLabel: SPECIALTY_LABELS.dental,
+      specialtyLabel: getSpecialtyLabel(
+        (key) => (translations.ar as Record<string, string>)[key] ?? key,
+        "dental"
+      ),
       hasModule: () => false,
       enabledModules: [],
       refresh: async () => {},

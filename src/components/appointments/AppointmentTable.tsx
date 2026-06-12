@@ -8,8 +8,8 @@ import {
 } from "@/hooks/useCentralizedAppointments";
 import {
   APPOINTMENT_STATUS_COLORS,
-  APPOINTMENT_STATUS_LABELS,
 } from "@/components/appointments/appointment-constants";
+import { useAppointmentStatusLabels } from "@/i18n/localized-labels";
 import { AddAppointmentModal } from "@/components/assistant/AddAppointmentModal";
 import { EditAppointmentModal } from "@/components/assistant/EditAppointmentModal";
 import { RejectAppointmentModal } from "@/components/assistant/RejectAppointmentModal";
@@ -51,6 +51,7 @@ export function AppointmentTable({
   subtitle,
   compact = false,
 }: AppointmentTableProps) {
+  const statusLabels = useAppointmentStatusLabels();
   const filterDoctorId = role === "doctor" ? doctorId : role === "assistant" ? doctorId : null;
 
   const { appointments, loading, refresh, pendingCount } = useCentralizedAppointments({
@@ -323,7 +324,7 @@ function AppointmentRow({
               APPOINTMENT_STATUS_COLORS.scheduled
           )}
         >
-          {APPOINTMENT_STATUS_LABELS[a.status] ?? a.status}
+          {statusLabels[a.status] ?? a.status}
         </span>
       </td>
       {canManage && (

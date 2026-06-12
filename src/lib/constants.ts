@@ -104,8 +104,9 @@ export const CURRENCY_SYMBOL_AR = "د.ع";
 
 export const DEVELOPER = {
   nameAr:   "حيدر حازم الموسوي",
-  nameEn:   "Haider Hazim Al-Mousawi",
-  role:     "Full-Stack Developer & System Architect",
-  roleAr:   "مطوّر النظام ومهندس المعمارية",
+  nameEn:   "Haidar Hazem Almusawi",
+  initials: "HH",
+  role:     "Full-Stack Developer & Product Designer",
+  roleAr:   "مطوّر برمجيات ومصمم المنتج",
   year:     2026,
 } as const;

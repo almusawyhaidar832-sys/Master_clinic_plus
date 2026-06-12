@@ -6,6 +6,7 @@ import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader
 import { PatientStatementByCase } from "@/components/statements/PatientStatementByCase";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { formatDate } from "@/lib/utils";
 
 interface PatientStatementDocumentProps {
@@ -25,16 +26,22 @@ export function PatientStatementDocument({
   clinic,
   printId = "patient-statement-print",
 }: PatientStatementDocumentProps) {
+  const { t, dateLocale, isRTL } = useLanguage();
+
+  const meta = t("docStatementIssuedMeta")
+    .replace("{patient}", patient.full_name_ar)
+    .replace("{date}", formatDate(new Date(), dateLocale));
+
   return (
     <div
       id={printId}
-      dir="rtl"
+      dir={isRTL ? "rtl" : "ltr"}
       className="rounded-xl border border-slate-border bg-white p-6 text-slate-text"
     >
       <ClinicBrandingHeader
         profile={clinic}
-        title="كشف حساب ومتابعة طبية"
-        meta={`المريض: ${patient.full_name_ar} — تاريخ الإصدار: ${formatDate(new Date())}`}
+        title={t("docStatementDocTitle")}
+        meta={meta}
         size="md"
         className="mb-6"
       />
@@ -52,13 +59,13 @@ export function PatientStatementDocument({
 
       {medicalLogs.length > 0 && (
         <section className="mt-6 border-t border-slate-border pt-6">
-          <h2 className="mb-2 font-semibold">السجل الطبي</h2>
+          <h2 className="mb-2 font-semibold">{t("docMedicalRecord")}</h2>
           <ul className="space-y-2 text-sm">
             {medicalLogs.map((log) => (
               <li key={log.id} className="rounded bg-surface p-2">
                 <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
                   <p className="text-xs text-slate-muted">
-                    {formatDate(log.log_date)}
+                    {formatDate(log.log_date, dateLocale)}
                   </p>
                   <span className="text-xs font-medium text-primary">
                     {formatDoctorDisplayName(log.doctor?.full_name_ar)}

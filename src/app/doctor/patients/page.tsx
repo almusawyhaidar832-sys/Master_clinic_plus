@@ -9,9 +9,11 @@ import {
 } from "@/lib/offline-cache";
 import { createClient } from "@/lib/supabase/client";
 import { fetchPatientsForCurrentDoctor } from "@/lib/services/doctor-patients";
+import { useLanguage } from "@/contexts/LanguageContext";
 import type { Patient } from "@/types";
 
 export default function DoctorPatientsPage() {
+  const { t } = useLanguage();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -38,20 +40,18 @@ export default function DoctorPatientsPage() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-bold text-slate-text">رعاية المرضى</h2>
-      <p className="text-xs text-slate-muted">
-        مراجعوك فقط — حسب الجلسات والحالات المسجّلة باسمك
-      </p>
+      <h2 className="text-lg font-bold text-slate-text">{t("docPatientCareTitle")}</h2>
+      <p className="text-xs text-slate-muted">{t("docPatientCareSubtitle")}</p>
       <Input
-        label="بحث"
+        label={t("search")}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="اسم المريض..."
+        placeholder={t("docSearchPatientPlaceholder")}
       />
       {loading ? (
-        <p className="text-sm text-slate-muted">جاري التحميل...</p>
+        <p className="text-sm text-slate-muted">{t("loading")}</p>
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-slate-muted">لا يوجد مراجعون مسجّلون لك</p>
+        <p className="text-sm text-slate-muted">{t("docNoPatientsRegistered")}</p>
       ) : (
         filtered.map((p) => (
           <Link
