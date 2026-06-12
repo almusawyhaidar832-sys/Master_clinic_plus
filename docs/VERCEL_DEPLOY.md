@@ -62,6 +62,11 @@ git push -u origin main
 
 ## 4) متغيرات البيئة على Vercel
 
+**للمبتدئين:** شغّل على جهازك `node scripts/prepare-vercel-deploy.mjs` — ينشئ ملف  
+`deploy/vercel-env-import.env` جاهز للرفع عبر **Import .env** في Vercel (بدون نسخ يدوي).
+
+دليل عربي مبسّط: **`docs/Nشر_بسيط.md`**
+
 في مشروع Vercel: **Settings → Environment Variables** أضف لكل من Production و Preview:
 
 | المتغير | الوصف |
@@ -72,6 +77,11 @@ git push -u origin main
 | `ADMIN_EMAIL` | بريد المدير العام |
 | `PLATFORM_DEVELOPER_SECRET` | سلسلة عشوائية 32+ حرف |
 | `PLATFORM_DEVELOPER_PASSWORD_HASH` | من `node scripts/hash-developer-password.mjs "كلمة-المرور"` |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | تنبيهات موبايل الطبيب (PWA) |
+| `VAPID_PRIVATE_KEY` | سري — من `node scripts/generate-vapid-keys.mjs` |
+| `VAPID_SUBJECT` | مثل `mailto:your-email@gmail.com` |
+
+> `NEXT_PUBLIC_APP_URL` **اختياري على Vercel** — التطبيق يكتشف الرابط تلقائياً. ضعه فقط إذا عندك نطاق مخصص.
 
 اختياري (واتساب):
 

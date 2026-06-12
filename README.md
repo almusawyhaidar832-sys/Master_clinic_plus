@@ -79,6 +79,12 @@ npm run dev
 
 دليل كامل: [docs/WHATSAPP_EVOLUTION_SETUP.md](docs/WHATSAPP_EVOLUTION_SETUP.md)
 
+## النشر على الإنترنت (Vercel)
+
+- **`.env.local` يبقى على جهازك** — لا يُرفع GitHub.
+- للنشر العالمي: [docs/Nشر_بسيط.md](docs/Nشر_بسيط.md) (دليل مبتدئ بالعربي).
+- تجهيز ملف Vercel تلقائياً: `npm run prepare:deploy` → يرفع `deploy/vercel-env-import.env` على Vercel عبر **Import .env**.
+
 ## الأدوار
 
 | الدور | المسار الرئيسي |

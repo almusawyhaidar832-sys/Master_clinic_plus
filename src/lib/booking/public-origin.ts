@@ -58,6 +58,16 @@ export function resolveBookingPublicOrigin(
     };
   }
 
+  /** Vercel production — no manual NEXT_PUBLIC_APP_URL needed */
+  const vercelHost =
+    typeof process !== "undefined"
+      ? process.env.VERCEL_URL?.trim()
+      : undefined;
+  if (vercelHost) {
+    const origin = stripTrailingSlash(`https://${vercelHost}`);
+    return { origin, unreachableOnMobile: false };
+  }
+
   if (input.forwardedHost) {
     const proto = input.forwardedProto?.split(",")[0]?.trim() || "https";
     const origin = stripTrailingSlash(`${proto}://${input.forwardedHost}`);

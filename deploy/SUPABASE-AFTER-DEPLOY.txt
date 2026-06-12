@@ -1,0 +1,12 @@
+بعد أول Deploy على Vercel — انسخ رابط التطبيق (مثل https://xxx.vercel.app)
+
+1) Supabase Dashboard → Authentication → URL Configuration
+   Site URL = https://xxx.vercel.app
+
+2) Redirect URLs — أضف:
+   https://xxx.vercel.app/**
+   http://localhost:3000/**
+
+3) Deployments → Redeploy (اختياري بعد تغيير Supabase)
+
+4) من موبايل الطبيب: افتح الرابط → ثبّت PWA → فعّل التنبيهات

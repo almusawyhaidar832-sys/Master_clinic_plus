@@ -20,6 +20,7 @@ export function notificationActionHref(
   linkPath?: string | null
 ): string | null {
   if (linkPath?.trim()) return linkPath;
+  if (title.includes("باركود")) return "/dashboard/queue";
   if (title.includes("مرتجع")) return "/doctor/notifications";
   if (title.includes("سحب")) return "/dashboard/withdrawals";
   if (title.includes("جلسة") || title.includes("مراجع")) return "/dashboard/ledger";

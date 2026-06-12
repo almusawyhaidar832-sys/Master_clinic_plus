@@ -144,6 +144,94 @@ export async function insertNotifications(
   if (error) throw new Error(error.message);
 }
 
+function formatAppointmentTimeRange(startTime: string, endTime: string): string {
+  const start = startTime.slice(0, 5);
+  const end = endTime.slice(0, 5);
+  return `${start} – ${end}`;
+}
+
+/** طلب حجز باركود pending → إشعار المحاسب ومساعد الطبيب */
+export async function notifyStaffBarcodeBooking(input: {
+  clinicId: string;
+  doctorId: string;
+  patientName: string;
+  appointmentDate: string;
+  startTime: string;
+  endTime: string;
+}) {
+  const admin = adminClient();
+
+  const { data: doctor } = await admin
+    .from("doctors")
+    .select("full_name_ar")
+    .eq("id", input.doctorId)
+    .maybeSingle();
+
+  const doctorName = doctor?.full_name_ar ?? "طبيب";
+  const timeRange = formatAppointmentTimeRange(input.startTime, input.endTime);
+  const title = "حجز عبر الباركود";
+  const body = `المراجع ${input.patientName} — د. ${doctorName} — ${input.appointmentDate} ${timeRange} — بانتظار الموافقة`;
+
+  const rows: {
+    clinic_id: string;
+    recipient_profile_id: string;
+    title_ar: string;
+    body_ar: string;
+    link_path?: string;
+  }[] = [];
+
+  const seen = new Set<string>();
+
+  function pushRow(
+    profileId: string,
+    linkPath: string
+  ) {
+    if (seen.has(profileId)) return;
+    seen.add(profileId);
+    rows.push({
+      clinic_id: input.clinicId,
+      recipient_profile_id: profileId,
+      title_ar: title,
+      body_ar: body,
+      link_path: linkPath,
+    });
+  }
+
+  const { data: accountants } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("clinic_id", input.clinicId)
+    .in("role", ["accountant", "super_admin"]);
+
+  for (const profile of accountants ?? []) {
+    pushRow(profile.id as string, "/dashboard/queue");
+  }
+
+  const { data: assistants } = await admin
+    .from("assistants")
+    .select("id, profile_id")
+    .eq("clinic_id", input.clinicId)
+    .eq("doctor_id", input.doctorId)
+    .eq("is_active", true);
+
+  for (const assistant of assistants ?? []) {
+    let profileId = assistant.profile_id as string | null;
+    if (!profileId) {
+      profileId = await resolveAssistantProfileId(
+        admin,
+        assistant.id as string,
+        input.clinicId
+      );
+    }
+    if (profileId) {
+      pushRow(profileId, "/assistant/dashboard");
+    }
+  }
+
+  if (!rows.length) return;
+  await insertNotifications(rows);
+}
+
 /** Doctor requested withdrawal → notify accountants + clinic owner */
 export async function notifyWithdrawalRequest(withdrawalId: string) {
   const admin = adminClient();

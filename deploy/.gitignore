@@ -1,0 +1,4 @@
+# ملفات النشر — لا ترفعها GitHub
+vercel-env-import.env
+*.env
+!*.env.example

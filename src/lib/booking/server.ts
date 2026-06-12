@@ -2,6 +2,7 @@ import "server-only";
 
 import { getAdminClient } from "@/lib/supabase/admin";
 import { validatePatientPhone } from "@/lib/phone";
+import { notifyStaffBarcodeBooking } from "@/lib/notifications/server";
 import { sendAppointmentUpdate } from "@/lib/services/appointment-updates";
 import type { SendAppointmentUpdateResult } from "@/lib/services/appointment-updates";
 import { isUuid } from "@/lib/booking/urls";
@@ -240,6 +241,17 @@ export async function createPublicBooking(
     startTime: inserted.start_time as string,
     endTime: inserted.end_time as string,
     action: "submitted",
+  });
+
+  await notifyStaffBarcodeBooking({
+    clinicId,
+    doctorId: input.doctorId,
+    patientName: inserted.patient_name_ar as string,
+    appointmentDate: inserted.appointment_date as string,
+    startTime: inserted.start_time as string,
+    endTime: inserted.end_time as string,
+  }).catch((err) => {
+    console.error("[createPublicBooking] barcode notification", err);
   });
 
   return {

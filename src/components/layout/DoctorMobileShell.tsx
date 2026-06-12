@@ -12,6 +12,8 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { doctorModuleNav, doctorModuleQuickActions } from "@/config/navigation";
 import { ClinicDataSyncBridge } from "@/components/sync/ClinicDataSyncBridge";
+import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
+import { DoctorAlertsSetup } from "@/components/doctor/DoctorAlertsSetup";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile, getDoctorForCurrentUser } from "@/lib/clinic-context";
 import type { Doctor } from "@/types";
@@ -81,6 +83,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-surface pb-20">
       <ClinicDataSyncBridge />
+      <QueueRealtimeBridge portal="doctor" enablePolling />
       <header className="safe-top sticky top-0 z-30 bg-primary px-4 py-3 text-white shadow-premium">
         <div className="flex items-center gap-2">
           {profile?.logo_url && (
@@ -136,7 +139,10 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="mc-app-main flex-1 px-4 py-4">{children}</main>
+      <main className="mc-app-main flex-1 px-4 py-4">
+        <DoctorAlertsSetup />
+        {children}
+      </main>
 
       <nav className="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-slate-border bg-surface-card px-2 py-2">
         <div className="flex justify-around">

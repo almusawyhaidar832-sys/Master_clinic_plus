@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v3-clinical-blue";
+const CACHE_NAME = "mcp-app-v4-push-alerts";
 const SHELL_URLS = ["/login", "/doctor", "/admin"];
 
 function shouldSkipCache(url) {
@@ -11,6 +11,24 @@ function shouldSkipCache(url) {
     }
   }
   return false;
+}
+
+function parsePushPayload(event) {
+  try {
+    return event.data ? event.data.json() : {};
+  } catch {
+    return {};
+  }
+}
+
+function notifyOpenClients(payload) {
+  return self.clients
+    .matchAll({ type: "window", includeUncontrolled: true })
+    .then((clientList) => {
+      clientList.forEach((client) => {
+        client.postMessage({ type: "QUEUE_PUSH_ALERT", payload });
+      });
+    });
 }
 
 self.addEventListener("install", (event) => {
@@ -29,6 +47,55 @@ self.addEventListener("activate", (event) => {
     )
   );
   self.clients.claim();
+});
+
+self.addEventListener("push", (event) => {
+  const data = parsePushPayload(event);
+  const title = data.title || "مراجع جديد 🔔";
+  const body =
+    data.body || "لديك مراجع جديد في الانتظار — افتح التطبيق";
+  const url = data.url || "/doctor/queue";
+  const tag = data.tag || "doctor-queue";
+
+  const options = {
+    body,
+    icon: "/favicon.ico",
+    badge: "/favicon.ico",
+    tag,
+    renotify: true,
+    requireInteraction: true,
+    vibrate: [180, 80, 180, 80, 320],
+    data: { url, patientName: data.patientName, kind: data.kind },
+  };
+
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      notifyOpenClients(data),
+    ])
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/doctor/queue";
+  const absoluteUrl = new URL(targetUrl, self.location.origin).href;
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if (client.url.startsWith(self.location.origin) && "focus" in client) {
+            return client.focus();
+          }
+        }
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(absoluteUrl);
+        }
+        return undefined;
+      })
+  );
 });
 
 self.addEventListener("fetch", (event) => {

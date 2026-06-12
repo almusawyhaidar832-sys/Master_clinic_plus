@@ -308,7 +308,6 @@ export default function DoctorQueuePage() {
 
   return (
     <>
-      <QueueRealtimeBridge portal="doctor" />
       <div className="space-y-4">
         <div>
           <h2 className="text-lg font-bold text-slate-800">قائمة انتظاري</h2>

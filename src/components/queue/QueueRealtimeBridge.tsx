@@ -22,7 +22,8 @@ interface QueueRealtimeBridgeProps {
 
 /**
  * Queue alerts: Realtime + (optional) polling fallback.
- * Mount on queue pages with enablePolling; avoid global layout mount.
+ * Doctor portal: mounted globally in DoctorMobileShell (all pages).
+ * Dashboard: mount on queue page only.
  */
 export function QueueRealtimeBridge({
   portal,

@@ -1,5 +1,6 @@
 import { getAdminClient } from "@/lib/supabase/admin";
 import { resolveDoctorProfileId, insertNotifications } from "@/lib/notifications/server";
+import { sendWebPushToProfile } from "@/lib/push/server";
 import { resolvePatientDisplayName } from "@/lib/queue/utils";
 
 export type QueueStatus =
@@ -173,6 +174,16 @@ export async function notifyDoctorNewQueuePatient(queueEntryId: string) {
       link_path: "/doctor/queue",
     },
   ]);
+
+  await sendWebPushToProfile(profileId, {
+    title: "مراجع جديد 🔔",
+    body: `لديك مراجع جديد في الانتظار: ${name}`,
+    url: "/doctor/queue",
+    tag: `doctor-queue-${entry.id}`,
+    patientName: name,
+  }).catch((err) => {
+    console.error("[queue] doctor web push failed:", err);
+  });
 }
 
 /** Notify accountants: doctor sent session for billing */
