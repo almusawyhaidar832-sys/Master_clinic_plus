@@ -13,7 +13,7 @@ import { formatCurrency } from "@/lib/utils";
 /** POST — doctor requests withdrawal */
 export async function POST(req: NextRequest) {
   try {
-    const caller = await getApiCallerProfile();
+    const caller = await getApiCallerProfile(req);
     if (!caller) {
       return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
     }

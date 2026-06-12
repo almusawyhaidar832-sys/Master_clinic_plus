@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "id و status مطلوبان" }, { status: 400 });
     }
 
-    const { profile, admin } = await assertCanManageWithdrawal(id);
+    const { profile, admin } = await assertCanManageWithdrawal(id, req);
 
     const { error: updateErr } = await applyWithdrawalStatusUpdate(
       admin,

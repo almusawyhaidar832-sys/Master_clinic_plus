@@ -70,6 +70,41 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (category === "doctor_salary") {
+      const { data: row } = await admin
+        .from("doctors")
+        .select("id, profile_id, full_name_ar")
+        .eq("id", id)
+        .eq("clinic_id", clinicId)
+        .maybeSingle();
+
+      if (!row) {
+        return NextResponse.json({ error: "الطبيب غير موجود" }, { status: 404 });
+      }
+
+      if (row.profile_id) {
+        await admin
+          .from("profiles")
+          .update({ is_active: false })
+          .eq("id", row.profile_id);
+      }
+
+      const { error } = await admin
+        .from("doctors")
+        .update({ is_active: false })
+        .eq("id", id);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        name: row.full_name_ar,
+        message: `تم إيقاف ${row.full_name_ar} — لن يظهر في الرواتب`,
+      });
+    }
+
     if (category === "general" || category === "accountant") {
       const { data: staff } = await admin
         .from("staff_members")

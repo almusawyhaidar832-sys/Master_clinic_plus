@@ -2,6 +2,8 @@
 
 import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
+import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import { withdrawalStatusLabel } from "@/lib/withdrawals/display";
 import type { MonthlySettlementReport } from "@/lib/services/clinic-reports";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -47,6 +49,18 @@ export function MonthlySettlementDocument({
             highlight
           />
           <Row
+            label="إجمالي المسحوب (الشهر)"
+            value={-report.totals.totalWithdrawn}
+            negative
+          />
+          {report.isCurrentMonthReport ? (
+            <Row
+              label="إجمالي أرصدة الأطباء (كالتطبيق)"
+              value={report.totals.totalRemaining}
+              highlight
+            />
+          ) : null}
+          <Row
             label="صافي ربح العيادة"
             value={report.totals.clinicNetProfit}
             highlight
@@ -69,11 +83,39 @@ export function MonthlySettlementDocument({
                 <p className="font-bold text-slate-text">
                   {formatDoctorDisplayName(doc.doctorName)}
                 </p>
-                {doc.specialty && (
-                  <span className="text-xs text-slate-muted">{doc.specialty}</span>
-                )}
+                <span className="text-xs text-slate-muted">
+                  {[doc.specialty, doc.paymentLabel].filter(Boolean).join(" — ")}
+                </span>
               </div>
               <div className="space-y-1 text-sm">
+                {doc.settlement.salaryBaseAmount != null && (
+                  <>
+                    <Row
+                      label="راتب أساسي"
+                      value={doc.settlement.salaryBaseAmount}
+                    />
+                    {(doc.settlement.salaryAdvances ?? 0) > 0 && (
+                      <Row
+                        label="سلف"
+                        value={-(doc.settlement.salaryAdvances ?? 0)}
+                        negative
+                      />
+                    )}
+                    {(doc.settlement.salaryDeductions ?? 0) > 0 && (
+                      <Row
+                        label="خصومات"
+                        value={-(doc.settlement.salaryDeductions ?? 0)}
+                        negative
+                      />
+                    )}
+                    {(doc.settlement.salaryBonuses ?? 0) > 0 && (
+                      <Row
+                        label="مكافآت"
+                        value={doc.settlement.salaryBonuses ?? 0}
+                      />
+                    )}
+                  </>
+                )}
                 <Row label="دخل الطبيب" value={doc.settlement.totalDoctorIncome} />
                 <Row
                   label="صرفيات العيادة"
@@ -92,12 +134,57 @@ export function MonthlySettlementDocument({
                   value={doc.settlement.doctorNetProfit}
                   highlight
                 />
+                {doc.monthWithdrawn > 0 ? (
+                  <Row
+                    label={
+                      isSalaryDoctor({ payment_type: doc.payment_type })
+                        ? "راتب مُصرف هذا الشهر"
+                        : "مسحوب هذا الشهر"
+                    }
+                    value={-doc.monthWithdrawn}
+                    negative
+                  />
+                ) : null}
+                {report.isCurrentMonthReport &&
+                doc.pendingWithdrawalAmount > 0 ? (
+                  <Row
+                    label="سحب معلّق"
+                    value={-doc.pendingWithdrawalAmount}
+                    negative
+                  />
+                ) : null}
+                {report.isCurrentMonthReport ? (
+                  <Row
+                    label="الرصيد الحالي (كالتطبيق)"
+                    value={doc.remainingBalance}
+                    highlight={doc.remainingBalance > 0}
+                  />
+                ) : null}
               </div>
               {doc.settlement.assistantLines.length > 0 && (
                 <ul className="mt-2 space-y-0.5 text-xs text-slate-muted">
                   {doc.settlement.assistantLines.map((line) => (
                     <li key={line.assistantId}>
                       {line.assistantName}: خصم {formatCurrency(line.doctorDeduction)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {doc.withdrawals.length > 0 && (
+                <ul className="mt-3 space-y-1 border-t border-slate-border/60 pt-2 text-xs">
+                  <li className="font-semibold text-slate-text">تفاصيل السحب:</li>
+                  {doc.withdrawals.map((w) => (
+                    <li
+                      key={w.id}
+                      className="flex flex-wrap justify-between gap-2 text-slate-muted"
+                    >
+                      <span>
+                        {formatDate(w.effectiveDate)} — {w.source} —{" "}
+                        {withdrawalStatusLabel(w.status)}
+                      </span>
+                      <span className="font-medium text-debt-text">
+                        {formatCurrency(w.amount)}
+                      </span>
                     </li>
                   ))}
                 </ul>

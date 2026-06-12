@@ -12,6 +12,8 @@ import { validatePatientPhone } from "@/lib/phone";
 import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
 import { formatTime, todayISO } from "@/lib/utils";
 import { DoctorAppointmentsPanel } from "@/components/appointments/DoctorAppointmentsPanel";
+import { PatientSearchField } from "@/components/patients/PatientSearchField";
+import { getPatientDisplayPhone } from "@/lib/phone";
 import type { Doctor, ScheduleLock } from "@/types";
 
 export default function DoctorSchedulePage() {
@@ -21,6 +23,7 @@ export default function DoctorSchedulePage() {
   const [message, setMessage] = useState<string | null>(null);
 
   const [patientName, setPatientName] = useState("");
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientPhone, setPatientPhone] = useState("");
   const [date, setDate] = useState(todayISO());
   const [startTime, setStartTime] = useState("10:00");
@@ -84,6 +87,7 @@ export default function DoctorSchedulePage() {
     }
 
     setPatientName("");
+    setSelectedPatientId(null);
     setPatientPhone("");
   }
 
@@ -136,12 +140,28 @@ export default function DoctorSchedulePage() {
               <CardTitle className="text-base">موعد جديد</CardTitle>
             </CardHeader>
             <form onSubmit={addAppointment} className="space-y-3">
-              <Input
-                label="اسم المريض"
-                value={patientName}
-                onChange={(e) => setPatientName(e.target.value)}
-                required
-              />
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-text">
+                  اسم المريض
+                </label>
+                <PatientSearchField
+                  portal="doctor"
+                  value={patientName}
+                  selectedPatientId={selectedPatientId}
+                  showIcon={false}
+                  required
+                  placeholder="اكتب حرفين من اسم مراجع سبق أن عالجته..."
+                  onChange={(v) => {
+                    setPatientName(v);
+                    setSelectedPatientId(null);
+                  }}
+                  onSelect={(p) => {
+                    setSelectedPatientId(p.id);
+                    setPatientName(p.full_name_ar);
+                    setPatientPhone(getPatientDisplayPhone(p) ?? "");
+                  }}
+                />
+              </div>
               <Input
                 label="الهاتف"
                 value={patientPhone}

@@ -32,7 +32,10 @@ export async function fetchCasesWithDoctors(
   const persisted = cases.filter((c) => c.id && !c.id.startsWith("inferred-"));
   const rows = await Promise.all(
     persisted.map(async (c) => {
-      const doctor = await fetchCasePrimaryDoctor(supabase, c.id);
+      const doctor =
+        c.primary_doctor_id && c.primary_doctor_name
+          ? { id: c.primary_doctor_id, full_name_ar: c.primary_doctor_name }
+          : await fetchCasePrimaryDoctor(supabase, c.id);
       return {
         caseId: c.id,
         caseLabel: treatmentCaseDisplayLabel(c, cases),

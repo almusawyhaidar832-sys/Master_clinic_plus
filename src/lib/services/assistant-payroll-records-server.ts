@@ -30,7 +30,9 @@ export async function fetchPayrollMonthAdmin(
       .order("assistant_name_ar"),
     admin
       .from("salary_slips")
-      .select("*, staff:staff_members!staff_id(full_name_ar, job_title_ar, profile_id)")
+      .select(
+        "*, staff:staff_members!staff_id(full_name_ar, job_title_ar, profile_id), doctor:doctors!doctor_id(full_name_ar)"
+      )
       .eq("clinic_id", clinicId)
       .eq("month_year", monthYear)
       .order("created_at", { ascending: false }),

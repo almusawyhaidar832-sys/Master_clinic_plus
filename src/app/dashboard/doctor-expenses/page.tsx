@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getActiveClinicId } from "@/lib/clinic-context";
 import { AddDoctorExpenseModal } from "@/components/doctor-expenses/AddDoctorExpenseModal";
 import { InvoiceHistoryPanel } from "@/components/doctor-expenses/InvoiceHistoryPanel";
+import { DoctorSalaryAdjustmentsPanel } from "@/components/expenses/DoctorSalaryAdjustmentsPanel";
 import { DoctorSalaryPayoutPanel } from "@/components/expenses/DoctorSalaryPayoutPanel";
 import { GeneralExpensesPanel } from "@/components/expenses/GeneralExpensesPanel";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
@@ -325,10 +326,16 @@ export default function DoctorExpensesPage() {
       )}
 
       {activeTab === "doctor_salary" && (
-        <DoctorSalaryPayoutPanel
-          clinicId={clinicId}
-          onPayoutRecorded={handleSalaryPayout}
-        />
+        <div className="space-y-6">
+          <DoctorSalaryAdjustmentsPanel
+            clinicId={clinicId}
+            onUpdated={refreshHistory}
+          />
+          <DoctorSalaryPayoutPanel
+            clinicId={clinicId}
+            onPayoutRecorded={handleSalaryPayout}
+          />
+        </div>
       )}
 
       {activeTab === "general_expenses" && (

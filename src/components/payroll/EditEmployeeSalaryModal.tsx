@@ -110,7 +110,8 @@ export function EditEmployeeSalaryModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {person.category !== "assistant" && (
+          {person.category !== "assistant" &&
+            person.category !== "doctor_salary" && (
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-600">
                 الوظيفة
@@ -128,7 +129,9 @@ export function EditEmployeeSalaryModal({
             <label className="mb-1 block text-sm font-medium text-slate-600">
               {person.category === "assistant"
                 ? "الراتب الكلي"
-                : "الراتب الشهري"}
+                : person.category === "doctor_salary"
+                  ? "الراتب الثابت الشهري"
+                  : "الراتب الشهري"}
             </label>
             <input
               type="number"
@@ -157,12 +160,27 @@ export function EditEmployeeSalaryModal({
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
               />
               {assistantPreview && (
-                <p className="mt-2 rounded-lg bg-teal-50 px-3 py-2 text-xs text-teal-800">
-                  معاينة: الطبيب {formatCurrency(assistantPreview.doctorShare)} ·
-                  العيادة {formatCurrency(assistantPreview.clinicShare)}
-                </p>
+                <div className="mt-2 space-y-1 rounded-lg bg-teal-50 px-3 py-2 text-xs text-teal-900">
+                  <p>
+                    من راتب {formatCurrency(assistantPreview.totalSalary)}:
+                  </p>
+                  <p>
+                    الطبيب يتحمل {assistantPreview.doctorSharePercentage}% ={" "}
+                    <strong>{formatCurrency(assistantPreview.doctorShare)}</strong>
+                  </p>
+                  <p>
+                    العيادة تتحمل {100 - assistantPreview.doctorSharePercentage}% ={" "}
+                    <strong>{formatCurrency(assistantPreview.clinicShare)}</strong>
+                  </p>
+                </div>
               )}
             </div>
+          )}
+
+          {person.category === "doctor_salary" && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              طبيب راتب ثابت — الجلسات للعيادة. سلف/خصم/مكافأة من هذه اللوحة.
+            </p>
           )}
 
           {person.category === "accountant" && (
@@ -178,7 +196,11 @@ export function EditEmployeeSalaryModal({
           )}
 
           <p className="text-xs text-slate-400">
-            التعديل يؤثر على الأشهر القادمة — السجلات المُولَّدة سابقاً ثابتة.
+            {person.category === "assistant"
+              ? "يُحدَّث تلقائياً في سجلات الرواتب غير المُصرفة لهذا المساعد (من أي صفحة تعدّل منها)."
+              : person.category === "doctor_salary"
+                ? "يُحدَّث تلقائياً في قسائم الراتب غير المُصرفة — يظهر أيضاً عند تعديل الطبيب من صفحة الأطباء."
+                : "يُحدَّث تلقائياً في قسائم الراتب غير المُسلَّمة لموظفي العيادة."}
           </p>
 
           {error && (

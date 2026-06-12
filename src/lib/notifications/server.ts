@@ -1,3 +1,4 @@
+import { isSalaryReasonRequired } from "@/lib/services/salary-entry-reason";
 import { formatCurrency } from "@/lib/utils";
 import { getAdminClient } from "@/lib/supabase/admin";
 
@@ -34,6 +35,81 @@ export async function resolveDoctorProfileId(
       .from("doctors")
       .update({ profile_id: match.id })
       .eq("id", doctorId)
+      .is("profile_id", null);
+    return match.id;
+  }
+
+  return null;
+}
+
+/** ربط حساب موظف الخدمات / المحاسب بالإشعارات */
+export async function resolveStaffProfileId(
+  admin: ReturnType<typeof adminClient>,
+  staffId: string,
+  clinicId: string
+): Promise<string | null> {
+  const { data: staff } = await admin
+    .from("staff_members")
+    .select("profile_id, full_name_ar, job_title_ar")
+    .eq("id", staffId)
+    .maybeSingle();
+
+  if (staff?.profile_id) return staff.profile_id;
+  if (!staff?.full_name_ar) return null;
+
+  const isAccountant = /محاسب/i.test(staff.job_title_ar ?? "");
+  const roles = isAccountant
+    ? (["accountant", "super_admin"] as const)
+    : (["accountant", "super_admin"] as const);
+
+  const { data: profiles } = await admin
+    .from("profiles")
+    .select("id, full_name")
+    .eq("clinic_id", clinicId)
+    .in("role", [...roles]);
+
+  const name = staff.full_name_ar.trim();
+  const match = profiles?.find((p) => p.full_name?.trim() === name);
+  if (match?.id) {
+    await admin
+      .from("staff_members")
+      .update({ profile_id: match.id })
+      .eq("id", staffId)
+      .is("profile_id", null);
+    return match.id;
+  }
+
+  return null;
+}
+
+/** ربط حساب المساعد بالإشعارات */
+export async function resolveAssistantProfileId(
+  admin: ReturnType<typeof adminClient>,
+  assistantId: string,
+  clinicId: string
+): Promise<string | null> {
+  const { data: assistant } = await admin
+    .from("assistants")
+    .select("profile_id, full_name_ar")
+    .eq("id", assistantId)
+    .maybeSingle();
+
+  if (assistant?.profile_id) return assistant.profile_id;
+  if (!assistant?.full_name_ar) return null;
+
+  const { data: profiles } = await admin
+    .from("profiles")
+    .select("id, full_name")
+    .eq("clinic_id", clinicId)
+    .eq("role", "assistant");
+
+  const name = assistant.full_name_ar.trim();
+  const match = profiles?.find((p) => p.full_name?.trim() === name);
+  if (match?.id) {
+    await admin
+      .from("assistants")
+      .update({ profile_id: match.id })
+      .eq("id", assistantId)
       .is("profile_id", null);
     return match.id;
   }
@@ -142,7 +218,11 @@ export async function notifyWithdrawalStatus(withdrawalId: string, status: strin
   const title = statusText[status] ?? "تحديث طلب السحب";
   let body = `${title} — ${formatCurrency(amount)}`;
   if (status === "paid") {
-    body = `تم سحب ${formatCurrency(amount)} من محفظتك`;
+    body = `تم صرف ${formatCurrency(amount)} نقداً — خُصم من محفظتك`;
+  } else if (status === "approved") {
+    body = `وافق المحاسب على سحب ${formatCurrency(amount)} — بانتظار الصرف النقدي`;
+  } else if (status === "rejected") {
+    body = `رُفض طلب سحب ${formatCurrency(amount)}`;
   }
 
   await insertNotifications([{
@@ -313,4 +393,131 @@ export async function notifyDoctorRefund(refundId: string) {
       link_path: `/doctor/patients/${refund.patient_id}`,
     },
   ]);
+}
+
+const SALARY_ENTRY_NOTIFY_LABELS: Record<string, string> = {
+  advance: "سلفة على راتبك",
+  deduction: "خصم من راتبك",
+  absence: "خصم غياب من راتبك",
+  bonus: "مكافأة على راتبك",
+};
+
+function buildSalaryEntryNotifyBody(input: {
+  monthYear: string;
+  amount: number;
+  entryType: string;
+  notesAr?: string | null;
+  netPayout?: number;
+}): string {
+  const netLine =
+    input.netPayout != null
+      ? ` — صافي الراتب الآن ${formatCurrency(input.netPayout)}`
+      : "";
+  const reason = input.notesAr?.trim();
+  if (reason) {
+    const reasonPart = isSalaryReasonRequired(input.entryType)
+      ? ` — السبب: ${reason}`
+      : ` (${reason})`;
+    return `شهر ${input.monthYear}: ${formatCurrency(input.amount)}${reasonPart}${netLine}`;
+  }
+  return `شهر ${input.monthYear}: ${formatCurrency(input.amount)}${netLine}`;
+}
+
+async function notifySalaryEntryProfile(input: {
+  clinicId: string;
+  recipientProfileId: string;
+  entryType: string;
+  amount: number;
+  monthYear: string;
+  netPayout?: number;
+  notesAr?: string | null;
+  linkPath: string;
+}) {
+  const typeLabel =
+    SALARY_ENTRY_NOTIFY_LABELS[input.entryType] ?? "تعديل على راتبك";
+
+  await insertNotifications([
+    {
+      clinic_id: input.clinicId,
+      recipient_profile_id: input.recipientProfileId,
+      title_ar: typeLabel,
+      body_ar: buildSalaryEntryNotifyBody(input),
+      link_path: input.linkPath,
+    },
+  ]);
+}
+
+/** حركة راتب (خصم/مكافأة/سلفة) لطبيب راتب ثابت */
+export async function notifyDoctorSalaryEntry(input: {
+  clinicId: string;
+  doctorId: string;
+  entryType: string;
+  amount: number;
+  monthYear: string;
+  netPayout?: number;
+  notesAr?: string | null;
+}) {
+  const admin = adminClient();
+  const profileId = await resolveDoctorProfileId(
+    admin,
+    input.doctorId,
+    input.clinicId
+  );
+  if (!profileId) return;
+
+  await notifySalaryEntryProfile({
+    ...input,
+    recipientProfileId: profileId,
+    linkPath: "/doctor/wallet",
+  });
+}
+
+/** إشعار موظف خدمات / محاسب */
+export async function notifyStaffSalaryEntry(input: {
+  clinicId: string;
+  staffId: string;
+  entryType: string;
+  amount: number;
+  monthYear: string;
+  netPayout?: number;
+  notesAr?: string | null;
+}) {
+  const admin = adminClient();
+  const profileId = await resolveStaffProfileId(
+    admin,
+    input.staffId,
+    input.clinicId
+  );
+  if (!profileId) return;
+
+  await notifySalaryEntryProfile({
+    ...input,
+    recipientProfileId: profileId,
+    linkPath: "/dashboard/salary",
+  });
+}
+
+/** إشعار مساعد طبيب */
+export async function notifyAssistantSalaryEntry(input: {
+  clinicId: string;
+  assistantId: string;
+  entryType: string;
+  amount: number;
+  monthYear: string;
+  netPayout?: number;
+  notesAr?: string | null;
+}) {
+  const admin = adminClient();
+  const profileId = await resolveAssistantProfileId(
+    admin,
+    input.assistantId,
+    input.clinicId
+  );
+  if (!profileId) return;
+
+  await notifySalaryEntryProfile({
+    ...input,
+    recipientProfileId: profileId,
+    linkPath: "/assistant/dashboard",
+  });
 }

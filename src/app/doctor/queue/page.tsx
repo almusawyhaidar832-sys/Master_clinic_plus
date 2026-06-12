@@ -20,7 +20,14 @@ import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
 import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
 import {
   Clock, UserCheck, RefreshCw, LogIn, Send, Users, RotateCcw,
+  UserX, ArrowRightLeft, X,
 } from "lucide-react";
+
+interface ClinicDoctor {
+  id: string;
+  full_name_ar: string;
+  specialty_ar: string | null;
+}
 
 type QueueStatus =
   | "waiting"
@@ -41,6 +48,9 @@ interface QueueEntry {
   doctor_id: string;
   created_at: string;
   sent_to_doctor_at: string | null;
+  transfer_to_doctor_id: string | null;
+  transfer_requested_at: string | null;
+  transfer_to_doctor?: { full_name_ar: string } | null;
   patient: { full_name_ar: string; speech_name_ar?: string | null } | null;
   doctor?: { full_name_ar: string } | null;
 }
@@ -94,6 +104,9 @@ export default function DoctorQueuePage() {
   const [pageError, setPageError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
   const [clinicalEntryId, setClinicalEntryId] = useState<string | null>(null);
+  const [clinicDoctors, setClinicDoctors] = useState<ClinicDoctor[]>([]);
+  const [transferEntry, setTransferEntry] = useState<QueueEntry | null>(null);
+  const [transferTargetId, setTransferTargetId] = useState("");
 
   const fetchQueue = useCallback(async () => {
     setPageError(null);
@@ -101,9 +114,11 @@ export default function DoctorQueuePage() {
       const data = await apiJson<{
         queue: QueueEntry[];
         doctorId: string | null;
+        doctors?: ClinicDoctor[];
       }>("/api/queue");
 
       setDoctorId(data.doctorId);
+      setClinicDoctors(data.doctors ?? []);
       const rows = (data.queue ?? []).filter(
         (e) =>
           e.status !== "done" &&
@@ -200,6 +215,57 @@ export default function DoctorQueuePage() {
       await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : "تعذر بدء الكشف");
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const rejectPatient = async (entry: QueueEntry) => {
+    const name =
+      entry.patient?.full_name_ar ?? entry.patient_name ?? `رقم ${entry.ticket_number}`;
+    if (
+      !confirm(
+        `رفض المراجع «${name}»؟\nسيُلغى الدور ويُبلَّغ المحاسب — لن يظهر على شاشة النداء.`
+      )
+    ) {
+      return;
+    }
+    setUpdating(entry.id);
+    try {
+      await apiJson(`/api/queue/${entry.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: "reject" }),
+      });
+      if (clinicId) {
+        notifyQueueRefresh({ scope: "clinic", clinicId });
+      }
+      await fetchQueue();
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "تعذر رفض المراجع");
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const submitTransfer = async () => {
+    if (!transferEntry || !transferTargetId) return;
+    setUpdating(transferEntry.id);
+    try {
+      await apiJson(`/api/queue/${transferEntry.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          action: "request_transfer",
+          target_doctor_id: transferTargetId,
+        }),
+      });
+      if (clinicId) {
+        notifyQueueRefresh({ scope: "clinic", clinicId });
+      }
+      setTransferEntry(null);
+      setTransferTargetId("");
+      await fetchQueue();
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "تعذر طلب التحويل");
     } finally {
       setUpdating(null);
     }
@@ -358,56 +424,116 @@ export default function DoctorQueuePage() {
                       {!entry.sent_to_doctor_at && entry.status === "waiting" && (
                         <p className="mt-0.5 text-[10px] text-amber-700">جديد — بانتظار الإدخال</p>
                       )}
+                      {entry.transfer_to_doctor_id && (
+                        <p className="mt-0.5 text-[10px] text-violet-700">
+                          طلب تحويل إلى{" "}
+                          {entry.transfer_to_doctor?.full_name_ar ?? "طبيب آخر"} — بانتظار المحاسب
+                        </p>
+                      )}
                     </div>
                   </div>
 
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-3 flex flex-col gap-2">
                     {entry.status === "waiting" && (
                       <>
-                        <button
-                          onClick={() => admitPatient(entry)}
-                          disabled={updating === entry.id}
-                          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-bold text-white disabled:opacity-60"
-                        >
-                          {updating === entry.id ? (
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <LogIn className="h-4 w-4" />
-                          )}
-                          ادخل المراجع
-                        </button>
-                        <button
-                          onClick={() => recallAdmit(entry)}
-                          disabled={updating === entry.id}
-                          className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-bold text-amber-700 disabled:opacity-60"
-                          title="إعادة إشعار المحاسب"
-                        >
-                          <RotateCcw className="h-4 w-4" />
-                        </button>
+                        {!entry.transfer_to_doctor_id ? (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => admitPatient(entry)}
+                              disabled={updating === entry.id}
+                              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                            >
+                              {updating === entry.id ? (
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <LogIn className="h-4 w-4" />
+                              )}
+                              موافقة — ادخل المراجع
+                            </button>
+                            <button
+                              onClick={() => recallAdmit(entry)}
+                              disabled={updating === entry.id}
+                              className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-bold text-amber-700 disabled:opacity-60"
+                              title="إعادة إشعار المحاسب"
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : null}
+                        {!entry.transfer_to_doctor_id && (
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTransferEntry(entry);
+                                setTransferTargetId("");
+                              }}
+                              disabled={updating === entry.id}
+                              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 py-2.5 text-sm font-bold text-violet-800 disabled:opacity-60"
+                            >
+                              <ArrowRightLeft className="h-4 w-4" />
+                              تحويل لطبيب آخر
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void rejectPatient(entry)}
+                              disabled={updating === entry.id}
+                              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 py-2.5 text-sm font-bold text-red-700 disabled:opacity-60"
+                            >
+                              <UserX className="h-4 w-4" />
+                              رفض
+                            </button>
+                          </div>
+                        )}
                       </>
                     )}
-                    {entry.status === "called" && (
+                    {entry.status === "called" && !entry.transfer_to_doctor_id && (
                       <>
-                        <button
-                          onClick={() => enterPatient(entry)}
-                          disabled={updating === entry.id}
-                          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
-                        >
-                          {updating === entry.id ? (
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <UserCheck className="h-4 w-4" />
-                          )}
-                          بدء الكشف + المخطط
-                        </button>
-                        <button
-                          onClick={() => recallAdmit(entry)}
-                          disabled={updating === entry.id}
-                          className="flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-bold text-blue-700 disabled:opacity-60"
-                          title="إعادة طلب الإدخال"
-                        >
-                          <RotateCcw className="h-4 w-4" />
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => enterPatient(entry)}
+                            disabled={updating === entry.id}
+                            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                          >
+                            {updating === entry.id ? (
+                              <RefreshCw className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <UserCheck className="h-4 w-4" />
+                            )}
+                            بدء الكشف + المخطط
+                          </button>
+                          <button
+                            onClick={() => recallAdmit(entry)}
+                            disabled={updating === entry.id}
+                            className="flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-bold text-blue-700 disabled:opacity-60"
+                            title="إعادة طلب الإدخال"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTransferEntry(entry);
+                              setTransferTargetId("");
+                            }}
+                            disabled={updating === entry.id}
+                            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 py-2.5 text-sm font-bold text-violet-800 disabled:opacity-60"
+                          >
+                            <ArrowRightLeft className="h-4 w-4" />
+                            تحويل
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void rejectPatient(entry)}
+                            disabled={updating === entry.id}
+                            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 py-2.5 text-sm font-bold text-red-700 disabled:opacity-60"
+                          >
+                            <UserX className="h-4 w-4" />
+                            رفض
+                          </button>
+                        </div>
                       </>
                     )}
                     {entry.status === "in_progress" && (
@@ -424,6 +550,64 @@ export default function DoctorQueuePage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {transferEntry && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
+            <div className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-slate-800">تحويل لطبيب آخر</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTransferEntry(null);
+                    setTransferTargetId("");
+                  }}
+                  className="rounded-lg p-1 hover:bg-slate-100"
+                >
+                  <X className="h-5 w-5 text-slate-500" />
+                </button>
+              </div>
+              <p className="mb-4 text-sm text-slate-600">
+                سيُبلَّغ المحاسب لإتمام التحويل — ثم يصل إشعار للطبيب الجديد.
+              </p>
+              <select
+                value={transferTargetId}
+                onChange={(e) => setTransferTargetId(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+              >
+                <option value="">اختر الطبيب</option>
+                {clinicDoctors
+                  .filter((d) => d.id !== doctorId)
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.full_name_ar}
+                      {d.specialty_ar ? ` — ${d.specialty_ar}` : ""}
+                    </option>
+                  ))}
+              </select>
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTransferEntry(null);
+                    setTransferTargetId("");
+                  }}
+                  className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submitTransfer()}
+                  disabled={!transferTargetId || updating === transferEntry.id}
+                  className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                >
+                  طلب التحويل
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

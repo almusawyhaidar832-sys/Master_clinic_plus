@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { X, RefreshCw } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import { formatCurrency } from "@/lib/utils";
 
@@ -54,18 +54,25 @@ export function EditAssistantSalaryModal({
     }
 
     setSaving(true);
-    const supabase = createClient();
-    const { error: updateErr } = await supabase
-      .from("assistants")
-      .update({
-        total_salary: salary,
+    const res = await fetch("/api/payroll/update-compensation", {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...authPortalHeaders("accountant"),
+      },
+      body: JSON.stringify({
+        category: "assistant",
+        id: assistant.id,
+        base_salary: salary,
         doctor_share_percentage: sharePct,
-      })
-      .eq("id", assistant.id);
-
+      }),
+    });
+    const json = await res.json();
     setSaving(false);
-    if (updateErr) {
-      setError(updateErr.message);
+
+    if (!res.ok) {
+      setError(json.error ?? "تعذر الحفظ");
       return;
     }
 
@@ -125,8 +132,8 @@ export function EditAssistantSalaryModal({
               {formatCurrency(preview.clinicShare)}
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              التعديل يؤثر على توليد رواتب الأشهر القادمة فقط — سجلات الأشهر
-              السابقة ثابتة.
+              يُحدَّث تلقائياً في سجلات الرواتب غير المُصرفة — السجلات المدفوعة
+              تبقى كما هي.
             </p>
           </div>
 

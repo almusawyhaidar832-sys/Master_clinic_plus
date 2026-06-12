@@ -16,7 +16,7 @@ export async function getDoctorPatientIds(
 ): Promise<string[]> {
   const patientIds = new Set<string>();
 
-  const [primaryRes, opsRes, casesRes] = await Promise.all([
+  const [primaryRes, opsRes, casesRes, apptsRes] = await Promise.all([
     supabase.from("patients").select("id").eq("primary_doctor_id", doctorId),
     supabase
       .from("patient_operations")
@@ -26,6 +26,11 @@ export async function getDoctorPatientIds(
       .from("patient_treatment_cases")
       .select("patient_id")
       .eq("primary_doctor_id", doctorId),
+    supabase
+      .from("appointments")
+      .select("patient_id")
+      .eq("doctor_id", doctorId)
+      .not("patient_id", "is", null),
   ]);
 
   for (const row of primaryRes.data ?? []) {
@@ -35,6 +40,9 @@ export async function getDoctorPatientIds(
     if (row.patient_id) patientIds.add(String(row.patient_id));
   }
   for (const row of casesRes.data ?? []) {
+    if (row.patient_id) patientIds.add(String(row.patient_id));
+  }
+  for (const row of apptsRes.data ?? []) {
     if (row.patient_id) patientIds.add(String(row.patient_id));
   }
 

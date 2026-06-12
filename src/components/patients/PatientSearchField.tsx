@@ -7,6 +7,7 @@ import { usePatientSearch } from "@/hooks/usePatientSearch";
 import {
   PATIENT_SEARCH_MIN_LENGTH,
   type PatientSearchResult,
+  type PatientSearchScope,
 } from "@/lib/services/patient-search";
 import { getPatientDisplayPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,10 @@ interface PatientSearchFieldProps {
   required?: boolean;
   /** Hide dropdown when a patient is already chosen */
   selectedPatientId?: string | null;
+  /** clinic = كل العيادة؛ doctor = مراجعو طبيب محدد فقط */
+  searchScope?: PatientSearchScope;
+  /** فلترة مراجعي طبيب معيّن (للمحاسب عند اختيار الطبيب) */
+  doctorId?: string | null;
 }
 
 export function PatientSearchField({
@@ -40,6 +45,8 @@ export function PatientSearchField({
   autoFocus = false,
   required = false,
   selectedPatientId = null,
+  searchScope,
+  doctorId = null,
 }: PatientSearchFieldProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -48,6 +55,8 @@ export function PatientSearchField({
   const { results, loading, error } = usePatientSearch(value, {
     portal,
     enabled,
+    scope: searchScope,
+    doctorId,
   });
 
   useEffect(() => {

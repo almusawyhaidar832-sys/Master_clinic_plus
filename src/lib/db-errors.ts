@@ -16,6 +16,12 @@ export function translateDbError(message: string): string {
   if (m.includes("permission denied") || m.includes("policy")) {
     return "صلاحيات غير كافية — سجّل دخولك كمحاسب أو مدير";
   }
+  if (
+    m.includes("salary_entry_type") ||
+    m.includes("invalid input value for enum")
+  ) {
+    return "نوع الحركة غير مدعوم — شغّل supabase/scripts/35-salary-entry-bonus.sql في Supabase";
+  }
   if (m.includes("patients_total_paid_check")) {
     return "تعذر الإرجاع — المبلغ يتجاوز المدفوع المسجّل للمراجع";
   }

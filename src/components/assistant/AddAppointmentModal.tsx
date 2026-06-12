@@ -10,6 +10,8 @@ import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { validatePatientPhone } from "@/lib/phone";
 import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
 import { Select } from "@/components/ui/Select";
+import { PatientSearchField } from "@/components/patients/PatientSearchField";
+import { getPatientDisplayPhone } from "@/lib/phone";
 import type { Doctor } from "@/types";
 
 interface AddAppointmentModalProps {
@@ -26,6 +28,7 @@ export function AddAppointmentModal({
   clinicId = null,
 }: AddAppointmentModalProps) {
   const [name, setName] = useState("");
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [phone, setPhone] = useState("");
   const [doctorId, setDoctorId] = useState("");
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -158,7 +161,12 @@ export function AddAppointmentModal({
             <Select
               label="الطبيب"
               value={doctorId}
-              onChange={(e) => setDoctorId(e.target.value)}
+              onChange={(e) => {
+                setDoctorId(e.target.value);
+                setName("");
+                setSelectedPatientId(null);
+                setPhone("");
+              }}
               placeholder="— اختر الطبيب —"
               options={doctors.map((d) => ({
                 value: d.id,
@@ -167,12 +175,32 @@ export function AddAppointmentModal({
             />
           )}
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">اسم المريض</label>
-            <input
+            <label className="mb-1 block text-sm font-medium text-slate-600">
+              اسم المريض
+            </label>
+            <PatientSearchField
+              portal={portal}
+              doctorId={portal === "accountant" ? doctorId || null : null}
+              disabled={portal === "accountant" && !doctorId}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              selectedPatientId={selectedPatientId}
+              showIcon={false}
               required
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              placeholder={
+                portal === "accountant" && !doctorId
+                  ? "اختر الطبيب أولاً..."
+                  : "اكتب حرفين من اسم مراجع هذا الطبيب..."
+              }
+              inputClassName="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              onChange={(v) => {
+                setName(v);
+                setSelectedPatientId(null);
+              }}
+              onSelect={(p) => {
+                setSelectedPatientId(p.id);
+                setName(p.full_name_ar);
+                setPhone(getPatientDisplayPhone(p) ?? "");
+              }}
             />
           </div>
           <div>

@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import {
+  fetchDoctorMonthSalaryBreakdown,
+  fetchDoctorSalaryBreakdownsBatch,
+} from "@/lib/services/salary-entry-display";
 import { currentMonthYear, monthDateRange } from "@/lib/utils";
 
 export interface DoctorWalletStats {
@@ -16,7 +20,42 @@ export interface DoctorWalletStats {
   isDebtor: boolean;
 }
 
-type WithdrawalRow = { amount: number | string; status: string };
+type WithdrawalRow = {
+  amount: number | string;
+  status: string;
+  requested_at?: string;
+  processed_at?: string | null;
+};
+
+export function withdrawalEffectiveDate(row: WithdrawalRow): string {
+  return (row.processed_at ?? row.requested_at ?? "").slice(0, 10);
+}
+
+export function filterWithdrawalsInPeriod<T extends WithdrawalRow>(
+  rows: T[] | null | undefined,
+  period?: { from: string; to: string }
+): T[] {
+  if (!period) return rows ?? [];
+  return (rows ?? []).filter((r) => {
+    const date = withdrawalEffectiveDate(r);
+    return Boolean(date && date >= period.from && date <= period.to);
+  });
+}
+
+function sumWithdrawalsByStatus(
+  rows: WithdrawalRow[] | undefined,
+  statuses: string[],
+  period?: { from: string; to: string }
+): number {
+  return (rows ?? [])
+    .filter((r) => {
+      if (!statuses.includes(r.status)) return false;
+      if (!period) return true;
+      const date = withdrawalEffectiveDate(r);
+      return Boolean(date && date >= period.from && date <= period.to);
+    })
+    .reduce((s, r) => s + Number(r.amount ?? 0), 0);
+}
 
 type OperationEarningRow = {
   doctor_share_amount?: number | string | null;
@@ -49,7 +88,8 @@ export function calcOperationEarned(
     return Math.round(paid * (caseDoc / finalPrice) * 100) / 100;
   }
 
-  return Math.round(paid * doctorPct * 100) / 100;
+  void doctorPct;
+  return 0;
 }
 
 export interface WalletStatsOptions {
@@ -416,14 +456,32 @@ export async function fetchDoctorWalletStatsBatch(
     ),
     supabase
       .from("doctors")
-      .select("id, payment_type, salary_amount")
+      .select("id, payment_type, salary_amount, clinic_id")
       .in("id", doctorIds),
   ]);
 
   const salaryByDoctor = new Map<string, number>();
+  const salaryDoctorIds: string[] = [];
+  let salaryClinicId: string | null = null;
   for (const row of doctorsRes.data ?? []) {
     salaryByDoctor.set(row.id, Number(row.salary_amount ?? 0));
+    if (isSalaryDoctor({ payment_type: row.payment_type })) {
+      salaryDoctorIds.push(row.id as string);
+      salaryClinicId ??= row.clinic_id as string;
+    }
   }
+
+  const monthYear = range.from.slice(0, 7);
+  const salaryBreakdowns =
+    salaryDoctorIds.length > 0 && salaryClinicId
+      ? await fetchDoctorSalaryBreakdownsBatch(
+          supabase,
+          salaryClinicId,
+          salaryDoctorIds,
+          monthYear,
+          salaryByDoctor
+        )
+      : new Map();
 
   const withdrawalsByDoctor = groupWithdrawalsByDoctor(withdrawalsRes.data);
   const expenseByDoctor = groupDeductionsByDoctor(expenseRows.data);
@@ -433,7 +491,10 @@ export async function fetchDoctorWalletStatsBatch(
     const meta = paymentMap.get(doctorId) ?? { pct: 0.5, isSalary: false };
 
     if (meta.isSalary) {
-      const earned = salaryByDoctor.get(doctorId) ?? 0;
+      const earned =
+        salaryBreakdowns.get(doctorId)?.netPayout ??
+        salaryByDoctor.get(doctorId) ??
+        0;
       result.set(
         doctorId,
         computeWalletStats(earned, [], {
@@ -462,19 +523,11 @@ export async function fetchDoctorWalletStatsBatch(
   return result;
 }
 
-function sumWithdrawalsByStatus(
-  rows: WithdrawalRow[] | undefined,
-  statuses: string[]
-): number {
-  return (rows ?? [])
-    .filter((r) => statuses.includes(r.status))
-    .reduce((s, r) => s + Number(r.amount ?? 0), 0);
-}
-
 /** مجموع السحوبات (موافق + مدفوع) والمعلّق — استعلام واحد */
 export async function fetchWithdrawalSumsByDoctor(
   supabase: SupabaseClient,
-  doctorIds: string[]
+  doctorIds: string[],
+  period?: { from: string; to: string }
 ): Promise<
   Map<string, { totalWithdrawn: number; pendingWithdrawalAmount: number }>
 > {
@@ -486,15 +539,15 @@ export async function fetchWithdrawalSumsByDoctor(
 
   const { data } = await supabase
     .from("doctor_withdrawals")
-    .select("doctor_id, amount, status")
+    .select("doctor_id, amount, status, requested_at, processed_at")
     .in("doctor_id", doctorIds);
 
   const byDoctor = groupWithdrawalsByDoctor(data);
   for (const doctorId of doctorIds) {
     const rows = byDoctor.get(doctorId);
     map.set(doctorId, {
-      totalWithdrawn: sumWithdrawalsByStatus(rows, ["approved", "paid"]),
-      pendingWithdrawalAmount: sumWithdrawalsByStatus(rows, ["pending"]),
+      totalWithdrawn: sumWithdrawalsByStatus(rows, ["approved", "paid"], period),
+      pendingWithdrawalAmount: sumWithdrawalsByStatus(rows, ["pending"], period),
     });
   }
   return map;
@@ -511,7 +564,7 @@ function sumOperationEarnings(
   );
 }
 
-/** حساب الأرباح من الجلسات — لا يعتمد على doctor_share_amount (غالباً 0 في DB) */
+/** حساب الأرباح من الجلسات — يعتمد على doctor_share_amount المجمّد عند الدفع */
 export async function computeEarningsFromOperations(
   supabase: SupabaseClient,
   doctorId: string
@@ -579,12 +632,12 @@ export async function fetchDoctorWalletStats(
 
   const { data: doctor } = await supabase
     .from("doctors")
-    .select("percentage, payment_type, salary_amount")
+    .select("percentage, payment_type, salary_amount, clinic_id")
     .eq("id", doctorId)
     .maybeSingle();
 
   if (isSalaryDoctor({ payment_type: doctor?.payment_type })) {
-    const [salaryPaid, expenseDeductions, payrollDeductions] =
+    const [salaryPaid, expenseDeductions, payrollDeductions, breakdown] =
       await Promise.all([
         fetchDoctorSalaryPayoutsTotal(
           supabase,
@@ -594,9 +647,20 @@ export async function fetchDoctorWalletStats(
         ),
         fetchDoctorExpenseDeductionsTotal(supabase, doctorId),
         fetchDoctorPayrollDeductionsTotal(supabase, doctorId),
+        doctor?.clinic_id
+          ? fetchDoctorMonthSalaryBreakdown(
+              supabase,
+              doctor.clinic_id as string,
+              doctorId,
+              range.from.slice(0, 7),
+              Number(doctor?.salary_amount ?? 0)
+            )
+          : Promise.resolve(null),
       ]);
 
-    return computeWalletStats(Number(doctor?.salary_amount ?? 0), [], {
+    const earned = breakdown?.netPayout ?? Number(doctor?.salary_amount ?? 0);
+
+    return computeWalletStats(earned, [], {
       salaryLedger: true,
       salaryWithdrawn: salaryPaid,
       expenseDeductions,

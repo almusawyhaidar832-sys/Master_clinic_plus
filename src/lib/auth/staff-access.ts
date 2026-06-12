@@ -1,7 +1,5 @@
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { getApiSessionUser } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
-import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 import { isStaffRole } from "@/lib/withdrawals/update-status-client";
 
 export class StaffAccessError extends Error {
@@ -11,47 +9,6 @@ export class StaffAccessError extends Error {
   ) {
     super(message);
   }
-}
-
-export async function createApiSessionClient() {
-  const cookieStore = await cookies();
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (cookiesToSet: { name: string; value: string; options?: object }[]) => {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch {
-            // Route handlers may throw when setting cookies outside Server Action
-          }
-        },
-      },
-    }
-  );
-}
-
-export async function getApiSessionUser() {
-  const supabase = await createApiSessionClient();
-  return getCurrentUser(supabase);
-}
-
-export async function getApiCallerProfile() {
-  const user = await getApiSessionUser();
-  if (!user) return null;
-
-  const admin = getAdminClient();
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("id, role, clinic_id, full_name")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  return profile;
 }
 
 async function loadStaffProfile(userId: string) {
@@ -80,8 +37,11 @@ async function loadStaffProfile(userId: string) {
  * Verify logged-in user is accountant/owner and belongs to withdrawal clinic.
  * Update runs via service_role (bypasses RLS).
  */
-export async function assertCanManageWithdrawal(withdrawalId: string) {
-  const user = await getApiSessionUser();
+export async function assertCanManageWithdrawal(
+  withdrawalId: string,
+  req?: Request
+) {
+  const user = await getApiSessionUser(req);
   if (!user) {
     throw new StaffAccessError(401, "يجب تسجيل الدخول");
   }
@@ -110,8 +70,11 @@ export async function assertCanManageWithdrawal(withdrawalId: string) {
 }
 
 /** Verify accountant/owner can record cash payment for a doctor */
-export async function assertCanRecordCashWithdrawal(doctorId: string) {
-  const user = await getApiSessionUser();
+export async function assertCanRecordCashWithdrawal(
+  doctorId: string,
+  req?: Request
+) {
+  const user = await getApiSessionUser(req);
   if (!user) {
     throw new StaffAccessError(401, "يجب تسجيل الدخول");
   }

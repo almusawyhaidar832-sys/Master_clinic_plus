@@ -98,7 +98,7 @@ export default function DoctorWalletPage() {
 
   const rows = [
     {
-      label: salaryDoctor ? "الراتب الشهري المستحق" : "إجمالي الأرباح",
+      label: salaryDoctor ? "صافي الراتب المستحق" : "إجمالي الأرباح",
       value: stats?.totalEarnings,
       highlight: false,
     },

@@ -11,10 +11,15 @@ export interface AssistantSalaryBreakdown {
   clinicShare: number;
 }
 
+/**
+ * تقسيم راتب المساعد:
+ * حصة الطبيب = صافي الراتب × (نسبة الطبيب ÷ 100)
+ * حصة العيادة = صافي الراتب − حصة الطبيب
+ */
 export function breakdownAssistantSalary(
   input: AssistantSalaryInput
 ): AssistantSalaryBreakdown {
-  const totalSalary = Number(input.total_salary) || 0;
+  const totalSalary = Math.max(0, Number(input.total_salary) || 0);
   const doctorSharePercentage = Math.min(
     100,
     Math.max(0, Number(input.doctor_share_percentage) || 0)
@@ -23,6 +28,15 @@ export function breakdownAssistantSalary(
     Math.round((totalSalary * doctorSharePercentage) / 100 * 100) / 100;
   const clinicShare = Math.round((totalSalary - doctorShare) * 100) / 100;
   return { totalSalary, doctorSharePercentage, doctorShare, clinicShare };
+}
+
+/** يتحقق أن مجموع الحصتين يساوي صافي الراتب (بعد التقريب) */
+export function assistantBreakdownIsBalanced(
+  breakdown: AssistantSalaryBreakdown
+): boolean {
+  const sum =
+    Math.round((breakdown.doctorShare + breakdown.clinicShare) * 100) / 100;
+  return sum === breakdown.totalSalary;
 }
 
 export interface AssistantPayrollLine {
@@ -94,6 +108,14 @@ export function doctorShareFromExpense(
   return Math.round((Number(amount) * pct) / 100 * 100) / 100;
 }
 
+export interface SalaryAdjustmentLine {
+  entryType: string;
+  entryTypeLabel: string;
+  amount: number;
+  entryDate: string;
+  notes?: string | null;
+}
+
 export interface DoctorMonthlySettlement {
   totalDoctorIncome: number;
   totalClinicExpenses: number;
@@ -101,6 +123,13 @@ export interface DoctorMonthlySettlement {
   doctorNetProfit: number;
   assistantLines: AssistantPayrollLine[];
   expenseLines: DoctorExpenseDeduction[];
+  /** طبيب راتب ثابت — تفاصيل الحركات */
+  salaryBaseAmount?: number;
+  salaryAdvances?: number;
+  salaryDeductions?: number;
+  salaryBonuses?: number;
+  salaryNetAmount?: number;
+  salaryAdjustmentLines?: SalaryAdjustmentLine[];
 }
 
 export function computeDoctorMonthlySettlement(

@@ -38,6 +38,7 @@ import { getPatientDisplayPhone } from "@/lib/phone";
 import { TransferDoctorPanel } from "@/components/patients/TransferDoctorPanel";
 import { PatientSpeechNameEditor } from "@/components/patients/PatientSpeechNameEditor";
 import type { PatientPrimaryDoctor } from "@/lib/services/patient-primary-doctor";
+import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { ArrowRight, Plus, X } from "lucide-react";
 
 export default function PatientProfilePage() {
@@ -61,9 +62,9 @@ export default function PatientProfilePage() {
   );
   const sessionFormRef = useRef<HTMLDivElement>(null);
   const continueFormRef = useRef<HTMLDivElement>(null);
-  const [caseDoctorKeys, setCaseDoctorKeys] = useState<Record<string, string>>(
-    {}
-  );
+  const [caseDoctors, setCaseDoctors] = useState<
+    Record<string, PatientPrimaryDoctor>
+  >({});
   const [accessDenied, setAccessDenied] = useState(false);
 
   const continueCase = useMemo(
@@ -185,14 +186,35 @@ export default function PatientProfilePage() {
   }, [id, loadOperations, loadTreatmentCases]);
 
   const handleDoctorTransferred = useCallback(
-    (caseId: string, doc: PatientPrimaryDoctor) => {
-      setCaseDoctorKeys((prev) => ({ ...prev, [caseId]: doc.id }));
+    async (caseId: string, doc: PatientPrimaryDoctor) => {
+      setCaseDoctors((prev) => ({ ...prev, [caseId]: doc }));
+      setTreatmentCases((prev) =>
+        prev.map((c) =>
+          c.id === caseId
+            ? {
+                ...c,
+                primary_doctor_id: doc.id,
+                primary_doctor_name: doc.full_name_ar,
+              }
+            : c
+        )
+      );
+      await loadTreatmentCases();
     },
-    []
+    [loadTreatmentCases]
   );
 
+  const continueCaseDoctor =
+    (continueCaseId && caseDoctors[continueCaseId]) ||
+    (continueCase?.primary_doctor_id && continueCase?.primary_doctor_name
+      ? {
+          id: continueCase.primary_doctor_id,
+          full_name_ar: continueCase.primary_doctor_name,
+        }
+      : null);
+
   const continueFormKey = continueCaseId
-    ? `${id}-continue-${caseDoctorKeys[continueCaseId] ?? "x"}-${continueCaseId}`
+    ? `${id}-continue-${continueCaseDoctor?.id ?? "x"}-${continueCaseId}`
     : "";
 
   const caseGroups = useMemo(
@@ -377,6 +399,14 @@ export default function PatientProfilePage() {
                 const hasDebt = remaining > FINANCIAL_EPSILON;
                 const settled =
                   !hasDebt && isTreatmentCaseSettledForPicker(c);
+                const caseDoctor =
+                  caseDoctors[c.id] ??
+                  (c.primary_doctor_id && c.primary_doctor_name
+                    ? {
+                        id: c.primary_doctor_id,
+                        full_name_ar: c.primary_doctor_name,
+                      }
+                    : null);
                 return (
                   <li key={c.id}>
                     {hasDebt ? (
@@ -388,6 +418,13 @@ export default function PatientProfilePage() {
                         <span className="font-medium text-slate-text">
                           {treatmentCaseDisplayLabel(c, treatmentCases)}
                         </span>
+                        {caseDoctor ? (
+                          <span className="text-primary font-medium">
+                            {" "}
+                            — د.{" "}
+                            {formatDoctorDisplayName(caseDoctor.full_name_ar)}
+                          </span>
+                        ) : null}
                         {" — "}
                         <span className="text-debt-text font-semibold tabular-nums">
                           متبقي {formatCurrency(remaining)}
@@ -401,6 +438,13 @@ export default function PatientProfilePage() {
                         <span className="font-medium text-slate-text">
                           {treatmentCaseDisplayLabel(c, treatmentCases)}
                         </span>
+                        {caseDoctor ? (
+                          <span className="text-primary font-medium">
+                            {" "}
+                            — د.{" "}
+                            {formatDoctorDisplayName(caseDoctor.full_name_ar)}
+                          </span>
+                        ) : null}
                         {" — "}
                         {settled ? (
                           <span className="text-emerald-700 font-semibold">مكتمل</span>
@@ -477,6 +521,17 @@ export default function PatientProfilePage() {
                 </p>
                 {continueCase ? (
                   <p className="text-sm text-slate-muted mt-1">
+                    {continueCaseDoctor ? (
+                      <>
+                        الطبيب المعالج:{" "}
+                        <span className="font-semibold text-primary">
+                          {formatDoctorDisplayName(
+                            continueCaseDoctor.full_name_ar
+                          )}
+                        </span>
+                        {" — "}
+                      </>
+                    ) : null}
                     السعر الكلي {formatCurrency(continueCase.case_price)} — مدفوع{" "}
                     {formatCurrency(continueCase.total_paid)} — المتبقي{" "}
                     <span className="font-bold text-debt-text">
@@ -505,6 +560,8 @@ export default function PatientProfilePage() {
               defaultPatientPhone={getPatientDisplayPhone(patient) ?? undefined}
               defaultCaseId={continueCaseId}
               prefetchedCases={treatmentCases}
+              lockDoctorId={continueCaseDoctor?.id}
+              lockDoctorName={continueCaseDoctor?.full_name_ar}
               onTreatmentCasesChanged={setTreatmentCases}
               onSuccess={handleSessionSaved}
             />

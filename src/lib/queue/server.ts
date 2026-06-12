@@ -25,8 +25,82 @@ export interface QueueEntryRow {
   entered_at: string | null;
   sent_to_doctor_at: string | null;
   appointment_id: string | null;
+  transfer_to_doctor_id: string | null;
+  transfer_from_doctor_id: string | null;
+  transfer_requested_at: string | null;
   doctor: { full_name_ar: string } | null;
+  transfer_to_doctor?: { full_name_ar: string } | null;
   patient: { full_name_ar: string } | null;
+}
+
+const QUEUE_ENTRY_SELECT = `
+  id, ticket_number, status, patient_name, patient_phone,
+  patient_id, doctor_id, clinic_id, created_at, called_at, entered_at,
+  sent_to_doctor_at, appointment_id,
+  transfer_to_doctor_id, transfer_from_doctor_id, transfer_requested_at,
+  doctor:doctors!doctor_id(full_name_ar),
+  transfer_to_doctor:doctors!transfer_to_doctor_id(full_name_ar),
+  patient:patients(full_name_ar, speech_name_ar)
+`;
+
+async function loadQueueEntryContext(queueEntryId: string) {
+  const admin = getAdminClient();
+  const { data, error } = await admin
+    .from("patient_queue")
+    .select(QUEUE_ENTRY_SELECT)
+    .eq("id", queueEntryId)
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new Error("queue entry not found");
+  }
+
+  return data as unknown as QueueEntryRow;
+}
+
+async function fetchDoctorNameById(
+  admin: ReturnType<typeof getAdminClient>,
+  doctorId: string
+): Promise<string> {
+  const { data } = await admin
+    .from("doctors")
+    .select("full_name_ar")
+    .eq("id", doctorId)
+    .maybeSingle();
+  return String(data?.full_name_ar ?? "طبيب");
+}
+
+function resolveQueuePatientName(entry: QueueEntryRow): string {
+  const patientRow = entry.patient as { full_name_ar?: string } | null;
+  return resolvePatientDisplayName({
+    patient: patientRow ? { full_name_ar: patientRow.full_name_ar ?? "" } : null,
+    patient_name: entry.patient_name,
+    ticket_number: entry.ticket_number,
+  });
+}
+
+async function notifyAccountantProfiles(
+  clinicId: string,
+  payload: { title_ar: string; body_ar: string; link_path: string }
+) {
+  const admin = getAdminClient();
+  const { data: staff } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("clinic_id", clinicId)
+    .in("role", ["accountant", "super_admin"]);
+
+  if (!staff?.length) return;
+
+  await insertNotifications(
+    staff.map((s) => ({
+      clinic_id: clinicId,
+      recipient_profile_id: s.id,
+      title_ar: payload.title_ar,
+      body_ar: payload.body_ar,
+      link_path: payload.link_path,
+    }))
+  );
 }
 
 function todayIsoDate() {
@@ -43,15 +117,7 @@ export async function fetchClinicQueue(
 
   let query = admin
     .from("patient_queue")
-    .select(
-      `
-      id, ticket_number, status, patient_name, patient_phone,
-      patient_id, doctor_id, clinic_id, created_at, called_at, entered_at,
-      sent_to_doctor_at, appointment_id,
-      doctor:doctors(full_name_ar),
-      patient:patients(full_name_ar, speech_name_ar)
-    `
-    )
+    .select(QUEUE_ENTRY_SELECT)
     .eq("clinic_id", clinicId)
     .eq("queue_date", today)
     .neq("status", "cancelled")
@@ -355,6 +421,184 @@ export async function updateQueueStatus(
   if (!data) {
     throw new Error("لم يتم تحديث الدور — تحقق من الصلاحيات أو حالة المراجع");
   }
+}
+
+const DOCTOR_QUEUE_ACTION_STATUSES: QueueStatus[] = ["waiting", "called"];
+
+/** رفض الطبيب للمراجع — إلغاء فوري + إشعار المحاسب (بدون شاشة النداء) */
+export async function rejectQueueEntryByDoctor(
+  queueEntryId: string,
+  doctorId: string
+) {
+  const admin = getAdminClient();
+  const entry = await loadQueueEntryContext(queueEntryId);
+
+  if (entry.doctor_id !== doctorId) {
+    throw new Error("غير مصرح");
+  }
+  if (!DOCTOR_QUEUE_ACTION_STATUSES.includes(entry.status)) {
+    throw new Error("لا يمكن الرفض في هذه المرحلة");
+  }
+
+  const doctorName = await fetchDoctorNameById(admin, doctorId);
+  const patientName = resolveQueuePatientName(entry);
+
+  const { error } = await admin
+    .from("patient_queue")
+    .update({
+      status: "cancelled",
+      transfer_to_doctor_id: null,
+      transfer_from_doctor_id: null,
+      transfer_requested_at: null,
+    })
+    .eq("id", queueEntryId)
+    .eq("doctor_id", doctorId)
+    .in("status", DOCTOR_QUEUE_ACTION_STATUSES);
+
+  if (error) throw new Error(error.message);
+
+  await notifyAccountantProfiles(entry.clinic_id, {
+    title_ar: "رفض الطبيب للمراجع",
+    body_ar: `الطبيب ${doctorName} رفض المراجع ${patientName} — تم إلغاء الدور`,
+    link_path: "/dashboard/queue",
+  });
+}
+
+/** طلب تحويل مراجع لطبيب آخر — بانتظار تأكيد المحاسب */
+export async function requestQueueTransferByDoctor(
+  queueEntryId: string,
+  doctorId: string,
+  targetDoctorId: string
+) {
+  const admin = getAdminClient();
+  const entry = await loadQueueEntryContext(queueEntryId);
+
+  if (entry.doctor_id !== doctorId) {
+    throw new Error("غير مصرح");
+  }
+  if (!DOCTOR_QUEUE_ACTION_STATUSES.includes(entry.status)) {
+    throw new Error("لا يمكن التحويل في هذه المرحلة");
+  }
+  if (targetDoctorId === doctorId) {
+    throw new Error("اختر طبيباً غيرك");
+  }
+
+  const { data: target } = await admin
+    .from("doctors")
+    .select("id, full_name_ar, clinic_id, is_active")
+    .eq("id", targetDoctorId)
+    .maybeSingle();
+
+  if (!target || target.clinic_id !== entry.clinic_id || !target.is_active) {
+    throw new Error("الطبيب المستهدف غير متاح");
+  }
+
+  const fromName = await fetchDoctorNameById(admin, doctorId);
+  const toName = String(target.full_name_ar ?? "طبيب");
+  const patientName = resolveQueuePatientName(entry);
+  const now = new Date().toISOString();
+
+  const { error } = await admin
+    .from("patient_queue")
+    .update({
+      transfer_to_doctor_id: targetDoctorId,
+      transfer_from_doctor_id: doctorId,
+      transfer_requested_at: now,
+    })
+    .eq("id", queueEntryId)
+    .eq("doctor_id", doctorId)
+    .in("status", DOCTOR_QUEUE_ACTION_STATUSES)
+    .is("transfer_to_doctor_id", null);
+
+  if (error) throw new Error(error.message);
+
+  await notifyAccountantProfiles(entry.clinic_id, {
+    title_ar: "طلب تحويل مراجع",
+    body_ar: `الطبيب ${fromName} يطلب تحويل ${patientName} إلى ${toName}`,
+    link_path: "/dashboard/queue",
+  });
+}
+
+/** تأكيد المحاسب لتحويل المراجع لطبيب جديد */
+export async function confirmQueueTransferByAccountant(
+  queueEntryId: string,
+  clinicId: string
+) {
+  const admin = getAdminClient();
+  const entry = await loadQueueEntryContext(queueEntryId);
+
+  if (entry.clinic_id !== clinicId) {
+    throw new Error("غير مصرح");
+  }
+  if (!entry.transfer_to_doctor_id) {
+    throw new Error("لا يوجد طلب تحويل لهذا الدور");
+  }
+  if (!DOCTOR_QUEUE_ACTION_STATUSES.includes(entry.status)) {
+    throw new Error("لا يمكن إتمام التحويل في هذه المرحلة");
+  }
+
+  const fromDoctorId = entry.transfer_from_doctor_id ?? entry.doctor_id;
+  const toDoctorId = entry.transfer_to_doctor_id;
+  const fromName = await fetchDoctorNameById(admin, fromDoctorId);
+  const patientName = resolveQueuePatientName(entry);
+  const now = new Date().toISOString();
+
+  const { error } = await admin
+    .from("patient_queue")
+    .update({
+      doctor_id: toDoctorId,
+      status: "waiting",
+      called_at: null,
+      sent_to_doctor_at: now,
+      transfer_to_doctor_id: null,
+      transfer_from_doctor_id: null,
+      transfer_requested_at: null,
+    })
+    .eq("id", queueEntryId)
+    .eq("clinic_id", clinicId);
+
+  if (error) throw new Error(error.message);
+
+  if (entry.appointment_id) {
+    await admin
+      .from("appointments")
+      .update({ doctor_id: toDoctorId })
+      .eq("id", entry.appointment_id)
+      .eq("clinic_id", clinicId);
+  }
+
+  const profileId = await resolveDoctorProfileId(admin, toDoctorId, clinicId);
+  if (profileId) {
+    await insertNotifications([
+      {
+        clinic_id: clinicId,
+        recipient_profile_id: profileId,
+        title_ar: "حالة محوّلة إليك",
+        body_ar: `المراجع ${patientName} — حوّلها إليك الطبيب ${fromName}`,
+        link_path: "/doctor/queue",
+      },
+    ]);
+  }
+
+}
+
+/** إلغاء طلب التحويل من المحاسب */
+export async function dismissQueueTransferRequest(
+  queueEntryId: string,
+  clinicId: string
+) {
+  const admin = getAdminClient();
+  const { error } = await admin
+    .from("patient_queue")
+    .update({
+      transfer_to_doctor_id: null,
+      transfer_from_doctor_id: null,
+      transfer_requested_at: null,
+    })
+    .eq("id", queueEntryId)
+    .eq("clinic_id", clinicId);
+
+  if (error) throw new Error(error.message);
 }
 
 export async function getDoctorByProfileId(profileId: string) {

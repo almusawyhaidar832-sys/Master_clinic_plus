@@ -47,6 +47,19 @@ export function normalizeDoctorPercentage(
     : fallback;
 }
 
+export function parseDoctorPercentageStrict(
+  value: unknown
+): { ok: true; value: string } | { ok: false; error: string } {
+  const s = String(value ?? "").trim();
+  if (!(VALID_DOCTOR_PERCENTAGE_VALUES as readonly string[]).includes(s)) {
+    return {
+      ok: false,
+      error: "نسبة الطبيب يجب أن تكون 10% أو 20% … حتى 100% (مضاعفات 10 فقط)",
+    };
+  }
+  return { ok: true, value: s };
+}
+
 export function normalizeMaterialsShare(
   value: unknown,
   fallback = "0"
@@ -55,6 +68,19 @@ export function normalizeMaterialsShare(
   return (VALID_MATERIALS_SHARE_VALUES as readonly string[]).includes(s)
     ? s
     : fallback;
+}
+
+export function parseMaterialsShareStrict(
+  value: unknown
+): { ok: true; value: string } | { ok: false; error: string } {
+  const s = String(value ?? "").trim();
+  if (!(VALID_MATERIALS_SHARE_VALUES as readonly string[]).includes(s)) {
+    return {
+      ok: false,
+      error: "نسبة تحمّل المختبر غير صالحة — اختر من القائمة",
+    };
+  }
+  return { ok: true, value: s };
 }
 
 export const DOCTOR_PAYMENT_TYPE_OPTIONS = [

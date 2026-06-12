@@ -71,7 +71,7 @@ export interface Invoice {
   invoice_number?: string | null;
 }
 export type TreatmentStatus = "active" | "completed" | "cancelled";
-export type SalaryEntryType = "advance" | "deduction" | "absence";
+export type SalaryEntryType = "advance" | "deduction" | "absence" | "bonus";
 export type SalarySlipStatus = "draft" | "paid";
 
 export interface Profile {
@@ -229,7 +229,9 @@ export interface StaffMember {
 
 export interface SalaryEntry {
   id: string;
-  staff_id: string;
+  staff_id: string | null;
+  assistant_id?: string | null;
+  doctor_id?: string | null;
   entry_type: SalaryEntryType;
   amount: number;
   entry_date: string;
@@ -238,7 +240,8 @@ export interface SalaryEntry {
 
 export interface SalarySlip {
   id: string;
-  staff_id: string;
+  staff_id: string | null;
+  doctor_id?: string | null;
   month_year: string;
   base_salary: number;
   total_advances: number;
@@ -247,6 +250,7 @@ export interface SalarySlip {
   status: SalarySlipStatus;
   paid_at: string | null;
   staff?: StaffMember;
+  doctor?: { full_name_ar: string };
 }
 
 export interface Assistant {

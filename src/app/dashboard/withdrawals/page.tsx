@@ -16,6 +16,7 @@ import {
 } from "@/lib/withdrawals/update-status-client";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { formatCurrency } from "@/lib/utils";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import type { Doctor, DoctorWithdrawal } from "@/types";
@@ -144,8 +145,11 @@ export default function WithdrawalsPage() {
 
     const res = await fetch("/api/withdrawals/record-cash", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        ...authPortalHeaders("accountant"),
+      },
+      credentials: "include",
       body: JSON.stringify({
         doctor_id: cashDoctorId,
         amount,

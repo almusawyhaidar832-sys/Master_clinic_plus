@@ -9,6 +9,8 @@ import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import {
   DOCTOR_PERCENTAGE_OPTIONS,
   MATERIALS_SHARE_OPTIONS,
+  normalizeDoctorPercentage,
+  normalizeMaterialsShare,
 } from "@/lib/constants";
 import type { Doctor } from "@/types";
 import { doctorPaymentLabel } from "@/lib/services/doctor-payment";
@@ -17,6 +19,7 @@ import {
   type DoctorAccountingBalance,
 } from "@/lib/services/doctor-accounting-balance";
 import { formatCurrency } from "@/lib/utils";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { Plus, RefreshCw, PencilLine, Check, X, Settings2 } from "lucide-react";
 
 function labelFor(
@@ -90,16 +93,26 @@ export default function DoctorsPage() {
   async function saveEdit() {
     if (!editing) return;
     setSaving(editing.id);
-    const supabase = createClient();
-    let q = supabase
-      .from("doctors")
-      .update({
-        percentage: editing.percentage as Doctor["percentage"],
-        materials_share: editing.materials_share as Doctor["materials_share"],
-      })
-      .eq("id", editing.id);
-    if (clinicId) q = q.eq("clinic_id", clinicId);
-    await q;
+    try {
+      const res = await fetch(`/api/admin/doctors/${editing.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...authPortalHeaders("accountant"),
+        },
+        body: JSON.stringify({
+          percentage: editing.percentage,
+          materials_share: editing.materials_share,
+        }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        console.error("[doctors/saveEdit]", json.error ?? res.statusText);
+      }
+    } catch (err) {
+      console.error("[doctors/saveEdit]", err);
+    }
     setSaving(null);
     setEditing(null);
     load();
@@ -275,8 +288,12 @@ export default function DoctorsPage() {
                           onClick={() =>
                             setEditing({
                               id: doc.id,
-                              percentage: doc.percentage,
-                              materials_share: doc.materials_share,
+                              percentage: normalizeDoctorPercentage(
+                                doc.percentage
+                              ),
+                              materials_share: normalizeMaterialsShare(
+                                doc.materials_share
+                              ),
                             })
                           }
                         >

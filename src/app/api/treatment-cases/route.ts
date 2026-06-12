@@ -11,16 +11,17 @@ import {
 export async function GET(req: NextRequest) {
   try {
     const profile = await getApiCallerProfile(req);
+    const roleNorm = String(profile?.role ?? "").toLowerCase();
+    const allowedRole =
+      roleNorm === "accountant" ||
+      roleNorm === "super_admin" ||
+      roleNorm === "admin" ||
+      roleNorm === "doctor";
     if (!profile?.clinic_id) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
     }
 
-    const role = String(profile.role ?? "").toLowerCase();
-    if (
-      role !== "accountant" &&
-      role !== "super_admin" &&
-      role !== "doctor"
-    ) {
+    if (!allowedRole) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
@@ -60,16 +61,17 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const profile = await getApiCallerProfile(req);
+    const roleNorm = String(profile?.role ?? "").toLowerCase();
+    const allowedRole =
+      roleNorm === "accountant" ||
+      roleNorm === "super_admin" ||
+      roleNorm === "admin" ||
+      roleNorm === "doctor";
     if (!profile?.clinic_id) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
     }
 
-    const role = String(profile.role ?? "").toLowerCase();
-    if (
-      role !== "accountant" &&
-      role !== "super_admin" &&
-      role !== "doctor"
-    ) {
+    if (!allowedRole) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 

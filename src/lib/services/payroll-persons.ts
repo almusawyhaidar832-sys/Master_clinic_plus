@@ -1,7 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 
-export type PayrollEmployeeCategory = "assistant" | "general" | "accountant";
+export type PayrollEmployeeCategory =
+  | "assistant"
+  | "general"
+  | "accountant"
+  | "doctor_salary";
 
 /** عنصر موحّد في قائمة الرواتب */
 export interface PayrollPerson {
@@ -23,6 +27,7 @@ const CATEGORY_LABELS: Record<PayrollEmployeeCategory, string> = {
   assistant: "مساعد طبيب",
   general: "خدمات",
   accountant: "محاسب",
+  doctor_salary: "طبيب — راتب ثابت",
 };
 
 export function payrollCategoryLabel(category: PayrollEmployeeCategory): string {
@@ -37,6 +42,30 @@ export async function fetchPayrollPersonByKey(
 ): Promise<PayrollPerson | null> {
   const parsed = parsePayrollPersonKey(key);
   if (!parsed) return null;
+
+  if (parsed.category === "doctor_salary") {
+    const { data } = await supabase
+      .from("doctors")
+      .select("id, full_name_ar, specialty_ar, salary_amount, payment_type, is_active")
+      .eq("clinic_id", clinicId)
+      .eq("id", parsed.id)
+      .eq("is_active", true)
+      .eq("payment_type", "salary")
+      .maybeSingle();
+    if (!data) return null;
+    const specialty = (data.specialty_ar as string) || "طبيب";
+    const name = data.full_name_ar as string;
+    return {
+      id: data.id as string,
+      name,
+      role: `راتب ثابت — ${specialty}`,
+      category: "doctor_salary",
+      full_name_ar: name,
+      job_title_ar: `طبيب — ${specialty}`,
+      base_salary: Number(data.salary_amount ?? 0),
+      is_active: true,
+    };
+  }
 
   if (parsed.category === "general" || parsed.category === "accountant") {
     const { data } = await supabase
@@ -63,6 +92,8 @@ export async function fetchPayrollPersonByKey(
       is_active: true,
     };
   }
+
+  if (parsed.category !== "assistant") return null;
 
   const { data } = await supabase
     .from("assistants")
@@ -99,6 +130,7 @@ export async function fetchPayrollPersonByKey(
 export function payrollPersonKey(person: PayrollPerson): string {
   if (person.category === "assistant") return `assistant:${person.id}`;
   if (person.category === "accountant") return `accountant:${person.id}`;
+  if (person.category === "doctor_salary") return `doctor_salary:${person.id}`;
   return `general:${person.id}`;
 }
 
@@ -115,6 +147,12 @@ export function parsePayrollPersonKey(key: string): {
   }
   if (key.startsWith("general:")) {
     return { category: "general", id: key.slice("general:".length) };
+  }
+  if (key.startsWith("doctor_salary:")) {
+    return {
+      category: "doctor_salary",
+      id: key.slice("doctor_salary:".length),
+    };
   }
   // توافق قديم
   if (key.startsWith("employee:staff:")) {
@@ -152,7 +190,7 @@ export async function fetchActivePayrollPersons(
   supabase: SupabaseClient,
   clinicId: string
 ): Promise<PayrollPerson[]> {
-  const [staffRes, asstRes] = await Promise.all([
+  const [staffRes, asstRes, docSalaryRes] = await Promise.all([
     supabase
       .from("staff_members")
       .select("id, full_name_ar, job_title_ar, base_salary, is_active, profile_id")
@@ -168,6 +206,13 @@ export async function fetchActivePayrollPersons(
       .eq("clinic_id", clinicId)
       .eq("is_active", true)
       .order("full_name_ar"),
+    supabase
+      .from("doctors")
+      .select("id, full_name_ar, specialty_ar, salary_amount, payment_type")
+      .eq("clinic_id", clinicId)
+      .eq("is_active", true)
+      .eq("payment_type", "salary")
+      .order("full_name_ar"),
   ]);
 
   if (staffRes.error) {
@@ -175,6 +220,9 @@ export async function fetchActivePayrollPersons(
   }
   if (asstRes.error) {
     console.error("[payroll-persons] assistants:", asstRes.error.message);
+  }
+  if (docSalaryRes.error) {
+    console.error("[payroll-persons] doctors:", docSalaryRes.error.message);
   }
 
   const staffPersons: PayrollPerson[] = (staffRes.data ?? []).map((s) => {
@@ -216,7 +264,24 @@ export async function fetchActivePayrollPersons(
     };
   });
 
-  return [...staffPersons, ...assistantPersons].sort((a, b) =>
-    a.name.localeCompare(b.name, "ar")
+  const doctorSalaryPersons: PayrollPerson[] = (docSalaryRes.data ?? []).map(
+    (d) => {
+      const specialty = (d.specialty_ar as string) || "طبيب";
+      const name = d.full_name_ar as string;
+      return {
+        id: d.id as string,
+        name,
+        role: `راتب ثابت — ${specialty}`,
+        category: "doctor_salary" as const,
+        full_name_ar: name,
+        job_title_ar: `طبيب — ${specialty}`,
+        base_salary: Number(d.salary_amount ?? 0),
+        is_active: true as const,
+      };
+    }
+  );
+
+  return [...staffPersons, ...assistantPersons, ...doctorSalaryPersons].sort(
+    (a, b) => a.name.localeCompare(b.name, "ar")
   );
 }

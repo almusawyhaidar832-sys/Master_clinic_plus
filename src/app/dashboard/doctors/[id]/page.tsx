@@ -10,6 +10,11 @@ import { Alert } from "@/components/ui/Alert";
 import { DoctorPaymentFields } from "@/components/doctors/DoctorPaymentFields";
 import type { Doctor, DoctorPaymentType } from "@/types";
 import { normalizeDoctorPaymentType } from "@/lib/services/doctor-payment";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
+import {
+  normalizeDoctorPercentage,
+  normalizeMaterialsShare,
+} from "@/lib/constants";
 import {
   ArrowRight,
   CheckCircle2,
@@ -51,6 +56,7 @@ export default function EditDoctorPage() {
       try {
         const res = await fetch(`/api/admin/doctors/${doctorId}`, {
           credentials: "include",
+          headers: authPortalHeaders("accountant"),
         });
         const json = await res.json();
         if (!res.ok) {
@@ -61,8 +67,8 @@ export default function EditDoctorPage() {
         setFullName(doc.full_name_ar ?? "");
         setSpecialty(doc.specialty_ar ?? "");
         setPhone(doc.phone ?? "");
-        setPercentage(doc.percentage ?? "50");
-        setMaterialsShare(doc.materials_share ?? "0");
+        setPercentage(normalizeDoctorPercentage(doc.percentage));
+        setMaterialsShare(normalizeMaterialsShare(doc.materials_share));
         setPaymentType(normalizeDoctorPaymentType(doc.payment_type));
         setSalaryAmount(
           doc.salary_amount != null && doc.salary_amount > 0
@@ -94,6 +100,7 @@ export default function EditDoctorPage() {
       const res = await fetch(`/api/admin/doctors/${doctorId}`, {
         method: "DELETE",
         credentials: "include",
+        headers: authPortalHeaders("accountant"),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -133,7 +140,10 @@ export default function EditDoctorPage() {
       const res = await fetch(`/api/admin/doctors/${doctorId}`, {
         method: "PATCH",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...authPortalHeaders("accountant"),
+        },
         body: JSON.stringify({
           full_name_ar: fullName.trim(),
           specialty_ar: specialty.trim(),
@@ -152,7 +162,11 @@ export default function EditDoctorPage() {
         return;
       }
 
-      setSuccess(json.message ?? "تم الحفظ بنجاح");
+      const extra =
+        json.refresh_warning && !json.treatment_cases_refreshed
+          ? ` — تنبيه: ${json.refresh_warning}`
+          : "";
+      setSuccess((json.message ?? "تم الحفظ بنجاح") + extra);
       setHasLogin(Boolean(json.hasLogin));
       if (json.username) setUsername(json.username);
       setPassword("");

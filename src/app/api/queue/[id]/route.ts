@@ -7,9 +7,13 @@ import {
 } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
+  confirmQueueTransferByAccountant,
+  dismissQueueTransferRequest,
   getDoctorByProfileId,
   notifyAccountantsReadyForBilling,
   notifyAccountantsReadyForPayment,
+  rejectQueueEntryByDoctor,
+  requestQueueTransferByDoctor,
   updateQueueStatus,
   type QueueStatus,
 } from "@/lib/queue/server";
@@ -57,7 +61,17 @@ export async function PATCH(
 
     const role = String(profile.role ?? "").toLowerCase();
     const body = (await req.json()) as {
-      action?: "advance" | "cancel" | "enter" | "ready_for_billing" | "ready_for_payment";
+      action?:
+        | "advance"
+        | "cancel"
+        | "enter"
+        | "ready_for_billing"
+        | "ready_for_payment"
+        | "reject"
+        | "request_transfer"
+        | "confirm_transfer"
+        | "dismiss_transfer";
+      target_doctor_id?: string;
     };
 
     const admin = getAdminClient();
@@ -67,6 +81,51 @@ export async function PATCH(
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
       await updateQueueAndSync(admin, id, "cancelled", { clinicId: profile.clinic_id });
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === "reject") {
+      if (!isApiDoctorRole(role)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+      const doctor = await getDoctorByProfileId(profile.id);
+      if (!doctor) {
+        return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+      }
+      await rejectQueueEntryByDoctor(id, doctor.id);
+      await syncAppointmentFromQueueStatus(admin, id, "cancelled").catch(console.error);
+      return NextResponse.json({ success: true, status: "cancelled" });
+    }
+
+    if (body.action === "request_transfer") {
+      if (!isApiDoctorRole(role)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+      const doctor = await getDoctorByProfileId(profile.id);
+      if (!doctor) {
+        return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+      }
+      const targetDoctorId = String(body.target_doctor_id ?? "").trim();
+      if (!targetDoctorId) {
+        return NextResponse.json({ error: "اختر الطبيب المستهدف" }, { status: 400 });
+      }
+      await requestQueueTransferByDoctor(id, doctor.id, targetDoctorId);
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === "confirm_transfer") {
+      if (!staffRolesOk(role)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+      await confirmQueueTransferByAccountant(id, profile.clinic_id as string);
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === "dismiss_transfer") {
+      if (!staffRolesOk(role)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+      await dismissQueueTransferRequest(id, profile.clinic_id as string);
       return NextResponse.json({ success: true });
     }
 

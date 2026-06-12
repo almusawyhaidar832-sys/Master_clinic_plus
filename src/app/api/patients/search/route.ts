@@ -1,13 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
-import { isApiDoctorRole, isApiStaffRole } from "@/lib/auth/api-portal";
+import {
+  isApiAssistantRole,
+  isApiDoctorRole,
+  isApiStaffRole,
+} from "@/lib/auth/api-portal";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { resolveAssistantContext } from "@/lib/services/assistant-appointments-server";
 import { searchPatientsForDoctor } from "@/lib/services/doctor-patients";
 import { getDoctorByProfileId } from "@/lib/queue/server";
 import {
   PATIENT_SEARCH_MIN_LENGTH,
   searchPatientsInClinic,
 } from "@/lib/services/patient-search";
+
+async function doctorBelongsToClinic(
+  admin: ReturnType<typeof getAdminClient>,
+  doctorId: string,
+  clinicId: string
+): Promise<boolean> {
+  const { data } = await admin
+    .from("doctors")
+    .select("id")
+    .eq("id", doctorId)
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  return Boolean(data?.id);
+}
 
 /** GET /api/patients/search?q=...&limit=20 — live patient autocomplete */
 export async function GET(req: NextRequest) {
@@ -18,7 +37,11 @@ export async function GET(req: NextRequest) {
     }
 
     const role = String(profile.role ?? "");
-    if (!isApiStaffRole(role) && !isApiDoctorRole(role)) {
+    if (
+      !isApiStaffRole(role) &&
+      !isApiDoctorRole(role) &&
+      !isApiAssistantRole(role)
+    ) {
       return NextResponse.json(
         { error: "لا تملك صلاحية البحث عن المراجعين" },
         { status: 403 }
@@ -26,6 +49,9 @@ export async function GET(req: NextRequest) {
     }
 
     const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
+    const scope = req.nextUrl.searchParams.get("scope");
+    const doctorIdParam =
+      req.nextUrl.searchParams.get("doctor_id")?.trim() || null;
     const limit = Math.min(
       Math.max(Number(req.nextUrl.searchParams.get("limit") ?? 20), 1),
       50
@@ -41,7 +67,22 @@ export async function GET(req: NextRequest) {
     >["patients"] = [];
     let error: string | undefined;
 
-    if (isApiDoctorRole(role)) {
+    let searchDoctorId: string | null = null;
+
+    if (scope === "clinic") {
+      searchDoctorId = null;
+    } else if (doctorIdParam) {
+      if (!(await doctorBelongsToClinic(admin, doctorIdParam, profile.clinic_id))) {
+        return NextResponse.json({ error: "الطبيب غير موجود" }, { status: 400 });
+      }
+      if (isApiAssistantRole(role)) {
+        const ctx = await resolveAssistantContext(admin, profile.id);
+        if (!ctx || ctx.doctorId !== doctorIdParam) {
+          return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+        }
+      }
+      searchDoctorId = doctorIdParam;
+    } else if (isApiDoctorRole(role)) {
       const doctor = await getDoctorByProfileId(profile.id);
       if (!doctor || doctor.clinic_id !== profile.clinic_id) {
         return NextResponse.json(
@@ -49,10 +90,23 @@ export async function GET(req: NextRequest) {
           { status: 403 }
         );
       }
+      searchDoctorId = doctor.id;
+    } else if (isApiAssistantRole(role)) {
+      const ctx = await resolveAssistantContext(admin, profile.id);
+      if (!ctx) {
+        return NextResponse.json(
+          { error: "حساب المساعد غير مربوط" },
+          { status: 400 }
+        );
+      }
+      searchDoctorId = ctx.doctorId;
+    }
+
+    if (searchDoctorId) {
       const scoped = await searchPatientsForDoctor(
         admin,
         profile.clinic_id,
-        doctor.id,
+        searchDoctorId,
         q,
         { limit, minLength: PATIENT_SEARCH_MIN_LENGTH }
       );

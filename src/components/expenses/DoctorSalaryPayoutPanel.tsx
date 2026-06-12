@@ -115,9 +115,10 @@ export function DoctorSalaryPayoutPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>صرف راتب طبيب</CardTitle>
+        <CardTitle>صرف راتب يدوي (اختياري)</CardTitle>
         <p className="text-sm text-slate-muted">
-          للأطباء على نظام الراتب الثابت — عملية مالية عامة غير مرتبطة بجلسة
+          للخصم والمكافأة استخدم البطاقة <strong>أعلاه</strong> ثم «تأكيد صرف
+          الراتب». هذا النموذج لصرف مبلغ يدوي خارج القسيمة الشهرية فقط.
         </p>
       </CardHeader>
 

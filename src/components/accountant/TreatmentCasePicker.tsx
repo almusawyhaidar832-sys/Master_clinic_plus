@@ -1,6 +1,7 @@
 "use client";
 
 import { formatCurrency } from "@/lib/utils";
+import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
 import {
   computedCaseRemaining,
@@ -55,6 +56,11 @@ export function TreatmentCasePicker({
           >
             <div>
               <p className="font-semibold text-slate-text">{c.treatment_name_ar}</p>
+              {c.primary_doctor_name ? (
+                <p className="text-xs font-medium text-primary mt-0.5">
+                  د. {formatDoctorDisplayName(c.primary_doctor_name)}
+                </p>
+              ) : null}
               <p className="text-xs text-slate-muted tabular-nums mt-0.5">
                 السعر الكلي {formatCurrency(c.case_price)}
                 {c.discount_total > 0 && (

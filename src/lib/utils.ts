@@ -188,7 +188,8 @@ export function calculateRemainingDebt(total: number, paid: number): number {
 export function calculateSalaryNet(
   baseSalary: number,
   advances: number,
-  deductions: number
+  deductions: number,
+  bonuses = 0
 ): number {
-  return Math.max(0, baseSalary - advances - deductions);
+  return Math.max(0, baseSalary + bonuses - advances - deductions);
 }

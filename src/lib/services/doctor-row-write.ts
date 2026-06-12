@@ -6,6 +6,15 @@ import {
 
 const PAYMENT_COLUMN_MARKERS = ["payment_type", "salary_amount"] as const;
 
+const PAYMENT_MIGRATION_HINT =
+  "شغّل في Supabase: supabase/scripts/add-doctor-payment-type.sql";
+
+function rowNeedsPaymentColumns(row: Record<string, unknown>): boolean {
+  const paymentType = String(row.payment_type ?? "percentage");
+  const salary = Number(row.salary_amount ?? 0);
+  return paymentType === "salary" || salary > 0;
+}
+
 export function isMissingDoctorPaymentColumnsError(message: string): boolean {
   const lower = message.toLowerCase();
   return PAYMENT_COLUMN_MARKERS.some((col) => lower.includes(col));
@@ -37,6 +46,9 @@ export async function insertDoctorRow(
   if (!first.error) return { error: null };
 
   if (isMissingDoctorPaymentColumnsError(first.error.message)) {
+    if (rowNeedsPaymentColumns(row)) {
+      return { error: PAYMENT_MIGRATION_HINT };
+    }
     const retry = await admin.from("doctors").insert(stripDoctorPaymentFields(row));
     return { error: retry.error?.message ?? null };
   }
@@ -54,6 +66,9 @@ export async function updateDoctorRow(
   if (!first.error) return { error: null };
 
   if (isMissingDoctorPaymentColumnsError(first.error.message)) {
+    if (rowNeedsPaymentColumns(patch)) {
+      return { error: PAYMENT_MIGRATION_HINT };
+    }
     const retry = await admin
       .from("doctors")
       .update(stripDoctorPaymentFields(patch))
@@ -99,6 +114,9 @@ export async function insertDoctorRowClient(
   if (!first.error) return { error: null };
 
   if (isMissingDoctorPaymentColumnsError(first.error.message)) {
+    if (rowNeedsPaymentColumns(row)) {
+      return { error: PAYMENT_MIGRATION_HINT };
+    }
     const retry = await supabase
       .from("doctors")
       .insert(stripDoctorPaymentFields(row));

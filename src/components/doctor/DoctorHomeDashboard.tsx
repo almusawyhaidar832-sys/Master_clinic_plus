@@ -145,11 +145,15 @@ export function DoctorHomeDashboard() {
         </div>
         <Link
           href="/doctor/notifications"
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-border bg-surface-card p-3"
+          className="relative flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-border bg-surface-card p-3"
         >
           <Bell className="h-5 w-5 text-primary" />
-          <span className="font-semibold">{notifications}</span>
-          <span className="text-xs text-slate-muted">إشعار</span>
+          {notifications > 0 ? (
+            <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white">
+              {notifications > 9 ? "9+" : notifications}
+            </span>
+          ) : null}
+          <span className="text-xs text-slate-muted">إشعارات</span>
         </Link>
       </div>
 

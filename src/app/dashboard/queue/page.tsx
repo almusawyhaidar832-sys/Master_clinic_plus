@@ -25,6 +25,7 @@ import type { PatientSearchResult } from "@/lib/services/patient-search";
 import {
   Users, Clock, CheckCircle2, UserCheck, Plus, Volume2,
   RefreshCw, Monitor, Phone, X, ChevronRight, Send, RotateCcw, Receipt, LogOut,
+  ArrowRightLeft,
 } from "lucide-react";
 
 type QueueStatus =
@@ -49,7 +50,10 @@ interface QueueEntry {
   entered_at: string | null;
   sent_to_doctor_at: string | null;
   appointment_id: string | null;
+  transfer_to_doctor_id: string | null;
+  transfer_requested_at: string | null;
   doctor: { full_name_ar: string } | null;
+  transfer_to_doctor?: { full_name_ar: string } | null;
   patient: { full_name_ar: string; speech_name_ar?: string | null } | null;
 }
 
@@ -464,6 +468,57 @@ export default function QueuePage() {
     }
   };
 
+  const confirmTransfer = async (entry: QueueEntry) => {
+    const target = entry.transfer_to_doctor?.full_name_ar ?? "الطبيب الجديد";
+    const patient =
+      entry.patient?.full_name_ar ?? entry.patient_name ?? `رقم ${entry.ticket_number}`;
+    if (!confirm(`تأكيد تحويل «${patient}» إلى ${target}؟`)) return;
+
+    setUpdating(entry.id);
+    try {
+      await apiJson(`/api/queue/${entry.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: "confirm_transfer" }),
+      });
+      const targetDoctorId = entry.transfer_to_doctor_id;
+      if (targetDoctorId) {
+        notifyQueueRefresh({ scope: "doctor", doctorId: targetDoctorId });
+        void broadcastPatientSentToDoctor(supabase, targetDoctorId, {
+          name: patient,
+          entryId: entry.id,
+        });
+      }
+      if (clinicId) {
+        notifyQueueRefresh({ scope: "clinic", clinicId });
+        notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
+      }
+      await fetchQueue();
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "تعذر تأكيد التحويل");
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const dismissTransfer = async (entry: QueueEntry) => {
+    setUpdating(entry.id);
+    try {
+      await apiJson(`/api/queue/${entry.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: "dismiss_transfer" }),
+      });
+      if (clinicId) {
+        notifyQueueRefresh({ scope: "clinic", clinicId });
+        notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
+      }
+      await fetchQueue();
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "تعذر إلغاء طلب التحويل");
+    } finally {
+      setUpdating(null);
+    }
+  };
+
   const addToQueue = async (data: {
     doctor_id: string;
     patient_name: string;
@@ -633,7 +688,11 @@ export default function QueuePage() {
             const canCheckout =
               entry.status === "ready_for_billing" ||
               entry.status === "ready_for_payment";
-            const canSend = entry.status === "waiting" && !entry.sent_to_doctor_at;
+            const transferPending = Boolean(entry.transfer_to_doctor_id);
+            const canSend =
+              entry.status === "waiting" &&
+              !entry.sent_to_doctor_at &&
+              !transferPending;
             const canRecall =
               entry.status === "called" ||
               entry.status === "in_progress" ||
@@ -644,7 +703,7 @@ export default function QueuePage() {
                 key={entry.id}
                 className={cn(
                   "flex items-center gap-4 rounded-2xl border bg-white p-4 shadow-sm transition-all",
-                  cfg.border
+                  transferPending ? "border-violet-300 ring-1 ring-violet-200" : cfg.border
                 )}
               >
                 <div className={cn(
@@ -662,6 +721,14 @@ export default function QueuePage() {
                       <>
                         <span>•</span>
                         <span className="text-emerald-600">أُرسل للطبيب</span>
+                      </>
+                    )}
+                    {transferPending && (
+                      <>
+                        <span>•</span>
+                        <span className="font-medium text-violet-700">
+                          طلب تحويل إلى {entry.transfer_to_doctor?.full_name_ar ?? "—"}
+                        </span>
                       </>
                     )}
                     <span>•</span>
@@ -682,7 +749,30 @@ export default function QueuePage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {transferPending && (
+                    <>
+                      <button
+                        onClick={() => void confirmTransfer(entry)}
+                        disabled={updating === entry.id}
+                        className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                      >
+                        {updating === entry.id ? (
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <ArrowRightLeft className="h-3.5 w-3.5" />
+                        )}
+                        <span className="hidden sm:inline">تأكيد التحويل</span>
+                      </button>
+                      <button
+                        onClick={() => void dismissTransfer(entry)}
+                        disabled={updating === entry.id}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        رفض التحويل
+                      </button>
+                    </>
+                  )}
                   {canRecall && (
                     <button
                       onClick={() => recallPatient(entry)}
@@ -739,7 +829,7 @@ export default function QueuePage() {
                       <span className="hidden sm:inline">دفع</span>
                     </button>
                   )}
-                  {nextAction && (
+                  {nextAction && !transferPending && (
                     <button
                       onClick={() => advanceStatus(entry)}
                       disabled={updating === entry.id}

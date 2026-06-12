@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
-import { upsertAccountantStaffRow } from "@/lib/services/accountant-payroll-sync";
+import {
+  refreshUnpaidAssistantPayrollRecords,
+  refreshUnpaidDoctorSalarySlips,
+  refreshUnpaidStaffSalarySlips,
+} from "@/lib/services/salary-entries-server";
 import type { PayrollEmployeeCategory } from "@/lib/services/payroll-persons";
 
 /**
@@ -79,7 +83,57 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json({ success: true, category, id });
+      const refresh = await refreshUnpaidAssistantPayrollRecords(
+        admin,
+        clinicId,
+        id
+      );
+
+      return NextResponse.json({
+        success: true,
+        category,
+        id,
+        payroll_records_refreshed: refresh.updated,
+        refresh_warning: refresh.error,
+      });
+    }
+
+    if (category === "doctor_salary") {
+      const { data: doctor } = await admin
+        .from("doctors")
+        .select("id, payment_type")
+        .eq("id", id)
+        .eq("clinic_id", clinicId)
+        .maybeSingle();
+
+      if (!doctor) {
+        return NextResponse.json({ error: "الطبيب غير موجود" }, { status: 404 });
+      }
+      if (doctor.payment_type !== "salary") {
+        return NextResponse.json(
+          { error: "هذا الطبيب على نظام النسبة — عدّله من صفحة الأطباء" },
+          { status: 400 }
+        );
+      }
+
+      const { error } = await admin
+        .from("doctors")
+        .update({ salary_amount: salary })
+        .eq("id", id);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      const refresh = await refreshUnpaidDoctorSalarySlips(admin, clinicId, id);
+
+      return NextResponse.json({
+        success: true,
+        category,
+        id,
+        salary_slips_refreshed: refresh.updated,
+        refresh_warning: refresh.error,
+      });
     }
 
     if (category === "general" || category === "accountant") {
@@ -124,7 +178,15 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
-      return NextResponse.json({ success: true, category, id });
+      const refresh = await refreshUnpaidStaffSalarySlips(admin, clinicId, id);
+
+      return NextResponse.json({
+        success: true,
+        category,
+        id,
+        salary_slips_refreshed: refresh.updated,
+        refresh_warning: refresh.error,
+      });
     }
 
     return NextResponse.json({ error: "نوع الموظف غير صالح" }, { status: 400 });

@@ -27,10 +27,21 @@ export async function fetchCasePrimaryDoctor(
     .maybeSingle();
 
   if (!caseErr && caseRow?.primary_doctor_id) {
-    return mapDoctorRow(
-      String(caseRow.primary_doctor_id),
-      caseRow.doctor as { full_name_ar?: string } | null
-    );
+    const doctorId = String(caseRow.primary_doctor_id);
+    const joined = caseRow.doctor as
+      | { full_name_ar?: string }
+      | { full_name_ar?: string }[]
+      | null;
+    const joinedName = Array.isArray(joined) ? joined[0] : joined;
+    if (joinedName?.full_name_ar?.trim()) {
+      return mapDoctorRow(doctorId, joinedName);
+    }
+    const { data: doctorRow } = await supabase
+      .from("doctors")
+      .select("full_name_ar")
+      .eq("id", doctorId)
+      .maybeSingle();
+    return mapDoctorRow(doctorId, doctorRow);
   }
 
   const { data: op, error: opErr } = await supabase

@@ -17,6 +17,9 @@ import { caseBelongsToDoctor } from "@/lib/services/doctor-patients";
 export interface PatientTreatmentCase extends PatientFinancialPlan {
   id: string;
   treatment_name_ar: string;
+  /** الطبيب المعالج الحالي للحالة — يتغيّر بتحويل الطبيب */
+  primary_doctor_id?: string | null;
+  primary_doctor_name?: string | null;
 }
 
 export type TreatmentCaseWithPatient = PatientTreatmentCase & {
@@ -414,6 +417,14 @@ function inferCasesFromOperationsByName(
   return cases.sort((a, b) => b.remaining_balance - a.remaining_balance);
 }
 
+function relationDoctorName(
+  rel: { full_name_ar?: string } | { full_name_ar?: string }[] | null | undefined
+): string | null {
+  if (!rel) return null;
+  const row = Array.isArray(rel) ? rel[0] : rel;
+  return row?.full_name_ar?.trim() || null;
+}
+
 function mapDbRow(row: Record<string, unknown>): PatientTreatmentCase {
   const casePrice = num(row.case_price);
   const discount = num(row.discount_total);
@@ -426,10 +437,19 @@ function mapDbRow(row: Record<string, unknown>): PatientTreatmentCase {
     clinic_share_total: num(row.clinic_share_total),
     total_paid: num(row.total_paid),
   });
+  const primaryDoctorId = row.primary_doctor_id
+    ? String(row.primary_doctor_id)
+    : null;
+  const primaryDoctorName =
+    relationDoctorName(
+      row.doctor as { full_name_ar?: string } | { full_name_ar?: string }[] | null
+    ) ?? null;
   return finalizeTreatmentCase({
     ...plan,
     id: String(row.id),
     treatment_name_ar: String(row.treatment_name_ar ?? "علاج").trim(),
+    primary_doctor_id: primaryDoctorId,
+    primary_doctor_name: primaryDoctorName,
   });
 }
 
@@ -448,8 +468,13 @@ export async function fetchPatientTreatmentCasesViaApi(
 ): Promise<PatientTreatmentCase[] | null> {
   if (typeof window === "undefined") return null;
   try {
+    const { authPortalHeaders } = await import("@/lib/auth/api-portal");
     const res = await fetch(
-      `/api/treatment-cases?patientId=${encodeURIComponent(patientId)}`
+      `/api/treatment-cases?patientId=${encodeURIComponent(patientId)}`,
+      {
+        credentials: "include",
+        headers: authPortalHeaders("accountant"),
+      }
     );
     if (!res.ok) return null;
     const data = (await res.json()) as { cases?: PatientTreatmentCase[] };
@@ -474,11 +499,29 @@ export async function fetchPatientTreatmentCasesDirect(
   patientId: string,
   opts?: { skipReconcile?: boolean }
 ): Promise<PatientTreatmentCase[]> {
-  const { data: rows, error } = await supabase
+  let rows: Record<string, unknown>[] | null = null;
+  let error: { message: string } | null = null;
+
+  const joined = await supabase
     .from("patient_treatment_cases")
-    .select("*")
+    .select(
+      "*, doctor:doctors!primary_doctor_id(id, full_name_ar)"
+    )
     .eq("patient_id", patientId)
     .order("created_at", { ascending: false });
+
+  if (joined.error?.message?.includes("primary_doctor_id")) {
+    const fallback = await supabase
+      .from("patient_treatment_cases")
+      .select("*")
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false });
+    rows = (fallback.data ?? []) as Record<string, unknown>[];
+    error = fallback.error;
+  } else {
+    rows = (joined.data ?? []) as Record<string, unknown>[];
+    error = joined.error;
+  }
 
   if (error) {
     console.error("[fetchPatientTreatmentCases] cases query", error.message);

@@ -2,6 +2,8 @@ import "server-only";
 
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
+import { isApiStaffRole } from "@/lib/auth/api-portal";
+import { normalizeRole } from "@/lib/auth/portal-access";
 
 export type StaffAdminContext = {
   admin: ReturnType<typeof createServiceClient>;
@@ -18,9 +20,13 @@ export async function requireStaffAdmin(
     return { error: "يجب تسجيل الدخول أولاً", status: 401 };
   }
 
-  if (!["accountant", "super_admin"].includes(profile.role)) {
+  if (!isApiStaffRole(profile.role)) {
     return { error: "لا تملك صلاحية إدارة الأطباء", status: 403 };
   }
+
+  const normalizedRole = normalizeRole(profile.role);
+  const staffRole: StaffAdminContext["role"] =
+    normalizedRole === "super_admin" ? "super_admin" : "accountant";
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) {
@@ -39,7 +45,7 @@ export async function requireStaffAdmin(
   return {
     admin,
     callerId: profile.id,
-    role: profile.role as "accountant" | "super_admin",
+    role: staffRole,
     clinicId: profile.clinic_id ?? null,
   };
 }

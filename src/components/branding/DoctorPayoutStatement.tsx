@@ -68,6 +68,68 @@ export function DoctorPayoutStatement({
             التقرير المالي الشهري — تصفية الحساب
           </h3>
           <div className="space-y-2 text-sm">
+            {settlement.salaryBaseAmount != null && (
+              <>
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-muted">الراتب الأساسي</span>
+                  <span className="font-semibold">
+                    {formatCurrency(settlement.salaryBaseAmount)}
+                  </span>
+                </div>
+                {(settlement.salaryAdvances ?? 0) > 0 && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-slate-muted">سلف</span>
+                    <span className="font-semibold text-debt-text">
+                      − {formatCurrency(settlement.salaryAdvances ?? 0)}
+                    </span>
+                  </div>
+                )}
+                {(settlement.salaryDeductions ?? 0) > 0 && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-slate-muted">خصومات وغياب</span>
+                    <span className="font-semibold text-debt-text">
+                      − {formatCurrency(settlement.salaryDeductions ?? 0)}
+                    </span>
+                  </div>
+                )}
+                {(settlement.salaryBonuses ?? 0) > 0 && (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-slate-muted">مكافآت</span>
+                    <span className="font-semibold text-emerald-700">
+                      + {formatCurrency(settlement.salaryBonuses ?? 0)}
+                    </span>
+                  </div>
+                )}
+                {settlement.salaryAdjustmentLines &&
+                  settlement.salaryAdjustmentLines.length > 0 && (
+                    <details className="text-xs text-slate-muted">
+                      <summary className="cursor-pointer font-medium">
+                        تفاصيل حركات الراتب (
+                        {settlement.salaryAdjustmentLines.length})
+                      </summary>
+                      <ul className="mt-2 space-y-1">
+                        {settlement.salaryAdjustmentLines.map((line, i) => (
+                          <li key={i} className="flex justify-between gap-2">
+                            <span>
+                              {formatDate(line.entryDate)} — {line.entryTypeLabel}
+                              {line.notes ? ` (${line.notes})` : ""}
+                            </span>
+                            <span>{formatCurrency(line.amount)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                <div className="flex justify-between gap-4 border-b border-primary/10 pb-2">
+                  <span className="text-slate-muted">صافي الراتب بعد التعديلات</span>
+                  <span className="font-semibold">
+                    {formatCurrency(
+                      settlement.salaryNetAmount ?? settlement.totalDoctorIncome
+                    )}
+                  </span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between gap-4">
               <span className="text-slate-muted">إجمالي دخل الطبيب</span>
               <span className="font-semibold">
@@ -174,9 +236,17 @@ export function DoctorPayoutStatement({
         </h3>
         {isSalaryDoctor(doctor) ? (
           <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-slate-text">
-            هذا الطبيب على نظام <strong>راتب ثابت شهري</strong> بقيمة{" "}
-            <strong>{formatCurrency(doctor.salary_amount ?? 0)}</strong> — لا
-            تُحسب له حصة من الجلسات في التقرير الشهري.
+            هذا الطبيب على نظام <strong>راتب ثابت شهري</strong> — الأساس{" "}
+            <strong>{formatCurrency(doctor.salary_amount ?? 0)}</strong>
+            {settlement?.salaryNetAmount != null &&
+            settlement.salaryNetAmount !== (doctor.salary_amount ?? 0) ? (
+              <>
+                {" "}
+                والصافي بعد السلف والخصومات والمكافآت{" "}
+                <strong>{formatCurrency(settlement.salaryNetAmount)}</strong>
+              </>
+            ) : null}
+            . لا تُحسب له حصة من الجلسات في التقرير الشهري.
           </p>
         ) : (
         <table className="w-full text-xs sm:text-sm">

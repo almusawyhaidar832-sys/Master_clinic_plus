@@ -351,6 +351,17 @@ export function QuickEntryForm({
         setAssignedDoctor(doc);
         if (!lockDoctorId) setDoctorId(doc.id);
       }
+      setTreatmentCases((prev) =>
+        prev.map((c) =>
+          c.id === caseId
+            ? {
+                ...c,
+                primary_doctor_id: doc.id,
+                primary_doctor_name: doc.full_name_ar,
+              }
+            : c
+        )
+      );
       if (!selectedPatientId) return;
       const supabase = createClient();
       const clinic = await getActiveClinicId(supabase);
@@ -746,6 +757,17 @@ export function QuickEntryForm({
 
   useEffect(() => {
     if (lockDoctorId || !selectedPatientId) return;
+    const caseRow =
+      selectedCaseId &&
+      treatmentCases.find((c) => c.id === selectedCaseId);
+    if (caseRow?.primary_doctor_id && caseRow.primary_doctor_name) {
+      setAssignedDoctor({
+        id: caseRow.primary_doctor_id,
+        full_name_ar: caseRow.primary_doctor_name,
+      });
+      setDoctorId(caseRow.primary_doctor_id);
+      return;
+    }
     let cancelled = false;
     (async () => {
       const supabase = createClient();
@@ -763,7 +785,7 @@ export function QuickEntryForm({
     return () => {
       cancelled = true;
     };
-  }, [selectedPatientId, selectedCaseId, lockDoctorId]);
+  }, [selectedPatientId, selectedCaseId, lockDoctorId, treatmentCases]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

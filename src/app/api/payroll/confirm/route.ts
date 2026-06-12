@@ -3,6 +3,7 @@ import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   recordAssistantPayrollPaidTransaction,
+  recordDoctorSalarySlipPaidTransaction,
   recordStaffSlipPaidTransaction,
 } from "@/lib/services/payroll-financial";
 import type { PayrollRecord, SalarySlip } from "@/types";
@@ -65,11 +66,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: updateErr.message }, { status: 500 });
       }
 
-      const tx = await recordStaffSlipPaidTransaction(
-        admin,
-        clinicId,
-        slip as SalarySlip
-      );
+      const tx = slip.doctor_id
+        ? await recordDoctorSalarySlipPaidTransaction(
+            admin,
+            clinicId,
+            slip as SalarySlip
+          )
+        : await recordStaffSlipPaidTransaction(
+            admin,
+            clinicId,
+            slip as SalarySlip
+          );
       if (!tx.ok) {
         return NextResponse.json(
           { error: `تم التأكيد لكن فشل الحركة المالية: ${tx.error}` },

@@ -20,6 +20,7 @@ const CATEGORY_STYLES = {
   assistant: "bg-teal-100 text-teal-800",
   general: "bg-slate-100 text-slate-700",
   accountant: "bg-violet-100 text-violet-800",
+  doctor_salary: "bg-amber-100 text-amber-900",
 };
 
 export default function EmployeesPage() {
@@ -58,6 +59,7 @@ export default function EmployeesPage() {
     accountant: persons.filter((p) => p.category === "accountant"),
     assistant: persons.filter((p) => p.category === "assistant"),
     general: persons.filter((p) => p.category === "general"),
+    doctor_salary: persons.filter((p) => p.category === "doctor_salary"),
   };
 
   return (
@@ -221,6 +223,7 @@ export default function EmployeesPage() {
               <span>محاسبون: {byCategory.accountant.length}</span>
               <span>مساعدون: {byCategory.assistant.length}</span>
               <span>خدمات: {byCategory.general.length}</span>
+              <span>أطباء راتب: {byCategory.doctor_salary.length}</span>
             </div>
           </Card>
         </>

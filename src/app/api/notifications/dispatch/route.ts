@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { getApiSessionUser } from "@/lib/auth/api-session";
 import {
   notifyWithdrawalRequest,
   notifyWithdrawalStatus,
   notifyDoctorNewOperation,
 } from "@/lib/notifications/server";
-import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 
 /**
  * POST /api/notifications/dispatch
@@ -14,19 +12,7 @@ import { getCurrentUser } from "@/lib/supabase/auth-helpers";
  */
 export async function POST(req: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      }
-    );
-
-    const user = await getCurrentUser(supabase);
+    const user = await getApiSessionUser(req);
     if (!user) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
     }

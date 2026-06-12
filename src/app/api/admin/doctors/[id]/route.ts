@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { usernameToAuthEmail } from "@/lib/auth/credentials";
 import { requireStaffAdmin } from "@/lib/admin/require-staff-admin";
-import { createApiSessionClient } from "@/lib/auth/api-session";
 import { validatePatientPhone } from "@/lib/phone";
 import {
   insertProfileRow,
@@ -11,9 +10,14 @@ import {
 } from "@/lib/admin/profile-write";
 import { getAuthAdmin } from "@/lib/supabase/auth-helpers";
 import {
-  normalizeDoctorPercentage,
-  normalizeMaterialsShare,
+  parseDoctorPercentageStrict,
+  parseMaterialsShareStrict,
 } from "@/lib/constants";
+import {
+  mapDoctorRowForShareCalc,
+  refreshActiveTreatmentCaseSharesForDoctor,
+} from "@/lib/services/doctor-compensation-sync";
+import { refreshUnpaidDoctorSalarySlips } from "@/lib/services/salary-entries-server";
 import {
   normalizeDoctorPaymentType,
   parseSalaryAmount,
@@ -35,8 +39,7 @@ async function loadDoctorForCaller(
 ) {
   if ("error" in ctx) return { error: ctx.error, status: ctx.status };
 
-  const sessionClient = await createApiSessionClient();
-  const { data: doctorRow, error } = await sessionClient
+  const { data: doctorRow, error } = await ctx.admin
     .from("doctors")
     .select("*")
     .eq("id", doctorId)
@@ -46,6 +49,13 @@ async function loadDoctorForCaller(
     return { error: error.message, status: 500 };
   }
   if (!doctorRow) {
+    return {
+      error: "الطبيب غير موجود أو لا تملك صلاحية الوصول إليه",
+      status: 404,
+    };
+  }
+
+  if (ctx.clinicId && doctorRow.clinic_id !== ctx.clinicId) {
     return {
       error: "الطبيب غير موجود أو لا تملك صلاحية الوصول إليه",
       status: 404,
@@ -70,11 +80,11 @@ async function loadDoctorForCaller(
 
 /** GET — بيانات الطبيب للتعديل */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const ctx = await requireStaffAdmin();
+    const ctx = await requireStaffAdmin(req);
     const { id } = await context.params;
     const loaded = await loadDoctorForCaller(ctx, id);
     if ("error" in loaded) {
@@ -101,7 +111,7 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const ctx = await requireStaffAdmin();
+    const ctx = await requireStaffAdmin(req);
     if ("error" in ctx) {
       return NextResponse.json({ error: ctx.error }, { status: ctx.status });
     }
@@ -132,15 +142,33 @@ export async function PATCH(
     const doctorUpdate: Record<string, unknown> = {};
     if (fullName) doctorUpdate.full_name_ar = fullName;
     if (body.specialty_ar !== undefined) doctorUpdate.specialty_ar = specialty;
+    const financialFieldsTouched =
+      (percentage !== undefined &&
+        percentage !== null &&
+        percentage !== "") ||
+      (materialsShare !== undefined &&
+        materialsShare !== null &&
+        materialsShare !== "") ||
+      Boolean(paymentType) ||
+      salaryAmountRaw !== undefined;
+
     if (percentage !== undefined && percentage !== null && percentage !== "") {
-      doctorUpdate.percentage = normalizeDoctorPercentage(percentage);
+      const parsed = parseDoctorPercentageStrict(percentage);
+      if (!parsed.ok) {
+        return NextResponse.json({ error: parsed.error }, { status: 400 });
+      }
+      doctorUpdate.percentage = parsed.value;
     }
     if (
       materialsShare !== undefined &&
       materialsShare !== null &&
       materialsShare !== ""
     ) {
-      doctorUpdate.materials_share = normalizeMaterialsShare(materialsShare);
+      const parsed = parseMaterialsShareStrict(materialsShare);
+      if (!parsed.ok) {
+        return NextResponse.json({ error: parsed.error }, { status: 400 });
+      }
+      doctorUpdate.materials_share = parsed.value;
     }
     if (paymentType) {
       doctorUpdate.payment_type = paymentType;
@@ -326,6 +354,11 @@ export async function PATCH(
       );
     }
 
+    let casesRefreshed = 0;
+    let casesRefreshWarning: string | undefined;
+    let salarySlipsRefreshed = 0;
+    let salarySlipsRefreshWarning: string | undefined;
+
     if (Object.keys(doctorUpdate).length > 0) {
       const { error: doctorErrMsg } = await updateDoctorRow(
         ctx.admin,
@@ -338,13 +371,58 @@ export async function PATCH(
           { status: 500 }
         );
       }
+
+      if (financialFieldsTouched) {
+        const { data: freshDoctor, error: fetchErr } = await ctx.admin
+          .from("doctors")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (fetchErr || !freshDoctor) {
+          casesRefreshWarning = fetchErr?.message ?? "تعذر مزامنة حالات العلاج";
+        } else {
+          const refresh = await refreshActiveTreatmentCaseSharesForDoctor(
+            ctx.admin,
+            doctor.clinic_id as string,
+            id,
+            mapDoctorRowForShareCalc(freshDoctor as Record<string, unknown>)
+          );
+          casesRefreshed = refresh.updated;
+          casesRefreshWarning = refresh.error;
+        }
+
+        const paymentAfter =
+          (doctorUpdate.payment_type as string | undefined) ??
+          doctor.payment_type;
+        if (paymentAfter === "salary") {
+          const slipRefresh = await refreshUnpaidDoctorSalarySlips(
+            ctx.admin,
+            doctor.clinic_id as string,
+            id
+          );
+          salarySlipsRefreshed = slipRefresh.updated;
+          salarySlipsRefreshWarning = slipRefresh.error;
+        }
+      }
+    }
+
+    let message = "تم حفظ بيانات الطبيب";
+    if (casesRefreshed > 0) {
+      message = `تم الحفظ — وُحدّثت حصص ${casesRefreshed} حالة علاج جديدة (بدون دفعات سابقة)`;
+    }
+    if (salarySlipsRefreshed > 0) {
+      message += ` — وُحدّثت ${salarySlipsRefreshed} قسيمة راتب`;
     }
 
     return NextResponse.json({
       success: true,
-      message: "تم حفظ بيانات الطبيب",
+      message,
       hasLogin: Boolean(profileId),
       username: safeUsername || loaded.username,
+      treatment_cases_refreshed: casesRefreshed,
+      salary_slips_refreshed: salarySlipsRefreshed,
+      refresh_warning: casesRefreshWarning ?? salarySlipsRefreshWarning,
     });
   } catch (err) {
     console.error("[admin/doctors/PATCH]", err);
@@ -354,11 +432,11 @@ export async function PATCH(
 
 /** DELETE — إيقاف الطبيب (حذف من القائمة النشطة) */
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const ctx = await requireStaffAdmin();
+    const ctx = await requireStaffAdmin(req);
     if ("error" in ctx) {
       return NextResponse.json({ error: ctx.error }, { status: ctx.status });
     }

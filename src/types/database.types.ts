@@ -356,8 +356,9 @@ export interface Database {
         Row: {
           id: string;
           clinic_id: string;
-          staff_id: string;
-          entry_type: "advance" | "deduction" | "absence";
+          staff_id: string | null;
+          assistant_id?: string | null;
+          entry_type: "advance" | "deduction" | "absence" | "bonus";
           amount: number;
           entry_date: string;
           notes_ar: string | null;

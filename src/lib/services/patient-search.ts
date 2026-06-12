@@ -19,6 +19,9 @@ export type PatientSearchResult = Pick<
 export const PATIENT_SEARCH_MIN_LENGTH = 2;
 export const PATIENT_SEARCH_DEBOUNCE_MS = 300;
 
+/** clinic = كل مراجعي العيادة؛ doctor = مراجعو الطبيب فقط */
+export type PatientSearchScope = "clinic" | "doctor";
+
 /** Core DB search — clinic_id must be known */
 export async function searchPatientsInClinic(
   supabase: SupabaseClient,
@@ -101,6 +104,8 @@ export async function searchPatientsViaApi(
     limit?: number;
     minLength?: number;
     signal?: AbortSignal;
+    scope?: PatientSearchScope;
+    doctorId?: string | null;
   }
 ): Promise<{ patients: PatientSearchResult[]; error?: string }> {
   const q = query.trim();
@@ -116,6 +121,12 @@ export async function searchPatientsViaApi(
       q,
       limit: String(limit),
     });
+    if (opts.scope) {
+      params.set("scope", opts.scope);
+    }
+    if (opts.doctorId) {
+      params.set("doctor_id", opts.doctorId);
+    }
     const res = await fetch(`/api/patients/search?${params}`, {
       credentials: "include",
       headers: authPortalHeaders(opts.portal),

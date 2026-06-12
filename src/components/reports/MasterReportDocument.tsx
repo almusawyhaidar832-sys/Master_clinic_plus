@@ -2,6 +2,7 @@
 
 import type { MasterClinicReport } from "@/lib/services/clinic-reports";
 import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
+import { withdrawalStatusLabel } from "@/lib/withdrawals/display";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface MasterReportDocumentProps {
@@ -39,7 +40,7 @@ export function MasterReportDocument({
           <StatBox label="المرتجعات (مطروحة)" value={summary.totalRefunds} negative />
           <StatBox label="مصروفات عامة" value={summary.generalExpenses} negative />
           <StatBox label="رواتب الموظفين" value={summary.staffSalaries} negative />
-          <StatBox label="التدفق النقدي (تراكمي)" value={summary.cashInflow} />
+          <StatBox label="محصّل الفترة" value={summary.cashInflow} />
           <StatBox label="حصة العيادة" value={summary.totalClinicShare} />
           <StatBox label="مستحقات الأطباء" value={summary.doctorPayouts} negative />
           <StatBox label="ديون معلّقة" value={summary.outstandingDebts} warning />
@@ -55,17 +56,27 @@ export function MasterReportDocument({
         </p>
       </section>
 
-      <section className="mb-6 grid grid-cols-2 gap-3 text-sm">
+      <section
+        className={`mb-6 grid gap-3 text-sm ${
+          report.isCurrentMonthReport ? "grid-cols-2" : "grid-cols-1"
+        }`}
+      >
+        {report.isCurrentMonthReport ? (
+          <div className="rounded-lg bg-surface p-3">
+            <p className="mb-1 font-semibold text-slate-text">
+              {report.today.label}
+            </p>
+            <p>عمليات: {report.today.operationsCount}</p>
+            <p>محصّل: {formatCurrency(report.today.totalCollected)}</p>
+            <p className="text-debt-text">
+              متبقي: {formatCurrency(report.today.totalRemainingDebt)}
+            </p>
+          </div>
+        ) : null}
         <div className="rounded-lg bg-surface p-3">
-          <p className="mb-1 font-semibold text-slate-text">اليوم</p>
-          <p>عمليات: {report.today.operationsCount}</p>
-          <p>محصّل: {formatCurrency(report.today.totalCollected)}</p>
-          <p className="text-debt-text">
-            متبقي: {formatCurrency(report.today.totalRemainingDebt)}
+          <p className="mb-1 font-semibold text-slate-text">
+            {report.periodLabel}
           </p>
-        </div>
-        <div className="rounded-lg bg-surface p-3">
-          <p className="mb-1 font-semibold text-slate-text">الشهر الحالي</p>
           <p>عمليات: {report.month.operationsCount}</p>
           <p>محصّل: {formatCurrency(report.month.totalCollected)}</p>
           <p className="text-debt-text">
@@ -74,7 +85,7 @@ export function MasterReportDocument({
         </div>
       </section>
 
-      {report.pendingWithdrawals.length > 0 && (
+      {report.isCurrentMonthReport && report.pendingWithdrawals.length > 0 && (
         <section className="mb-6">
           <h3 className="mb-2 text-sm font-bold">طلبات سحب معلّقة</h3>
           <table className="w-full text-xs sm:text-sm">
@@ -100,40 +111,88 @@ export function MasterReportDocument({
         </section>
       )}
 
-      <section className="mb-6">
-        <h3 className="mb-2 text-sm font-bold">حسابات الأطباء</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[480px] text-xs sm:text-sm">
+      {report.monthWithdrawals.length > 0 && (
+        <section className="mb-6">
+          <h3 className="mb-2 text-sm font-bold">
+            سحوبات الأطباء (الشهر)
+          </h3>
+          <table className="w-full text-xs sm:text-sm">
             <thead>
               <tr className="border-b text-right text-slate-muted">
                 <th className="py-1">الطبيب</th>
-                <th className="py-1">طريقة المحاسبة</th>
-                <th className="py-1">مستحق</th>
-                <th className="py-1">مسحوب</th>
-                <th className="py-1">قابل للسحب</th>
-                <th className="py-1">سحب معلّق</th>
+                <th className="py-1">النوع</th>
+                <th className="py-1">الحالة</th>
+                <th className="py-1">المبلغ</th>
+                <th className="py-1">التاريخ</th>
               </tr>
             </thead>
             <tbody>
-              {report.doctors.map((d) => (
-                <tr key={d.id} className="border-b border-slate-border/40">
-                  <td className="py-1 font-medium">{d.full_name_ar}</td>
-                  <td className="py-1 text-slate-muted">{d.paymentLabel}</td>
-                  <td className="py-1">{formatCurrency(d.totalEarned)}</td>
-                  <td className="py-1">{formatCurrency(d.totalWithdrawn)}</td>
-                  <td className="py-1 text-primary">
-                    {formatCurrency(d.withdrawableBalance)}
-                  </td>
-                  <td className="py-1 text-amber-700">
-                    {d.pendingWithdrawalAmount > 0
-                      ? formatCurrency(d.pendingWithdrawalAmount)
-                      : "—"}
-                  </td>
+              {report.monthWithdrawals.map((w) => (
+                <tr key={w.id} className="border-b border-slate-border/40">
+                  <td className="py-1">{w.doctorName}</td>
+                  <td className="py-1 text-slate-muted">{w.source}</td>
+                  <td className="py-1">{withdrawalStatusLabel(w.status)}</td>
+                  <td className="py-1">{formatCurrency(w.amount)}</td>
+                  <td className="py-1">{formatDate(w.effectiveDate)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
+      )}
+
+      <section className="mb-6">
+        <h3 className="mb-2 text-sm font-bold">
+          حسابات الأطباء ({report.periodLabel})
+        </h3>
+        {report.doctors.length === 0 ? (
+          <p className="text-sm text-slate-muted">
+            لا توجد حركات أطباء مسجّلة في هذه الفترة
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-xs sm:text-sm">
+              <thead>
+                <tr className="border-b text-right text-slate-muted">
+                  <th className="py-1">الطبيب</th>
+                  <th className="py-1">طريقة المحاسبة</th>
+                  <th className="py-1">مستحق الشهر</th>
+                  <th className="py-1">مسحوب الشهر</th>
+                  {report.isCurrentMonthReport ? (
+                    <>
+                      <th className="py-1">قابل للسحب (حالي)</th>
+                      <th className="py-1">سحب معلّق</th>
+                    </>
+                  ) : null}
+                </tr>
+              </thead>
+              <tbody>
+                {report.doctors.map((d) => (
+                  <tr key={d.id} className="border-b border-slate-border/40">
+                    <td className="py-1 font-medium">{d.full_name_ar}</td>
+                    <td className="py-1 text-slate-muted">{d.paymentLabel}</td>
+                    <td className="py-1">{formatCurrency(d.totalEarned)}</td>
+                    <td className="py-1">
+                      {formatCurrency(d.monthWithdrawn)}
+                    </td>
+                    {report.isCurrentMonthReport ? (
+                      <>
+                        <td className="py-1 text-primary">
+                          {formatCurrency(d.withdrawableBalance)}
+                        </td>
+                        <td className="py-1 text-amber-700">
+                          {d.pendingWithdrawalAmount > 0
+                            ? formatCurrency(d.pendingWithdrawalAmount)
+                            : "—"}
+                        </td>
+                      </>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {report.expenses.length > 0 && (
@@ -162,13 +221,17 @@ export function MasterReportDocument({
 
       {report.salaryAdvances.length > 0 && (
         <section className="mb-6">
-          <h3 className="mb-2 text-sm font-bold">سلف وخصومات الموظفين (الشهر)</h3>
+          <h3 className="mb-2 text-sm font-bold">
+            سلف وخصومات ومكافآت الرواتب (الشهر)
+          </h3>
           <table className="w-full text-xs sm:text-sm">
             <thead>
               <tr className="border-b text-right text-slate-muted">
-                <th className="py-1">الموظف</th>
+                <th className="py-1">الاسم</th>
+                <th className="py-1">الفئة</th>
                 <th className="py-1">النوع</th>
                 <th className="py-1">المبلغ</th>
+                <th className="py-1">السبب</th>
                 <th className="py-1">التاريخ</th>
               </tr>
             </thead>
@@ -176,13 +239,15 @@ export function MasterReportDocument({
               {report.salaryAdvances.map((e, i) => (
                 <tr key={i} className="border-b border-slate-border/40">
                   <td className="py-1">
-                    {e.staffName}
+                    {e.personName}
                     <span className="block text-[10px] text-slate-muted">
                       {e.jobTitle}
                     </span>
                   </td>
+                  <td className="py-1 text-slate-muted">{e.personCategory}</td>
                   <td className="py-1">{e.entryType}</td>
                   <td className="py-1">{formatCurrency(e.amount)}</td>
+                  <td className="py-1 text-slate-muted">{e.notes ?? "—"}</td>
                   <td className="py-1">{formatDate(e.entry_date)}</td>
                 </tr>
               ))}

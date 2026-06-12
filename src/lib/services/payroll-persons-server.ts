@@ -31,7 +31,7 @@ export async function fetchActivePayrollPersonsAdmin(
 ): Promise<PayrollPerson[]> {
   await ensureAccountantStaffRows(admin, clinicId);
 
-  const [staffRes, asstRes] = await Promise.all([
+  const [staffRes, asstRes, docSalaryRes] = await Promise.all([
     admin
       .from("staff_members")
       .select(
@@ -49,6 +49,13 @@ export async function fetchActivePayrollPersonsAdmin(
       .eq("clinic_id", clinicId)
       .eq("is_active", true)
       .order("full_name_ar"),
+    admin
+      .from("doctors")
+      .select("id, full_name_ar, specialty_ar, salary_amount, payment_type")
+      .eq("clinic_id", clinicId)
+      .eq("is_active", true)
+      .eq("payment_type", "salary")
+      .order("full_name_ar"),
   ]);
 
   if (staffRes.error) {
@@ -56,6 +63,9 @@ export async function fetchActivePayrollPersonsAdmin(
   }
   if (asstRes.error) {
     throw new Error(asstRes.error.message);
+  }
+  if (docSalaryRes.error) {
+    throw new Error(docSalaryRes.error.message);
   }
 
   const staffPersons: PayrollPerson[] = (staffRes.data ?? []).map(mapStaffRow);
@@ -81,7 +91,24 @@ export async function fetchActivePayrollPersonsAdmin(
     };
   });
 
-  return [...staffPersons, ...assistantPersons].sort((a, b) =>
-    a.name.localeCompare(b.name, "ar")
+  const doctorSalaryPersons: PayrollPerson[] = (docSalaryRes.data ?? []).map(
+    (d) => {
+      const specialty = (d.specialty_ar as string) || "طبيب";
+      const name = d.full_name_ar as string;
+      return {
+        id: d.id as string,
+        name,
+        role: `راتب ثابت — ${specialty}`,
+        category: "doctor_salary" as const,
+        full_name_ar: name,
+        job_title_ar: `طبيب — ${specialty}`,
+        base_salary: Number(d.salary_amount ?? 0),
+        is_active: true,
+      };
+    }
+  );
+
+  return [...staffPersons, ...assistantPersons, ...doctorSalaryPersons].sort(
+    (a, b) => a.name.localeCompare(b.name, "ar")
   );
 }

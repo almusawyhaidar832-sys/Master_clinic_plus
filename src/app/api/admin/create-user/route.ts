@@ -4,8 +4,8 @@ import { usernameToAuthEmail } from "@/lib/auth/credentials";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAuthAdmin } from "@/lib/supabase/auth-helpers";
 import {
-  normalizeDoctorPercentage,
-  normalizeMaterialsShare,
+  parseDoctorPercentageStrict,
+  parseMaterialsShareStrict,
 } from "@/lib/constants";
 import {
   normalizeDoctorPaymentType,
@@ -267,8 +267,18 @@ export async function POST(req: NextRequest) {
 
     // ── Step 10: create doctors record if needed ───────────────────────────
     if (role === "doctor") {
-      const docPercentage = normalizeDoctorPercentage(percentage);
-      const docMaterials = normalizeMaterialsShare(materials_share);
+      const pctParsed = parseDoctorPercentageStrict(percentage);
+      if (!pctParsed.ok) {
+        await getAuthAdmin(admin).deleteUser(authData.user.id);
+        return NextResponse.json({ error: pctParsed.error }, { status: 400 });
+      }
+      const matParsed = parseMaterialsShareStrict(materials_share);
+      if (!matParsed.ok) {
+        await getAuthAdmin(admin).deleteUser(authData.user.id);
+        return NextResponse.json({ error: matParsed.error }, { status: 400 });
+      }
+      const docPercentage = pctParsed.value;
+      const docMaterials = matParsed.value;
       const docPaymentType = normalizeDoctorPaymentType(payment_type);
       const docSalaryAmount =
         docPaymentType === "salary" ? parseSalaryAmount(salary_amount) : 0;

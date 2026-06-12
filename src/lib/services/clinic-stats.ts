@@ -32,10 +32,11 @@ export interface ClinicProfitStats {
   }[];
 }
 
-export async function fetchTodaySummary(
-  supabase: SupabaseClient
+/** ملخص يوم واحد — للتقرير الشهري (اليوم الحالي أو آخر يوم في الشهر) */
+export async function fetchDaySummary(
+  supabase: SupabaseClient,
+  date: string
 ): Promise<TodaySummary> {
-  const today = todayISO();
   const active = await getActiveClinicId(supabase);
 
   if (!active?.clinicId) {
@@ -43,12 +44,12 @@ export async function fetchTodaySummary(
   }
 
   const [visitorResult, opsRes] = await Promise.all([
-    fetchPeriodVisitorDebt(supabase, active.clinicId, today, today),
+    fetchPeriodVisitorDebt(supabase, active.clinicId, date, date),
     supabase
       .from("patient_operations")
       .select("paid_amount", { count: "exact" })
       .eq("clinic_id", active.clinicId)
-      .eq("operation_date", today),
+      .eq("operation_date", date),
   ]);
 
   const rows = opsRes.data ?? [];
@@ -63,6 +64,119 @@ export async function fetchTodaySummary(
   };
 }
 
+export async function fetchTodaySummary(
+  supabase: SupabaseClient
+): Promise<TodaySummary> {
+  return fetchDaySummary(supabase, todayISO());
+}
+
+const emptyProfitStats = (): ClinicProfitStats => ({
+  cashInflow: 0,
+  outstandingDebts: 0,
+  netProfit: 0,
+  totalRefunds: 0,
+  clinicShareTotal: 0,
+  doctorShareTotal: 0,
+  totalExpenses: 0,
+  totalSalariesPaid: 0,
+  breakdown: [],
+});
+
+/** إحصائيات مالية لشهر أو فترة محددة — للتقارير التاريخية */
+export async function fetchClinicProfitStatsForPeriod(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<ClinicProfitStats> {
+  const { fetchTotalRefundsAmount } = await import(
+    "@/lib/services/session-refunds"
+  );
+  const { fetchPaidSalariesInPeriod } = await import(
+    "@/lib/services/executive-snapshot"
+  );
+
+  const [
+    opsRes,
+    expensesRes,
+    totalSalariesPaid,
+    totalRefunds,
+    clinicExpenseShareRes,
+    visitorDebt,
+  ] = await Promise.all([
+    supabase
+      .from("patient_operations")
+      .select("paid_amount, clinic_share_amount, doctor_share_amount")
+      .eq("clinic_id", clinicId)
+      .gte("operation_date", from)
+      .lte("operation_date", to),
+    supabase
+      .from("expenses")
+      .select("amount")
+      .eq("clinic_id", clinicId)
+      .gte("expense_date", from)
+      .lte("expense_date", to),
+    fetchPaidSalariesInPeriod(supabase, clinicId, from, to),
+    fetchTotalRefundsAmount(supabase, { clinicId, from, to }),
+    supabase
+      .from("transactions")
+      .select("amount")
+      .eq("clinic_id", clinicId)
+      .eq("type", "doctor_expense_clinic")
+      .lt("amount", 0)
+      .gte("transaction_date", from)
+      .lte("transaction_date", to),
+    fetchPeriodVisitorDebt(supabase, clinicId, from, to),
+  ]);
+
+  const ops = opsRes.data ?? [];
+  const cashInflow = ops.reduce((s, r) => s + Number(r.paid_amount ?? 0), 0);
+  const clinicShareTotal = ops.reduce(
+    (s, r) => s + Number(r.clinic_share_amount ?? 0),
+    0
+  );
+  const doctorShareTotal = ops.reduce(
+    (s, r) => s + Number(r.doctor_share_amount ?? 0),
+    0
+  );
+  const generalExpenses = (expensesRes.data ?? []).reduce(
+    (s, r) => s + Number(r.amount ?? 0),
+    0
+  );
+  const clinicExpenseShare = (clinicExpenseShareRes.data ?? []).reduce(
+    (s, row) => s + Math.abs(Number(row.amount ?? 0)),
+    0
+  );
+  const totalExpenses = generalExpenses + clinicExpenseShare;
+  const outstandingDebts = visitorDebt.debt;
+  const refundsRounded = Math.round(totalRefunds * 100) / 100;
+  const netProfit =
+    Math.round((cashInflow - totalExpenses - totalSalariesPaid) * 100) / 100;
+
+  return {
+    cashInflow,
+    outstandingDebts,
+    netProfit,
+    totalRefunds: refundsRounded,
+    clinicShareTotal,
+    doctorShareTotal,
+    totalExpenses,
+    totalSalariesPaid,
+    breakdown: [
+      { label: "صافي المحصّل (بعد المرتجعات)", amount: cashInflow },
+      { label: "مصروفات عامة", amount: -generalExpenses },
+      {
+        label: "حصة العيادة من صرفيات الأطباء",
+        amount: -clinicExpenseShare,
+      },
+      { label: "رواتب مدفوعة", amount: -totalSalariesPaid },
+      { label: "حصة العيادة من العمليات", amount: clinicShareTotal },
+      { label: "أرباح الأطباء (محافظ — منفصلة)", amount: doctorShareTotal },
+      { label: "صافي ربح العيادة", amount: netProfit },
+    ],
+  };
+}
+
 export async function fetchClinicProfitStats(
   supabase: SupabaseClient
 ): Promise<ClinicProfitStats> {
@@ -70,17 +184,7 @@ export async function fetchClinicProfitStats(
   const clinicId = active?.clinicId;
 
   if (!clinicId) {
-    return {
-      cashInflow: 0,
-      outstandingDebts: 0,
-      netProfit: 0,
-      totalRefunds: 0,
-      clinicShareTotal: 0,
-      doctorShareTotal: 0,
-      totalExpenses: 0,
-      totalSalariesPaid: 0,
-      breakdown: [],
-    };
+    return emptyProfitStats();
   }
 
   const { fetchTotalRefundsAmount } = await import(

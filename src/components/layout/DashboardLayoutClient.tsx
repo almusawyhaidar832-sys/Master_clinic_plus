@@ -64,7 +64,7 @@ export function DashboardLayoutClient({
   }, [loadNotifications]);
 
   useClinicSync({
-    topics: ["sessions", "refunds", "queue", "appointments"],
+    topics: ["sessions", "refunds", "queue", "appointments", "notifications"],
     clinicId: profile?.id,
     onRefresh: loadNotifications,
     enabled: !!profile?.id,

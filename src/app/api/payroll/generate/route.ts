@@ -67,10 +67,21 @@ export async function POST(req: NextRequest) {
       success: true,
       month_year: monthYear,
       assistantCreated: result.assistantCreated,
+      assistantUpdated: result.assistantUpdated,
       assistantSkipped: result.assistantSkipped,
       generalCreated: result.generalCreated,
+      generalUpdated: result.generalUpdated,
       generalSkipped: result.generalSkipped,
-      totalCreated: result.assistantCreated + result.generalCreated,
+      doctorSalaryCreated: result.doctorSalaryCreated,
+      doctorSalaryUpdated: result.doctorSalaryUpdated,
+      doctorSalarySkipped: result.doctorSalarySkipped,
+      totalCreated:
+        result.assistantCreated +
+        result.assistantUpdated +
+        result.generalCreated +
+        result.generalUpdated +
+        result.doctorSalaryCreated +
+        result.doctorSalaryUpdated,
       transactions_created: txResult.created,
       transaction_errors: txResult.errors.length ? txResult.errors : undefined,
       profit_updated: true,

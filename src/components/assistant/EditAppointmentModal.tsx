@@ -5,6 +5,8 @@ import { X, RefreshCw } from "lucide-react";
 import type { Appointment } from "@/types";
 import { updateAssistantAppointmentViaApi } from "@/lib/services/assistant-appointments-client";
 import { updateAccountantAppointmentViaApi } from "@/lib/services/accountant-appointments-client";
+import { PatientSearchField } from "@/components/patients/PatientSearchField";
+import { getPatientDisplayPhone } from "@/lib/phone";
 
 interface EditAppointmentModalProps {
   appointment: Appointment;
@@ -20,6 +22,7 @@ export function EditAppointmentModal({
   portal = "assistant",
 }: EditAppointmentModalProps) {
   const [name, setName] = useState(appointment.patient_name_ar ?? "");
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [phone, setPhone] = useState(appointment.patient_phone ?? "");
   const [date, setDate] = useState(appointment.appointment_date);
   const [startTime, setStartTime] = useState(appointment.start_time.slice(0, 5));
@@ -77,12 +80,27 @@ export function EditAppointmentModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">اسم المريض</label>
-            <input
+            <label className="mb-1 block text-sm font-medium text-slate-600">
+              اسم المريض
+            </label>
+            <PatientSearchField
+              portal={portal}
+              doctorId={appointment.doctor_id}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              selectedPatientId={selectedPatientId}
+              showIcon={false}
               required
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              placeholder="اكتب حرفين من اسم مراجع هذا الطبيب..."
+              inputClassName="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              onChange={(v) => {
+                setName(v);
+                setSelectedPatientId(null);
+              }}
+              onSelect={(p) => {
+                setSelectedPatientId(p.id);
+                setName(p.full_name_ar);
+                setPhone(getPatientDisplayPhone(p) ?? "");
+              }}
             />
           </div>
           <div>

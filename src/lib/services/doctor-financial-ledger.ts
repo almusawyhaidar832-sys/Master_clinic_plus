@@ -1,7 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildInvoiceNumber } from "@/lib/invoices/session-invoice";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
-import { calcOperationEarned } from "@/lib/services/doctor-wallet";
+import {
+  calcOperationEarned,
+  filterWithdrawalsInPeriod,
+  withdrawalEffectiveDate,
+} from "@/lib/services/doctor-wallet";
+import {
+  withdrawalSourceLabel,
+  withdrawalStatusLabel,
+} from "@/lib/withdrawals/display";
+import { SALARY_ENTRY_TYPE_LABELS } from "@/lib/services/salary-entry-display";
+import type { SalaryEntryType } from "@/types";
 import type { InvoiceHistoryRow } from "@/lib/services/invoice-archive";
 import { fetchInvoiceHistory } from "@/lib/services/invoice-history-query";
 import { opName, type PatientOperation } from "@/types";
@@ -41,6 +51,7 @@ export interface DoctorLedgerPatientRow {
 export type DoctorLedgerOperationKind =
   | "withdrawal"
   | "salary_payout"
+  | "salary_adjustment"
   | "expense_deduction"
   | "payroll_deduction";
 
@@ -70,6 +81,7 @@ export interface DoctorFinancialReportData {
   patient_payments: DoctorLedgerPatientRow[];
   withdrawals: DoctorLedgerOperationRow[];
   salary_payouts: DoctorLedgerOperationRow[];
+  salary_adjustments: DoctorLedgerOperationRow[];
   expense_deductions: DoctorLedgerOperationRow[];
   payroll_deductions: DoctorLedgerOperationRow[];
 }
@@ -568,22 +580,47 @@ export async function fetchDoctorLedgerFinancialOps(
   const limit = Math.min(Math.max(filters.limit ?? 100, 1), 200);
   const rows: DoctorLedgerOperationRow[] = [];
 
+  const withdrawalSelectFull =
+    "id, amount, status, source, requested_at, processed_at, notes";
+  const withdrawalSelectBase =
+    "id, amount, status, requested_at, processed_at";
+
   let withdrawalsQuery = admin
     .from("doctor_withdrawals")
-    .select("id, amount, status, requested_at, processed_at, notes")
+    .select(withdrawalSelectFull)
     .eq("doctor_id", doctorId)
     .order("requested_at", { ascending: false })
-    .limit(100);
+    .limit(200);
 
-  if (filters.dateFrom) {
-    withdrawalsQuery = withdrawalsQuery.gte("requested_at", filters.dateFrom);
+  let withdrawalsRes = await withdrawalsQuery;
+  if (withdrawalsRes.error?.message?.includes("notes")) {
+    withdrawalsRes = await admin
+      .from("doctor_withdrawals")
+      .select(withdrawalSelectBase)
+      .eq("doctor_id", doctorId)
+      .order("requested_at", { ascending: false })
+      .limit(200);
   }
-  if (filters.dateTo) {
-    withdrawalsQuery = withdrawalsQuery.lte(
-      "requested_at",
-      `${filters.dateTo}T23:59:59`
-    );
+  if (withdrawalsRes.error?.message?.includes("source")) {
+    withdrawalsRes = await admin
+      .from("doctor_withdrawals")
+      .select("id, amount, status, requested_at, processed_at")
+      .eq("doctor_id", doctorId)
+      .order("requested_at", { ascending: false })
+      .limit(200);
   }
+
+  const period =
+    filters.dateFrom || filters.dateTo
+      ? {
+          from: filters.dateFrom ?? "1970-01-01",
+          to: filters.dateTo ?? "2999-12-31",
+        }
+      : undefined;
+  const withdrawalRows = filterWithdrawalsInPeriod(
+    withdrawalsRes.data ?? [],
+    period
+  );
 
   const txSelectFull =
     "id, type, amount, transaction_date, description_ar, reference_type, reference_id, operation_id, patient_id";
@@ -628,26 +665,41 @@ export async function fetchDoctorLedgerFinancialOps(
     txRes = await fallback;
   }
 
-  const [withdrawalsRes, txResFinal] = await Promise.all([
-    withdrawalsQuery,
+  let salaryEntriesQuery = admin
+    .from("salary_entries")
+    .select("id, entry_type, amount, entry_date, notes_ar")
+    .eq("clinic_id", clinicId)
+    .eq("doctor_id", doctorId)
+    .order("entry_date", { ascending: false })
+    .limit(100);
+
+  if (filters.dateFrom) {
+    salaryEntriesQuery = salaryEntriesQuery.gte("entry_date", filters.dateFrom);
+  }
+  if (filters.dateTo) {
+    salaryEntriesQuery = salaryEntriesQuery.lte("entry_date", filters.dateTo);
+  }
+
+  const [txResFinal, salaryEntriesRes] = await Promise.all([
     Promise.resolve(txRes),
+    salaryEntriesQuery,
   ]);
 
   if (txResFinal.error) throw new Error(txResFinal.error.message);
 
   if (!withdrawalsRes.error) {
-    for (const w of withdrawalsRes.data ?? []) {
+    for (const w of withdrawalRows) {
       const status = w.status as WithdrawalStatus;
-      const date =
-        (w.processed_at as string | null)?.slice(0, 10) ??
-        (w.requested_at as string).slice(0, 10);
+      const date = withdrawalEffectiveDate(w);
+      const source = (w as { source?: string | null }).source;
+      const notes = (w as { notes?: string | null }).notes?.trim();
+      const sourceLabel = withdrawalSourceLabel(source);
       rows.push({
         id: w.id as string,
         kind: "withdrawal",
-        label:
-          status === "rejected"
-            ? `طلب سحب — ${WITHDRAWAL_STATUS_AR[status] ?? status}`
-            : `سحب نقدي — ${WITHDRAWAL_STATUS_AR[status] ?? status}`,
+        label: notes
+          ? `${sourceLabel} — ${withdrawalStatusLabel(status)} — ${notes}`
+          : `${sourceLabel} — ${withdrawalStatusLabel(status)}`,
         amount: Number(w.amount ?? 0),
         operation_date: date,
         status,
@@ -686,6 +738,21 @@ export async function fetchDoctorLedgerFinancialOps(
     });
   }
 
+  for (const entry of salaryEntriesRes.data ?? []) {
+    const entryType = entry.entry_type as SalaryEntryType;
+    const typeLabel =
+      SALARY_ENTRY_TYPE_LABELS[entryType] ?? String(entry.entry_type);
+    const notes = (entry.notes_ar as string | null)?.trim();
+    rows.push({
+      id: entry.id as string,
+      kind: "salary_adjustment",
+      label: notes ? `${typeLabel} — ${notes}` : typeLabel,
+      amount: Number(entry.amount ?? 0),
+      operation_date: entry.entry_date as string,
+      status: entryType,
+    });
+  }
+
   rows.sort((a, b) => b.operation_date.localeCompare(a.operation_date));
 
   return { rows: rows.slice(0, limit), total: rows.length };
@@ -695,6 +762,7 @@ function splitOperations(rows: DoctorLedgerOperationRow[]) {
   return {
     withdrawals: rows.filter((r) => r.kind === "withdrawal"),
     salary_payouts: rows.filter((r) => r.kind === "salary_payout"),
+    salary_adjustments: rows.filter((r) => r.kind === "salary_adjustment"),
     expense_deductions: rows.filter((r) => r.kind === "expense_deduction"),
     payroll_deductions: rows.filter((r) => r.kind === "payroll_deduction"),
   };
@@ -777,6 +845,7 @@ export async function fetchDoctorFinancialReport(
     patient_payments: patientsRes.rows,
     withdrawals: split.withdrawals,
     salary_payouts: split.salary_payouts,
+    salary_adjustments: split.salary_adjustments,
     expense_deductions: expenseDeductions,
     payroll_deductions: split.payroll_deductions,
   };

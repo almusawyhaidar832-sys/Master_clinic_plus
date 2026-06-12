@@ -7,6 +7,7 @@ import {
   PATIENT_SEARCH_MIN_LENGTH,
   searchPatientsViaApi,
   type PatientSearchResult,
+  type PatientSearchScope,
 } from "@/lib/services/patient-search";
 
 export function usePatientSearch(
@@ -17,6 +18,8 @@ export function usePatientSearch(
     limit?: number;
     debounceMs?: number;
     minLength?: number;
+    scope?: PatientSearchScope;
+    doctorId?: string | null;
   }
 ) {
   const {
@@ -25,6 +28,8 @@ export function usePatientSearch(
     limit = 12,
     debounceMs = PATIENT_SEARCH_DEBOUNCE_MS,
     minLength = PATIENT_SEARCH_MIN_LENGTH,
+    scope,
+    doctorId,
   } = opts;
 
   const [results, setResults] = useState<PatientSearchResult[]>([]);
@@ -56,7 +61,14 @@ export function usePatientSearch(
 
       const { patients, error: searchError } = await searchPatientsViaApi(
         trimmed,
-        { portal, limit, minLength, signal: controller.signal }
+        {
+          portal,
+          limit,
+          minLength,
+          scope,
+          doctorId,
+          signal: controller.signal,
+        }
       );
 
       if (id !== requestId.current) return;
@@ -70,7 +82,7 @@ export function usePatientSearch(
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, portal, enabled, limit, debounceMs, minLength]);
+  }, [query, portal, enabled, limit, debounceMs, minLength, scope, doctorId]);
 
   return { results, loading, error };
 }

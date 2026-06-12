@@ -34,6 +34,11 @@ const KIND_META: Record<
     color: "bg-emerald-100 text-emerald-800",
     icon: Banknote,
   },
+  salary_adjustment: {
+    label: "حركة راتب",
+    color: "bg-sky-100 text-sky-800",
+    icon: Banknote,
+  },
   expense_deduction: {
     label: "خصم صرفية",
     color: "bg-amber-100 text-amber-800",
@@ -103,7 +108,8 @@ export function DoctorLedgerOperationsTab({
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-muted">
-        سحوباتك ورواتبك وخصومات المساعدين — صرفيات العيادة في تبويب الفواتير
+        سحوباتك ورواتبك وحركات الراتب (سلفة/خصم/مكافأة) وخصومات المساعدين —
+        صرفيات العيادة في تبويب الفواتير
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -163,6 +169,9 @@ export function DoctorLedgerOperationsTab({
           {rows.map((row) => {
             const meta = KIND_META[row.kind];
             const Icon = meta.icon;
+            const isSalaryBonus =
+              row.kind === "salary_adjustment" && row.status === "bonus";
+            const showAsCredit = isSalaryBonus;
             return (
               <div
                 key={`${row.kind}-${row.id}`}
@@ -188,8 +197,14 @@ export function DoctorLedgerOperationsTab({
                     {formatDate(row.operation_date)}
                   </p>
                 </div>
-                <p className="shrink-0 text-lg font-bold text-red-600 tabular-nums">
-                  −{formatCurrency(row.amount)}
+                <p
+                  className={cn(
+                    "shrink-0 text-lg font-bold tabular-nums",
+                    showAsCredit ? "text-emerald-700" : "text-red-600"
+                  )}
+                >
+                  {showAsCredit ? "+" : "−"}
+                  {formatCurrency(row.amount)}
                 </p>
               </div>
             );

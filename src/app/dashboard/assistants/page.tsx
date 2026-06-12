@@ -7,7 +7,8 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { EditAssistantSalaryModal } from "@/components/assistants/EditAssistantSalaryModal";
+import { EditEmployeeSalaryModal } from "@/components/payroll/EditEmployeeSalaryModal";
+import type { PayrollPerson } from "@/lib/services/payroll-persons";
 import { ArchiveAssistantDialog } from "@/components/assistants/ArchiveAssistantDialog";
 import {
   UserPlus, UserRound, Stethoscope, Eye, EyeOff,
@@ -33,6 +34,24 @@ interface AssistantRow {
   profile?: { username: string | null; is_active: boolean } | null;
 }
 
+function assistantRowToPayrollPerson(a: AssistantRow): PayrollPerson {
+  const doctorName = a.doctor?.full_name_ar;
+  const role = doctorName ? `مساعد — ${doctorName}` : "مساعد طبيب";
+  return {
+    id: a.id,
+    name: a.full_name_ar,
+    role,
+    category: "assistant",
+    full_name_ar: a.full_name_ar,
+    job_title_ar: role,
+    base_salary: Number(a.total_salary ?? 0),
+    doctor_id: a.doctor_id,
+    doctor_name_ar: doctorName ?? null,
+    doctor_share_percentage: Number(a.doctor_share_percentage ?? 0),
+    is_active: true,
+  };
+}
+
 export default function AssistantsPage() {
   const supabase = createClient();
 
@@ -53,7 +72,7 @@ export default function AssistantsPage() {
   const [doctorSharePct, setDoctorSharePct] = useState("50");
   const [showPass, setShowPass] = useState(false);
   const [listFilter, setListFilter] = useState<"all" | "active" | "archived">("all");
-  const [editingAssistant, setEditingAssistant] = useState<AssistantRow | null>(null);
+  const [editingPerson, setEditingPerson] = useState<PayrollPerson | null>(null);
   const [archivingAssistant, setArchivingAssistant] = useState<AssistantRow | null>(null);
 
   const previewBreakdown = useMemo(() => {
@@ -453,7 +472,7 @@ export default function AssistantsPage() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => setEditingAssistant(a)}
+                    onClick={() => setEditingPerson(assistantRowToPayrollPerson(a))}
                     className="flex items-center gap-1 rounded-xl border border-teal-200 px-3 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-50"
                   >
                     <Pencil className="h-3.5 w-3.5" />
@@ -484,12 +503,15 @@ export default function AssistantsPage() {
         </div>
       )}
 
-      {editingAssistant && (
-        <EditAssistantSalaryModal
-          assistant={editingAssistant}
-          onClose={() => setEditingAssistant(null)}
+      {editingPerson && (
+        <EditEmployeeSalaryModal
+          person={editingPerson}
+          onClose={() => setEditingPerson(null)}
           onSaved={() => {
-            setMsg({ ok: true, text: "تم تحديث راتب المساعد" });
+            setMsg({
+              ok: true,
+              text: "تم تحديث راتب المساعد — سجلات الرواتب غير المُصرفة مُحدَّثة",
+            });
             load();
           }}
         />

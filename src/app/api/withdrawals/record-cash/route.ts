@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { profile, doctor, admin } =
-      await assertCanRecordCashWithdrawal(doctor_id);
+      await assertCanRecordCashWithdrawal(doctor_id, req);
 
     const limit = await computeDoctorWithdrawableLimit(admin, doctor.id);
     if (amount > limit + 0.001) {

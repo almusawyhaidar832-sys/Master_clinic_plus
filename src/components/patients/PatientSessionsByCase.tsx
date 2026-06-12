@@ -342,6 +342,13 @@ function CaseAccordion({
             </p>
             <p className="text-xs text-slate-muted mt-0.5">
               {group.sessions.length} جلسة
+              {group.caseInfo?.primary_doctor_name ? (
+                <>
+                  {" "}
+                  — د.{" "}
+                  {formatDoctorDisplayName(group.caseInfo.primary_doctor_name)}
+                </>
+              ) : null}
             </p>
             <div className="mt-1.5">
               <CaseFinancialSummary group={group} />

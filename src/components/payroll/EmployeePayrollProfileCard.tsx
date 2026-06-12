@@ -120,6 +120,22 @@ export function EmployeePayrollProfileCard({
             راتب المحاسب يُعدّل من إدارة الرواتب — يظهر في صرف الرواتب الشهرية.
           </p>
         </div>
+      ) : person.category === "doctor_salary" ? (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/80 p-4 text-sm">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-amber-600 px-2.5 py-0.5 text-xs font-bold text-white">
+              طبيب — راتب ثابت
+            </span>
+            <span className="text-slate-600">{person.role}</span>
+          </div>
+          <p className="font-medium text-primary">
+            الراتب الشهري: {formatCurrency(person.base_salary)}
+          </p>
+          <p className="mt-1 text-xs text-amber-900">
+            سجّل سلفة أو خصماً أو مكافأة من النموذج أدناه — الصرف من مصاريف
+            العيادة.
+          </p>
+        </div>
       ) : person.category === "assistant" ? (
         <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50/80 p-4 text-sm">
           <div className="mb-2 flex flex-wrap items-center gap-2">

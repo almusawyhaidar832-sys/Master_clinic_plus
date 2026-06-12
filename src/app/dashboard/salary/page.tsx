@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
@@ -47,6 +47,12 @@ import {
 import { EmployeePayrollProfileCard } from "@/components/payroll/EmployeePayrollProfileCard";
 import { EditEmployeeSalaryModal } from "@/components/payroll/EditEmployeeSalaryModal";
 import { DeactivateEmployeeDialog } from "@/components/payroll/DeactivateEmployeeDialog";
+import {
+  isSalaryReasonRequired,
+  salaryReasonFieldLabel,
+  salaryReasonPlaceholder,
+  validateSalaryEntryReason,
+} from "@/lib/services/salary-entry-reason";
 
 interface DoctorOption {
   id: string;
@@ -96,11 +102,86 @@ function StaffRow({
   );
 }
 
-const entryTypes = [
+const employeeEntryTypes = [
   { value: "advance", label: "سلفة" },
   { value: "deduction", label: "خصم" },
   { value: "absence", label: "خصم غياب" },
+  { value: "bonus", label: "مكافأة" },
 ];
+
+const doctorEntryTypes = [
+  { value: "advance", label: "سلفة (يُخصم من الراتب)" },
+  { value: "deduction", label: "خصم" },
+  { value: "absence", label: "خصم غياب" },
+  { value: "bonus", label: "مكافأة (يُضاف للراتب)" },
+];
+
+const entryTypeLabels = [...employeeEntryTypes, ...doctorEntryTypes];
+
+const entryTypeShortLabel: Record<string, string> = {
+  advance: "سلفة",
+  deduction: "خصم",
+  absence: "غياب",
+  bonus: "مكافأة",
+};
+
+function slipDisplayName(slip: SalarySlip, persons: PayrollPerson[]): string {
+  const staff = slip.staff as { full_name_ar?: string } | null | undefined;
+  if (staff?.full_name_ar) return staff.full_name_ar;
+  const doctor = slip.doctor as { full_name_ar?: string } | null | undefined;
+  if (doctor?.full_name_ar) return doctor.full_name_ar;
+  if (slip.doctor_id) {
+    return (
+      persons.find(
+        (p) => p.category === "doctor_salary" && p.id === slip.doctor_id
+      )?.full_name_ar ?? "طبيب"
+    );
+  }
+  if (slip.staff_id) {
+    return (
+      persons.find(
+        (p) =>
+          (p.category === "general" || p.category === "accountant") &&
+          p.id === slip.staff_id
+      )?.full_name_ar ?? "موظف"
+    );
+  }
+  return "—";
+}
+
+function entrySubmitLabel(type: string): string {
+  switch (type) {
+    case "advance":
+      return "تسجيل السلفة وخصمها من الراتب";
+    case "deduction":
+      return "تسجيل الخصم";
+    case "absence":
+      return "تسجيل خصم الغياب";
+    case "bonus":
+      return "تسجيل المكافأة وإضافتها للراتب";
+    default:
+      return "حفظ الحركة";
+  }
+}
+
+function entryDisabledReason(opts: {
+  boardLocked: boolean;
+  slipPaid: boolean;
+  selectedPerson: PayrollPerson | null;
+  saving: boolean;
+}): string | null {
+  if (!opts.selectedPerson) {
+    return "اختر موظفاً من القائمة أعلاه أولاً";
+  }
+  if (opts.boardLocked) {
+    return "هذا الشهر مُغلق أو أرشيف — غيّر «شهر العمل» إلى الشهر النشط";
+  }
+  if (opts.slipPaid) {
+    return "راتب هذا الموظف مُصرف لهذا الشهر — لا يمكن إضافة حركات";
+  }
+  if (opts.saving) return null;
+  return null;
+}
 
 export default function SalaryPage() {
   const { clinicId, source: clinicSource } = useActiveClinicId();
@@ -129,6 +210,12 @@ export default function SalaryPage() {
   const [entries, setEntries] = useState<SalaryEntry[]>([]);
   const [slips, setSlips] = useState<SalarySlip[]>([]);
   const [saving, setSaving] = useState(false);
+  const [entryFeedback, setEntryFeedback] = useState<{
+    text: string;
+    ok: boolean;
+  } | null>(null);
+  const entryFormRef = useRef<HTMLDivElement>(null);
+  const payrollEntryFormRef = useRef<HTMLDivElement>(null);
 
   const [employeeType, setEmployeeType] =
     useState<PayrollEmployeeCategory>("general");
@@ -156,9 +243,15 @@ export default function SalaryPage() {
   const selection = parsePayrollPersonKey(selectedKey);
   const assistantId = selection?.category === "assistant" ? selection.id : "";
   const isAssistantSelected = selection?.category === "assistant";
-  const isGeneralSelected =
+  const isDoctorSalarySelected = selection?.category === "doctor_salary";
+  const isStaffSelected =
     selection?.category === "general" || selection?.category === "accountant";
-  const staffId = isGeneralSelected ? selection?.id ?? "" : "";
+  const isGeneralSelected = isStaffSelected;
+  const staffId =
+    selection?.category === "general" || selection?.category === "accountant"
+      ? selection?.id ?? ""
+      : "";
+  const doctorSalaryId = isDoctorSalarySelected ? selection.id : "";
   const selectedStaff =
     staff.find((s) => s.id === staffId) ??
     (isGeneralSelected && selectedPerson
@@ -176,21 +269,57 @@ export default function SalaryPage() {
   const selectedAssistantRecord = payrollRecords.find(
     (r) => r.assistant_id === assistantId
   );
-  const staffSlipThisMonth = slips.find((s) => s.staff_id === staffId);
-  const slipPaid = staffSlipThisMonth?.status === "paid";
+  const staffSlipThisMonth = slips.find((s) =>
+    isDoctorSalarySelected
+      ? s.doctor_id === doctorSalaryId
+      : s.staff_id === staffId
+  );
+  const slipPaid = isAssistantSelected
+    ? selectedAssistantRecord?.status === "paid"
+    : staffSlipThisMonth?.status === "paid";
+
+  const payrollBaseSalary =
+    selectedStaff?.base_salary ?? selectedPerson?.base_salary ?? 0;
 
   function showMessage(text: string, ok: boolean) {
     setMessage(text);
     setMessageOk(ok);
   }
 
+  function flashEntryFeedback(text: string, ok: boolean) {
+    setEntryFeedback({ text, ok });
+    showMessage(text, ok);
+    requestAnimationFrame(() => {
+      payrollEntryFormRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      entryFormRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+  }
+
   useEffect(() => {
-    if (isCurrentMonth && isActivePayrollMonth) {
-      setEntryDate(todayISO());
-    } else {
-      setEntryDate(monthTo);
+    let next =
+      isCurrentMonth && isActivePayrollMonth ? todayISO() : monthTo;
+    if (next < monthFrom) next = monthFrom;
+    if (next > monthTo) next = monthTo;
+    setEntryDate(next);
+  }, [workMonth, isCurrentMonth, isActivePayrollMonth, monthFrom, monthTo]);
+
+  useEffect(() => {
+    if (isDoctorSalarySelected) {
+      if (!doctorEntryTypes.some((t) => t.value === entryType)) {
+        setEntryType("advance");
+      }
+    } else if (isStaffSelected || isAssistantSelected) {
+      if (!employeeEntryTypes.some((t) => t.value === entryType)) {
+        setEntryType("advance");
+      }
     }
-  }, [workMonth, isCurrentMonth, isActivePayrollMonth, monthTo]);
+  }, [selectedKey, isDoctorSalarySelected, isStaffSelected, isAssistantSelected, entryType]);
 
   useEffect(() => {
     if (!clinicId) return;
@@ -327,7 +456,9 @@ export default function SalaryPage() {
         fetchPayrollRecordsForMonth(supabase, clinicId, workMonth),
         supabase
           .from("salary_slips")
-          .select("*, staff:staff_members!staff_id(full_name_ar, job_title_ar, profile_id)")
+          .select(
+            "*, staff:staff_members!staff_id(full_name_ar, job_title_ar, profile_id), doctor:doctors!doctor_id(full_name_ar)"
+          )
           .eq("clinic_id", clinicId)
           .eq("month_year", workMonth)
           .order("created_at", { ascending: false }),
@@ -342,17 +473,47 @@ export default function SalaryPage() {
   }, [clinicId, workMonth]);
 
   const loadEntries = useCallback(async () => {
-    if (!staffId) return;
+    if ((!staffId && !doctorSalaryId && !assistantId) || !clinicId) {
+      setEntries([]);
+      return;
+    }
+    try {
+      const params = new URLSearchParams({
+        month_year: workMonth,
+      });
+      if (staffId) params.set("staff_id", staffId);
+      if (assistantId) params.set("assistant_id", assistantId);
+      if (doctorSalaryId) params.set("doctor_id", doctorSalaryId);
+      const res = await fetch(`/api/payroll/salary-entries?${params}`, {
+        credentials: "include",
+        headers: authPortalHeaders("accountant"),
+      });
+      const json = (await res.json()) as {
+        entries?: SalaryEntry[];
+        error?: string;
+      };
+      if (res.ok) {
+        setEntries(json.entries ?? []);
+        return;
+      }
+    } catch {
+      // fallback below
+    }
     const supabase = createClient();
-    const { data } = await supabase
+    let query = supabase
       .from("salary_entries")
       .select("*")
-      .eq("staff_id", staffId)
       .gte("entry_date", monthFrom)
       .lte("entry_date", monthTo)
       .order("entry_date", { ascending: false });
+    query = staffId
+      ? query.eq("staff_id", staffId)
+      : assistantId
+        ? query.eq("assistant_id", assistantId)
+        : query.eq("doctor_id", doctorSalaryId);
+    const { data } = await query;
     setEntries((data as SalaryEntry[]) || []);
-  }, [staffId, monthFrom, monthTo]);
+  }, [staffId, assistantId, doctorSalaryId, clinicId, workMonth, monthFrom, monthTo]);
 
 
   useEffect(() => {
@@ -375,78 +536,303 @@ export default function SalaryPage() {
     .filter((e) => e.entry_type === "advance")
     .reduce((s, e) => s + e.amount, 0);
   const deductions = entries
-    .filter((e) => e.entry_type !== "advance")
+    .filter((e) => e.entry_type === "deduction" || e.entry_type === "absence")
     .reduce((s, e) => s + e.amount, 0);
-  const netPreview = selectedStaff
-    ? calculateSalaryNet(selectedStaff.base_salary, advances, deductions)
-    : 0;
+  const bonuses = entries
+    .filter((e) => e.entry_type === "bonus")
+    .reduce((s, e) => s + e.amount, 0);
+  const netPreview = isDoctorSalarySelected
+    ? selectedPerson
+      ? calculateSalaryNet(
+          selectedPerson.base_salary,
+          advances,
+          deductions,
+          bonuses
+        )
+      : 0
+    : selectedPerson && (isStaffSelected || isAssistantSelected)
+      ? calculateSalaryNet(
+          selectedPerson.base_salary,
+          advances,
+          deductions,
+          bonuses
+        )
+      : 0;
+  const pendingAmount = parsePositiveAmount(amount) ?? 0;
+  const netAfterPending =
+    isDoctorSalarySelected && selectedPerson && pendingAmount > 0
+      ? calculateSalaryNet(
+          selectedPerson.base_salary,
+          advances + (entryType === "advance" ? pendingAmount : 0),
+          deductions +
+            (entryType === "deduction" || entryType === "absence"
+              ? pendingAmount
+              : 0),
+          bonuses + (entryType === "bonus" ? pendingAmount : 0)
+        )
+      : (isStaffSelected || isAssistantSelected) &&
+          selectedPerson &&
+          pendingAmount > 0
+        ? calculateSalaryNet(
+            selectedPerson.base_salary,
+            advances + (entryType === "advance" ? pendingAmount : 0),
+            deductions +
+              (entryType === "deduction" || entryType === "absence"
+                ? pendingAmount
+                : 0),
+            bonuses + (entryType === "bonus" ? pendingAmount : 0)
+          )
+        : null;
+  const employeeEntryBlockReason =
+    (isStaffSelected || isAssistantSelected) && !isDoctorSalarySelected
+      ? entryDisabledReason({
+          boardLocked,
+          slipPaid,
+          selectedPerson,
+          saving,
+        })
+      : null;
+  const doctorEntryBlockReason = isDoctorSalarySelected
+    ? entryDisabledReason({
+        boardLocked,
+        slipPaid,
+        selectedPerson,
+        saving,
+      })
+    : null;
 
   const totalPaidThisMonth = slips
     .filter((s) => s.status === "paid")
     .reduce((sum, s) => sum + Number(s.net_payout ?? 0), 0);
 
-  async function handleEntry(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleEmployeeEntry(e?: React.SyntheticEvent) {
+    e?.preventDefault();
+    setEntryFeedback(null);
+
+    if (employeeEntryBlockReason) {
+      flashEntryFeedback(employeeEntryBlockReason, false);
+      return;
+    }
     if (!clinicId) {
-      showMessage("لا توجد عيادة نشطة — ربط الحساب بالعيادة مطلوب", false);
+      flashEntryFeedback("لا توجد عيادة نشطة — ربط الحساب بالعيادة مطلوب", false);
       return;
     }
     if (clinicSource === "fallback") {
-      showMessage(
-        "حسابك غير مربوط بعيادة في Supabase — نفّذ link_profile_to_first_clinic() ثم أعد تسجيل الدخول",
+      flashEntryFeedback(
+        "حسابك غير مربوط بعيادة — نفّذ link_profile_to_first_clinic() ثم أعد تسجيل الدخول",
         false
       );
-      return;
-    }
-    if (boardLocked) {
-      showMessage("هذا الشهر مُغلق أو أرشيف — لا يمكن إضافة حركات", false);
-      return;
-    }
-    if (slipPaid) {
-      showMessage("قسيمة هذا الموظف مُسلَّمة — لا يمكن إضافة سلف/خصم لنفس الشهر", false);
       return;
     }
     const parsed = parsePositiveAmount(amount);
     if (parsed == null) {
-      showMessage("أدخل مبلغاً أكبر من صفر", false);
+      flashEntryFeedback("أدخل مبلغاً أكبر من صفر في حقل المبلغ", false);
       return;
     }
-    if (!staffId) {
-      showMessage(
-        isAssistantSelected
-          ? "سلف/خصم المساعدين غير مدعوم هنا — استخدم توليد رواتب الشهر"
-          : "اختر موظفاً",
-        false
-      );
+    if (!selectedPerson || (!staffId && !assistantId)) {
+      flashEntryFeedback("اختر موظفاً أو مساعداً من القائمة أعلاه", false);
       return;
     }
     if (entryDate < monthFrom || entryDate > monthTo) {
-      showMessage(
+      flashEntryFeedback(
         `تاريخ الحركة يجب أن يكون داخل ${formatMonthYearAr(workMonth)} (${monthFrom} — ${monthTo})`,
         false
       );
       return;
     }
-
-    setSaving(true);
-    const supabase = createClient();
-    const { error } = await supabase.from("salary_entries").insert({
-      clinic_id: clinicId,
-      staff_id: staffId,
-      entry_type: entryType,
-      amount: parsed,
-      entry_date: entryDate,
-      notes_ar: notes || null,
-    });
-    setSaving(false);
-    if (error) {
-      showMessage(`تعذر الحفظ: ${translateDbError(error.message)}`, false);
+    const reasonError = validateSalaryEntryReason(entryType, notes);
+    if (reasonError) {
+      flashEntryFeedback(reasonError, false);
       return;
     }
-    showMessage("تم تسجيل الحركة", true);
-    setAmount("");
-    setNotes("");
-    loadEntries();
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/payroll/salary-entries", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          ...authPortalHeaders("accountant"),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          staff_id: staffId || undefined,
+          assistant_id: assistantId || undefined,
+          month_year: workMonth,
+          entry_type: entryType,
+          amount: parsed,
+          entry_date: entryDate,
+          base_salary: selectedPerson.base_salary,
+          notes_ar: notes || null,
+        }),
+      });
+      const json = (await res.json()) as {
+        error?: string;
+        warning?: string;
+        entries?: SalaryEntry[];
+        slip?: SalarySlip;
+        payroll_record?: PayrollRecord;
+        net_payout?: number;
+      };
+      if (!res.ok) {
+        flashEntryFeedback(
+          `تعذر الحفظ: ${translateDbError(json.error ?? "خطأ غير معروف")}`,
+          false
+        );
+        return;
+      }
+
+      if (json.entries) {
+        setEntries(json.entries);
+      } else {
+        await loadEntries();
+      }
+
+      if (json.slip) {
+        setSlips((prev) => {
+          const rest = prev.filter(
+            (s) => !(s.month_year === workMonth && s.staff_id === staffId)
+          );
+          return [json.slip as SalarySlip, ...rest];
+        });
+      } else if (json.payroll_record) {
+        setPayrollRecords((prev) => {
+          const rest = prev.filter((r) => r.id !== json.payroll_record!.id);
+          return [json.payroll_record as PayrollRecord, ...rest];
+        });
+      } else {
+        await loadPayrollMonth();
+      }
+
+      const typeLabel =
+        employeeEntryTypes.find((t) => t.value === entryType)?.label ??
+        "الحركة";
+      const netText =
+        json.net_payout != null
+          ? ` — الصافي الآن ${formatCurrency(json.net_payout)}`
+          : "";
+      flashEntryFeedback(
+        json.warning
+          ? `✓ تم تسجيل ${typeLabel}${netText} — ${json.warning}`
+          : `✓ تم تسجيل ${typeLabel}${netText}`,
+        !json.warning
+      );
+      setAmount("");
+      setNotes("");
+    } catch {
+      flashEntryFeedback("تعذر الاتصال بالسيرفر — أعد المحاولة", false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDoctorSalaryEntry(e?: React.SyntheticEvent) {
+    e?.preventDefault();
+    setEntryFeedback(null);
+
+    if (doctorEntryBlockReason) {
+      flashEntryFeedback(doctorEntryBlockReason, false);
+      return;
+    }
+    if (!clinicId || !doctorSalaryId || !selectedPerson) {
+      flashEntryFeedback("اختر طبيباً على نظام الراتب الثابت", false);
+      return;
+    }
+    if (clinicSource === "fallback") {
+      flashEntryFeedback(
+        "حسابك غير مربوط بعيادة — نفّذ link_profile_to_first_clinic() ثم أعد تسجيل الدخول",
+        false
+      );
+      return;
+    }
+    const parsed = parsePositiveAmount(amount);
+    if (parsed == null) {
+      flashEntryFeedback("أدخل مبلغاً أكبر من صفر في حقل المبلغ", false);
+      return;
+    }
+    if (entryDate < monthFrom || entryDate > monthTo) {
+      flashEntryFeedback(
+        `تاريخ الحركة يجب أن يكون داخل ${formatMonthYearAr(workMonth)}`,
+        false
+      );
+      return;
+    }
+    const reasonError = validateSalaryEntryReason(entryType, notes);
+    if (reasonError) {
+      flashEntryFeedback(reasonError, false);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/payroll/salary-entries", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          ...authPortalHeaders("accountant"),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          doctor_id: doctorSalaryId,
+          month_year: workMonth,
+          entry_type: entryType,
+          amount: parsed,
+          entry_date: entryDate,
+          base_salary: selectedPerson.base_salary,
+          notes_ar: notes || null,
+        }),
+      });
+      const json = (await res.json()) as {
+        error?: string;
+        warning?: string;
+        entries?: SalaryEntry[];
+        slip?: SalarySlip;
+        net_payout?: number;
+      };
+      if (!res.ok) {
+        flashEntryFeedback(
+          `تعذر الحفظ: ${translateDbError(json.error ?? "خطأ غير معروف")}`,
+          false
+        );
+        return;
+      }
+
+      if (json.entries) {
+        setEntries(json.entries);
+      } else {
+        await loadEntries();
+      }
+
+      if (json.slip) {
+        setSlips((prev) => {
+          const rest = prev.filter(
+            (s) =>
+              !(s.month_year === workMonth && s.doctor_id === doctorSalaryId)
+          );
+          return [json.slip as SalarySlip, ...rest];
+        });
+      } else {
+        await loadPayrollMonth();
+      }
+
+      const typeLabel =
+        doctorEntryTypes.find((t) => t.value === entryType)?.label ?? "الحركة";
+      const netText =
+        json.net_payout != null
+          ? ` — صافي الراتب الآن ${formatCurrency(json.net_payout)}`
+          : "";
+      const successText = `✓ تم تسجيل ${typeLabel}${netText}`;
+      flashEntryFeedback(
+        json.warning ? `${successText} — ${json.warning}` : successText,
+        !json.warning
+      );
+      setAmount("");
+      setNotes("");
+    } catch {
+      flashEntryFeedback("تعذر الاتصال بالسيرفر — أعد المحاولة", false);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function addStaff(e: React.FormEvent) {
@@ -552,7 +938,7 @@ export default function SalaryPage() {
       showMessage("قسائم المساعدين تُدار عبر «توليد رواتب الشهر»", false);
       return;
     }
-    if (!selectedStaff || !clinicId) {
+    if ((!selectedStaff && !isDoctorSalarySelected) || !clinicId) {
       showMessage("اختر موظفاً أولاً", false);
       return;
     }
@@ -574,24 +960,31 @@ export default function SalaryPage() {
 
     setSaving(true);
     const supabase = createClient();
-    const payload = {
+    const base = selectedPerson?.base_salary ?? selectedStaff?.base_salary ?? 0;
+    const payload: Record<string, unknown> = {
       clinic_id: clinicId,
-      staff_id: staffId,
       month_year: workMonth,
-      base_salary: selectedStaff.base_salary,
+      base_salary: base,
       total_advances: advances,
       total_deductions: deductions,
       net_payout: netPreview,
       status: "draft" as const,
     };
+    if (isDoctorSalarySelected) {
+      payload.doctor_id = doctorSalaryId;
+    } else {
+      payload.staff_id = staffId;
+    }
 
-    const { data: existing, error: fetchErr } = await supabase
+    let slipQuery = supabase
       .from("salary_slips")
       .select("id, status")
       .eq("clinic_id", clinicId)
-      .eq("staff_id", staffId)
-      .eq("month_year", workMonth)
-      .maybeSingle();
+      .eq("month_year", workMonth);
+    slipQuery = isDoctorSalarySelected
+      ? slipQuery.eq("doctor_id", doctorSalaryId)
+      : slipQuery.eq("staff_id", staffId);
+    const { data: existing, error: fetchErr } = await slipQuery.maybeSingle();
 
     if (fetchErr) {
       setSaving(false);
@@ -670,7 +1063,11 @@ export default function SalaryPage() {
   }
 
   async function refreshAfterEmployeeChange(preferKey?: string) {
-    await Promise.all([loadStaff(), loadPayrollPersons({ preferKey })]);
+    await Promise.all([
+      loadStaff(),
+      loadPayrollPersons({ preferKey }),
+      loadPayrollMonth(),
+    ]);
   }
 
   async function handleGenerateMonthlyPayroll() {
@@ -696,17 +1093,24 @@ export default function SalaryPage() {
       return;
     }
 
-    const totalCreated =
+    const totalTouched =
       result.totalCreated ??
-      result.assistantCreated + result.generalCreated;
-    if (totalCreated === 0) {
+      result.assistantCreated +
+        (result.assistantUpdated ?? 0) +
+        result.generalCreated +
+        (result.generalUpdated ?? 0) +
+        (result.doctorSalaryCreated ?? 0) +
+        (result.doctorSalaryUpdated ?? 0);
+    if (totalTouched === 0 && payrollPersons.length === 0) {
+      showMessage("لا يوجد عاملون نشطون — أضف موظفاً أولاً", false);
+    } else if (totalTouched === 0) {
       showMessage(
-        "جميع الرواتب مُولَّدة مسبقاً لهذا الشهر — أو لا يوجد عاملون نشطون",
+        "تمت مزامنة الرواتب — السجلات المدفوعة تبقى كما هي",
         true
       );
     } else {
       showMessage(
-        `تم توليد ${totalCreated} راتب — ${result.assistantCreated} مساعد · ${result.generalCreated} موظف (خدمات/محاسب)`,
+        `تم توليد/تحديث ${totalTouched} راتب — ${result.assistantCreated} مساعد · ${result.generalCreated} موظف · ${result.doctorSalaryCreated ?? 0} طبيب راتب · محدَّث: ${(result.assistantUpdated ?? 0) + (result.generalUpdated ?? 0) + (result.doctorSalaryUpdated ?? 0)}`,
         true
       );
     }
@@ -725,6 +1129,25 @@ export default function SalaryPage() {
     0
   );
   const hasGeneratedPayroll = payrollRecords.length > 0 || slips.length > 0;
+
+  const payrollMonthRows = useMemo(
+    () =>
+      payrollPersons.map((person) => {
+        if (person.category === "assistant") {
+          const record = payrollRecords.find(
+            (r) => r.assistant_id === person.id
+          );
+          return { person, record: record ?? null, slip: null as SalarySlip | null };
+        }
+        if (person.category === "doctor_salary") {
+          const slip = slips.find((s) => s.doctor_id === person.id);
+          return { person, record: null, slip: slip ?? null };
+        }
+        const slip = slips.find((s) => s.staff_id === person.id);
+        return { person, record: null, slip: slip ?? null };
+      }),
+    [payrollPersons, payrollRecords, slips]
+  );
 
   async function handleResetBoard() {
     if (!clinicId) return;
@@ -864,6 +1287,110 @@ export default function SalaryPage() {
         }
       />
 
+      {isDoctorSalarySelected && selectedPerson && (
+        <div ref={entryFormRef}>
+          <Card className="border-amber-200 bg-gradient-to-b from-amber-50/80 to-white">
+            <CardHeader>
+              <CardTitle>
+                طبيب راتب ثابت — سلفة · خصم · غياب · مكافأة (
+                {formatMonthYearAr(workMonth)})
+              </CardTitle>
+              <p className="text-xs text-amber-900">
+                {selectedPerson.full_name_ar} — الراتب الأساسي{" "}
+                {formatCurrency(selectedPerson.base_salary)}
+              </p>
+            </CardHeader>
+            <form
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleDoctorSalaryEntry();
+              }}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {doctorEntryTypes.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => setEntryType(t.value)}
+                    className={`rounded-lg border px-3 py-3 text-sm font-semibold transition ${
+                      entryType === t.value
+                        ? "border-amber-600 bg-amber-600 text-white shadow-sm"
+                        : "border-slate-border bg-white text-slate-text hover:border-amber-500 hover:bg-amber-50"
+                    }`}
+                  >
+                    {entryTypeShortLabel[t.value] ?? t.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-muted">
+                {doctorEntryTypes.find((t) => t.value === entryType)?.label}
+              </p>
+
+              <CurrencyInput
+                label="المبلغ"
+                value={amount}
+                onChange={setAmount}
+                placeholder="500,000"
+              />
+
+              <Input
+                label="التاريخ (ضمن الشهر المختار)"
+                type="date"
+                value={entryDate}
+                min={monthFrom}
+                max={monthTo}
+                onChange={(e) => setEntryDate(e.target.value)}
+                dir="ltr"
+                className="text-left"
+              />
+
+              <Input
+                label={salaryReasonFieldLabel(entryType)}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={salaryReasonPlaceholder(entryType)}
+                required={isSalaryReasonRequired(entryType)}
+              />
+
+              {entryFeedback && (
+                <Alert variant={entryFeedback.ok ? "success" : "error"}>
+                  {entryFeedback.text}
+                </Alert>
+              )}
+
+              {netAfterPending != null && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                  صافي الراتب بعد هذه الحركة:{" "}
+                  <strong className="text-amber-900">
+                    {formatCurrency(netAfterPending)}
+                  </strong>
+                </p>
+              )}
+
+              <Button
+                type="button"
+                className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-70"
+                disabled={saving}
+                onClick={() => void handleDoctorSalaryEntry()}
+              >
+                {saving ? "جاري الحفظ..." : entrySubmitLabel(entryType)}
+              </Button>
+              {doctorEntryBlockReason ? (
+                <p className="text-center text-xs text-amber-800">
+                  تنبيه: {doctorEntryBlockReason}
+                </p>
+              ) : (
+                <p className="text-center text-xs text-slate-muted">
+                  تُحدَّث قسيمة راتب الطبيب تلقائياً بعد كل حركة
+                </p>
+              )}
+            </form>
+          </Card>
+        </div>
+      )}
+
       {clinicSource === "fallback" && (
         <Alert variant="warning">
           حسابك غير مربوط بعيادة في قاعدة البيانات. نفّذ في Supabase SQL:{" "}
@@ -914,82 +1441,116 @@ export default function SalaryPage() {
         </CardHeader>
         <p className="mb-3 px-1 text-xs text-slate-muted">
           <strong>مساعد طبيب:</strong> يُقسّم بين الطبيب والعيادة ·{" "}
-          <strong>موظف خدمات:</strong> كامل الراتب مصاريف تشغيل العيادة (لا خصم من الأطباء)
+          <strong>موظف عيادة:</strong> راتبه كامل من مصاريف العيادة ·{" "}
+          <strong>الخصم/المكافأة:</strong> لهذا الشهر فقط — الشهر الجديد يبدأ بالراتب الأساسي
         </p>
-        {!hasGeneratedPayroll ? (
+        {payrollPersons.length === 0 ? (
           <p className="rounded-lg border border-dashed border-slate-border px-4 py-8 text-center text-sm text-slate-muted">
-            لا توجد رواتب مُولَّدة لهذا الشهر — اضغط «توليد رواتب الشهر»
+            لا يوجد عاملون نشطون — أضف موظفاً من النموذج أدناه
           </p>
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b text-right text-xs text-slate-muted">
                     <th className="py-2 pe-2">الاسم</th>
                     <th className="py-2 pe-2">النوع</th>
-                    <th className="py-2 pe-2">الراتب</th>
-                    <th className="py-2 pe-2">مصاريف العيادة</th>
+                    <th className="py-2 pe-2">الراتب الأساسي</th>
+                    <th className="py-2 pe-2">سلف/خصم</th>
+                    <th className="py-2 pe-2">صافي العيادة</th>
                     <th className="py-2 pe-2">حصة الطبيب</th>
                     <th className="py-2">الحالة</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {payrollRecords.map((r) => (
-                    <tr key={r.id} className="border-b border-slate-border/30">
-                      <td className="py-2 pe-2 font-medium">{r.assistant_name_ar}</td>
-                      <td className="py-2 pe-2 text-teal-700">مساعد طبيب</td>
-                      <td className="py-2 pe-2">{formatCurrency(r.total_salary)}</td>
-                      <td className="py-2 pe-2 text-primary">
-                        {formatCurrency(r.clinic_share_amount)}
-                      </td>
-                      <td className="py-2 pe-2 text-amber-800">
-                        {formatCurrency(r.doctor_share_amount)} ({r.doctor_share_percentage}%)
-                      </td>
-                      <td className="py-2 text-xs">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span>
-                            {r.status === "paid" ? "مدفوع" : "مُولَّد"}
-                          </span>
-                          {r.status !== "paid" && !boardLocked && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => markAssistantPayrollPaid(r.id)}
-                            >
-                              تأكيد الصرف
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {slips.map((slip) => {
-                    const staffInfo = slip.staff as {
-                      full_name_ar: string;
-                      profile_id?: string | null;
-                    } | null;
-                    const slipType = staffInfo?.profile_id ? "محاسب" : "خدمات";
+                  {payrollMonthRows.map(({ person, record, slip }) => {
+                    const isAssistant = person.category === "assistant";
+                    const baseSalary = isAssistant
+                      ? person.base_salary
+                      : slip?.base_salary ?? person.base_salary;
+                    const adjustments = slip
+                      ? Number(slip.total_advances ?? 0) +
+                        Number(slip.total_deductions ?? 0)
+                      : 0;
+                    const clinicNet = isAssistant
+                      ? record?.clinic_share_amount
+                      : slip?.net_payout;
+                    const doctorShare = record?.doctor_share_amount;
+                    const rowKey = payrollPersonKey(person);
+
                     return (
-                    <tr key={slip.id} className="border-b border-slate-border/30">
-                      <td className="py-2 pe-2 font-medium">
-                        {staffInfo?.full_name_ar ?? "—"}
-                      </td>
-                      <td className="py-2 pe-2 text-slate-600">{slipType}</td>
-                      <td className="py-2 pe-2">{formatCurrency(slip.base_salary)}</td>
-                      <td className="py-2 pe-2 font-medium text-primary">
-                        {formatCurrency(slip.net_payout)}
-                      </td>
-                      <td className="py-2 pe-2 text-slate-400">—</td>
-                      <td className="py-2 text-xs">
-                        {slip.status === "paid" ? "مدفوع" : "مسودة"}
-                      </td>
-                    </tr>
+                      <tr
+                        key={rowKey}
+                        className="border-b border-slate-border/30"
+                      >
+                        <td className="py-2 pe-2 font-medium">
+                          {person.full_name_ar}
+                        </td>
+                        <td className="py-2 pe-2 text-slate-600">
+                          {payrollCategoryLabel(person.category)}
+                        </td>
+                        <td className="py-2 pe-2">
+                          {formatCurrency(baseSalary)}
+                        </td>
+                        <td className="py-2 pe-2 text-debt-text">
+                          {slip && adjustments > 0
+                            ? formatCurrency(adjustments)
+                            : isAssistant && record
+                              ? "—"
+                              : "—"}
+                        </td>
+                        <td className="py-2 pe-2 font-medium text-primary">
+                          {clinicNet != null
+                            ? formatCurrency(clinicNet)
+                            : "—"}
+                        </td>
+                        <td className="py-2 pe-2 text-amber-800">
+                          {isAssistant && record
+                            ? `${formatCurrency(doctorShare ?? 0)} (${record.doctor_share_percentage}%)`
+                            : "—"}
+                        </td>
+                        <td className="py-2 text-xs">
+                          {isAssistant ? (
+                            record ? (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span>
+                                  {record.status === "paid" ? "مدفوع" : "مُولَّد"}
+                                </span>
+                                {record.status !== "paid" && !boardLocked && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      markAssistantPayrollPaid(record.id)
+                                    }
+                                  >
+                                    تأكيد الصرف
+                                  </Button>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-amber-700">لم يُولَّد</span>
+                            )
+                          ) : slip ? (
+                            <span>
+                              {slip.status === "paid" ? "مدفوع" : "مسودة"}
+                            </span>
+                          ) : (
+                            <span className="text-amber-700">لم يُولَّد</span>
+                          )}
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
+            {!hasGeneratedPayroll && (
+              <p className="mt-3 text-center text-xs text-amber-800">
+                اضغط «توليد رواتب الشهر» لإنشاء قسائم موظفي العيادة
+              </p>
+            )}
             <div className="mt-3 flex flex-wrap gap-4 border-t border-slate-border/40 pt-3 text-sm">
               <span>
                 إجمالي مصاريف العيادة:{" "}
@@ -1101,79 +1662,114 @@ export default function SalaryPage() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
+        <div ref={payrollEntryFormRef}>
         <Card>
           <CardHeader>
             <CardTitle>
               تسجيل سلفة أو خصم — {formatMonthYearAr(workMonth)}
             </CardTitle>
           </CardHeader>
-          <form onSubmit={handleEntry} className="space-y-4">
-            {selectedPerson ? (
-              <div className="rounded-lg border border-slate-border bg-slate-50 px-3 py-2 text-sm">
-                <span className="text-slate-muted">الموظف المختار: </span>
-                <strong>{selectedPerson.full_name_ar}</strong>
-                <span className="mx-2 text-slate-muted">·</span>
-                <span>{formatCurrency(selectedPerson.base_salary)}</span>
-              </div>
-            ) : (
-              <p className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                اختر موظفاً من القائمة الشاملة أعلاه أولاً
-              </p>
-            )}
+          {isDoctorSalarySelected ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+              سلفة وخصم ومكافأة طبيب الراتب الثابت من النموذج المخصص أعلاه.
+            </p>
+          ) : (
+            <form
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleEmployeeEntry();
+              }}
+              className="space-y-4"
+            >
+              {selectedPerson ? (
+                <div className="rounded-lg border border-slate-border bg-slate-50 px-3 py-2 text-sm">
+                  <span className="text-slate-muted">الموظف المختار: </span>
+                  <strong>{selectedPerson.full_name_ar}</strong>
+                  <span className="mx-2 text-slate-muted">·</span>
+                  <span>{formatCurrency(selectedPerson.base_salary)}</span>
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  اختر موظفاً من القائمة الشاملة أعلاه أولاً
+                </p>
+              )}
 
-            <Select
-              label="نوع الحركة"
-              value={entryType}
-              onChange={(e) => setEntryType(e.target.value)}
-              options={entryTypes}
-            />
+              <Select
+                label="نوع الحركة"
+                value={entryType}
+                onChange={(e) => setEntryType(e.target.value)}
+                options={employeeEntryTypes}
+              />
 
-            <CurrencyInput
-              label="المبلغ"
-              value={amount}
-              onChange={setAmount}
-              placeholder="500,000"
-              required
-            />
+              <CurrencyInput
+                label="المبلغ"
+                value={amount}
+                onChange={setAmount}
+                placeholder="500,000"
+              />
 
-            <Input
-              label="التاريخ (ضمن الشهر المختار)"
-              type="date"
-              value={entryDate}
-              min={monthFrom}
-              max={monthTo}
-              onChange={(e) => setEntryDate(e.target.value)}
-              dir="ltr"
-              className="text-left"
-            />
+              <Input
+                label="التاريخ (ضمن الشهر المختار)"
+                type="date"
+                value={entryDate}
+                min={monthFrom}
+                max={monthTo}
+                onChange={(e) => setEntryDate(e.target.value)}
+                dir="ltr"
+                className="text-left"
+              />
 
-            <Input
-              label="ملاحظات"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
+              <Input
+                label={salaryReasonFieldLabel(entryType)}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={salaryReasonPlaceholder(entryType)}
+                required={isSalaryReasonRequired(entryType)}
+              />
 
-            {!isAssistantSelected && (
+              {entryFeedback && !isDoctorSalarySelected && (
+                <Alert variant={entryFeedback.ok ? "success" : "error"}>
+                  {entryFeedback.text}
+                </Alert>
+              )}
+
+              {netAfterPending != null && (
+                <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+                  صافي الراتب بعد هذه الحركة:{" "}
+                  <strong className="text-primary">
+                    {formatCurrency(netAfterPending)}
+                  </strong>
+                </p>
+              )}
+
               <Button
-                type="submit"
-                disabled={saving || slipPaid || boardLocked || !staffId || !selectedPerson}
+                type="button"
+                className="w-full bg-teal-600 hover:bg-teal-700"
+                disabled={saving}
+                onClick={() => void handleEmployeeEntry()}
               >
-                {boardLocked
-                  ? "الشهر مُغلق"
-                  : slipPaid
-                    ? "القسيمة مُسلَّمة"
-                    : saving
-                      ? "جاري الحفظ..."
-                      : "حفظ الحركة"}
+                {saving
+                  ? "جاري الحفظ..."
+                  : entrySubmitLabel(entryType)}
               </Button>
-            )}
-            {isAssistantSelected && (
-              <p className="text-xs text-slate-muted">
-                السلف والخصومات للمساعدين تُسجَّل من إدارة المساعدين — استخدم «توليد رواتب الشهر» أعلاه.
-              </p>
-            )}
-          </form>
+              {employeeEntryBlockReason ? (
+                <p className="text-center text-xs text-amber-800">
+                  تنبيه: {employeeEntryBlockReason}
+                </p>
+              ) : !selectedPerson || (!staffId && !assistantId) ? (
+                <p className="text-center text-xs text-amber-800">
+                  اختر موظفاً أو مساعداً من القائمة أعلاه أولاً
+                </p>
+              ) : (
+                <p className="text-center text-xs text-slate-muted">
+                  يُحدَّث صافي الراتب وقسيمة الشهر تلقائياً
+                </p>
+              )}
+            </form>
+          )}
         </Card>
+        </div>
 
         <Card>
           <CardHeader>
@@ -1187,7 +1783,34 @@ export default function SalaryPage() {
               {selectedAssistantRecord ? (
                 <div className="space-y-3 rounded-lg bg-surface p-4 text-sm">
                   <div className="flex justify-between">
-                    <span>الراتب الكلي (لقطة شهرية)</span>
+                    <span>الراتب الأساسي</span>
+                    <span>{formatCurrency(selectedPerson?.base_salary ?? 0)}</span>
+                  </div>
+                  {advances > 0 && (
+                    <div className="flex justify-between text-debt-text">
+                      <span>− سلف</span>
+                      <span>{formatCurrency(advances)}</span>
+                    </div>
+                  )}
+                  {deductions > 0 && (
+                    <div className="flex justify-between text-debt-text">
+                      <span>− خصومات</span>
+                      <span>{formatCurrency(deductions)}</span>
+                    </div>
+                  )}
+                  {bonuses > 0 && (
+                    <div className="flex justify-between text-emerald-700">
+                      <span>+ مكافآت</span>
+                      <span>{formatCurrency(bonuses)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-primary">
+                    <span>صافي الراتب</span>
+                    <span>{formatCurrency(netPreview)}</span>
+                  </div>
+                  <hr className="border-slate-border" />
+                  <div className="flex justify-between">
+                    <span>الراتب المُولَّد (بعد الحركات)</span>
                     <span>{formatCurrency(selectedAssistantRecord.total_salary)}</span>
                   </div>
                   <div className="flex justify-between text-primary">
@@ -1234,18 +1857,27 @@ export default function SalaryPage() {
           ) : (
             <>
               <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-muted">
-                موظف خدمات — الراتب كامل من مصاريف تشغيل العيادة، بدون ربط بطبيب.
+                {isDoctorSalarySelected
+                  ? "طبيب راتب ثابت — الصرف من مصاريف العيادة. الجلسات لا تدخل محفظة الطبيب."
+                  : "موظف خدمات — الراتب كامل من مصاريف تشغيل العيادة، بدون ربط بطبيب."}
               </p>
               {staffSlipThisMonth?.status === "paid" && (
                 <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                  ✓ قسيمة {selectedStaff?.full_name_ar} لهذا الشهر{" "}
-                  <strong>مدفوعة</strong> — لا حاجة لإعادة الصرف.
+                  ✓ قسيمة{" "}
+                  {selectedStaff?.full_name_ar ?? selectedPerson?.full_name_ar}{" "}
+                  لهذا الشهر <strong>مدفوعة</strong> — لا حاجة لإعادة الصرف.
                 </p>
               )}
               <div className="space-y-3 rounded-lg bg-surface p-4 text-sm">
                 <div className="flex justify-between">
                   <span>الراتب الأساسي</span>
-                  <span>{formatCurrency(selectedStaff?.base_salary ?? 0)}</span>
+                  <span>
+                    {formatCurrency(
+                      selectedStaff?.base_salary ??
+                        selectedPerson?.base_salary ??
+                        0
+                    )}
+                  </span>
                 </div>
                 <div className="flex justify-between text-debt-text">
                   <span>− سلف {formatMonthYearAr(workMonth)}</span>
@@ -1255,6 +1887,12 @@ export default function SalaryPage() {
                   <span>− خصومات {formatMonthYearAr(workMonth)}</span>
                   <span>{formatCurrency(deductions)}</span>
                 </div>
+                {bonuses > 0 && (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>+ مكافآت {formatMonthYearAr(workMonth)}</span>
+                    <span>{formatCurrency(bonuses)}</span>
+                  </div>
+                )}
                 <hr className="border-slate-border" />
                 <div className="flex justify-between text-lg font-bold text-primary">
                   <span>صافي الصرف</span>
@@ -1264,7 +1902,12 @@ export default function SalaryPage() {
               <div className="mt-4 flex gap-2">
                 <Button
                   onClick={generateSlip}
-                  disabled={!staffId || saving || slipPaid || boardLocked}
+                  disabled={
+                    (!staffId && !doctorSalaryId) ||
+                    saving ||
+                    slipPaid ||
+                    boardLocked
+                  }
                 >
                   {boardLocked
                     ? "شهر مُغلق"
@@ -1286,27 +1929,49 @@ export default function SalaryPage() {
             <CardTitle>حركات {formatMonthYearAr(workMonth)}</CardTitle>
           </CardHeader>
           <ul className="space-y-2 text-sm">
-            {entries.map((e) => (
-              <li
-                key={e.id}
-                className="flex justify-between border-b border-slate-border/40 py-2"
-              >
-                <span>
-                  {entryTypes.find((t) => t.value === e.entry_type)?.label} —{" "}
-                  {e.entry_date}
-                </span>
-                <span className="font-medium">{formatCurrency(e.amount)}</span>
-              </li>
-            ))}
+            {entries.map((e) => {
+              const isBonus = e.entry_type === "bonus";
+              const typeLabel =
+                entryTypeLabels.find((t) => t.value === e.entry_type)?.label ??
+                e.entry_type;
+              return (
+                <li
+                  key={e.id}
+                  className="flex justify-between border-b border-slate-border/40 py-2"
+                >
+                  <span>
+                    {typeLabel} — {e.entry_date}
+                    {e.notes_ar ? (
+                      <span className="block text-xs text-slate-muted">
+                        {isSalaryReasonRequired(e.entry_type)
+                          ? `السبب: ${e.notes_ar}`
+                          : e.notes_ar}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span
+                    className={`font-medium ${isBonus ? "text-emerald-700" : ""}`}
+                  >
+                    {isBonus ? "+" : "−"}
+                    {formatCurrency(e.amount)}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </Card>
       )}
 
-      {entries.length === 0 && !slipPaid && (
-        <p className="text-center text-sm text-slate-muted">
-          لا حركات لـ {formatMonthYearAr(workMonth)} — ابدأ بتسجيل السلف أو أنشئ قسيمة بالراتب الأساسي فقط.
-        </p>
-      )}
+      {entries.length === 0 &&
+        !slipPaid &&
+        (isStaffSelected || isAssistantSelected || isDoctorSalarySelected) && (
+          <p className="text-center text-sm text-slate-muted">
+            لا حركات لـ {formatMonthYearAr(workMonth)} —{" "}
+            {isDoctorSalarySelected
+              ? "سجّل سلفة أو خصماً أو مكافأة من النموذج أعلاه."
+              : "سجّل سلفة أو خصماً، أو أنشئ قسيمة بالراتب الأساسي فقط."}
+          </p>
+        )}
 
       {slips.length > 0 && (
         <Card>
@@ -1321,7 +1986,7 @@ export default function SalaryPage() {
               >
                 <div>
                   <p className="font-medium">
-                    {(slip.staff as { full_name_ar: string })?.full_name_ar}
+                    {slipDisplayName(slip, payrollPersons)}
                   </p>
                   <p className="text-sm text-primary">
                     {formatCurrency(slip.net_payout)}

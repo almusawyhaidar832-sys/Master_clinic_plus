@@ -65,6 +65,31 @@ export async function recordPayrollGenerateTransactions(
   return { created, errors };
 }
 
+/** تأكيد صرف قسيمة طبيب راتب ثابت */
+export async function recordDoctorSalarySlipPaidTransaction(
+  admin: SupabaseClient,
+  clinicId: string,
+  slip: Pick<SalarySlip, "id" | "net_payout" | "month_year" | "doctor_id">
+): Promise<{ ok: boolean; error?: string }> {
+  const amt = -Number(slip.net_payout ?? 0);
+  if (amt >= 0) return { ok: true };
+  const doctorId = slip.doctor_id?.trim();
+  if (!doctorId) {
+    return { ok: false, error: "قسيمة الطبيب بدون معرّف" };
+  }
+
+  return recordFinancialTransaction(admin, {
+    clinicId,
+    amount: amt,
+    type: "doctor_salary_paid",
+    descriptionAr: `صرف راتب طبيب — ${slip.month_year}`,
+    transactionDate: new Date().toISOString().slice(0, 10),
+    doctorId,
+    referenceType: "salary_slip_doctor_paid",
+    referenceId: slip.id,
+  });
+}
+
 /** تأكيد صرف قسيمة موظف */
 export async function recordStaffSlipPaidTransaction(
   admin: SupabaseClient,

@@ -168,15 +168,39 @@ export function DoctorFinancialReportDocument({
         <h2 className="mb-2 border-b border-slate-200 pb-1 text-sm font-bold">
           سحوباتك ({report.withdrawals.length})
         </h2>
-        <ReportTable
-          headers={["التاريخ", "البيان", "المبلغ"]}
-          rows={report.withdrawals.map((op) => [
-            formatDate(op.operation_date),
-            op.label,
-            `−${formatCurrency(op.amount)}`,
-          ])}
-        />
+        {report.withdrawals.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            لا توجد سحوبات في الفترة المحددة — جرّب ترك التواريخ فارغة لعرض كل
+            السحوبات.
+          </p>
+        ) : (
+          <ReportTable
+            headers={["التاريخ", "البيان", "المبلغ"]}
+            rows={report.withdrawals.map((op) => [
+              formatDate(op.operation_date),
+              op.label,
+              `−${formatCurrency(op.amount)}`,
+            ])}
+          />
+        )}
       </section>
+
+      {report.salary_adjustments.length > 0 && (
+        <section className="mb-6">
+          <h2 className="mb-2 border-b border-slate-200 pb-1 text-sm font-bold">
+            حركات الراتب ({report.salary_adjustments.length})
+          </h2>
+          <ReportTable
+            headers={["التاريخ", "النوع", "البيان", "المبلغ"]}
+            rows={report.salary_adjustments.map((op) => [
+              formatDate(op.operation_date),
+              "راتب ثابت",
+              op.label,
+              formatCurrency(op.amount),
+            ])}
+          />
+        </section>
+      )}
 
       {(report.salary_payouts.length > 0 ||
         report.expense_deductions.length > 0 ||
