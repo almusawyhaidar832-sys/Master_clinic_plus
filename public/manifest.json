@@ -47,7 +47,7 @@
     {
       "name": "تطبيق الطبيب",
       "short_name": "طبيب",
-      "url": "/doctor",
+      "url": "/login?portal=doctor",
       "icons": [{ "src": "/pwa-icon/192", "sizes": "192x192", "type": "image/png" }]
     },
     {

@@ -1,0 +1,126 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  isValidSanitizedUsername,
+  resolveEmailForUsername,
+  sanitizeUsername,
+} from "@/lib/auth/credentials";
+import {
+  isRoleAllowedForPath,
+  loginPortalToAuthPortalId,
+  normalizeRole,
+  type AuthPortalId,
+} from "@/lib/auth/portal-access";
+import { signInWithPassword, signOutUser } from "@/lib/supabase/auth-helpers";
+
+export interface PortalLoginInput {
+  username: string;
+  password: string;
+  portal: string;
+  destination: string;
+}
+
+export type PortalLoginResult =
+  | { ok: true; redirect: string; role: string }
+  | { ok: false; status: number; error: string };
+
+async function resolveRoleAfterSignIn(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<string | null> {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  const fromProfile = normalizeRole(profile?.role as string | undefined);
+  if (fromProfile) return fromProfile;
+
+  const { data: rpcRole } = await supabase.rpc("get_my_role");
+  return normalizeRole(rpcRole as string | undefined);
+}
+
+/** Server/client shared portal login — expects Supabase client with portal-scoped cookies. */
+export async function performPortalLogin(
+  supabase: SupabaseClient,
+  input: PortalLoginInput
+): Promise<PortalLoginResult> {
+  const username = input.username.trim();
+  const password = input.password;
+
+  if (!username || !password) {
+    return {
+      ok: false,
+      status: 400,
+      error: "اسم المستخدم وكلمة المرور مطلوبان",
+    };
+  }
+
+  const authPortal = loginPortalToAuthPortalId(input.portal);
+  if (!authPortal) {
+    return { ok: false, status: 400, error: "بوابة الدخول غير معروفة" };
+  }
+
+  if (
+    !username.includes("@") &&
+    !isValidSanitizedUsername(sanitizeUsername(username))
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      error:
+        "اسم المستخدم غير صالح — استخدم حروفاً إنجليزية وأرقاماً فقط (مثل dr_ahmed)",
+    };
+  }
+
+  const email = await resolveEmailForUsername(supabase, username);
+  if (!email) {
+    return { ok: false, status: 400, error: "أدخل اسم المستخدم" };
+  }
+
+  const { data, error } = await signInWithPassword(supabase, email, password);
+  if (error || !data.user) {
+    const msg = error?.message ?? "";
+    if (msg.includes("Invalid login credentials")) {
+      return {
+        ok: false,
+        status: 401,
+        error:
+          "اسم المستخدم أو كلمة المرور غير صحيحة. إذا كان حسابك قديماً، جرّب إدخال بريدك في حقل اسم المستخدم.",
+      };
+    }
+    return { ok: false, status: 401, error: msg || "تعذر تسجيل الدخول" };
+  }
+
+  const role = await resolveRoleAfterSignIn(supabase, data.user.id);
+  if (!role || !isRoleAllowedForPath(role, input.destination)) {
+    await signOutUser(supabase);
+    return {
+      ok: false,
+      status: 403,
+      error: role
+        ? "هذا الحساب لا يناسب هذه البوابة — استخدم البوابة الصحيحة لدورك"
+        : "تعذر تحميل صلاحيات الحساب — تواصل مع الإدارة",
+    };
+  }
+
+  return {
+    ok: true,
+    redirect: input.destination,
+    role,
+  };
+}
+
+export function portalLoginDestination(portalId: string): string | null {
+  const authPortal = loginPortalToAuthPortalId(portalId);
+  if (!authPortal) return null;
+
+  const destinations: Record<AuthPortalId, string> = {
+    doctor: "/doctor",
+    accountant: "/dashboard",
+    admin: "/admin",
+    assistant: "/assistant/dashboard",
+  };
+
+  return destinations[authPortal];
+}

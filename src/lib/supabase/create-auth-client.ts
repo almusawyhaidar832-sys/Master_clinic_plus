@@ -15,6 +15,15 @@ type CookieStore = {
   ) => void;
 };
 
+function authCookieOptions(storageKey: string) {
+  return {
+    name: storageKey,
+    path: "/",
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+  };
+}
+
 const browserClients = new Map<string, AppSupabaseClient>();
 
 export function createBrowserAuthClient(
@@ -29,7 +38,7 @@ export function createBrowserAuthClient(
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       isSingleton: false,
-      cookieOptions: { name: storageKey },
+      cookieOptions: authCookieOptions(storageKey),
     }
   );
 
@@ -46,7 +55,7 @@ export function createServerAuthClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      cookieOptions: { name: storageKey },
+      cookieOptions: authCookieOptions(storageKey),
       cookies: cookieStore,
     }
   ) as unknown as AppSupabaseClient;
@@ -61,7 +70,7 @@ export async function createServerAuthClientFromAnySession(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
-        cookieOptions: { name: storageKey },
+        cookieOptions: authCookieOptions(storageKey),
         cookies: cookieStore,
       }
     );

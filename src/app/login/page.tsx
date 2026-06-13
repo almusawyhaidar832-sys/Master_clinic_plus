@@ -1,20 +1,12 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { FaTooth } from "react-icons/fa";
-import { createClientForPortal } from "@/lib/supabase/client";
-import { signOutUser } from "@/lib/supabase/auth-helpers";
 import {
   isValidSanitizedUsername,
   sanitizeUsername,
-  signInWithUsername,
 } from "@/lib/auth/credentials";
-import {
-  isRoleAllowedForPath,
-  loginPortalToAuthPortalId,
-  normalizeRole,
-} from "@/lib/auth/portal-access";
 import { Eye, EyeOff, Languages } from "lucide-react";
 import { DeveloperCredit } from "@/components/layout/DeveloperCredit";
 import { DeveloperFooterLink } from "@/components/layout/DeveloperFooterLink";
@@ -86,7 +78,6 @@ function PortalCard({
   portal: Portal;
   highlighted?: boolean;
 }) {
-  const router = useRouter();
   const { t } = useLanguage();
   const title = t(portal.titleKey);
 
@@ -129,13 +120,6 @@ function PortalCard({
     setError("");
 
     try {
-      const authPortal = loginPortalToAuthPortalId(portal.id);
-      if (!authPortal) {
-        setError(t("loginUnknownPortal"));
-        setLoading(false);
-        return;
-      }
-
       const trimmedUser = username.trim();
       if (
         !trimmedUser.includes("@") &&
@@ -146,27 +130,28 @@ function PortalCard({
         return;
       }
 
-      const supabase = createClientForPortal(authPortal);
-      const result = await signInWithUsername(supabase, trimmedUser, password);
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          username: trimmedUser,
+          password,
+          portal: portal.id,
+        }),
+      });
 
-      if (!result.ok) {
-        setError(result.error);
+      const payload = (await res.json().catch(() => null)) as
+        | { ok?: boolean; redirect?: string; error?: string }
+        | null;
+
+      if (!res.ok || !payload?.ok) {
+        setError(payload?.error ?? t("loginConnectionError"));
         setLoading(false);
         return;
       }
 
-      const role = normalizeRole(result.role);
-      if (!role || !isRoleAllowedForPath(role, portal.destination)) {
-        await signOutUser(supabase);
-        setError(
-          role ? t("loginWrongPortal") : t("loginNoRole")
-        );
-        setLoading(false);
-        return;
-      }
-
-      router.refresh();
-      window.location.assign(portal.destination);
+      window.location.assign(payload.redirect ?? portal.destination);
     } catch {
       setError(t("loginConnectionError"));
     } finally {
@@ -201,6 +186,11 @@ function PortalCard({
           disabled={loading}
           required
           dir="ltr"
+          autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          inputMode="email"
           className="touch-input w-full rounded-xl border border-white bg-white/80 px-4 py-3 text-base text-left placeholder:text-slate-400 focus:border-slate-300 focus:outline-none disabled:opacity-60"
         />
 
@@ -213,6 +203,10 @@ function PortalCard({
             disabled={loading}
             required
             dir="ltr"
+            autoComplete="current-password"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             className="touch-input w-full rounded-xl border border-white bg-white/80 px-4 py-3 pr-12 text-base text-left placeholder:text-slate-400 focus:border-slate-300 focus:outline-none disabled:opacity-60"
           />
           <button
