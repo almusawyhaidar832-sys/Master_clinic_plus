@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import Link from "next/link";
@@ -40,7 +40,13 @@ export function DeveloperClinicsTable({
   onRefresh,
   onMessage,
 }: Props) {
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [menuClinic, setMenuClinic] = useState<DeveloperClinicRow | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(
+    null
+  );
+  const [sheetClinic, setSheetClinic] = useState<DeveloperClinicRow | null>(
+    null
+  );
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -51,13 +57,52 @@ export function DeveloperClinicsTable({
   const [editPhone, setEditPhone] = useState("");
   const [editAddress, setEditAddress] = useState("");
 
+  const closeMenus = useCallback(() => {
+    setMenuClinic(null);
+    setMenuPos(null);
+    setSheetClinic(null);
+  }, []);
+
+  useEffect(() => {
+    if (!menuClinic) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeMenus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuClinic, closeMenus]);
+
   function openEdit(c: DeveloperClinicRow) {
     setEditId(c.id);
     setEditName(c.name);
     setEditNameAr(c.name_ar ?? "");
     setEditPhone(c.phone ?? "");
     setEditAddress(c.address ?? "");
-    setOpenMenu(null);
+    closeMenus();
+  }
+
+  function openActions(
+    c: DeveloperClinicRow,
+    e: React.MouseEvent<HTMLButtonElement>
+  ) {
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      setSheetClinic(c);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 240;
+    const menuHeight = 232;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < menuHeight + 12;
+    const top = openUp
+      ? Math.max(8, rect.top - menuHeight - 4)
+      : rect.bottom + 4;
+    const left = Math.max(
+      8,
+      Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)
+    );
+    setMenuClinic(c);
+    setMenuPos({ top, left });
   }
 
   async function saveEdit(id: string) {
@@ -85,7 +130,7 @@ export function DeveloperClinicsTable({
 
   async function toggleActive(c: DeveloperClinicRow) {
     setBusyId(c.id);
-    setOpenMenu(null);
+    closeMenus();
     const res = await fetch(`/api/developer/clinics/${c.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -113,7 +158,7 @@ export function DeveloperClinicsTable({
       return;
     }
     setBusyId(id);
-    setOpenMenu(null);
+    closeMenus();
     const res = await fetch(`/api/developer/clinics/${id}/reset-whatsapp`, {
       method: "POST",
     });
@@ -126,18 +171,10 @@ export function DeveloperClinicsTable({
     onRefresh();
   }
 
-  async function confirmDelete(c: DeveloperClinicRow) {
-    const label = c.name_ar || c.name;
-    if (
-      !confirm(
-        `حذف عيادة «${label}» نهائياً؟\n\nسيتم حذف: المرضى، الأطباء، العمليات المالية، المواعيد، غرفة الانتظار، الواتساب، ملفات الأشعة، وحسابات الدخول للطاقم.\n\nلا يمكن التراجع — يُوفّر مساحة قاعدة البيانات.`
-      )
-    ) {
-      return;
-    }
+  async function performDelete(c: DeveloperClinicRow) {
     setBusyId(c.id);
     setDeleteId(null);
-    setOpenMenu(null);
+    closeMenus();
     const res = await fetch(`/api/developer/clinics/${c.id}`, {
       method: "DELETE",
     });
@@ -167,71 +204,66 @@ export function DeveloperClinicsTable({
     window.location.href = data.redirect ?? "/dashboard";
   }
 
-  function renderActionMenu(c: DeveloperClinicRow) {
+  function renderActionButtons(c: DeveloperClinicRow) {
     return (
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setOpenMenu(openMenu === c.id ? null : c.id)}
-          className="touch-target rounded-lg border border-slate-600 hover:bg-slate-800"
-          aria-label="إجراءات"
-        >
-          <MoreVertical className="h-5 w-5" />
-        </button>
-        {openMenu === c.id && (
-          <>
-            <div
-              className="fixed inset-0 z-10"
-              onClick={() => setOpenMenu(null)}
-            />
-            <ul className="absolute left-0 z-20 mt-1 min-w-[220px] rounded-lg border border-slate-600 bg-slate-800 py-1 shadow-xl">
-              <li>
-                <Link
-                  href={`/developer/clinics/${c.id}`}
-                  className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-sm text-amber-300 hover:bg-slate-700"
-                  onClick={() => setOpenMenu(null)}
-                >
-                  <UserCog className="h-4 w-4" />
-                  المستخدمون والصلاحيات
-                </Link>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-sm hover:bg-slate-700"
-                  onClick={() => openEdit(c)}
-                >
-                  <Pencil className="h-4 w-4" />
-                  تعديل البيانات
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-sm hover:bg-slate-700"
-                  onClick={() => void resetWhatsapp(c.id)}
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  إعادة تعيين الربط
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-sm text-red-400 hover:bg-red-950/40"
-                  onClick={() => {
-                    setDeleteId(c.id);
-                    setOpenMenu(null);
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  حذف العيادة
-                </button>
-              </li>
-            </ul>
-          </>
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={(e) => openActions(c, e)}
+        className="touch-target rounded-lg border border-slate-600 hover:bg-slate-800"
+        aria-label="إجراءات"
+      >
+        <MoreVertical className="h-5 w-5" />
+      </button>
+    );
+  }
+
+  function renderMenuItems(c: DeveloperClinicRow) {
+    return (
+      <>
+        <li>
+          <Link
+            href={`/developer/clinics/${c.id}`}
+            className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-sm text-amber-300 hover:bg-slate-700"
+            onClick={closeMenus}
+          >
+            <UserCog className="h-4 w-4" />
+            المستخدمون والصلاحيات
+          </Link>
+        </li>
+        <li>
+          <button
+            type="button"
+            className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-sm hover:bg-slate-700"
+            onClick={() => openEdit(c)}
+          >
+            <Pencil className="h-4 w-4" />
+            تعديل البيانات
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-sm hover:bg-slate-700"
+            onClick={() => void resetWhatsapp(c.id)}
+          >
+            <RefreshCw className="h-4 w-4" />
+            إعادة تعيين الربط
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-sm text-red-400 hover:bg-red-950/40"
+            onClick={() => {
+              setDeleteId(c.id);
+              closeMenus();
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+            حذف العيادة
+          </button>
+        </li>
+      </>
     );
   }
 
@@ -308,7 +340,7 @@ export function DeveloperClinicsTable({
                 <ExternalLink className="h-4 w-4" />
                 {enteringId === c.id ? "..." : "دخول نيابةً"}
               </Button>
-              {renderActionMenu(c)}
+              {renderActionButtons(c)}
             </div>
           </li>
         ))}
@@ -401,7 +433,7 @@ export function DeveloperClinicsTable({
                     {enteringId === c.id ? "..." : "دخول نيابةً"}
                   </Button>
 
-                  {renderActionMenu(c)}
+                  {renderActionButtons(c)}
                 </div>
               </td>
             </tr>
@@ -409,6 +441,51 @@ export function DeveloperClinicsTable({
         </tbody>
       </table>
       </div>
+
+      {menuClinic && menuPos && (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-40 cursor-default bg-black/20"
+            aria-label="إغلاق القائمة"
+            onClick={closeMenus}
+          />
+          <ul
+            className="fixed z-50 min-w-[240px] rounded-lg border border-slate-600 bg-slate-800 py-1 shadow-xl"
+            style={{ top: menuPos.top, left: menuPos.left }}
+          >
+            {renderMenuItems(menuClinic)}
+          </ul>
+        </>
+      )}
+
+      {sheetClinic && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 md:hidden">
+          <button
+            type="button"
+            className="absolute inset-0"
+            aria-label="إغلاق"
+            onClick={closeMenus}
+          />
+          <div className="safe-bottom relative z-10 w-full max-w-lg rounded-t-2xl border border-slate-600 bg-slate-900 p-4 shadow-2xl">
+            <p className="mb-3 text-center text-sm font-bold text-slate-200">
+              {sheetClinic.name_ar || sheetClinic.name}
+            </p>
+            <ul className="divide-y divide-slate-800 rounded-xl border border-slate-700">
+              {renderMenuItems(sheetClinic)}
+            </ul>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={closeMenus}
+              className="mt-3 w-full border-slate-600 text-slate-300"
+            >
+              إلغاء
+            </Button>
+          </div>
+        </div>
+      )}
 
       {editId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -467,11 +544,19 @@ export function DeveloperClinicsTable({
       )}
 
       {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-red-900/50 bg-slate-900 p-6">
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-4 sm:items-center">
+          <div className="safe-bottom w-full max-w-sm rounded-2xl border border-red-900/50 bg-slate-900 p-6 shadow-2xl">
             <h3 className="text-lg font-bold text-red-400">تأكيد الحذف</h3>
-            <p className="mt-2 text-sm text-slate-400">
-              سيتم حذف العيادة وجميع المرضى والسجلات المرتبطة. لا يمكن التراجع.
+            <p className="mt-2 text-sm text-slate-300">
+              {(() => {
+                const c = clinics.find((x) => x.id === deleteId);
+                const label = c?.name_ar || c?.name || "هذه العيادة";
+                return `حذف «${label}» نهائياً؟`;
+              })()}
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">
+              سيتم حذف المرضى، الأطباء، المواعيد، غرفة الانتظار، الواتساب،
+              والسجلات المالية. لا يمكن التراجع.
             </p>
             <div className="mt-6 flex gap-2 justify-end">
               <Button
@@ -479,7 +564,7 @@ export function DeveloperClinicsTable({
                 variant="outline"
                 size="sm"
                 onClick={() => setDeleteId(null)}
-                className="border-slate-600 text-slate-300"
+                className="touch-target border-slate-600 text-slate-300"
               >
                 إلغاء
               </Button>
@@ -488,9 +573,10 @@ export function DeveloperClinicsTable({
                 variant="danger"
                 size="sm"
                 disabled={busyId === deleteId}
+                className="touch-target"
                 onClick={() => {
                   const c = clinics.find((x) => x.id === deleteId);
-                  if (c) void confirmDelete(c);
+                  if (c) void performDelete(c);
                 }}
               >
                 {busyId === deleteId ? "جاري الحذف..." : "حذف نهائي"}

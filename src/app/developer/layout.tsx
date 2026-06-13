@@ -11,7 +11,10 @@ export default function DeveloperLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100" dir="rtl">
+    <div
+      className="min-h-dvh overflow-y-auto overscroll-y-contain bg-slate-950 text-slate-100"
+      dir="rtl"
+    >
       {children}
     </div>
   );

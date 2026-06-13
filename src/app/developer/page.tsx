@@ -179,7 +179,7 @@ export default function DeveloperDashboardPage() {
   }
 
   return (
-    <div className="safe-top safe-bottom mx-auto max-w-6xl p-4 sm:p-6">
+    <div className="safe-top safe-bottom mx-auto max-w-6xl p-4 pb-24 sm:p-6 sm:pb-16">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-amber-400">
@@ -353,9 +353,17 @@ export default function DeveloperDashboardPage() {
       )}
 
       <section>
-        <h2 className="mb-3 text-lg font-bold text-slate-200">
-          قائمة العيادات
-        </h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold text-slate-200">قائمة العيادات</h2>
+          {!loading && clinics.length > 0 && (
+            <span className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-400">
+              {clinics.length} عيادة
+              {stats && stats.totalClinics !== clinics.length
+                ? ` · المسجّل في الإحصائيات: ${stats.totalClinics}`
+                : ""}
+            </span>
+          )}
+        </div>
         {loading ? (
           <p className="text-slate-400">جاري التحميل...</p>
         ) : clinics.length === 0 ? (
