@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
+import { assertOperationInClinic } from "@/lib/auth/require-operation-clinic";
 import { runSessionSavedAutomation } from "@/lib/automation/run";
 import type { WhatsAppMessageSnapshot } from "@/lib/automation/session-context";
 
@@ -83,6 +84,16 @@ export async function POST(req: NextRequest) {
         { error: "event و operationId مطلوبان" },
         { status: 400 }
       );
+    }
+
+    if (!internal && profile?.clinic_id) {
+      const owned = await assertOperationInClinic(
+        operationId,
+        profile.clinic_id
+      );
+      if (!owned.ok) {
+        return NextResponse.json({ error: owned.error }, { status: owned.status });
+      }
     }
 
     switch (event) {

@@ -3,6 +3,7 @@ import {
   assertCanRecordCashWithdrawal,
   StaffAccessError,
 } from "@/lib/auth/staff-access";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import {
   computeDoctorWithdrawableLimit,
   insertWithdrawal,
@@ -50,6 +51,24 @@ export async function POST(req: NextRequest) {
 
     await notifyWithdrawalStatus(id, "paid").catch((err) => {
       console.error("[withdrawals/record-cash] notification failed:", err);
+    });
+
+    await writeAuditLog(admin, {
+      clinicId: doctor.clinic_id,
+      entityType: "withdrawal",
+      entityId: id,
+      action: "create",
+      changedBy: profile.id,
+      actorName: profile.full_name ?? null,
+      financialAmount: -Math.abs(amount),
+      after: {
+        doctor_id: doctor.id,
+        amount,
+        status: "paid",
+        source: "accountant_cash",
+        notes: notes?.trim() || null,
+      },
+      note: "دفع نقدي — محاسب",
     });
 
     return NextResponse.json({ success: true, id });

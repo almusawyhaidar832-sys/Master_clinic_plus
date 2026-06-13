@@ -1,12 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createApiSessionClient, getApiCallerProfile } from "@/lib/auth/api-session";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
 import { resolveEvolutionSession } from "@/lib/whatsapp/evolution-client";
 import { resolveWhatsAppClinic } from "@/lib/whatsapp/resolve-clinic";
 import { resolveWhatsAppInstanceName } from "@/lib/whatsapp/resolve-instance";
+import { requireWhatsAppManageAccess } from "@/lib/whatsapp/require-api-access";
 
 /** GET /api/whatsapp/status — حالة الاتصال + تحديث whatsapp_linked في العيادة */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const access = await requireWhatsAppManageAccess(req);
+  if (!access.ok) return access.response;
+
   const cfg = getWhatsAppConfig();
   if (!cfg.configured) {
     return NextResponse.json({

@@ -16,7 +16,11 @@ import { deliverWhatsAppMessage } from "@/lib/whatsapp/send-message";
  * Body: { phone?: string } — defaults to WHATSAPP_TEST_PHONE env or profile.phone
  */
 export async function POST(request: NextRequest) {
-  const profile = await getApiCallerProfile();
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "غير متاح" }, { status: 404 });
+  }
+
+  const profile = await getApiCallerProfile(request);
   if (!profile) {
     return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
   }

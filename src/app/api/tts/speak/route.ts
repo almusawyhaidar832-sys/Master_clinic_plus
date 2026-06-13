@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  getApiCallerProfile,
+  isApiAssistantRole,
+  isApiDoctorRole,
+  isApiStaffRole,
+} from "@/lib/auth/api-session";
+import {
   ARABIC_SPEECH_RATE,
   buildPatientCallSsml,
   buildPlainArabicSsml,
@@ -7,8 +13,33 @@ import {
 } from "@/lib/queue/arabic-speech-text";
 import { synthesizeArabicSpeech } from "@/lib/queue/edge-tts-server";
 
+function isQueueScreenCaller(req: NextRequest): boolean {
+  const referer = req.headers.get("referer") ?? "";
+  try {
+    return new URL(referer).pathname.startsWith("/queue-screen");
+  } catch {
+    return false;
+  }
+}
+
+function callerMayUseTts(role: string | null | undefined): boolean {
+  return (
+    isApiStaffRole(role) ||
+    isApiDoctorRole(role) ||
+    isApiAssistantRole(role)
+  );
+}
+
 export async function POST(req: NextRequest) {
   try {
+    const profile = await getApiCallerProfile(req);
+    if (!profile && !isQueueScreenCaller(req)) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+    }
+    if (profile && !callerMayUseTts(profile.role) && !isQueueScreenCaller(req)) {
+      return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
+    }
+
     const body = (await req.json()) as {
       text?: string;
       parts?: PatientCallSpeechParts;

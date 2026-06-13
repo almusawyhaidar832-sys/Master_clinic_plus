@@ -3,6 +3,7 @@ import {
   assertCanManageWithdrawal,
   StaffAccessError,
 } from "@/lib/auth/staff-access";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { notifyWithdrawalStatus } from "@/lib/notifications/server";
 import { applyWithdrawalStatusUpdate } from "@/lib/withdrawals/status-update";
 
@@ -19,6 +20,12 @@ export async function POST(req: NextRequest) {
     }
 
     const { profile, admin } = await assertCanManageWithdrawal(id, req);
+
+    const { data: beforeRow } = await admin
+      .from("doctor_withdrawals")
+      .select("id, clinic_id, amount, status, doctor_id, source")
+      .eq("id", id)
+      .maybeSingle();
 
     const { error: updateErr } = await applyWithdrawalStatusUpdate(
       admin,
@@ -37,6 +44,29 @@ export async function POST(req: NextRequest) {
     await notifyWithdrawalStatus(id, status).catch((err) => {
       console.error("[withdrawals/update-status] notification failed:", err);
     });
+
+    if (beforeRow?.clinic_id) {
+      await writeAuditLog(admin, {
+        clinicId: String(beforeRow.clinic_id),
+        entityType: "withdrawal",
+        entityId: id,
+        action: "update",
+        changedBy: profile.id,
+        actorName: profile.full_name ?? null,
+        financialAmount:
+          status === "paid"
+            ? -Math.abs(Number(beforeRow.amount ?? 0))
+            : null,
+        before: beforeRow as Record<string, unknown>,
+        after: { status },
+        note:
+          status === "paid"
+            ? "صرف طلب سحب"
+            : status === "approved"
+              ? "الموافقة على طلب سحب"
+              : "رفض طلب سحب",
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

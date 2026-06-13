@@ -22,9 +22,24 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const clinicId = String(body.clinic_id ?? caller.clinic_id ?? "");
+    const requestedClinicId =
+      body.clinic_id != null ? String(body.clinic_id).trim() : "";
+
+    if (
+      caller.clinic_id &&
+      requestedClinicId &&
+      requestedClinicId !== caller.clinic_id
+    ) {
+      return NextResponse.json({ error: "غير مصرح لهذه العيادة" }, { status: 403 });
+    }
+
+    const clinicId = caller.clinic_id ?? requestedClinicId;
     if (!clinicId) {
       return NextResponse.json({ error: "معرّف العيادة مطلوب" }, { status: 400 });
+    }
+
+    if (!caller.clinic_id && caller.role !== "super_admin") {
+      return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
     }
 
     const action = body.action as AppointmentUpdateAction;

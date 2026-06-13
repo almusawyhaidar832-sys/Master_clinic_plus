@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   recordAssistantPayrollPaidTransaction,
@@ -84,6 +85,23 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      await writeAuditLog(admin, {
+        clinicId,
+        entityType: "payroll",
+        entityId: id,
+        action: "update",
+        changedBy: caller.id,
+        actorName: caller.full_name ?? null,
+        financialAmount: -Math.abs(Number(slip.net_payout ?? 0)),
+        after: {
+          kind: "slip",
+          status: "paid",
+          doctor_id: slip.doctor_id ?? null,
+          month_year: slip.month_year ?? null,
+        },
+        note: "تأكيد صرف راتب",
+      });
+
       return NextResponse.json({ success: true, kind: "slip", profit_updated: true });
     }
 
@@ -121,6 +139,23 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    await writeAuditLog(admin, {
+      clinicId,
+      entityType: "payroll",
+      entityId: id,
+      action: "update",
+      changedBy: caller.id,
+      actorName: caller.full_name ?? null,
+      financialAmount: -Math.abs(Number(record.total_salary ?? 0)),
+      after: {
+        kind: "assistant",
+        status: "paid",
+        doctor_id: record.doctor_id ?? null,
+        month_year: record.month_year ?? null,
+      },
+      note: "تأكيد صرف راتب مساعد",
+    });
 
     return NextResponse.json({
       success: true,

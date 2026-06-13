@@ -1234,7 +1234,6 @@ export function QuickEntryForm({
       }
     }
 
-    let syncWarning = "";
     const syncCaseId =
       (linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
         ? linkedCaseId
@@ -1258,7 +1257,13 @@ export function QuickEntryForm({
         caseId: syncCaseId,
       });
       if (!sync.ok) {
-        syncWarning = ` — تحذير: ${sync.error ?? "تعذر تحديث ذمة الحالة"}`;
+        setMessage({
+          type: "error",
+          text:
+            `تم حفظ الجلسة لكن فشل تحديث ذمة الحالة: ${sync.error ?? "خطأ غير معروف"}. ` +
+            "راجع ملف المريض وتأكد من تطابق الرصيد قبل إغلاق الحساب.",
+        });
+        return;
       }
     }
 
@@ -1405,7 +1410,7 @@ export function QuickEntryForm({
     }
     setMessage({
       type: "success",
-      text: successText + syncWarning,
+      text: successText,
     });
 
     setOperationName("");

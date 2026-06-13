@@ -3,6 +3,13 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { registerWithUsername } from "@/lib/auth/credentials";
 
 export async function POST(request: Request) {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      { error: "التسجيل الذاتي غير متاح — تواصل مع مدير العيادة" },
+      { status: 403 }
+    );
+  }
+
   const body = await request.json();
   const username = String(body.username ?? "").trim();
   const password = String(body.password ?? "");

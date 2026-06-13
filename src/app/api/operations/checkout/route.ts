@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile, isApiStaffRole } from "@/lib/auth/api-session";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { processSessionCheckout } from "@/lib/services/session-checkout";
 /** POST — دفع الحساب النهائي بعد جلسة الطبيب */
@@ -29,6 +30,25 @@ export async function POST(req: NextRequest) {
       profile.id as string,
       { appointmentId, queueEntryId, paidAmount }
     );
+
+    if (result.operationId && paidAmount > 0) {
+      await writeAuditLog(admin, {
+        clinicId: profile.clinic_id as string,
+        entityType: "patient_operation",
+        entityId: result.operationId,
+        action: "create",
+        changedBy: profile.id,
+        actorName: profile.full_name ?? null,
+        financialAmount: paidAmount,
+        after: {
+          source: "queue_checkout",
+          appointment_id: appointmentId ?? null,
+          queue_entry_id: queueEntryId ?? null,
+          paid_amount: paidAmount,
+        },
+        note: "دفعة — حساب نهائي (طابور)",
+      });
+    }
 
     return NextResponse.json({ success: true, ...result });
   } catch (err) {

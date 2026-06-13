@@ -7,6 +7,10 @@ import { Code2 } from "lucide-react";
  * رابط «دخول المطور» — باهت لكن مرئي؛ أوضح عند التمرير.
  */
 export function DeveloperFooterLink() {
+  if (process.env.NODE_ENV === "production") {
+    return null;
+  }
+
   return (
     <Link
       href="/admin-login"

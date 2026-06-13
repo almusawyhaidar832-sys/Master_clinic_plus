@@ -7,7 +7,9 @@ export type AuditEntityType =
   | "appointment"
   | "operation_xray_image"
   | "operation_tooth_records"
-  | "expense";
+  | "expense"
+  | "withdrawal"
+  | "payroll";
 
 export type AuditAction = "create" | "update" | "delete" | "refund";
 

@@ -1,10 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
 import { restartEvolutionInstance } from "@/lib/whatsapp/evolution-client";
 import { resolveWhatsAppInstanceName } from "@/lib/whatsapp/resolve-instance";
+import { requireWhatsAppManageAccess } from "@/lib/whatsapp/require-api-access";
 
 /** POST /api/whatsapp/restart — QR جديد بعد logout (يحل Couldn't link device) */
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const access = await requireWhatsAppManageAccess(req);
+  if (!access.ok) return access.response;
+
   const cfg = getWhatsAppConfig();
   if (!cfg.configured) {
     return NextResponse.json(

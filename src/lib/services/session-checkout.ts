@@ -8,6 +8,11 @@ import {
   syncQueueFromAppointmentStatus,
 } from "@/lib/services/appointment-queue-sync";
 import { updateQueueStatus, type QueueStatus } from "@/lib/queue/server";
+import {
+  isPersistedTreatmentCaseId,
+  linkOperationToTreatmentCase,
+  processCasePayment,
+} from "@/lib/services/patient-treatment-cases";
 import { todayISO } from "@/lib/utils";
 
 export interface CheckoutProcedureLine {
@@ -295,6 +300,25 @@ export async function processSessionCheckout(
       operationId = retry.data.id as string;
     } else {
       operationId = op?.id as string;
+    }
+
+    if (
+      operationId &&
+      summary.treatmentCaseId &&
+      isPersistedTreatmentCaseId(summary.treatmentCaseId)
+    ) {
+      await linkOperationToTreatmentCase(
+        admin,
+        operationId,
+        summary.treatmentCaseId
+      );
+      const sync = await processCasePayment(admin, {
+        caseId: summary.treatmentCaseId,
+        paidDelta: paid,
+      });
+      if (!sync.ok) {
+        throw new Error(sync.error ?? "تعذر تحديث ذمة الحالة بعد الدفع");
+      }
     }
   }
 

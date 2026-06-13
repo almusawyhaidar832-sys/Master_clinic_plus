@@ -13,7 +13,6 @@ import { searchPatientsViaApi } from "@/lib/services/patient-search";
 import type { Patient, PatientOperation } from "@/types";
 import { Search, FileText } from "lucide-react";
 import { AddPatientForm } from "@/components/patients/AddPatientForm";
-import { WhatsAppTestButton } from "@/components/patients/WhatsAppTestButton";
 import { getPatientDisplayPhone } from "@/lib/phone";
 
 interface PatientWithStats extends Patient {
@@ -187,8 +186,6 @@ export default function PatientsSearchPage() {
       )}
 
       <AddPatientForm />
-
-      <WhatsAppTestButton />
 
       <Link href="/dashboard/ledger">
         <Button variant="outline" size="sm">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   fetchPayrollMonthAdmin,
@@ -63,6 +64,45 @@ export async function POST(req: NextRequest) {
       slips
     );
 
+    if (txResult.errors.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "تم توليد سجلات الرواتب لكن فشل تسجيل جزء من القيود المحاسبية — راجع اللوحة التنفيذية قبل تأكيد الصرف",
+          month_year: monthYear,
+          assistantCreated: result.assistantCreated,
+          assistantUpdated: result.assistantUpdated,
+          assistantSkipped: result.assistantSkipped,
+          generalCreated: result.generalCreated,
+          generalUpdated: result.generalUpdated,
+          generalSkipped: result.generalSkipped,
+          doctorSalaryCreated: result.doctorSalaryCreated,
+          doctorSalaryUpdated: result.doctorSalaryUpdated,
+          doctorSalarySkipped: result.doctorSalarySkipped,
+          transactions_created: txResult.created,
+          transaction_errors: txResult.errors,
+        },
+        { status: 500 }
+      );
+    }
+
+    await writeAuditLog(admin, {
+      clinicId,
+      entityType: "payroll",
+      entityId: monthYear,
+      action: "create",
+      changedBy: caller.id,
+      actorName: caller.full_name ?? null,
+      after: {
+        month_year: monthYear,
+        records_count: records.length,
+        slips_count: slips.length,
+        transactions_created: txResult.created,
+      },
+      note: `توليد رواتب ${monthYear}`,
+    });
+
     return NextResponse.json({
       success: true,
       month_year: monthYear,
@@ -83,7 +123,6 @@ export async function POST(req: NextRequest) {
         result.doctorSalaryCreated +
         result.doctorSalaryUpdated,
       transactions_created: txResult.created,
-      transaction_errors: txResult.errors.length ? txResult.errors : undefined,
       profit_updated: true,
     });
   } catch (e) {

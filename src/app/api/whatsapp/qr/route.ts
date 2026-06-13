@@ -1,14 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
 import { fetchEvolutionQr } from "@/lib/whatsapp/evolution-client";
 import { resolveWhatsAppInstanceName } from "@/lib/whatsapp/resolve-instance";
+import { requireWhatsAppManageAccess } from "@/lib/whatsapp/require-api-access";
 
 /**
  * GET /api/whatsapp/qr
  * يجلب QR من Evolution API ويعيد base64 جاهزاً لـ <img src="..." />
  * لا يُخزَّن QR في Supabase — يُعرض مباشرة من الجسر (يُحدَّث كل ~20 ثانية).
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const access = await requireWhatsAppManageAccess(req);
+  if (!access.ok) return access.response;
+
   const cfg = getWhatsAppConfig();
 
   if (!cfg.configured) {
