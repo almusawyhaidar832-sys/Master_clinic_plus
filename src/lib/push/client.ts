@@ -15,8 +15,14 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return output;
 }
 
+export interface PushSubscriptionStatus {
+  configured: boolean;
+  subscriptionCount: number;
+  tableMissing?: boolean;
+}
+
 export type PushRegisterResult =
-  | { ok: true; subscribed: boolean }
+  | { ok: true; subscribed: boolean; serverSaved: boolean }
   | {
       ok: false;
       reason:
@@ -25,14 +31,15 @@ export type PushRegisterResult =
         | "denied"
         | "no-sw"
         | "subscribe-failed"
-        | "server-failed";
+        | "server-failed"
+        | "server-not-saved";
     };
 
 export function isWebPushSupported(): boolean {
   return getDoctorPushCapability().level === "full";
 }
 
-const PUSH_REGISTER_TIMEOUT_MS = 15_000;
+const PUSH_REGISTER_TIMEOUT_MS = 25_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | "timeout"> {
   return Promise.race([
@@ -43,9 +50,38 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | "timeout">
   ]);
 }
 
+export async function fetchPushSubscriptionStatus(): Promise<PushSubscriptionStatus | null> {
+  try {
+    const res = await fetch("/api/push/status", {
+      credentials: "include",
+      headers: authPortalHeaders("doctor"),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as PushSubscriptionStatus;
+  } catch {
+    return null;
+  }
+}
+
+async function savePushSubscription(
+  subscription: PushSubscription
+): Promise<boolean> {
+  const res = await fetch("/api/push/subscribe", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...authPortalHeaders("doctor"),
+    },
+    body: JSON.stringify({ subscription: subscription.toJSON() }),
+  });
+  return res.ok;
+}
+
 /** اشتراك Web Push لموبايل الطبيب — Android + iPhone (PWA مثبّت) */
 export async function registerDoctorWebPush(
-  requestPermission = false
+  requestPermission = false,
+  options?: { forceResubscribe?: boolean }
 ): Promise<PushRegisterResult> {
   const run = async (): Promise<PushRegisterResult> => {
     const capability = getDoctorPushCapability();
@@ -76,36 +112,49 @@ export async function registerDoctorWebPush(
       return { ok: false, reason: "no-sw" };
     }
 
+    await navigator.serviceWorker.ready.catch(() => undefined);
+
     const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!.trim();
+    const serverStatus = await fetchPushSubscriptionStatus();
 
     let subscription = await registration.pushManager.getSubscription();
+
+    if (
+      options?.forceResubscribe ||
+      (subscription && serverStatus && serverStatus.subscriptionCount === 0)
+    ) {
+      try {
+        await subscription?.unsubscribe();
+      } catch {
+        // ignore
+      }
+      subscription = null;
+    }
+
     if (!subscription) {
       try {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(vapidKey),
         });
-      } catch {
+      } catch (err) {
+        console.error("[push] subscribe failed:", err);
         return { ok: false, reason: "subscribe-failed" };
       }
     }
 
-    try {
-      const res = await fetch("/api/push/subscribe", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          ...authPortalHeaders("doctor"),
-        },
-        body: JSON.stringify({ subscription: subscription.toJSON() }),
-      });
-
-      if (!res.ok) return { ok: false, reason: "server-failed" };
-      return { ok: true, subscribed: true };
-    } catch {
+    const saved = await savePushSubscription(subscription);
+    if (!saved) {
       return { ok: false, reason: "server-failed" };
     }
+
+    const verified = await fetchPushSubscriptionStatus();
+    const serverSaved = (verified?.subscriptionCount ?? 0) > 0;
+    if (!serverSaved) {
+      return { ok: false, reason: "server-not-saved" };
+    }
+
+    return { ok: true, subscribed: true, serverSaved: true };
   };
 
   const result = await withTimeout(run(), PUSH_REGISTER_TIMEOUT_MS);
@@ -116,15 +165,15 @@ export async function registerDoctorWebPush(
 }
 
 /** إعادة تسجيل Push عند العودة للتطبيق (iOS/Android) */
-export async function refreshDoctorWebPushIfGranted(): Promise<void> {
+export async function refreshDoctorWebPushIfGranted(): Promise<PushRegisterResult | null> {
   if (
     typeof window === "undefined" ||
     !("Notification" in window) ||
     Notification.permission !== "granted"
   ) {
-    return;
+    return null;
   }
-  await registerDoctorWebPush(false);
+  return registerDoctorWebPush(false);
 }
 
 /** استمع لرسائل Service Worker — تشغيل النداء إذا التطبيق مفتوح بالخلفية */

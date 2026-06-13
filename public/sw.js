@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v12-doctor-push-chime";
+const CACHE_NAME = "mcp-app-v13-background-push";
 
 const PRECACHE_URLS = [
   "/",

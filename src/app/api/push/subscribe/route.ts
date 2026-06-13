@@ -68,6 +68,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const { data: linkedDoctor } = await admin
+      .from("doctors")
+      .select("id")
+      .eq("profile_id", profile.id)
+      .eq("clinic_id", profile.clinic_id)
+      .maybeSingle();
+
+    if (!linkedDoctor) {
+      const { data: unlinkedDoctors } = await admin
+        .from("doctors")
+        .select("id")
+        .eq("clinic_id", profile.clinic_id)
+        .is("profile_id", null)
+        .eq("is_active", true);
+
+      if (unlinkedDoctors?.length === 1) {
+        await admin
+          .from("doctors")
+          .update({ profile_id: profile.id })
+          .eq("id", unlinkedDoctors[0]!.id);
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("[push/subscribe]", err);

@@ -15,8 +15,9 @@ export function ServiceWorkerRegister() {
     }
 
     void navigator.serviceWorker
-      .register(SW_URL, { scope: SW_SCOPE })
+      .register(SW_URL, { scope: SW_SCOPE, updateViaCache: "none" })
       .then((registration) => {
+        void registration.update();
         if (process.env.NODE_ENV === "development") {
           console.info("[PWA] Service worker registered", registration.scope);
         }

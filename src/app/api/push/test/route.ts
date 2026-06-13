@@ -17,14 +17,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
-    await sendWebPushToProfile(profile.id, {
+    const result = await sendWebPushToProfile(profile.id, {
       title: "تجربة النداء 🔔",
-      body: "إذا وصلك هذا الإشعار — التنبيهات تعمل حتى والتطبيق بالخلفية",
+      body: "إذا وصلك هذا الإشعار — التنبيهات تعمل حتى والتطبيق مغلق",
       url: "/doctor/queue",
       tag: "doctor-queue-test",
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: result.sent > 0,
+      sent: result.sent,
+      attempted: result.attempted,
+      configured: result.configured,
+    });
   } catch (err) {
     console.error("[push/test]", err);
     return NextResponse.json(

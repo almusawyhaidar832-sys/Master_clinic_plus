@@ -78,6 +78,10 @@ export function getPwaInstallHintEn(): string {
   }
 }
 
+export function backgroundPushNeedsInstalledApp(): boolean {
+  return isAndroid() && !isStandalonePwa();
+}
+
 export type DoctorPushCapability =
   | { level: "full" }
   | { level: "in-app-only"; reason: "ios-not-installed" }

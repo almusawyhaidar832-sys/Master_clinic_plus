@@ -16,12 +16,14 @@ import {
   listenForServiceWorkerNavigation,
   registerDoctorWebPush,
   refreshDoctorWebPushIfGranted,
+  fetchPushSubscriptionStatus,
 } from "@/lib/push/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { triggerQueueAlert, unlockQueueAudio } from "@/lib/queue/audio-alerts";
 import { warmDoctorCloudTts } from "@/lib/queue/cloud-speech";
 import { formatNameForSpeech } from "@/lib/queue/arabic-speech-text";
 import {
+  backgroundPushNeedsInstalledApp,
   getDoctorPushCapability,
   getNotificationSettingsHintAr,
   getNotificationSettingsHintEn,
@@ -65,6 +67,7 @@ export function DoctorAlertsSetup() {
   const [standalone, setStandalone] = useState(false);
   const [platform, setPlatform] = useState<"ios" | "android" | "other">("other");
   const [pushRegistering, setPushRegistering] = useState(false);
+  const [needsInstallForBackground, setNeedsInstallForBackground] = useState(false);
   const pushInflightRef = useRef(false);
 
   const showActivationBanner =
@@ -74,26 +77,63 @@ export function DoctorAlertsSetup() {
 
   const alertsActive = browserGranted;
 
-  const registerPush = useCallback(() => {
-    if (!browserGranted || !isWebPushSupported() || pushInflightRef.current) return;
-    pushInflightRef.current = true;
-    setPushRegistering(true);
-    void registerDoctorWebPush(false)
-      .then((result) => {
-        setPushReady(result.ok);
-        if (!result.ok) {
-          console.warn("[doctor-alerts] push registration failed:", result.reason);
-        }
+  const registerPush = useCallback(
+    (opts?: { force?: boolean; requestPermission?: boolean }) => {
+      if (!browserGranted || !isWebPushSupported() || pushInflightRef.current) {
+        return Promise.resolve(false);
+      }
+      pushInflightRef.current = true;
+      setPushRegistering(true);
+      return registerDoctorWebPush(opts?.requestPermission === true, {
+        forceResubscribe: opts?.force === true,
       })
-      .finally(() => {
-        pushInflightRef.current = false;
-        setPushRegistering(false);
-      });
-  }, [browserGranted]);
+        .then(async (result) => {
+          const status = result.ok
+            ? await fetchPushSubscriptionStatus()
+            : null;
+          const serverReady = (status?.subscriptionCount ?? 0) > 0;
+          const ready = result.ok && serverReady;
+          setPushReady(ready);
+          if (!result.ok) {
+            console.warn("[doctor-alerts] push registration failed:", result.reason);
+            if (result.reason === "server-not-saved" || result.reason === "server-failed") {
+              setMessage(t("docAlertsPushServerMissing"));
+              setMessageIsError(true);
+            }
+          } else if (!serverReady) {
+            setMessage(t("docAlertsPushServerMissing"));
+            setMessageIsError(true);
+          }
+          return ready;
+        })
+        .finally(() => {
+          pushInflightRef.current = false;
+          setPushRegistering(false);
+        });
+    },
+    [browserGranted, t]
+  );
+
+  const syncPushStatus = useCallback(async (): Promise<boolean> => {
+    if (!browserGranted) {
+      setPushReady(false);
+      return false;
+    }
+    const status = await fetchPushSubscriptionStatus();
+    const ready = (status?.subscriptionCount ?? 0) > 0;
+    setPushReady(ready);
+    if (status?.tableMissing) {
+      setMessage(t("docAlertsPushTableMissing"));
+      setMessageIsError(true);
+    }
+    return ready;
+  }, [browserGranted, t]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setStandalone(isStandalonePwa());
+    const installed = isStandalonePwa();
+    setStandalone(installed);
+    setNeedsInstallForBackground(backgroundPushNeedsInstalledApp());
     if (isIOS()) setPlatform("ios");
     else if (isAndroid()) setPlatform("android");
   }, []);
@@ -109,17 +149,21 @@ export function DoctorAlertsSetup() {
       // ignore
     }
     void warmDoctorCloudTts();
-    registerPush();
-  }, [browserGranted, registerPush]);
+    void syncPushStatus().then((ready) => {
+      if (!ready) void registerPush({ force: true });
+    });
+  }, [browserGranted, registerPush, syncPushStatus]);
 
   useEffect(() => {
     if (!browserGranted) return;
 
     const refreshPush = () => {
       if (document.visibilityState !== "visible") return;
-      void refreshDoctorWebPushIfGranted().finally(() => {
-        registerPush();
-      });
+      void refreshDoctorWebPushIfGranted()
+        .then(() => syncPushStatus())
+        .then((ready) => {
+          if (!ready) void registerPush();
+        });
     };
 
     refreshPush();
@@ -129,7 +173,7 @@ export function DoctorAlertsSetup() {
       document.removeEventListener("visibilitychange", refreshPush);
       window.removeEventListener("focus", refreshPush);
     };
-  }, [browserGranted, registerPush]);
+  }, [browserGranted, registerPush, syncPushStatus]);
 
   useEffect(() => {
     return listenForPushAlertMessages((payload) => {
@@ -162,9 +206,10 @@ export function DoctorAlertsSetup() {
 
       if (typeof window !== "undefined" && Notification.permission === "granted") {
         setBannerDismissed(true);
-        setMessage(t("docAlertsEnabled"));
-        window.setTimeout(() => setMessage(null), 6000);
-        registerPush();
+        const ready = await registerPush({ force: true, requestPermission: true });
+        setMessage(ready ? t("docAlertsEnabled") : t("docAlertsPushServerMissing"));
+        setMessageIsError(!ready);
+        window.setTimeout(() => setMessage(null), 8000);
         return;
       }
 
@@ -215,7 +260,11 @@ export function DoctorAlertsSetup() {
       setMessage(t("docAlertsEnabled"));
       setMessageIsError(false);
       window.setTimeout(() => setMessage(null), 6000);
-      registerPush();
+      const ready = await registerPush({ force: true, requestPermission: true });
+      if (!ready) {
+        setMessage(t("docAlertsPushServerMissing"));
+        setMessageIsError(true);
+      }
     } finally {
       setActivating(false);
     }
@@ -247,14 +296,23 @@ export function DoctorAlertsSetup() {
         credentials: "include",
         headers: authPortalHeaders("doctor"),
       });
-      if (!res.ok) {
-        setMessage(t("docAlertsPushFailed"));
+      const json = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        sent?: number;
+        configured?: boolean;
+      };
+      if (!res.ok || !json.success) {
+        setMessage(
+          json.configured === false
+            ? t("docAlertsPushVapidMissing")
+            : t("docAlertsPushFailed")
+        );
         setMessageIsError(true);
         return;
       }
-      setMessage(t("docAlertsPushTestSent"));
+      setMessage(t("docAlertsPushTestSentCloseApp"));
       setMessageIsError(false);
-      window.setTimeout(() => setMessage(null), 6000);
+      window.setTimeout(() => setMessage(null), 10000);
     } finally {
       setTestingPush(false);
     }
@@ -271,9 +329,37 @@ export function DoctorAlertsSetup() {
 
   const iosNeedsInstall = platform === "ios" && !standalone;
   const androidHint = platform === "android" && !standalone;
+  const androidBackgroundBlocked = needsInstallForBackground && browserGranted;
 
   return (
     <div className="space-y-2">
+      {androidBackgroundBlocked && (
+        <div className="rounded-2xl border border-red-300 bg-red-50 p-3">
+          <div className="flex items-start gap-2">
+            <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-red-700" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="text-xs font-bold leading-relaxed text-red-950">
+                {t("docAlertsAndroidBackgroundTitle")}
+              </p>
+              <p className="text-xs leading-relaxed text-red-900">
+                {t("docAlertsAndroidBackgroundDesc")}{" "}
+                {bi(getPwaInstallHintAr(), getPwaInstallHintEn())}
+              </p>
+              <PwaInstallButton
+                label={t("docInstallApp")}
+                installingLabel={t("docInstallingApp")}
+                className="touch-target inline-flex items-center gap-1.5 rounded-lg bg-red-700 px-4 py-2 text-xs font-bold text-white shadow-sm disabled:opacity-60"
+                onInstalled={() => {
+                  setStandalone(true);
+                  setNeedsInstallForBackground(false);
+                  void registerPush({ force: true });
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {iosNeedsInstall && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
           <div className="flex items-start gap-2">
@@ -286,7 +372,7 @@ export function DoctorAlertsSetup() {
         </div>
       )}
 
-      {androidHint && (
+      {androidHint && !androidBackgroundBlocked && (
         <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3">
           <div className="flex items-start gap-2">
             <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
@@ -361,7 +447,7 @@ export function DoctorAlertsSetup() {
               <button
                 type="button"
                 disabled={pushRegistering}
-                onClick={() => registerPush()}
+                onClick={() => void registerPush({ force: true })}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:opacity-60"
               >
                 <Bell className="h-3.5 w-3.5" />
@@ -391,7 +477,7 @@ export function DoctorAlertsSetup() {
         </div>
       )}
 
-      {message && !browserGranted && (
+      {message && (
         <p
           className={
             messageIsError
