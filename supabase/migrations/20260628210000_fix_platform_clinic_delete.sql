@@ -304,6 +304,29 @@ BEGIN
        OR po.doctor_id IN (SELECT id FROM public.doctors WHERE clinic_id = p_clinic_id);
     GET DIAGNOSTICS v_ops_deleted = ROW_COUNT;
 
+    BEGIN
+      DELETE FROM public.appointments WHERE clinic_id = p_clinic_id;
+      DELETE FROM public.patient_queue WHERE clinic_id = p_clinic_id;
+      DELETE FROM public.treatments WHERE clinic_id = p_clinic_id;
+      DELETE FROM public.medical_logs WHERE clinic_id = p_clinic_id;
+      DELETE FROM public.patient_doctor_transfers WHERE clinic_id = p_clinic_id;
+      DELETE FROM public.push_subscriptions WHERE clinic_id = p_clinic_id;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    END;
+
+    -- فك ربط profiles قبل حذف auth.users (doctors_profile_id_fkey)
+    UPDATE public.doctors SET profile_id = NULL WHERE clinic_id = p_clinic_id;
+    BEGIN
+      UPDATE public.staff_members SET profile_id = NULL WHERE clinic_id = p_clinic_id;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    END;
+    BEGIN
+      UPDATE public.assistants SET profile_id = NULL WHERE clinic_id = p_clinic_id;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    END;
+
+    DELETE FROM public.doctors WHERE clinic_id = p_clinic_id;
+
     IF v_user_ids IS NOT NULL THEN
       DELETE FROM auth.users WHERE id = ANY(v_user_ids);
       GET DIAGNOSTICS v_users = ROW_COUNT;
@@ -354,5 +377,29 @@ END $$;
 ALTER TABLE public.patient_operations
   ADD CONSTRAINT patient_operations_doctor_id_fkey
   FOREIGN KEY (doctor_id) REFERENCES public.doctors(id) ON DELETE CASCADE;
+
+-- فك ربط الطبيب بالـ profile عند حذف الحساب (لا يمنع حذف profiles)
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT c.conname
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+    WHERE c.conrelid = 'public.doctors'::regclass
+      AND c.contype = 'f'
+      AND a.attname = 'profile_id'
+  LOOP
+    EXECUTE format(
+      'ALTER TABLE public.doctors DROP CONSTRAINT IF EXISTS %I',
+      r.conname
+    );
+  END LOOP;
+END $$;
+
+ALTER TABLE public.doctors
+  ADD CONSTRAINT doctors_profile_id_fkey
+  FOREIGN KEY (profile_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
 
 NOTIFY pgrst, 'reload schema';

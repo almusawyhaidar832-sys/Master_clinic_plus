@@ -248,6 +248,12 @@ export async function deletePlatformClinic(
   }
   await admin.from("patient_operations").delete().eq("clinic_id", clinicId);
 
+  await admin
+    .from("doctors")
+    .update({ profile_id: null })
+    .eq("clinic_id", clinicId);
+  await admin.from("doctors").delete().eq("clinic_id", clinicId);
+
   for (const row of profiles ?? []) {
     try {
       await getAuthAdmin(admin).deleteUser(row.id);
