@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v7-cross-platform-alerts";
+const CACHE_NAME = "mcp-app-v8-doctor-pwa-tts";
 
 function shouldSkipCache(url) {
   if (url.pathname.startsWith("/api/")) return true;

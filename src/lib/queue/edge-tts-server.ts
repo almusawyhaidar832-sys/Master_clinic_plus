@@ -1,7 +1,7 @@
 import "server-only";
 
 import { EdgeTTS } from "@travisvn/edge-tts";
-import { ARABIC_SPEECH_RATE } from "@/lib/queue/arabic-speech-text";
+import { prepareArabicSpeechPlainText } from "@/lib/queue/arabic-speech-text";
 import {
   ARABIC_TTS_MAX_CHARS,
   ARABIC_TTS_VOICE,
@@ -11,19 +11,18 @@ export async function synthesizeArabicSpeech(
   text: string,
   options?: { rate?: string; pitch?: string }
 ): Promise<Buffer> {
-  const trimmed = text.trim();
-  if (!trimmed) {
+  const plain = prepareArabicSpeechPlainText(text);
+  if (!plain) {
     throw new Error("النص فارغ");
   }
-  if (trimmed.length > ARABIC_TTS_MAX_CHARS) {
+  if (plain.length > ARABIC_TTS_MAX_CHARS) {
     throw new Error("النص طويل جداً");
   }
 
-  const tts = new EdgeTTS(trimmed, ARABIC_TTS_VOICE, {
-    rate: options?.rate ?? ARABIC_SPEECH_RATE,
+  const tts = new EdgeTTS(plain, ARABIC_TTS_VOICE, {
+    rate: options?.rate ?? "+8%",
     volume: "+0%",
     pitch: options?.pitch ?? "+0Hz",
-    timeout: 8000,
   });
 
   const result = await tts.synthesize();

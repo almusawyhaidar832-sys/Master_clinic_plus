@@ -168,6 +168,22 @@ function escapeSsml(text: string): string {
     .replace(/'/g, "&apos;");
 }
 
+/** نص عادي للـ TTS — مشكّل بدون SSML (EdgeTTS يتوقع نصاً وليس XML) */
+export function prepareArabicSpeechPlainText(text: string): string {
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("<speak")) {
+    return trimmed
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  if (hasArabicDiacritics(trimmed)) {
+    return trimmed.replace(/\u0640/g, "").replace(/\s+/g, " ").trim();
+  }
+  return vocalizeArabicName(trimmed);
+}
+
 export function buildPlainArabicSsml(
   text: string,
   rate: string = ARABIC_SPEECH_RATE

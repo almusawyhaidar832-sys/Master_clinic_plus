@@ -200,9 +200,14 @@ async function speakTextNow(text: string, options?: SpeechPlayOptions): Promise<
   if (options?.clearQueue) stopAllSpeech();
   prepareSpeechAuto();
 
+  const doctorPortal =
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/doctor");
+
   if (options?.useCloud) {
     const usedCloud = await speakViaCloudTtsText(text);
     if (usedCloud) return;
+    if (doctorPortal) return;
   }
 
   const voice = await resolveArabicVoice();
@@ -231,9 +236,14 @@ export async function speakPatientCallParts(
     if (options?.clearQueue) stopAllSpeech();
     prepareSpeechAuto();
 
+    const doctorPortal =
+      typeof window !== "undefined" &&
+      window.location.pathname.startsWith("/doctor");
+
     if (options?.useCloud !== false) {
       const usedCloud = await speakViaCloudTtsParts(parts);
       if (usedCloud) return;
+      if (doctorPortal) return;
     }
 
     const voice = await resolveArabicVoice();
