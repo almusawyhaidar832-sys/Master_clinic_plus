@@ -2,7 +2,7 @@
   "name": "ماستر كلينك بلس",
   "short_name": "MC+",
   "description": "نظام إدارة العيادات — طبيب، إدارة، وحجوزات",
-  "start_url": "/login?source=pwa",
+  "start_url": "/login?portal=doctor&source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",

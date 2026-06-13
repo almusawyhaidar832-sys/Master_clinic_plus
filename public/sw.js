@@ -1,16 +1,20 @@
-const CACHE_NAME = "mcp-app-v4-push-alerts";
-const SHELL_URLS = ["/login", "/doctor", "/admin"];
+const CACHE_NAME = "mcp-app-v5-no-auth-shell";
 
 function shouldSkipCache(url) {
   if (url.pathname.startsWith("/api/")) return true;
   if (url.pathname.startsWith("/_next/")) return true;
+  if (url.pathname === "/login" || url.pathname.startsWith("/login/")) return true;
+  if (url.pathname.startsWith("/doctor")) return true;
+  if (url.pathname.startsWith("/dashboard")) return true;
+  if (url.pathname.startsWith("/admin")) return true;
+  if (url.pathname.startsWith("/assistant")) return true;
   if (url.pathname.includes(".")) {
     const ext = url.pathname.split(".").pop() ?? "";
     if (["js", "css", "woff", "woff2", "png", "jpg", "svg", "webp"].includes(ext)) {
       return false;
     }
   }
-  return false;
+  return true;
 }
 
 function parsePushPayload(event) {
@@ -32,18 +36,13 @@ function notifyOpenClients(payload) {
 }
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_URLS))
-  );
-  self.skipWaiting();
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
-      )
+      Promise.all(keys.map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -114,8 +113,6 @@ self.addEventListener("fetch", (event) => {
         }
         return response;
       })
-      .catch(() =>
-        caches.match(event.request).then((cached) => cached ?? caches.match("/login"))
-      )
+      .catch(() => caches.match(event.request))
   );
 });

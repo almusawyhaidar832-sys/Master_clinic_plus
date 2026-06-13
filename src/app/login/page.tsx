@@ -7,6 +7,7 @@ import {
   isValidSanitizedUsername,
   sanitizeUsername,
 } from "@/lib/auth/credentials";
+import { syncPortalSessionClient } from "@/lib/auth/sync-portal-session-client";
 import { Eye, EyeOff, Languages } from "lucide-react";
 import { DeveloperCredit } from "@/components/layout/DeveloperCredit";
 import { DeveloperFooterLink } from "@/components/layout/DeveloperFooterLink";
@@ -147,6 +148,17 @@ function PortalCard({
 
       if (!res.ok || !payload?.ok) {
         setError(payload?.error ?? t("loginConnectionError"));
+        setLoading(false);
+        return;
+      }
+
+      const synced = await syncPortalSessionClient(
+        portal.id,
+        trimmedUser,
+        password
+      );
+      if (!synced.ok) {
+        setError(synced.error);
         setLoading(false);
         return;
       }
