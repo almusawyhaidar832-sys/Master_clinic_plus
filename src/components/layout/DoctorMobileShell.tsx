@@ -58,6 +58,12 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.title = t("docAppTitle");
+    document.documentElement.classList.add("mcp-doctor-portal");
+    document.body.classList.add("mcp-doctor-portal");
+    return () => {
+      document.documentElement.classList.remove("mcp-doctor-portal");
+      document.body.classList.remove("mcp-doctor-portal");
+    };
   }, [t]);
 
   useEffect(() => {
@@ -85,7 +91,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
   const filteredNav = useModuleNav(doctorModuleNav);
 
   return (
-    <div className="flex min-h-dvh flex-col bg-surface">
+    <div className="flex min-h-dvh flex-col bg-surface pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]">
       <ClinicDataSyncBridge />
       <QueueRealtimeBridge portal="doctor" enablePolling />
       <header className="safe-top sticky top-0 z-30 bg-primary px-4 py-3 text-white shadow-premium">
@@ -143,7 +149,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="mc-app-main min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-4 pb-24">
+      <main className="mc-app-main flex-1 px-4 py-4">
         <DoctorAlertsSetup />
         {children}
       </main>

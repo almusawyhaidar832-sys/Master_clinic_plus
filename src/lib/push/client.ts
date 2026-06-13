@@ -32,68 +32,87 @@ export function isWebPushSupported(): boolean {
   return getDoctorPushCapability().level === "full";
 }
 
+const PUSH_REGISTER_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | "timeout"> {
+  return Promise.race([
+    promise,
+    new Promise<"timeout">((resolve) =>
+      window.setTimeout(() => resolve("timeout"), ms)
+    ),
+  ]);
+}
+
 /** اشتراك Web Push لموبايل الطبيب — Android + iPhone (PWA مثبّت) */
 export async function registerDoctorWebPush(
   requestPermission = false
 ): Promise<PushRegisterResult> {
-  const capability = getDoctorPushCapability();
-  if (capability.level === "unsupported") {
-    return { ok: false, reason: "unsupported" };
-  }
-  if (capability.level === "in-app-only") {
-    return { ok: false, reason: "ios-not-installed" };
-  }
+  const run = async (): Promise<PushRegisterResult> => {
+    const capability = getDoctorPushCapability();
+    if (capability.level === "unsupported") {
+      return { ok: false, reason: "unsupported" };
+    }
+    if (capability.level === "in-app-only") {
+      return { ok: false, reason: "ios-not-installed" };
+    }
 
-  if (!("Notification" in window)) {
-    return { ok: false, reason: "unsupported" };
-  }
+    if (!("Notification" in window)) {
+      return { ok: false, reason: "unsupported" };
+    }
 
-  if (Notification.permission === "denied") {
-    return { ok: false, reason: "denied" };
-  }
+    if (Notification.permission === "denied") {
+      return { ok: false, reason: "denied" };
+    }
 
-  if (Notification.permission === "default" && requestPermission) {
-    const result = await Notification.requestPermission();
-    if (result !== "granted") return { ok: false, reason: "denied" };
-  } else if (Notification.permission !== "granted") {
-    return { ok: false, reason: "denied" };
-  }
+    if (Notification.permission === "default" && requestPermission) {
+      const result = await Notification.requestPermission();
+      if (result !== "granted") return { ok: false, reason: "denied" };
+    } else if (Notification.permission !== "granted") {
+      return { ok: false, reason: "denied" };
+    }
 
-  const registration = await ensureServiceWorkerRegistration();
-  if (!registration) {
+    const registration = await ensureServiceWorkerRegistration();
+    if (!registration) {
+      return { ok: false, reason: "no-sw" };
+    }
+
+    const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!.trim();
+
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      try {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        });
+      } catch {
+        return { ok: false, reason: "subscribe-failed" };
+      }
+    }
+
+    try {
+      const res = await fetch("/api/push/subscribe", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...authPortalHeaders("doctor"),
+        },
+        body: JSON.stringify({ subscription: subscription.toJSON() }),
+      });
+
+      if (!res.ok) return { ok: false, reason: "server-failed" };
+      return { ok: true, subscribed: true };
+    } catch {
+      return { ok: false, reason: "server-failed" };
+    }
+  };
+
+  const result = await withTimeout(run(), PUSH_REGISTER_TIMEOUT_MS);
+  if (result === "timeout") {
     return { ok: false, reason: "no-sw" };
   }
-
-  const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!.trim();
-
-  let subscription = await registration.pushManager.getSubscription();
-  if (!subscription) {
-    try {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey),
-      });
-    } catch {
-      return { ok: false, reason: "subscribe-failed" };
-    }
-  }
-
-  try {
-    const res = await fetch("/api/push/subscribe", {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...authPortalHeaders("doctor"),
-      },
-      body: JSON.stringify({ subscription: subscription.toJSON() }),
-    });
-
-    if (!res.ok) return { ok: false, reason: "server-failed" };
-    return { ok: true, subscribed: true };
-  } catch {
-    return { ok: false, reason: "server-failed" };
-  }
+  return result;
 }
 
 /** إعادة تسجيل Push عند العودة للتطبيق (iOS/Android) */

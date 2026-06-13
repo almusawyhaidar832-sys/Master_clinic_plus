@@ -52,8 +52,9 @@ export function QueueRealtimeBridge({
   }, [portal]);
 
   useEffect(() => {
+    if (portal === "doctor") return;
     void ensureNotificationPermission();
-  }, []);
+  }, [portal]);
 
   const activeDoctorId = portal === "doctor" ? doctorId : null;
   const activeClinicId = portal === "dashboard" ? clinicId : null;

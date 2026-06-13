@@ -107,37 +107,34 @@ export function DoctorAlertsSetup() {
         return;
       }
 
-      const capability = getDoctorPushCapability();
-      if (capability.level === "in-app-only") {
-        setEnabled(true);
-        setShowBanner(false);
-        localStorage.removeItem(DISMISS_KEY);
-        setMessage(t("docAlertsInAppOnly"));
-        window.setTimeout(() => setMessage(null), 8000);
-        return;
-      }
-
-      if (isWebPushSupported()) {
-        const result = await registerDoctorWebPush(false);
-        if (!result.ok) {
-          setMessage(
-            result.reason === "server-failed"
-              ? t("docAlertsPushFailed")
-              : t("docAlertsPushFailed")
-          );
-          setEnabled(true);
-          setShowBanner(false);
-          return;
-        }
-        setPushReady(true);
-      }
-
       setEnabled(true);
       setShowBanner(false);
       localStorage.removeItem(DISMISS_KEY);
-      void warmDoctorCloudTts();
+
+      const capability = getDoctorPushCapability();
+      if (capability.level === "in-app-only") {
+        setMessage(t("docAlertsInAppOnly"));
+        window.setTimeout(() => setMessage(null), 8000);
+        void warmDoctorCloudTts();
+        return;
+      }
+
       setMessage(t("docAlertsEnabled"));
       window.setTimeout(() => setMessage(null), 6000);
+      void warmDoctorCloudTts();
+
+      if (isWebPushSupported()) {
+        void registerDoctorWebPush(false).then((result) => {
+          if (result.ok) {
+            setPushReady(true);
+            return;
+          }
+          if (result.reason === "server-failed" || result.reason === "no-sw") {
+            setMessage(t("docAlertsPushFailed"));
+            window.setTimeout(() => setMessage(null), 8000);
+          }
+        });
+      }
     } finally {
       setActivating(false);
     }

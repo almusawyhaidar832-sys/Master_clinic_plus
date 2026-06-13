@@ -323,6 +323,16 @@ html.dark .mc-app-main h3.text-lg.font-bold {
     touch-action: manipulation;
   }
 
+  /* Doctor PWA — document scroll (iOS + Android) */
+  html.mcp-doctor-portal,
+  body.mcp-doctor-portal {
+    height: auto;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .text-balance {
     text-wrap: balance;
   }
