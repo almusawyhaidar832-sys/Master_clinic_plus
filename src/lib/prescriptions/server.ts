@@ -228,7 +228,7 @@ export async function upsertPrescription(
     return mapPrescriptionRow(data as Record<string, unknown>);
   }
 
-  let { data, error } = await admin
+  const { data, error } = await admin
     .from("patient_prescriptions")
     .insert(payload)
     .select("*")

@@ -585,7 +585,7 @@ export async function fetchDoctorLedgerFinancialOps(
   const withdrawalSelectBase =
     "id, amount, status, requested_at, processed_at";
 
-  let withdrawalsQuery = admin
+  const withdrawalsQuery = admin
     .from("doctor_withdrawals")
     .select(withdrawalSelectFull)
     .eq("doctor_id", doctorId)

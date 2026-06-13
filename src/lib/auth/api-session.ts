@@ -55,7 +55,7 @@ export async function getApiCallerProfile(req?: Request) {
   const supabase = await createApiSessionClient(req);
   const admin = getAdminClient();
 
-  let { data: profile } = await admin
+  const { data: profile } = await admin
     .from("profiles")
     .select("id, role, clinic_id, full_name")
     .eq("id", user.id)

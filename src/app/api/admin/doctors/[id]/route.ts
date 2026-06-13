@@ -55,14 +55,14 @@ async function loadDoctorForCaller(
     };
   }
 
-  if (ctx.clinicId && doctorRow.clinic_id !== ctx.clinicId) {
+  const doctor = doctorRow as Doctor;
+
+  if (ctx.clinicId && doctor.clinic_id !== ctx.clinicId) {
     return {
       error: "الطبيب غير موجود أو لا تملك صلاحية الوصول إليه",
       status: 404,
     };
   }
-
-  const doctor = doctorRow as Doctor;
 
   let username: string | null = null;
   let hasLogin = false;
@@ -451,23 +451,21 @@ export async function DELETE(
     }
 
     const doctor = loaded.doctor;
-    const { error: doctorErr } = await ctx.admin
-      .from("doctors")
-      .update({ is_active: false })
-      .eq("id", id);
+    const { error: doctorErrMsg } = await updateDoctorRow(ctx.admin, id, {
+      is_active: false,
+    });
 
-    if (doctorErr) {
+    if (doctorErrMsg) {
       return NextResponse.json(
-        { error: `تعذر إيقاف الطبيب: ${doctorErr.message}` },
+        { error: `تعذر إيقاف الطبيب: ${doctorErrMsg}` },
         { status: 500 }
       );
     }
 
     if (doctor.profile_id) {
-      await ctx.admin
-        .from("profiles")
-        .update({ is_active: false })
-        .eq("id", doctor.profile_id);
+      await updateProfileRow(ctx.admin, doctor.profile_id, {
+        is_active: false,
+      });
     }
 
     return NextResponse.json({

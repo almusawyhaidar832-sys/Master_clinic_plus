@@ -38,7 +38,7 @@ export async function fetchTodayLedgerOperations(
   const today = todayISO();
   const { startIso, endIso } = localPeriodUtcBounds(today, today);
 
-  let opsQuery = supabase
+  const opsQuery = supabase
     .from("patient_operations")
     .select(
       "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
