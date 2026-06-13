@@ -1,20 +1,13 @@
 -- =============================================================================
--- إصلاح فشل حذف العيادة من لوحة المطور
--- أخطاء محتملة:
---   • null value in column "doctor_share_total" of relation "patients"
---   • null value in column "doctor_id" of relation "patient_operations"
--- انسخ كامل الملف → Supabase SQL Editor → Run → أعد الحذف من /developer
+-- إصلاح حذف العيادة — انسخ الملف كاملاً → Supabase SQL Editor → Run
 -- =============================================================================
-
--- =============================================================================
--- إصلاح فشل حذف العيادة — شغّل الملف كاملاً ثم أعد الحذف من /developer
--- أخطاء: doctor_share_total / doctor_id violates not-null constraint
--- =============================================================================
--- تحقق بعد التشغيل (اختياري):
--- SELECT prosrc LIKE '%session_replication_role%' AS delete_fix_applied
+-- تحقق بعد التشغيل:
+-- SELECT prosrc NOT LIKE '%session_replication_role%'
+--   AND prosrc LIKE '%v_ops_deleted%' AS delete_fix_ok
 -- FROM pg_proc WHERE proname = 'platform_delete_clinic_completely';
+-- =============================================================================
 
--- Fix clinic delete failing when financial triggers re-run on FK SET NULL
+-- Fix clinic delete: skip financial trigger on FK-only updates; delete ops before clinic
 
 CREATE OR REPLACE FUNCTION public.calculate_operation_shares()
 RETURNS TRIGGER
@@ -44,13 +37,12 @@ DECLARE
   v_patient_doc    NUMERIC;
   v_patient_clinic NUMERIC;
 BEGIN
-  -- Skip when only metadata/FK columns change (e.g. clinic delete cascade SET NULL)
+  -- تجاهل تحديثات FK فقط (مثل treatment_case_id أو doctor_id أثناء CASCADE)
   IF TG_OP = 'UPDATE' AND (
     OLD.paid_amount IS NOT DISTINCT FROM NEW.paid_amount
     AND OLD.total_amount IS NOT DISTINCT FROM NEW.total_amount
     AND OLD.session_kind IS NOT DISTINCT FROM NEW.session_kind
     AND OLD.discount_amount IS NOT DISTINCT FROM NEW.discount_amount
-    AND OLD.doctor_id IS NOT DISTINCT FROM NEW.doctor_id
     AND OLD.doctor_share_amount IS NOT DISTINCT FROM NEW.doctor_share_amount
     AND OLD.clinic_share_amount IS NOT DISTINCT FROM NEW.clinic_share_amount
     AND OLD.materials_cost IS NOT DISTINCT FROM NEW.materials_cost
@@ -266,6 +258,7 @@ DECLARE
   v_user_ids UUID[];
   v_storage INT := 0;
   v_users INT := 0;
+  v_ops_deleted INT := 0;
 BEGIN
   IF p_clinic_id IS NULL THEN
     RETURN json_build_object('error', 'clinic_id_required');
@@ -295,8 +288,29 @@ BEGIN
   BEGIN
     DELETE FROM public.session_refunds WHERE clinic_id = p_clinic_id;
 
-    -- احذف الجلسات قبل الأطباء/المرضى حتى لا يُفرّغ doctor_id (NOT NULL) أثناء CASCADE
-    DELETE FROM public.patient_operations WHERE clinic_id = p_clinic_id;
+    BEGIN
+      DELETE FROM public.invoices_history WHERE clinic_id = p_clinic_id;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    END;
+    BEGIN
+      DELETE FROM public.invoices WHERE clinic_id = p_clinic_id;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    END;
+    BEGIN
+      DELETE FROM public.patient_prescriptions WHERE clinic_id = p_clinic_id;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    END;
+    BEGIN
+      DELETE FROM public.operation_xray_images WHERE clinic_id = p_clinic_id;
+      DELETE FROM public.operation_tooth_records WHERE clinic_id = p_clinic_id;
+    EXCEPTION WHEN undefined_table THEN NULL;
+    END;
+
+    DELETE FROM public.patient_operations po
+    WHERE po.clinic_id = p_clinic_id
+       OR po.patient_id IN (SELECT id FROM public.patients WHERE clinic_id = p_clinic_id)
+       OR po.doctor_id IN (SELECT id FROM public.doctors WHERE clinic_id = p_clinic_id);
+    GET DIAGNOSTICS v_ops_deleted = ROW_COUNT;
 
     IF v_user_ids IS NOT NULL THEN
       DELETE FROM auth.users WHERE id = ANY(v_user_ids);
@@ -306,7 +320,7 @@ BEGIN
     DELETE FROM public.clinics WHERE id = p_clinic_id;
   EXCEPTION WHEN OTHERS THEN
     ALTER TABLE public.patient_operations ENABLE TRIGGER USER;
-    RAISE;
+    RETURN json_build_object('error', SQLERRM);
   END;
 
   ALTER TABLE public.patient_operations ENABLE TRIGGER USER;
@@ -316,6 +330,7 @@ BEGIN
     'clinic_name', v_name,
     'auth_users_deleted', COALESCE(v_users, 0),
     'storage_files_deleted', v_storage,
+    'operations_deleted', v_ops_deleted,
     'message', 'تم حذف العيادة وجميع بياناتها نهائياً'
   );
 END;
@@ -324,12 +339,28 @@ $$;
 REVOKE ALL ON FUNCTION public.platform_delete_clinic_completely(UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.platform_delete_clinic_completely(UUID) TO service_role;
 
--- تأكد أن حذف الطبيب لا يُفرّغ doctor_id (NOT NULL) في الجلسات
-ALTER TABLE public.patient_operations
-  DROP CONSTRAINT IF EXISTS patient_operations_doctor_id_fkey;
+-- حذف الطبيب يحذف جلساته (لا SET NULL على doctor_id NOT NULL)
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT c.conname
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+    WHERE c.conrelid = 'public.patient_operations'::regclass
+      AND c.contype = 'f'
+      AND a.attname = 'doctor_id'
+  LOOP
+    EXECUTE format(
+      'ALTER TABLE public.patient_operations DROP CONSTRAINT IF EXISTS %I',
+      r.conname
+    );
+  END LOOP;
+END $$;
 
 ALTER TABLE public.patient_operations
   ADD CONSTRAINT patient_operations_doctor_id_fkey
-  FOREIGN KEY (doctor_id) REFERENCES public.doctors(id) ON DELETE RESTRICT;
+  FOREIGN KEY (doctor_id) REFERENCES public.doctors(id) ON DELETE CASCADE;
 
 NOTIFY pgrst, 'reload schema';
