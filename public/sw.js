@@ -1,4 +1,13 @@
-const CACHE_NAME = "mcp-app-v8-doctor-pwa-tts";
+const CACHE_NAME = "mcp-app-v9-installable-pwa";
+
+const PRECACHE_URLS = [
+  "/",
+  "/manifest.json",
+  "/manifest-doctor.json",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/login?portal=doctor&source=pwa",
+];
 
 function shouldSkipCache(url) {
   if (url.pathname.startsWith("/api/")) return true;
@@ -10,7 +19,7 @@ function shouldSkipCache(url) {
   if (url.pathname.startsWith("/assistant")) return true;
   if (url.pathname.includes(".")) {
     const ext = url.pathname.split(".").pop() ?? "";
-    if (["js", "css", "woff", "woff2", "png", "jpg", "svg", "webp"].includes(ext)) {
+    if (["js", "css", "woff", "woff2", "png", "jpg", "svg", "webp", "ico"].includes(ext)) {
       return false;
     }
   }
@@ -36,16 +45,24 @@ function notifyOpenClients(payload) {
 }
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .catch(() => undefined)
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.map((k) => caches.delete(k)))
-    )
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      )
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener("push", (event) => {
@@ -58,8 +75,8 @@ self.addEventListener("push", (event) => {
 
   const options = {
     body,
-    icon: "/favicon.ico",
-    badge: "/favicon.ico",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
     tag,
     renotify: true,
     requireInteraction: true,
@@ -122,6 +139,16 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
+
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() =>
+        caches.match(event.request).then((cached) => cached || caches.match("/"))
+      )
+    );
+    return;
+  }
+
   if (shouldSkipCache(url)) return;
 
   event.respondWith(

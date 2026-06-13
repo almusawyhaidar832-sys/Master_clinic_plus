@@ -7,8 +7,8 @@ export const metadata: Metadata = {
   applicationName: "Master Clinic Doctor",
   manifest: "/manifest-doctor.json",
   icons: {
-    icon: [{ url: "/pwa-icon/192", sizes: "192x192", type: "image/png" }],
-    apple: [{ url: "/pwa-icon/180", sizes: "180x180", type: "image/png" }],
+    icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/icons/icon-192.png", sizes: "180x180", type: "image/png" }],
   },
   appleWebApp: {
     capable: true,

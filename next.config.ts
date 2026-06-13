@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  async rewrites() {
+    return [
+      { source: "/service-worker.js", destination: "/sw.js" },
+    ];
+  },
   headers: async () => [
     {
       source: "/doctor/:path*",
@@ -24,12 +29,35 @@ const nextConfig: NextConfig = {
       source: "/sw.js",
       headers: [
         { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+        { key: "Service-Worker-Allowed", value: "/" },
+      ],
+    },
+    {
+      source: "/service-worker.js",
+      headers: [
+        { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        { key: "Content-Type", value: "application/javascript; charset=utf-8" },
         { key: "Service-Worker-Allowed", value: "/" },
       ],
     },
     {
       source: "/manifest.json",
-      headers: [{ key: "Cache-Control", value: "public, max-age=86400" }],
+      headers: [
+        { key: "Cache-Control", value: "public, max-age=86400" },
+        { key: "Content-Type", value: "application/manifest+json; charset=utf-8" },
+      ],
+    },
+    {
+      source: "/manifest-doctor.json",
+      headers: [
+        { key: "Cache-Control", value: "public, max-age=86400" },
+        { key: "Content-Type", value: "application/manifest+json; charset=utf-8" },
+      ],
+    },
+    {
+      source: "/icons/:path*",
+      headers: [{ key: "Cache-Control", value: "public, max-age=604800, immutable" }],
     },
   ],
 };
