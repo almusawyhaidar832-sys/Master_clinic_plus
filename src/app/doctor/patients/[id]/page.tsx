@@ -14,7 +14,7 @@ import {
 import { formatDate } from "@/lib/utils";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import type { Doctor, Patient, MedicalLog, Treatment, PatientOperation } from "@/types";
-import { QuickEntryForm } from "@/components/accountant/QuickEntryForm";
+import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
 import { fetchPatientClinicalRecords } from "@/lib/clinical/fetch-patient-clinical";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
 import { getPatientDisplayPhone } from "@/lib/phone";
@@ -58,7 +58,7 @@ export default function DoctorPatientDetailPage() {
   const [newLog, setNewLog] = useState("");
   const [saving, setSaving] = useState(false);
   const [doctor, setDoctor] = useState<Doctor | null>(null);
-  const [showSessionForm, setShowSessionForm] = useState(false);
+  const [showClinicalPanel, setShowClinicalPanel] = useState(false);
   const [clinicalByOp, setClinicalByOp] = useState<ClinicalByOperationId>({});
   const [accessDenied, setAccessDenied] = useState(false);
 
@@ -250,20 +250,23 @@ export default function DoctorPatientDetailPage() {
             variant="primary"
             size="sm"
             className="w-full"
-            onClick={() => setShowSessionForm((v) => !v)}
+            onClick={() => setShowClinicalPanel((v) => !v)}
           >
-            {showSessionForm ? (
+            {showClinicalPanel ? (
               <>
                 <X className="h-4 w-4" />
-                {t("docCloseSessionEntry")}
+                {t("docCloseClinicalRecord")}
               </>
             ) : (
               <>
                 <Plus className="h-4 w-4" />
-                {t("docOpenSessionEntry")}
+                {t("docOpenClinicalRecord")}
               </>
             )}
           </Button>
+          <p className="text-center text-xs text-slate-muted">
+            {t("docBillingAccountantOnly")}
+          </p>
           <Link href={`/doctor/statement?patientId=${id}`}>
             <Button variant="outline" size="sm" className="w-full">
               <FileText className="h-4 w-4" />
@@ -273,18 +276,12 @@ export default function DoctorPatientDetailPage() {
         </div>
       </Card>
 
-      {showSessionForm && doctor && (
-        <QuickEntryForm
-          defaultPatientId={id}
-          defaultPatientName={patient.full_name_ar}
-          lockDoctorId={doctor.id}
-          lockDoctorName={doctor.full_name_ar}
-          prefetchedCases={doctorCases}
-          onSuccess={() => {
-            setShowSessionForm(false);
-            void reloadOperations();
-            void loadTreatmentCases();
-          }}
+      {showClinicalPanel && (
+        <VisitSessionClinicalPanel
+          patientId={id}
+          portal="doctor"
+          showSendToAccounting={false}
+          defaultOpen
         />
       )}
 
