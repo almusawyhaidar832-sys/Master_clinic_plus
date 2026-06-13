@@ -14,6 +14,7 @@ import { doctorModuleNav, doctorModuleQuickActions } from "@/config/navigation";
 import { ClinicDataSyncBridge } from "@/components/sync/ClinicDataSyncBridge";
 import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
 import { DoctorAlertsSetup } from "@/components/doctor/DoctorAlertsSetup";
+import { ensureServiceWorkerRegistration } from "@/lib/pwa/service-worker-ready";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile, getDoctorForCurrentUser } from "@/lib/clinic-context";
 import type { Doctor } from "@/types";
@@ -60,6 +61,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
     document.title = t("docAppTitle");
     document.documentElement.classList.add("mcp-doctor-portal");
     document.body.classList.add("mcp-doctor-portal");
+    void ensureServiceWorkerRegistration();
     return () => {
       document.documentElement.classList.remove("mcp-doctor-portal");
       document.body.classList.remove("mcp-doctor-portal");

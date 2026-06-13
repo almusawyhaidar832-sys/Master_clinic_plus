@@ -6,6 +6,23 @@ function adminClient() {
   return getAdminClient();
 }
 
+function normalizePersonName(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("ar");
+}
+
+async function linkDoctorProfileId(
+  admin: ReturnType<typeof adminClient>,
+  doctorId: string,
+  profileId: string
+): Promise<string> {
+  await admin
+    .from("doctors")
+    .update({ profile_id: profileId })
+    .eq("id", doctorId)
+    .is("profile_id", null);
+  return profileId;
+}
+
 /** Resolve doctor login profile even if doctors.profile_id is missing */
 export async function resolveDoctorProfileId(
   admin: ReturnType<typeof adminClient>,
@@ -14,31 +31,70 @@ export async function resolveDoctorProfileId(
 ): Promise<string | null> {
   const { data: doc } = await admin
     .from("doctors")
-    .select("profile_id, full_name_ar")
+    .select("profile_id, full_name_ar, phone")
     .eq("id", doctorId)
     .maybeSingle();
 
   if (doc?.profile_id) return doc.profile_id;
 
-  if (!doc?.full_name_ar) return null;
-
   const { data: profiles } = await admin
     .from("profiles")
-    .select("id, full_name")
+    .select("id, full_name, phone")
     .eq("clinic_id", clinicId)
     .eq("role", "doctor");
 
-  const name = doc.full_name_ar.trim();
-  const match = profiles?.find((p) => p.full_name?.trim() === name);
-  if (match?.id) {
-    await admin
-      .from("doctors")
-      .update({ profile_id: match.id })
-      .eq("id", doctorId)
-      .is("profile_id", null);
-    return match.id;
+  if (!profiles?.length) return null;
+
+  const doctorName = doc?.full_name_ar?.trim() ?? "";
+  const normalizedDoctorName = doctorName
+    ? normalizePersonName(doctorName)
+    : "";
+
+  if (normalizedDoctorName) {
+    const exact = profiles.find(
+      (p) => p.full_name?.trim() === doctorName
+    );
+    if (exact?.id) {
+      return linkDoctorProfileId(admin, doctorId, exact.id);
+    }
+
+    const fuzzy = profiles.find(
+      (p) => normalizePersonName(p.full_name ?? "") === normalizedDoctorName
+    );
+    if (fuzzy?.id) {
+      return linkDoctorProfileId(admin, doctorId, fuzzy.id);
+    }
   }
 
+  const doctorPhone = doc?.phone?.replace(/\D/g, "") ?? "";
+  if (doctorPhone.length >= 8) {
+    const byPhone = profiles.find((p) => {
+      const profilePhone = String(p.phone ?? "").replace(/\D/g, "");
+      return profilePhone.length >= 8 && profilePhone.endsWith(doctorPhone.slice(-10));
+    });
+    if (byPhone?.id) {
+      return linkDoctorProfileId(admin, doctorId, byPhone.id);
+    }
+  }
+
+  const { count: activeDoctorCount } = await admin
+    .from("doctors")
+    .select("id", { count: "exact", head: true })
+    .eq("clinic_id", clinicId)
+    .eq("is_active", true);
+
+  if (profiles.length === 1 && activeDoctorCount === 1) {
+    return linkDoctorProfileId(admin, doctorId, profiles[0]!.id);
+  }
+
+  if (!doctorName) return null;
+
+  console.warn(
+    "[notifications] doctor profile not linked:",
+    doctorId,
+    "clinic:",
+    clinicId
+  );
   return null;
 }
 

@@ -6,6 +6,7 @@ import {
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
 import { buildDoctorCallAudioUrl } from "@/lib/queue/doctor-call-audio-url";
+import { warmDoctorCallAudioUrl } from "@/lib/queue/warm-doctor-call-audio";
 
 export type QueueStatus =
   | "waiting"
@@ -163,7 +164,15 @@ export async function notifyDoctorNewQueuePatient(
     entry.doctor_id,
     entry.clinic_id
   );
-  if (!profileId) return;
+  if (!profileId) {
+    console.error(
+      "[queue] doctor notify skipped — profile not linked:",
+      entry.doctor_id,
+      "queue:",
+      queueEntryId
+    );
+    return;
+  }
 
   const patientRow = entry.patient as {
     full_name_ar?: string;
@@ -203,7 +212,10 @@ export async function notifyDoctorNewQueuePatient(
     },
   ]);
 
-  await sendWebPushToProfile(profileId, {
+  const audioUrl = buildDoctorCallAudioUrl(entry.id);
+  await warmDoctorCallAudioUrl(audioUrl);
+
+  const pushResult = await sendWebPushToProfile(profileId, {
     title: recall ? "تذكير — مراجع 🔔" : "مراجع جديد 🔔",
     body: bodyAr,
     url: "/doctor/queue",
@@ -211,10 +223,18 @@ export async function notifyDoctorNewQueuePatient(
       ? `doctor-recall-${entry.id}-${Date.now()}`
       : `doctor-queue-${entry.id}`,
     patientName: speechName,
-    audioUrl: buildDoctorCallAudioUrl(entry.id),
+    audioUrl,
   }).catch((err) => {
     console.error("[queue] doctor web push failed:", err);
+    return { attempted: 0, sent: 0, configured: false };
   });
+
+  if (pushResult && pushResult.configured && pushResult.sent === 0) {
+    console.warn(
+      "[queue] in-app notification saved but no push delivered — doctor should enable alerts in the app:",
+      profileId
+    );
+  }
 }
 
 /** Notify accountants: doctor sent session for billing */

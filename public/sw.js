@@ -1,10 +1,12 @@
-const CACHE_NAME = "mcp-app-v11-doctor-call-audio";
+const CACHE_NAME = "mcp-app-v12-doctor-push-chime";
 
 const PRECACHE_URLS = [
   "/",
   "/manifest.json",
+  "/manifest-doctor.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
+  "/api/sounds/doctor-chime",
 ];
 
 function shouldSkipCache(url) {
@@ -71,6 +73,7 @@ self.addEventListener("push", (event) => {
   const url = data.url || "/doctor/queue";
   const tag = data.tag || "doctor-queue";
   const audioUrl = data.audioUrl || null;
+  const chimeUrl = new URL("/api/sounds/doctor-chime", self.location.origin).href;
 
   const options = {
     body,
@@ -84,12 +87,12 @@ self.addEventListener("push", (event) => {
     data: { url, patientName: data.patientName, kind: data.kind, audioUrl },
   };
 
-  if (audioUrl) {
-    try {
-      options.sound = new URL(audioUrl, self.location.origin).href;
-    } catch {
-      /* ignore invalid sound url */
-    }
+  try {
+    options.sound = audioUrl
+      ? new URL(audioUrl, self.location.origin).href
+      : chimeUrl;
+  } catch {
+    options.sound = chimeUrl;
   }
 
   event.waitUntil(

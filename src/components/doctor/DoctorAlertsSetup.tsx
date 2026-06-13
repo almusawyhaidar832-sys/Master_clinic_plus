@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, Share, Smartphone, Volume2, X } from "lucide-react";
 import { PwaInstallButton } from "@/components/pwa/PwaInstallButton";
@@ -15,6 +15,7 @@ import {
   listenForPushAlertMessages,
   listenForServiceWorkerNavigation,
   registerDoctorWebPush,
+  refreshDoctorWebPushIfGranted,
 } from "@/lib/push/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { triggerQueueAlert, unlockQueueAudio } from "@/lib/queue/audio-alerts";
@@ -63,7 +64,8 @@ export function DoctorAlertsSetup() {
   const [pushReady, setPushReady] = useState(false);
   const [standalone, setStandalone] = useState(false);
   const [platform, setPlatform] = useState<"ios" | "android" | "other">("other");
-  const [pushRegistered, setPushRegistered] = useState(false);
+  const [pushRegistering, setPushRegistering] = useState(false);
+  const pushInflightRef = useRef(false);
 
   const showActivationBanner =
     !browserGranted &&
@@ -72,14 +74,22 @@ export function DoctorAlertsSetup() {
 
   const alertsActive = browserGranted;
 
-  const registerPushOnce = useCallback(() => {
-    if (!browserGranted || !isWebPushSupported() || pushRegistered) return;
-    setPushRegistered(true);
-    void registerDoctorWebPush(false).then((result) => {
-      if (result.ok) setPushReady(true);
-      else setPushRegistered(false);
-    });
-  }, [browserGranted, pushRegistered]);
+  const registerPush = useCallback(() => {
+    if (!browserGranted || !isWebPushSupported() || pushInflightRef.current) return;
+    pushInflightRef.current = true;
+    setPushRegistering(true);
+    void registerDoctorWebPush(false)
+      .then((result) => {
+        setPushReady(result.ok);
+        if (!result.ok) {
+          console.warn("[doctor-alerts] push registration failed:", result.reason);
+        }
+      })
+      .finally(() => {
+        pushInflightRef.current = false;
+        setPushRegistering(false);
+      });
+  }, [browserGranted]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -99,8 +109,27 @@ export function DoctorAlertsSetup() {
       // ignore
     }
     void warmDoctorCloudTts();
-    registerPushOnce();
-  }, [browserGranted, registerPushOnce]);
+    registerPush();
+  }, [browserGranted, registerPush]);
+
+  useEffect(() => {
+    if (!browserGranted) return;
+
+    const refreshPush = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshDoctorWebPushIfGranted().finally(() => {
+        registerPush();
+      });
+    };
+
+    refreshPush();
+    document.addEventListener("visibilitychange", refreshPush);
+    window.addEventListener("focus", refreshPush);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshPush);
+      window.removeEventListener("focus", refreshPush);
+    };
+  }, [browserGranted, registerPush]);
 
   useEffect(() => {
     return listenForPushAlertMessages((payload) => {
@@ -135,7 +164,7 @@ export function DoctorAlertsSetup() {
         setBannerDismissed(true);
         setMessage(t("docAlertsEnabled"));
         window.setTimeout(() => setMessage(null), 6000);
-        registerPushOnce();
+        registerPush();
         return;
       }
 
@@ -186,11 +215,11 @@ export function DoctorAlertsSetup() {
       setMessage(t("docAlertsEnabled"));
       setMessageIsError(false);
       window.setTimeout(() => setMessage(null), 6000);
-      registerPushOnce();
+      registerPush();
     } finally {
       setActivating(false);
     }
-  }, [bi, registerPushOnce, t]);
+  }, [bi, registerPush, t]);
 
   const testAlert = useCallback(async () => {
     await unlockQueueAudio();
@@ -321,9 +350,24 @@ export function DoctorAlertsSetup() {
       {alertsActive && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2">
           <p className="text-xs font-medium text-emerald-900">
-            {pushReady ? t("docAlertsActive") : t("docAlertsInAppActive")}
+            {pushReady
+              ? t("docAlertsActive")
+              : platform === "android"
+                ? t("docAlertsAndroidPushPending")
+                : t("docAlertsInAppActive")}
           </p>
           <div className="flex flex-wrap gap-2">
+            {!pushReady && isWebPushSupported() && (
+              <button
+                type="button"
+                disabled={pushRegistering}
+                onClick={() => registerPush()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:opacity-60"
+              >
+                <Bell className="h-3.5 w-3.5" />
+                {pushRegistering ? t("docActivatingAlerts") : t("docEnableBackgroundPush")}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void testAlert()}

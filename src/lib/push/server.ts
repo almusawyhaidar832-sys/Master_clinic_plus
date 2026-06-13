@@ -34,12 +34,21 @@ function ensureVapidConfigured(): boolean {
   return true;
 }
 
+export interface WebPushSendResult {
+  attempted: number;
+  sent: number;
+  configured: boolean;
+}
+
 /** إرسال Web Push لكل أجهزة الطبيب — يعمل حتى لو التطبيق مغلق (PWA) */
 export async function sendWebPushToProfile(
   profileId: string,
   payload: DoctorQueuePushPayload
-): Promise<void> {
-  if (!ensureVapidConfigured()) return;
+): Promise<WebPushSendResult> {
+  if (!ensureVapidConfigured()) {
+    console.warn("[web-push] skipped — VAPID keys missing on server");
+    return { attempted: 0, sent: 0, configured: false };
+  }
 
   const admin = getAdminClient();
   const { data: subs, error } = await admin
@@ -48,10 +57,16 @@ export async function sendWebPushToProfile(
     .eq("profile_id", profileId);
 
   if (error) {
-    if (error.message.includes("push_subscriptions")) return;
+    if (error.message.includes("push_subscriptions")) {
+      console.warn("[web-push] push_subscriptions table missing");
+      return { attempted: 0, sent: 0, configured: true };
+    }
     throw new Error(error.message);
   }
-  if (!subs?.length) return;
+  if (!subs?.length) {
+    console.warn("[web-push] no subscriptions for profile:", profileId);
+    return { attempted: 0, sent: 0, configured: true };
+  }
 
   const body = JSON.stringify({
     title: payload.title,
@@ -62,6 +77,14 @@ export async function sendWebPushToProfile(
     kind: "doctor_new",
     audioUrl: payload.audioUrl,
   });
+
+  const pushOptions = {
+    TTL: 120,
+    urgency: "high" as const,
+    topic: payload.tag ?? "doctor-queue",
+  };
+
+  let sent = 0;
 
   await Promise.all(
     subs.map(async (sub) => {
@@ -74,8 +97,10 @@ export async function sendWebPushToProfile(
               auth: sub.auth as string,
             },
           },
-          body
+          body,
+          pushOptions
         );
+        sent += 1;
       } catch (err: unknown) {
         const status =
           err && typeof err === "object" && "statusCode" in err
@@ -89,4 +114,6 @@ export async function sendWebPushToProfile(
       }
     })
   );
+
+  return { attempted: subs.length, sent, configured: true };
 }
