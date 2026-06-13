@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { FilePen, Plus, RefreshCw, Save, Printer, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FilePen, Plus, RefreshCw, Save, Printer, Trash2, Send } from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -33,6 +33,11 @@ interface SessionPrescriptionPanelProps {
   readOnly?: boolean;
   className?: string;
   examMode?: boolean;
+  /** زر إرسال للمحاسبة — أسفل الوصفة في غرفة الكشف */
+  showSendToAccounting?: boolean;
+  queueStatus?: string | null;
+  onSendToAccounting?: () => void | Promise<void>;
+  sendingToAccounting?: boolean;
 }
 
 export function SessionPrescriptionPanel({
@@ -44,6 +49,10 @@ export function SessionPrescriptionPanel({
   readOnly = false,
   className,
   examMode = false,
+  showSendToAccounting = false,
+  queueStatus,
+  onSendToAccounting,
+  sendingToAccounting = false,
 }: SessionPrescriptionPanelProps) {
   const isAccountant = readOnly || portal === "accountant";
 
@@ -59,6 +68,8 @@ export function SessionPrescriptionPanel({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showPrint, setShowPrint] = useState(false);
+  const autoSaveReady = useRef(false);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,6 +103,10 @@ export function SessionPrescriptionPanel({
   }, [operationId, portal, isAccountant, queueEntryId]);
 
   useEffect(() => {
+    autoSaveReady.current = false;
+  }, [operationId]);
+
+  useEffect(() => {
     void load();
   }, [load]);
 
@@ -119,16 +134,20 @@ export function SessionPrescriptionPanel({
     );
   }
 
-  async function handleSave() {
+  async function handleSave(silent = false) {
     const meds = lines.filter((line) => line.drug_name_ar.trim());
     if (meds.length === 0) {
-      setError("أضف اسم دواء واحد على الأقل قبل الحفظ");
+      if (!silent) {
+        setError("أضف اسم دواء واحد على الأقل قبل الحفظ");
+      }
       return;
     }
 
     setSaving(true);
-    setError(null);
-    setSuccess(null);
+    if (!silent) {
+      setError(null);
+      setSuccess(null);
+    }
     try {
       const saved = await savePrescription(
         {
@@ -144,13 +163,43 @@ export function SessionPrescriptionPanel({
       );
       setPrescription(saved);
       setLines(meds.length > 0 ? meds : [emptyLine()]);
-      setSuccess("✓ تم حفظ الوصفة — ستظهر للمحاسب للطباعة");
+      if (silent) {
+        setSuccess("✓ محفوظ تلقائياً");
+      } else {
+        setSuccess("✓ تم حفظ الوصفة — ستظهر للمحاسب للطباعة");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر حفظ الوصفة");
     } finally {
       setSaving(false);
     }
   }
+
+  useEffect(() => {
+    if (!examMode || isAccountant || loading) return;
+
+    if (!autoSaveReady.current) {
+      autoSaveReady.current = true;
+      return;
+    }
+
+    const meds = lines.filter((line) => line.drug_name_ar.trim());
+    if (meds.length === 0) return;
+
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      void handleSave(true);
+    }, 900);
+
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, [diagnosis, notes, lines, examMode, isAccountant, loading]);
+
+  const canSendToAccounting =
+    showSendToAccounting &&
+    !!queueEntryId &&
+    (queueStatus === "in_progress" || queueStatus === "called");
 
   const canPrint =
     isAccountant &&
@@ -197,7 +246,9 @@ export function SessionPrescriptionPanel({
             <p className={cn("mt-1 text-xs", examMode ? "text-violet-700/80" : "text-slate-500")}>
             {isAccountant
               ? "وصفة الطبيب لهذه الجلسة — اطبعها وسلّمها للمراجع"
-              : "اكتب الوصفة أو اختر قالباً — تُحفظ مع الجلسة وتصل للمحاسب"}
+              : examMode
+                ? "اكتب الوصفة — تُحفظ تلقائياً مع الجلسة"
+                : "اكتب الوصفة أو اختر قالباً — تُحفظ مع الجلسة وتصل للمحاسب"}
             </p>
           </div>
         </div>
@@ -212,6 +263,9 @@ export function SessionPrescriptionPanel({
             >
               {statusLabel}
             </span>
+          )}
+          {examMode && saving && (
+            <span className="text-[11px] font-medium text-violet-700">جاري الحفظ...</span>
           )}
           <Button
             type="button"
@@ -370,7 +424,7 @@ export function SessionPrescriptionPanel({
             />
           </div>
 
-          {!isAccountant && (
+          {!isAccountant && !examMode && (
             <Button
               type="button"
               className="w-full sm:w-auto"
@@ -384,6 +438,22 @@ export function SessionPrescriptionPanel({
               )}
               حفظ الوصفة
             </Button>
+          )}
+
+          {canSendToAccounting && onSendToAccounting && (
+            <button
+              type="button"
+              onClick={() => void onSendToAccounting()}
+              disabled={sendingToAccounting}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 py-3.5 text-sm font-bold text-white shadow-md disabled:opacity-60"
+            >
+              {sendingToAccounting ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              إرسال للمحاسبة (حفظ الجلسة)
+            </button>
           )}
 
           {canPrint && (

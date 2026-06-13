@@ -334,25 +334,6 @@ function DoctorQueuePageContent() {
     }
   };
 
-  const sendToAccounting = async (entry: QueueEntry) => {
-    setUpdating(entry.id);
-    try {
-      await apiJson(`/api/queue/${entry.id}`, lang, t, {
-        method: "PATCH",
-        body: JSON.stringify({ action: "ready_for_billing" }),
-      });
-      if (clinicId) {
-        notifyQueueRefresh({ scope: "clinic", clinicId });
-      }
-      setClinicalEntryId(null);
-      await fetchQueue();
-    } catch (err) {
-      setPageError(err instanceof Error ? err.message : t("docErrSendAccounting"));
-    } finally {
-      setUpdating(null);
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -428,24 +409,9 @@ function DoctorQueuePageContent() {
               patientId={clinicalEntry.patient_id}
               queueEntryId={clinicalEntry.id}
               portal="doctor"
-              showSendToAccounting={false}
               defaultOpen
               hideHeader
             />
-
-            <button
-              type="button"
-              onClick={() => void sendToAccounting(clinicalEntry)}
-              disabled={updating === clinicalEntry.id}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 py-3.5 text-sm font-bold text-white shadow-md disabled:opacity-60"
-            >
-              {updating === clinicalEntry.id ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-              {t("docSendToAccountingSave")}
-            </button>
             </div>
           </div>
         )}

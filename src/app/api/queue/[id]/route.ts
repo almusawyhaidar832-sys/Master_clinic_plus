@@ -207,10 +207,49 @@ export async function PATCH(
     }
 
     if (body.action === "ready_for_billing") {
-      if (isApiAssistantRole(role)) {
-        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
-      }
       const isDoctor = isApiDoctorRole(role);
+      const isAssistant = isApiAssistantRole(role);
+
+      if (isAssistant) {
+        const ctx = await resolveAssistantApiContext(profile);
+        if (!ctx) {
+          return NextResponse.json(
+            { error: "حساب المساعد غير مربوط بطبيب" },
+            { status: 403 }
+          );
+        }
+        const check = await assertAssistantOwnsQueueEntry(id, ctx);
+        if (!check.ok) {
+          return NextResponse.json({ error: check.error }, { status: check.status });
+        }
+
+        const status = await markQueueReadyForBilling(admin, id, {
+          doctorId: ctx.doctorId,
+        });
+        await notifyAccountantsReadyForBilling(id).catch((err) => {
+          console.error("[api/queue] billing notify failed:", err);
+        });
+
+        const { data: entryRow } = await admin
+          .from("patient_queue")
+          .select(
+            "patient_id, appointment_id, doctor_id, patient_name, patient_phone"
+          )
+          .eq("id", id)
+          .maybeSingle();
+
+        const ledgerUrl = buildLedgerPayUrl({
+          queueEntryId: id,
+          patientId: entryRow?.patient_id as string | null,
+          appointmentId: entryRow?.appointment_id as string | null,
+          doctorId: entryRow?.doctor_id as string | null,
+          patientName: entryRow?.patient_name as string | null,
+          patientPhone: entryRow?.patient_phone as string | null,
+        });
+
+        return NextResponse.json({ success: true, status, ledger_url: ledgerUrl });
+      }
+
       if (!isDoctor && !staffRolesOk(role)) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }

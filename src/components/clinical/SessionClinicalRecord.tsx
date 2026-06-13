@@ -1,20 +1,27 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { Upload, X, Smile } from "lucide-react";
 import { InteractiveDentalChart } from "@/components/clinical/InteractiveDentalChart";
 import type { SessionClinicalDraft } from "@/lib/clinical/constants";
+import { saveSessionClinicalRecords } from "@/lib/clinical/session-records";
+import type { AuthPortalId } from "@/lib/auth/portal-access";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { cn } from "@/lib/utils";
 
 export interface SessionClinicalRecordProps {
   value: SessionClinicalDraft;
   onChange: (draft: SessionClinicalDraft) => void;
   disabled?: boolean;
-  /** يُمرَّر لمخطط الأسنان لمسح الاختيار عند إعادة تعيين المسودة */
   chartResetKey?: number;
   showHeader?: boolean;
-  /** كارتات منفصلة للأشعة والمخطط — واجهة الكشف */
   examLayout?: boolean;
+  /** حفظ تلقائي عند تعديل المخطط أو رفع الأشعة — غرفة الكشف */
+  autoSave?: boolean;
+  operationId?: string;
+  portal?: AuthPortalId;
+  onAutoSaved?: () => void;
+  onAutoSaveError?: (message: string) => void;
 }
 
 function XrayUploadSection({
@@ -23,23 +30,58 @@ function XrayUploadSection({
   disabled,
   fileRef,
   examLayout,
+  autoSave,
+  operationId,
+  portal = "doctor",
+  onAutoSaved,
+  onAutoSaveError,
 }: {
   value: SessionClinicalDraft;
   onChange: (draft: SessionClinicalDraft) => void;
   disabled?: boolean;
   fileRef: React.RefObject<HTMLInputElement | null>;
   examLayout?: boolean;
+  autoSave?: boolean;
+  operationId?: string;
+  portal?: AuthPortalId;
+  onAutoSaved?: () => void;
+  onAutoSaveError?: (message: string) => void;
 }) {
+  async function uploadFiles(files: File[]) {
+    if (!operationId) return;
+    for (const file of files) {
+      const form = new FormData();
+      form.append("operation_id", operationId);
+      form.append("file", file);
+      const res = await fetch("/api/clinical/xray-upload", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: authPortalHeaders(portal),
+        body: form,
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        onAutoSaveError?.(json.error ?? "تعذر رفع صورة الأشعة");
+        return;
+      }
+    }
+    onAutoSaved?.();
+  }
+
   function addFiles(files: FileList | null) {
     if (!files?.length) return;
     const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-    const next = [...value.xrayFiles];
-    for (const f of Array.from(files)) {
-      if (allowed.includes(f.type) || f.type.startsWith("image/")) {
-        next.push(f);
-      }
+    const picked = Array.from(files).filter(
+      (f) => allowed.includes(f.type) || f.type.startsWith("image/")
+    );
+    if (picked.length === 0) return;
+
+    if (autoSave && operationId) {
+      void uploadFiles(picked);
+      return;
     }
-    onChange({ ...value, xrayFiles: next });
+
+    onChange({ ...value, xrayFiles: [...value.xrayFiles, ...picked] });
   }
 
   function removeFile(index: number) {
@@ -73,9 +115,9 @@ function XrayUploadSection({
         )}
       >
         <Upload className="h-4 w-4" />
-        رفع صور أشعة لهذه الجلسة
+        {autoSave ? "رفع أشعة — تُحفظ مباشرة" : "رفع صور أشعة لهذه الجلسة"}
       </button>
-      {value.xrayFiles.length > 0 && (
+      {!autoSave && value.xrayFiles.length > 0 && (
         <ul className="mt-2 space-y-1">
           {value.xrayFiles.map((f, i) => (
             <li
@@ -106,8 +148,43 @@ export function SessionClinicalRecord({
   chartResetKey,
   showHeader = true,
   examLayout = false,
+  autoSave = false,
+  operationId,
+  portal = "doctor",
+  onAutoSaved,
+  onAutoSaveError,
 }: SessionClinicalRecordProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const teethSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const persistTeeth = useCallback(
+    async (teeth: SessionClinicalDraft["teeth"]) => {
+      if (!autoSave || !operationId || Object.keys(teeth).length === 0) return;
+      const res = await saveSessionClinicalRecords(
+        operationId,
+        { teeth, xrayFiles: [] },
+        portal
+      );
+      if (!res.ok) {
+        onAutoSaveError?.(res.error ?? "تعذر حفظ مخطط الأسنان");
+        return;
+      }
+      onAutoSaved?.();
+    },
+    [autoSave, operationId, portal, onAutoSaved, onAutoSaveError]
+  );
+
+  const handleTeethChange = useCallback(
+    (teeth: SessionClinicalDraft["teeth"]) => {
+      onChange({ ...value, teeth });
+      if (!autoSave || disabled) return;
+      if (teethSaveTimer.current) clearTimeout(teethSaveTimer.current);
+      teethSaveTimer.current = setTimeout(() => {
+        void persistTeeth(teeth);
+      }, 350);
+    },
+    [autoSave, disabled, onChange, persistTeeth, value]
+  );
 
   if (examLayout) {
     return (
@@ -123,6 +200,11 @@ export function SessionClinicalRecord({
             disabled={disabled}
             fileRef={fileRef}
             examLayout
+            autoSave={autoSave}
+            operationId={operationId}
+            portal={portal}
+            onAutoSaved={onAutoSaved}
+            onAutoSaveError={onAutoSaveError}
           />
         </div>
 
@@ -140,14 +222,14 @@ export function SessionClinicalRecord({
             key={chartResetKey}
             mode="session"
             value={value.teeth}
-            onChange={(teeth) => onChange({ ...value, teeth })}
+            onChange={handleTeethChange}
             readOnly={disabled}
             embedded
             examCanvas
           />
           <div className="mt-3 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2">
             <p className="text-[11px] font-semibold text-primary">
-              اضغط على أي سن لتسجيل الحالة والإجراء
+              اضغط على السن — يُحفظ تلقائياً دون زر حفظ
             </p>
           </div>
         </div>
@@ -179,6 +261,11 @@ export function SessionClinicalRecord({
           onChange={onChange}
           disabled={disabled}
           fileRef={fileRef}
+          autoSave={autoSave}
+          operationId={operationId}
+          portal={portal}
+          onAutoSaved={onAutoSaved}
+          onAutoSaveError={onAutoSaveError}
         />
       </div>
 
@@ -186,7 +273,7 @@ export function SessionClinicalRecord({
         key={chartResetKey}
         mode="session"
         value={value.teeth}
-        onChange={(teeth) => onChange({ ...value, teeth })}
+        onChange={handleTeethChange}
         readOnly={disabled}
         embedded
       />

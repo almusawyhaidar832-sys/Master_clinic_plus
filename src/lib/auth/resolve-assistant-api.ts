@@ -93,6 +93,15 @@ export async function assertAssistantOwnsOperation(
     operation.doctor_id !== ctx.doctorId ||
     operation.clinic_id !== ctx.clinicId
   ) {
+    if (operation.queue_entry_id) {
+      const queueCheck = await assertAssistantOwnsQueueEntry(
+        String(operation.queue_entry_id),
+        ctx
+      );
+      if (queueCheck.ok) {
+        return { ok: true, operation: operation as OperationScopeRow };
+      }
+    }
     return { ok: false, error: "غير مصرح", status: 403 };
   }
   return { ok: true, operation: operation as OperationScopeRow };

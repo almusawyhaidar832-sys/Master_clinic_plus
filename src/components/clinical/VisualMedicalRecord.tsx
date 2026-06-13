@@ -200,11 +200,19 @@ export function VisualMedicalRecord({
             chartResetKey={chartResetKey}
             showHeader={!collapsible && !examMode}
             examLayout={examMode}
+            autoSave={examMode && !!operationId && !reviewOnly}
+            operationId={operationId ?? undefined}
+            portal={portal}
+            onAutoSaved={() => {
+              setAddDraft(EMPTY_CLINICAL_DRAFT);
+              void loadExisting();
+            }}
+            onAutoSaveError={(text) => setMessage({ type: "error", text })}
           />
         </>
       )}
 
-      {operationId && !isDraftMode && !reviewOnly && (
+      {operationId && !isDraftMode && !reviewOnly && !examMode && (
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
@@ -217,7 +225,11 @@ export function VisualMedicalRecord({
         </div>
       )}
 
-      {message && <Alert variant={message.type}>{message.text}</Alert>}
+      {examMode && message && (
+        <Alert variant={message.type}>{message.text}</Alert>
+      )}
+
+      {!examMode && message && <Alert variant={message.type}>{message.text}</Alert>}
     </div>
   );
 

@@ -13,6 +13,10 @@ import {
   ensureVisitSessionOperation,
   getVisitSessionByQueueEntry,
 } from "@/lib/services/visit-session";
+import {
+  assertAssistantOwnsQueueEntry,
+  resolveAssistantApiContext,
+} from "@/lib/auth/resolve-assistant-api";
 
 function staffOk(role: string) {
   return isApiStaffRole(role) || isApiAssistantRole(role);
@@ -56,6 +60,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "queue_entry_id مطلوب" }, { status: 400 });
     }
 
+    if (isApiAssistantRole(role)) {
+      const ctx = await resolveAssistantApiContext(profile);
+      if (!ctx) {
+        return NextResponse.json(
+          { error: "حساب المساعد غير مربوط بطبيب" },
+          { status: 403 }
+        );
+      }
+      const check = await assertAssistantOwnsQueueEntry(queueEntryId, ctx);
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error }, { status: check.status });
+      }
+    }
+
     const admin = getAdminClient();
     const session = await getVisitSessionByQueueEntry(
       admin,
@@ -87,6 +105,7 @@ export async function POST(req: NextRequest) {
 
     const role = String(profile.role ?? "");
     const isDoctor = isApiDoctorRole(role);
+    const isAssistant = isApiAssistantRole(role);
     if (!isDoctor && !staffOk(role)) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
@@ -102,6 +121,23 @@ export async function POST(req: NextRequest) {
     const queueEntryId = body.queue_entry_id
       ? String(body.queue_entry_id).trim()
       : null;
+
+    if (isAssistant) {
+      const ctx = await resolveAssistantApiContext(profile);
+      if (!ctx) {
+        return NextResponse.json(
+          { error: "حساب المساعد غير مربوط بطبيب" },
+          { status: 403 }
+        );
+      }
+      doctorId = ctx.doctorId;
+      if (queueEntryId) {
+        const check = await assertAssistantOwnsQueueEntry(queueEntryId, ctx);
+        if (!check.ok) {
+          return NextResponse.json({ error: check.error }, { status: check.status });
+        }
+      }
+    }
 
     if (isDoctor) {
       const doctor = await getDoctorByProfileId(profile.id);
@@ -141,15 +177,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (!doctorId) {
-      const { data: recentOp } = await admin
-        .from("patient_operations")
-        .select("doctor_id")
-        .eq("clinic_id", profile.clinic_id)
-        .eq("patient_id", patientId)
-        .order("operation_date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
       if (queueEntryId) {
         const { data: entry } = await admin
           .from("patient_queue")
@@ -160,7 +187,18 @@ export async function POST(req: NextRequest) {
         doctorId = entry?.doctor_id as string | undefined;
       }
 
-      doctorId = doctorId ?? (recentOp?.doctor_id as string | undefined);
+      if (!doctorId) {
+        const { data: recentOp } = await admin
+          .from("patient_operations")
+          .select("doctor_id")
+          .eq("clinic_id", profile.clinic_id)
+          .eq("patient_id", patientId)
+          .order("operation_date", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        doctorId = recentOp?.doctor_id as string | undefined;
+      }
+
       if (!doctorId) {
         return NextResponse.json(
           { error: "تعذر تحديد الطبيب — افتح الزيارة من الطابور" },

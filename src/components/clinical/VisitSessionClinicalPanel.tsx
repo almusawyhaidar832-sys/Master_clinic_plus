@@ -153,7 +153,6 @@ export function VisitSessionClinicalPanel({
   const isAccountantView = portal === "accountant";
   const isExamPortal = portal === "doctor" || portal === "assistant";
   const canSend =
-    showSendToAccounting &&
     session?.queueEntryId &&
     (session.queueStatus === "in_progress" || session.queueStatus === "called");
 
@@ -272,8 +271,12 @@ export function VisitSessionClinicalPanel({
             patientId={session.patientId}
             doctorId={session.doctorId}
             queueEntryId={session.queueEntryId}
+            queueStatus={session.queueStatus}
             portal={portal}
             readOnly={isAccountantView}
+            showSendToAccounting={isExamPortal && canSend}
+            onSendToAccounting={() => void sendToAccounting()}
+            sendingToAccounting={sending}
           />
         )}
 
