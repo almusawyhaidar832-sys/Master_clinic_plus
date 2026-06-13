@@ -16,6 +16,7 @@ import {
 } from "@/lib/clinical/session-records";
 import {
   hasClinicalData,
+  teethArrayToMap,
   type OperationClinicalData,
 } from "@/lib/clinical/types";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
@@ -112,12 +113,12 @@ export function VisualMedicalRecord({
     void resolveFromInvoice();
   }, [invoiceId, operationIdProp]);
 
-  const loadExisting = useCallback(async () => {
+  const loadExisting = useCallback(async (silent = false) => {
     if (!operationId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     const data = await fetchOperationClinicalRecord(operationId, portal);
     setExisting(data);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, [operationId, portal]);
 
   useEffect(() => {
@@ -125,6 +126,19 @@ export function VisualMedicalRecord({
     if (initialData && hasClinicalData(initialData)) return;
     void loadExisting();
   }, [open, operationId, loadExisting, initialData]);
+
+  /** غرفة الكشف — تحميل أولي للمسودة من السيرفر فقط إذا كانت فارغة */
+  useEffect(() => {
+    if (!examMode || !operationId || !existing) return;
+    setAddDraft((prev) => {
+      if (Object.keys(prev.teeth).length > 0) return prev;
+      if (!hasClinicalData(existing)) return prev;
+      return {
+        xrayFiles: [],
+        teeth: teethArrayToMap(existing.teeth ?? []),
+      };
+    });
+  }, [examMode, operationId, existing]);
 
   const hasExisting = hasClinicalData(existing);
 
@@ -174,7 +188,7 @@ export function VisualMedicalRecord({
         <p className="text-xs text-slate-500">جاري تحميل السجل...</p>
       )}
 
-      {operationId && !loading && hasExisting && existing && (
+      {operationId && !loading && hasExisting && existing && !examMode && (
         <div className={examMode ? "mc-exam-section" : undefined}>
           <ClinicalRecordDisplay data={existing} examLayout={examMode} />
         </div>
@@ -188,7 +202,7 @@ export function VisualMedicalRecord({
 
       {!reviewOnly && (isDraftMode || operationId) && (
         <>
-          {operationId && !isDraftMode && hasExisting && (
+          {operationId && !isDraftMode && hasExisting && !examMode && (
             <p className="text-xs font-semibold text-primary">
               إضافة أشعة / أسنان لهذه الجلسة
             </p>
@@ -203,9 +217,9 @@ export function VisualMedicalRecord({
             autoSave={examMode && !!operationId && !reviewOnly}
             operationId={operationId ?? undefined}
             portal={portal}
-            onAutoSaved={() => {
-              setAddDraft(EMPTY_CLINICAL_DRAFT);
-              void loadExisting();
+            savedXrays={examMode && existing ? existing.xrays : undefined}
+            onAutoSaved={(kind) => {
+              if (kind === "xray") void loadExisting(true);
             }}
             onAutoSaveError={(text) => setMessage({ type: "error", text })}
           />

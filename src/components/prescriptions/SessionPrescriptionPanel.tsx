@@ -163,9 +163,7 @@ export function SessionPrescriptionPanel({
       );
       setPrescription(saved);
       setLines(meds.length > 0 ? meds : [emptyLine()]);
-      if (silent) {
-        setSuccess("✓ محفوظ تلقائياً");
-      } else {
+      if (!silent) {
         setSuccess("✓ تم حفظ الوصفة — ستظهر للمحاسب للطباعة");
       }
     } catch (e) {

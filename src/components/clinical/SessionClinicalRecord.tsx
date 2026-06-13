@@ -5,6 +5,7 @@ import { Upload, X, Smile } from "lucide-react";
 import { InteractiveDentalChart } from "@/components/clinical/InteractiveDentalChart";
 import type { SessionClinicalDraft } from "@/lib/clinical/constants";
 import { saveSessionClinicalRecords } from "@/lib/clinical/session-records";
+import type { ClinicalXrayImage } from "@/lib/clinical/types";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { cn } from "@/lib/utils";
@@ -20,8 +21,10 @@ export interface SessionClinicalRecordProps {
   autoSave?: boolean;
   operationId?: string;
   portal?: AuthPortalId;
-  onAutoSaved?: () => void;
+  onAutoSaved?: (kind?: "teeth" | "xray") => void;
   onAutoSaveError?: (message: string) => void;
+  /** أشعة محفوظة على الخادم — عرض واحد في غرفة الكشف */
+  savedXrays?: ClinicalXrayImage[];
 }
 
 function XrayUploadSection({
@@ -44,7 +47,7 @@ function XrayUploadSection({
   autoSave?: boolean;
   operationId?: string;
   portal?: AuthPortalId;
-  onAutoSaved?: () => void;
+  onAutoSaved?: (kind?: "teeth" | "xray") => void;
   onAutoSaveError?: (message: string) => void;
 }) {
   async function uploadFiles(files: File[]) {
@@ -65,7 +68,7 @@ function XrayUploadSection({
         return;
       }
     }
-    onAutoSaved?.();
+    onAutoSaved?.("xray");
   }
 
   function addFiles(files: FileList | null) {
@@ -153,6 +156,7 @@ export function SessionClinicalRecord({
   portal = "doctor",
   onAutoSaved,
   onAutoSaveError,
+  savedXrays,
 }: SessionClinicalRecordProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const teethSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -169,7 +173,7 @@ export function SessionClinicalRecord({
         onAutoSaveError?.(res.error ?? "تعذر حفظ مخطط الأسنان");
         return;
       }
-      onAutoSaved?.();
+      onAutoSaved?.("teeth");
     },
     [autoSave, operationId, portal, onAutoSaved, onAutoSaveError]
   );
@@ -186,6 +190,46 @@ export function SessionClinicalRecord({
     [autoSave, disabled, onChange, persistTeeth, value]
   );
 
+  function SavedXrayGallery({ xrays }: { xrays: ClinicalXrayImage[] }) {
+    if (!xrays.length) return null;
+    return (
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {xrays.map((x) => {
+          const isPdf =
+            x.mime_type === "application/pdf" ||
+            x.file_name?.toLowerCase().endsWith(".pdf");
+          return (
+            <a
+              key={x.id}
+              href={x.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block overflow-hidden rounded-lg border border-slate-border bg-white"
+            >
+              {isPdf ? (
+                <div className="flex h-24 items-center justify-center text-xs text-slate-muted">
+                  PDF — {x.file_name ?? "أشعة"}
+                </div>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={x.url}
+                  alt={x.file_name ?? "أشعة"}
+                  className="h-24 w-full object-cover"
+                />
+              )}
+              {x.file_name && (
+                <p className="truncate px-2 py-1 text-[10px] text-slate-muted">
+                  {x.file_name}
+                </p>
+              )}
+            </a>
+          );
+        })}
+      </div>
+    );
+  }
+
   if (examLayout) {
     return (
       <div className="space-y-4">
@@ -194,6 +238,9 @@ export function SessionClinicalRecord({
             <Upload className="h-4 w-4 text-cyan-600" />
             <span className="text-cyan-800">صور الأشعة (X-ray)</span>
           </h4>
+          {savedXrays && savedXrays.length > 0 && (
+            <SavedXrayGallery xrays={savedXrays} />
+          )}
           <XrayUploadSection
             value={value}
             onChange={onChange}
