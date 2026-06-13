@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppointmentsRealtime } from "@/hooks/useAppointmentsRealtime";
 import { useClinicSync } from "@/hooks/useClinicSync";
+import { normalizeAppointmentRows } from "@/lib/appointments/normalize-row";
 import type { AppointmentWithDoctor } from "@/hooks/useCentralizedAppointments";
 
 export interface UseAppointmentScheduleOptions {
@@ -39,7 +40,7 @@ export function useAppointmentSchedule({
 
     let query = supabase
       .from("appointments")
-      .select("*, doctor:doctors(full_name_ar)")
+      .select("*, doctor:doctors!doctor_id(full_name_ar)")
       .eq("clinic_id", clinicId)
       .gte("appointment_date", dateFrom)
       .lte("appointment_date", dateTo)
@@ -55,7 +56,9 @@ export function useAppointmentSchedule({
     if (error) {
       setAppointments([]);
     } else {
-      setAppointments((data as AppointmentWithDoctor[]) ?? []);
+      setAppointments(
+        normalizeAppointmentRows((data ?? []) as Record<string, unknown>[])
+      );
     }
     setLoading(false);
   }, [clinicId, dateFrom, dateTo, doctorId, enabled]);

@@ -296,7 +296,9 @@ function AppointmentRow({
         <p className="font-semibold text-slate-800">
           {a.patient_name_ar || "مريض"}
         </p>
-        {a.notes && <p className="text-xs text-slate-500">{a.notes}</p>}
+        {a.notes ? (
+          <p className="text-xs text-slate-500">{String(a.notes)}</p>
+        ) : null}
         {a.reason_for_change && a.status === "cancelled" && (
           <p className="text-xs text-red-600">سبب: {a.reason_for_change}</p>
         )}

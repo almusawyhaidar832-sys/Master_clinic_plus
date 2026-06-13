@@ -75,8 +75,13 @@ export function parseFormattedNumber(value: string): string {
     .replace(/(\..*)\./g, "$1");
 }
 
-export function formatDate(date: Date | string, locale = "ar-EG"): string {
+export function formatDate(
+  date: Date | string | null | undefined,
+  locale = "ar-EG"
+): string {
+  if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "—";
   return new Intl.DateTimeFormat(locale, {
     year: "numeric",
     month: "long",
@@ -84,13 +89,16 @@ export function formatDate(date: Date | string, locale = "ar-EG"): string {
   }).format(d);
 }
 
-export function formatTime(time: string): string {
-  const ascii = toAsciiDigits(time);
-  const [h, m] = ascii.split(":");
+export function formatTime(time: string | null | undefined): string {
+  if (!time?.trim()) return "—";
+  const ascii = toAsciiDigits(time.trim());
+  const [h, m = "00"] = ascii.split(":");
   const hour = parseInt(h, 10);
+  if (!Number.isFinite(hour)) return "—";
   const suffix = hour >= 12 ? "م" : "ص";
   const h12 = hour % 12 || 12;
-  return `${h12}:${m} ${suffix}`;
+  const minutes = m.padStart(2, "0").slice(0, 2);
+  return `${h12}:${minutes} ${suffix}`;
 }
 
 /** Calendar date in the user's local timezone (not UTC) */

@@ -13,6 +13,7 @@ import { setAccountantAppointmentStatusViaApi } from "@/lib/services/accountant-
 import { broadcastPatientSentToDoctor } from "@/lib/queue/broadcast";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import { normalizeAppointmentRows } from "@/lib/appointments/normalize-row";
 import { cn, formatTime, todayISO } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAppointmentStatusLabels } from "@/i18n/localized-labels";
@@ -92,7 +93,7 @@ export function TodayAppointmentsPanel({
       .from("appointments")
       .select(
         `*,
-        doctor:doctors ( full_name_ar, percentage, materials_share, payment_type )`
+        doctor:doctors!doctor_id ( full_name_ar, percentage, materials_share, payment_type )`
       )
       .eq("clinic_id", active.clinicId)
       .eq("appointment_date", todayISO())
@@ -103,7 +104,9 @@ export function TodayAppointmentsPanel({
       setMessage(t("msgLoadAppointmentsFailed"));
       setAppointments([]);
     } else {
-      setAppointments((data as DashboardAppointment[]) ?? []);
+      setAppointments(
+        normalizeAppointmentRows((data ?? []) as Record<string, unknown>[]) as DashboardAppointment[]
+      );
     }
     setLoading(false);
   }, [t]);

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAppointmentsRealtime } from "@/hooks/useAppointmentsRealtime";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { todayISO } from "@/lib/utils";
+import { normalizeAppointmentRows } from "@/lib/appointments/normalize-row";
 import type { Appointment } from "@/types";
 
 export interface AppointmentWithDoctor extends Appointment {
@@ -44,7 +45,7 @@ export function useCentralizedAppointments({
 
     let query = supabase
       .from("appointments")
-      .select("*, doctor:doctors(full_name_ar)")
+      .select("*, doctor:doctors!doctor_id(full_name_ar)")
       .eq("clinic_id", clinicId)
       .gte("appointment_date", today)
       .order("appointment_date")
@@ -59,7 +60,9 @@ export function useCentralizedAppointments({
     if (error) {
       setAppointments([]);
     } else {
-      setAppointments((data as AppointmentWithDoctor[]) ?? []);
+      setAppointments(
+        normalizeAppointmentRows((data ?? []) as Record<string, unknown>[])
+      );
     }
     setLoading(false);
   }, [clinicId, doctorId, enabled]);
