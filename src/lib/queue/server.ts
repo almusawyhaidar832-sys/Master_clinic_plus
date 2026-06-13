@@ -1,7 +1,10 @@
 import { getAdminClient } from "@/lib/supabase/admin";
 import { resolveDoctorProfileId, insertNotifications } from "@/lib/notifications/server";
 import { sendWebPushToProfile } from "@/lib/push/server";
-import { resolvePatientDisplayName } from "@/lib/queue/utils";
+import {
+  resolvePatientDisplayName,
+  resolvePatientSpeechName,
+} from "@/lib/queue/utils";
 
 export type QueueStatus =
   | "waiting"
@@ -161,9 +164,22 @@ export async function notifyDoctorNewQueuePatient(
   );
   if (!profileId) return;
 
-  const patientRow = entry.patient as { full_name_ar?: string } | null;
-  const name = resolvePatientDisplayName({
+  const patientRow = entry.patient as {
+    full_name_ar?: string;
+    speech_name_ar?: string | null;
+  } | null;
+  const displayName = resolvePatientDisplayName({
     patient: patientRow ? { full_name_ar: patientRow.full_name_ar ?? "" } : null,
+    patient_name: entry.patient_name,
+    ticket_number: entry.ticket_number,
+  });
+  const speechName = resolvePatientSpeechName({
+    patient: patientRow
+      ? {
+          full_name_ar: patientRow.full_name_ar ?? "",
+          speech_name_ar: patientRow.speech_name_ar,
+        }
+      : null,
     patient_name: entry.patient_name,
     ticket_number: entry.ticket_number,
   });
@@ -173,8 +189,8 @@ export async function notifyDoctorNewQueuePatient(
     ? "تذكير — مراجع في الانتظار"
     : "مراجع جديد في الانتظار";
   const bodyAr = recall
-    ? `تذكير: المراجع ${name} بانتظارك — يرجى استقباله`
-    : `لديك مراجع جديد في الانتظار: ${name}`;
+    ? `تذكير: المراجع ${displayName} بانتظارك — يرجى استقباله`
+    : `لديك مراجع جديد في الانتظار: ${displayName}`;
 
   await insertNotifications([
     {
@@ -193,7 +209,7 @@ export async function notifyDoctorNewQueuePatient(
     tag: recall
       ? `doctor-recall-${entry.id}-${Date.now()}`
       : `doctor-queue-${entry.id}`,
-    patientName: name,
+    patientName: speechName,
   }).catch((err) => {
     console.error("[queue] doctor web push failed:", err);
   });

@@ -178,7 +178,8 @@ async function speakQueueAlertVoice(
   options?: { clearQueue?: boolean }
 ): Promise<void> {
   prepareSpeechAuto();
-  const speechOpts = { useCloud: false as const, clearQueue: options?.clearQueue };
+  /** صوت Bassel العراقي من السحابة — نفس نطق المحاسب وشاشة الانتظار */
+  const speechOpts = { useCloud: true as const, clearQueue: options?.clearQueue };
 
   if (detail.patientName?.trim()) {
     const name = detail.patientName.trim();
@@ -202,6 +203,7 @@ async function speakQueueAlertVoice(
 /** إعادة تشغيل صوت التنبيه فوراً */
 export function replayQueueAlert(detail: QueueAlertDetail): void {
   void (async () => {
+    await unlockQueueAudio();
     await playQueueAlertSound(detail.kind);
     await speakQueueAlertVoice(detail, { clearQueue: true });
   })();
@@ -210,6 +212,7 @@ export function replayQueueAlert(detail: QueueAlertDetail): void {
 /** Sound + voice + browser notification + on-screen banner */
 export async function triggerQueueAlert(detail: QueueAlertDetail) {
   dispatchQueueAlertUI(detail);
+  await unlockQueueAudio();
   await playQueueAlertSound(detail.kind);
   await speakQueueAlertVoice(detail);
   showBrowserNotification(detail.title, detail.message, detail.linkPath);

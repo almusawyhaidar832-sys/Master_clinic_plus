@@ -3,25 +3,14 @@
 import { useEffect, useState } from "react";
 import { Download, Share, X } from "lucide-react";
 
+import { isIOS, isStandalonePwa } from "@/lib/pwa/platform";
+
 const DISMISS_KEY = "mcp-pwa-install-dismissed";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
-
-function isStandalone(): boolean {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (navigator as Navigator & { standalone?: boolean }).standalone === true
-  );
-}
-
-function isIOS(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /iphone|ipad|ipod/i.test(navigator.userAgent);
-}
 
 export function PWAProvider() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(
@@ -39,7 +28,7 @@ export function PWAProvider() {
   }, []);
 
   useEffect(() => {
-    if (isStandalone()) return;
+    if (isStandalonePwa()) return;
     if (localStorage.getItem(DISMISS_KEY) === "1") return;
 
     const onBip = (e: Event) => {
@@ -75,7 +64,7 @@ export function PWAProvider() {
     setShowBanner(false);
   }
 
-  if (isStandalone()) return null;
+  if (isStandalonePwa()) return null;
 
   if (showBanner && deferred) {
     return (

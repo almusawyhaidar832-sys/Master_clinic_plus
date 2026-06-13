@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 
-const ALLOWED = new Set(["192", "512"]);
+const ALLOWED = new Set(["180", "192", "512"]);
 
 export async function GET(
   _request: Request,

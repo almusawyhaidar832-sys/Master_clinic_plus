@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v6-push-alerts";
+const CACHE_NAME = "mcp-app-v7-cross-platform-alerts";
 
 function shouldSkipCache(url) {
   if (url.pathname.startsWith("/api/")) return true;
@@ -80,16 +80,35 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = event.notification.data?.url || "/doctor/queue";
   const absoluteUrl = new URL(targetUrl, self.location.origin).href;
+  const alertPayload = {
+    url: targetUrl,
+    kind: event.notification.data?.kind,
+    patientName: event.notification.data?.patientName,
+  };
 
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clientList) => {
+      .then(async (clientList) => {
         for (const client of clientList) {
-          if (client.url.startsWith(self.location.origin) && "focus" in client) {
+          if (!client.url.startsWith(self.location.origin)) continue;
+
+          client.postMessage({ type: "SW_NAVIGATE", url: targetUrl });
+          client.postMessage({ type: "QUEUE_PUSH_ALERT", payload: alertPayload });
+
+          if ("navigate" in client && typeof client.navigate === "function") {
+            try {
+              await client.navigate(absoluteUrl);
+            } catch {
+              /* focus only */
+            }
+          }
+
+          if ("focus" in client) {
             return client.focus();
           }
         }
+
         if (self.clients.openWindow) {
           return self.clients.openWindow(absoluteUrl);
         }

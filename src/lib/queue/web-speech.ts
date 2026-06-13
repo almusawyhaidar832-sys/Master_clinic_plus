@@ -7,6 +7,7 @@ import {
 } from "@/lib/queue/arabic-speech-text";
 import {
   clearCloudSpeechQueue,
+  speakViaCloudTtsParts,
   speakViaCloudTtsText,
 } from "@/lib/queue/cloud-speech";
 
@@ -226,8 +227,18 @@ export async function speakPatientCallParts(
   parts: PatientCallSpeechParts,
   options?: SpeechPlayOptions
 ): Promise<void> {
-  const text = joinPatientCallSpeech(parts);
-  return enqueueBrowserSpeech(() => speakTextNow(text, options), options);
+  return enqueueBrowserSpeech(async () => {
+    if (options?.clearQueue) stopAllSpeech();
+    prepareSpeechAuto();
+
+    if (options?.useCloud !== false) {
+      const usedCloud = await speakViaCloudTtsParts(parts);
+      if (usedCloud) return;
+    }
+
+    const voice = await resolveArabicVoice();
+    await speakPart(joinPatientCallSpeech(parts), voice, BROWSER_SPEECH_RATE, true);
+  }, options);
 }
 
 export async function speakPatientCallImmediate(

@@ -1,6 +1,8 @@
 "use client";
 
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import { ensureServiceWorkerRegistration } from "@/lib/pwa/service-worker-ready";
+import { getDoctorPushCapability } from "@/lib/pwa/platform";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -13,54 +15,97 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return output;
 }
 
+export type PushRegisterResult =
+  | { ok: true; subscribed: boolean }
+  | {
+      ok: false;
+      reason:
+        | "unsupported"
+        | "ios-not-installed"
+        | "denied"
+        | "no-sw"
+        | "subscribe-failed"
+        | "server-failed";
+    };
+
 export function isWebPushSupported(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    "serviceWorker" in navigator &&
-    "PushManager" in window &&
-    Boolean(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim())
-  );
+  return getDoctorPushCapability().level === "full";
 }
 
-/** اشتراك Web Push لموبايل الطبيب — يتطلب إذن الإشعارات */
+/** اشتراك Web Push لموبايل الطبيب — Android + iPhone (PWA مثبّت) */
 export async function registerDoctorWebPush(
   requestPermission = false
-): Promise<boolean> {
-  if (!isWebPushSupported()) return false;
+): Promise<PushRegisterResult> {
+  const capability = getDoctorPushCapability();
+  if (capability.level === "unsupported") {
+    return { ok: false, reason: "unsupported" };
+  }
+  if (capability.level === "in-app-only") {
+    return { ok: false, reason: "ios-not-installed" };
+  }
 
-  if (!("Notification" in window)) return false;
+  if (!("Notification" in window)) {
+    return { ok: false, reason: "unsupported" };
+  }
 
-  if (Notification.permission === "denied") return false;
+  if (Notification.permission === "denied") {
+    return { ok: false, reason: "denied" };
+  }
 
   if (Notification.permission === "default" && requestPermission) {
     const result = await Notification.requestPermission();
-    if (result !== "granted") return false;
+    if (result !== "granted") return { ok: false, reason: "denied" };
   } else if (Notification.permission !== "granted") {
-    return false;
+    return { ok: false, reason: "denied" };
+  }
+
+  const registration = await ensureServiceWorkerRegistration();
+  if (!registration) {
+    return { ok: false, reason: "no-sw" };
   }
 
   const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!.trim();
-  const registration = await navigator.serviceWorker.ready;
 
   let subscription = await registration.pushManager.getSubscription();
   if (!subscription) {
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidKey),
-    });
+    try {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      });
+    } catch {
+      return { ok: false, reason: "subscribe-failed" };
+    }
   }
 
-  const res = await fetch("/api/push/subscribe", {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...authPortalHeaders("doctor"),
-    },
-    body: JSON.stringify({ subscription: subscription.toJSON() }),
-  });
+  try {
+    const res = await fetch("/api/push/subscribe", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...authPortalHeaders("doctor"),
+      },
+      body: JSON.stringify({ subscription: subscription.toJSON() }),
+    });
 
-  return res.ok;
+    if (!res.ok) return { ok: false, reason: "server-failed" };
+    return { ok: true, subscribed: true };
+  } catch {
+    return { ok: false, reason: "server-failed" };
+  }
+}
+
+/** إعادة تسجيل Push عند العودة للتطبيق (iOS/Android) */
+export async function refreshDoctorWebPushIfGranted(): Promise<void> {
+  if (
+    typeof window === "undefined" ||
+    !("Notification" in window) ||
+    Notification.permission !== "granted"
+  ) {
+    return;
+  }
+  await registerDoctorWebPush(false);
 }
 
 /** استمع لرسائل Service Worker — تشغيل النداء إذا التطبيق مفتوح بالخلفية */
@@ -81,6 +126,24 @@ export function listenForPushAlertMessages(
     const data = event.data as { type?: string; payload?: unknown } | null;
     if (data?.type !== "QUEUE_PUSH_ALERT" || !data.payload) return;
     onAlert(data.payload as Parameters<typeof onAlert>[0]);
+  };
+
+  navigator.serviceWorker.addEventListener("message", handler);
+  return () => navigator.serviceWorker.removeEventListener("message", handler);
+}
+
+/** فتح صفحة من Service Worker عند النقر على الإشعار */
+export function listenForServiceWorkerNavigation(
+  onNavigate: (url: string) => void
+): () => void {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+    return () => {};
+  }
+
+  const handler = (event: MessageEvent) => {
+    const data = event.data as { type?: string; url?: string } | null;
+    if (data?.type !== "SW_NAVIGATE" || !data.url) return;
+    onNavigate(data.url);
   };
 
   navigator.serviceWorker.addEventListener("message", handler);

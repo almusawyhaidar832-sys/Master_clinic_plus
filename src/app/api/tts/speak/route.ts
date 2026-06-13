@@ -13,6 +13,9 @@ import {
 } from "@/lib/queue/arabic-speech-text";
 import { synthesizeArabicSpeech } from "@/lib/queue/edge-tts-server";
 
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 function isQueueScreenCaller(req: NextRequest): boolean {
   const referer = req.headers.get("referer") ?? "";
   try {

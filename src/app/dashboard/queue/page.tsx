@@ -407,8 +407,7 @@ export default function QueuePage() {
         method: "POST",
         body: JSON.stringify({ action: "send_to_doctor", queue_entry_id: entry.id }),
       });
-      const name =
-        entry.patient?.full_name_ar ?? entry.patient_name ?? `${bi("رقم", "Ticket #")} ${entry.ticket_number}`;
+      const name = resolvePatientSpeechName(entry);
       void broadcastPatientSentToDoctor(supabase, entry.doctor_id, {
         name,
         entryId: entry.id,

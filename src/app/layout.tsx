@@ -17,13 +17,30 @@ export const metadata: Metadata = {
     template: `%s | ${APP_NAME}`,
   },
   description: "نظام إدارة عيادات متعدد المستأجرين — ماستر كلينك بلس",
+  applicationName: "Master Clinic",
   authors: [{ name: DEVELOPER.nameEn }],
   creator: DEVELOPER.nameEn,
   manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/pwa-icon/192", sizes: "192x192", type: "image/png" },
+      { url: "/pwa-icon/512", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/pwa-icon/180", sizes: "180x180", type: "image/png" }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: APP_NAME,
+    title: "Master Clinic",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-title": "Master Clinic",
+    "apple-mobile-web-app-status-bar-style": "black-translucent",
   },
 };
 
