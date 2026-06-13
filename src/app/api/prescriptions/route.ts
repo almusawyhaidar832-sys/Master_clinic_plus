@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getApiCallerProfile,
+  isApiAssistantRole,
   isApiDoctorRole,
   isApiStaffRole,
 } from "@/lib/auth/api-session";
+import {
+  assertAssistantOwnsOperation,
+  assertAssistantOwnsQueueEntry,
+  resolveAssistantApiContext,
+} from "@/lib/auth/resolve-assistant-api";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { getDoctorByProfileId } from "@/lib/queue/server";
 import {
@@ -12,6 +18,46 @@ import {
   upsertPrescription,
   normalizeMedications,
 } from "@/lib/prescriptions/server";
+
+function canReadPrescriptions(role: string) {
+  return (
+    isApiStaffRole(role) || isApiDoctorRole(role) || isApiAssistantRole(role)
+  );
+}
+
+async function assertAssistantPrescriptionScope(
+  profile: { id: string; clinic_id: string | null; role?: string | null },
+  input: { operationId?: string | null; queueEntryId?: string | null }
+): Promise<NextResponse | null> {
+  if (!isApiAssistantRole(profile.role)) return null;
+
+  const ctx = await resolveAssistantApiContext(profile);
+  if (!ctx) {
+    return NextResponse.json(
+      { error: "حساب المساعد غير مربوط بطبيب" },
+      { status: 403 }
+    );
+  }
+
+  const operationId = String(input.operationId ?? "").trim();
+  if (operationId) {
+    const check = await assertAssistantOwnsOperation(operationId, ctx);
+    if (!check.ok) {
+      return NextResponse.json({ error: check.error }, { status: check.status });
+    }
+    return null;
+  }
+
+  const queueEntryId = String(input.queueEntryId ?? "").trim();
+  if (queueEntryId) {
+    const check = await assertAssistantOwnsQueueEntry(queueEntryId, ctx);
+    if (!check.ok) {
+      return NextResponse.json({ error: check.error }, { status: check.status });
+    }
+  }
+
+  return null;
+}
 
 /** GET ?operation_id= | ?id=&print=1 */
 export async function GET(req: NextRequest) {
@@ -22,7 +68,7 @@ export async function GET(req: NextRequest) {
     }
 
     const role = String(profile.role ?? "").toLowerCase();
-    if (!isApiStaffRole(role) && !isApiDoctorRole(role)) {
+    if (!canReadPrescriptions(role)) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
@@ -44,6 +90,12 @@ export async function GET(req: NextRequest) {
       }
       return NextResponse.json(data);
     }
+
+    const scopeError = await assertAssistantPrescriptionScope(profile, {
+      operationId,
+      queueEntryId,
+    });
+    if (scopeError) return scopeError;
 
     if (operationId) {
       const prescription = await fetchPrescriptionForSession(admin, clinicId, {
@@ -76,7 +128,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/** POST — حفظ/تحديث وصفة جلسة الكشف (الطبيب) */
+/** POST — حفظ/تحديث وصفة جلسة الكشف (الطبيب أو مساعده) */
 export async function POST(req: NextRequest) {
   try {
     const profile = await getApiCallerProfile(req);
@@ -85,13 +137,30 @@ export async function POST(req: NextRequest) {
     }
 
     const role = String(profile.role ?? "").toLowerCase();
-    if (!isApiDoctorRole(role)) {
-      return NextResponse.json({ error: "للطبيب فقط" }, { status: 403 });
+    const isDoctor = isApiDoctorRole(role);
+    const isAssistant = isApiAssistantRole(role);
+    if (!isDoctor && !isAssistant) {
+      return NextResponse.json({ error: "للطبيب أو مساعده فقط" }, { status: 403 });
     }
 
-    const doctor = await getDoctorByProfileId(profile.id);
-    if (!doctor) {
-      return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+    let doctorId: string | null = null;
+    let assistantCtx: Awaited<ReturnType<typeof resolveAssistantApiContext>> = null;
+
+    if (isDoctor) {
+      const doctor = await getDoctorByProfileId(profile.id);
+      if (!doctor) {
+        return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+      }
+      doctorId = doctor.id;
+    } else {
+      assistantCtx = await resolveAssistantApiContext(profile);
+      if (!assistantCtx) {
+        return NextResponse.json(
+          { error: "حساب المساعد غير مربوط بطبيب" },
+          { status: 403 }
+        );
+      }
+      doctorId = assistantCtx.doctorId;
     }
 
     const body = (await req.json()) as {
@@ -108,6 +177,13 @@ export async function POST(req: NextRequest) {
     let patientId = String(body.patient_id ?? "").trim();
     if (!operationId) {
       return NextResponse.json({ error: "operation_id مطلوب" }, { status: 400 });
+    }
+
+    if (isAssistant && assistantCtx) {
+      const check = await assertAssistantOwnsOperation(operationId, assistantCtx);
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error }, { status: check.status });
+      }
     }
 
     const admin = getAdminClient();
@@ -130,6 +206,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (doctorId && operation.doctor_id !== doctorId) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+    }
+
     if (!patientId) {
       patientId = String(operation.patient_id);
     }
@@ -147,7 +227,7 @@ export async function POST(req: NextRequest) {
     const prescription = await upsertPrescription(admin, {
       clinicId,
       patientId,
-      doctorId: doctor.id,
+      doctorId: doctorId ?? String(operation.doctor_id),
       operationId,
       queueEntryId,
       diagnosisAr: body.diagnosis_ar,

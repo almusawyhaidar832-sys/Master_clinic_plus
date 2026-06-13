@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile, isApiStaffRole } from "@/lib/auth/api-session";
+import {
+  getApiCallerProfile,
+  isApiAssistantRole,
+  isApiDoctorRole,
+  isApiStaffRole,
+} from "@/lib/auth/api-session";
+import { resolveAssistantApiContext } from "@/lib/auth/resolve-assistant-api";
 import { getAdminClient } from "@/lib/supabase/admin";
 
 const BUCKET = "clinical-xrays";
@@ -14,7 +20,11 @@ export async function POST(req: NextRequest) {
     }
 
     const role = String(profile.role ?? "").toLowerCase();
-    if (!isApiStaffRole(role) && role !== "doctor") {
+    if (
+      !isApiStaffRole(role) &&
+      !isApiDoctorRole(role) &&
+      !isApiAssistantRole(role)
+    ) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
@@ -54,6 +64,11 @@ export async function POST(req: NextRequest) {
         .eq("profile_id", profile.id)
         .maybeSingle();
       if (!doc || doc.id !== op.doctor_id) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+    } else if (isApiAssistantRole(role)) {
+      const ctx = await resolveAssistantApiContext(profile);
+      if (!ctx || op.doctor_id !== ctx.doctorId) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
     }

@@ -62,3 +62,38 @@ export async function assertAssistantOwnsQueueEntry(
   }
   return { ok: true };
 }
+
+type OperationScopeRow = {
+  id: string;
+  clinic_id: string;
+  doctor_id: string;
+  patient_id?: string | null;
+  queue_entry_id?: string | null;
+};
+
+/** Verify patient operation belongs to assistant's linked doctor */
+export async function assertAssistantOwnsOperation(
+  operationId: string,
+  ctx: AssistantApiContext
+): Promise<
+  | { ok: true; operation: OperationScopeRow }
+  | { ok: false; error: string; status: number }
+> {
+  const admin = getAdminClient();
+  const { data: operation } = await admin
+    .from("patient_operations")
+    .select("id, clinic_id, doctor_id, patient_id, queue_entry_id")
+    .eq("id", operationId)
+    .maybeSingle();
+
+  if (!operation) {
+    return { ok: false, error: "الجلسة غير موجودة", status: 404 };
+  }
+  if (
+    operation.doctor_id !== ctx.doctorId ||
+    operation.clinic_id !== ctx.clinicId
+  ) {
+    return { ok: false, error: "غير مصرح", status: 403 };
+  }
+  return { ok: true, operation: operation as OperationScopeRow };
+}

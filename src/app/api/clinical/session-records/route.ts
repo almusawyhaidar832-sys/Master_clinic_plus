@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile, isApiStaffRole } from "@/lib/auth/api-session";
+import {
+  getApiCallerProfile,
+  isApiAssistantRole,
+  isApiDoctorRole,
+  isApiStaffRole,
+} from "@/lib/auth/api-session";
+import {
+  assertAssistantOwnsOperation,
+  resolveAssistantApiContext,
+} from "@/lib/auth/resolve-assistant-api";
 import { getAdminClient } from "@/lib/supabase/admin";
 
 const XRAY_BUCKET = "clinical-xrays";
@@ -82,6 +91,33 @@ async function loadClinicalByOperationIds(
   return { byOperation };
 }
 
+function canAccessClinicalRecords(role: string) {
+  return (
+    isApiStaffRole(role) ||
+    isApiDoctorRole(role) ||
+    isApiAssistantRole(role)
+  );
+}
+
+async function assertAssistantOperationScope(
+  profile: { id: string; clinic_id: string | null; role?: string | null },
+  operationId: string
+): Promise<NextResponse | null> {
+  if (!isApiAssistantRole(profile.role)) return null;
+  const ctx = await resolveAssistantApiContext(profile);
+  if (!ctx) {
+    return NextResponse.json(
+      { error: "حساب المساعد غير مربوط بطبيب" },
+      { status: 403 }
+    );
+  }
+  const check = await assertAssistantOwnsOperation(operationId, ctx);
+  if (!check.ok) {
+    return NextResponse.json({ error: check.error }, { status: check.status });
+  }
+  return null;
+}
+
 /** GET ?patient_id= | ?operation_id= — السجل الطبي البصري */
 export async function GET(req: NextRequest) {
   try {
@@ -91,12 +127,20 @@ export async function GET(req: NextRequest) {
     }
 
     const role = String(profile.role ?? "").toLowerCase();
-    if (!isApiStaffRole(role) && role !== "doctor") {
+    if (!canAccessClinicalRecords(role)) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
     const patientId = req.nextUrl.searchParams.get("patient_id");
     const operationIdParam = req.nextUrl.searchParams.get("operation_id");
+
+    if (operationIdParam) {
+      const scopeError = await assertAssistantOperationScope(
+        profile,
+        operationIdParam
+      );
+      if (scopeError) return scopeError;
+    }
 
     if (!patientId && !operationIdParam) {
       return NextResponse.json(
@@ -198,7 +242,7 @@ export async function POST(req: NextRequest) {
     }
 
     const role = String(profile.role ?? "").toLowerCase();
-    if (!isApiStaffRole(role) && role !== "doctor") {
+    if (!canAccessClinicalRecords(role)) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
@@ -213,6 +257,12 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    const scopeError = await assertAssistantOperationScope(
+      profile,
+      body.operation_id
+    );
+    if (scopeError) return scopeError;
 
     const admin = getAdminClient();
     const { data: op } = await admin
@@ -232,6 +282,11 @@ export async function POST(req: NextRequest) {
         .eq("profile_id", profile.id)
         .maybeSingle();
       if (!doc || doc.id !== op.doctor_id) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+    } else if (isApiAssistantRole(role)) {
+      const ctx = await resolveAssistantApiContext(profile);
+      if (!ctx || op.doctor_id !== ctx.doctorId) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
     }
