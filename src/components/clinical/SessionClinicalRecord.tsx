@@ -68,7 +68,7 @@ function XrayUploadSection({
         className={cn(
           "flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed py-4 text-sm font-medium transition-colors disabled:opacity-50",
           examLayout
-            ? "border-gray-300 bg-slate-50 text-primary hover:bg-primary/5"
+            ? "border-cyan-400/60 bg-cyan-50/80 text-cyan-800 hover:bg-cyan-100"
             : "border-teal-300 bg-white text-teal-800 hover:bg-teal-50"
         )}
       >
@@ -112,10 +112,10 @@ export function SessionClinicalRecord({
   if (examLayout) {
     return (
       <div className="space-y-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-primary">
-            <Upload className="h-4 w-4" />
-            صور الأشعة (X-ray)
+        <div className="mc-exam-xray-card">
+          <h4 className="mc-exam-section-header">
+            <Upload className="h-4 w-4 text-cyan-600" />
+            <span className="text-cyan-800">صور الأشعة (X-ray)</span>
           </h4>
           <XrayUploadSection
             value={value}
@@ -126,14 +126,16 @@ export function SessionClinicalRecord({
           />
         </div>
 
-        <div className="rounded-xl border-2 border-primary/15 bg-white p-4 shadow-md ring-1 ring-primary/5">
-          <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-primary">
-            <Smile className="h-4 w-4" />
-            مخطط الأسنان التفاعلي
-          </h4>
-          <p className="mb-3 text-xs text-slate-500">
-            اضغط على السن لتسجيل الإجراء — خاص بهذه الجلسة فقط
-          </p>
+        <div className="mc-exam-record-card">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-primary/15 pb-2.5">
+            <h4 className="flex items-center gap-2 text-sm font-bold text-primary">
+              <Smile className="h-4 w-4" />
+              مخطط الأسنان التفاعلي
+            </h4>
+            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary tabular-nums">
+              {Object.keys(value.teeth).length} سن مسجّل
+            </span>
+          </div>
           <InteractiveDentalChart
             key={chartResetKey}
             mode="session"
@@ -141,9 +143,10 @@ export function SessionClinicalRecord({
             onChange={(teeth) => onChange({ ...value, teeth })}
             readOnly={disabled}
             embedded
+            examCanvas
           />
-          <div className="mt-2 rounded-lg border border-primary/10 bg-primary/5 px-3 py-2">
-            <p className="text-[11px] font-medium text-primary">
+          <div className="mt-3 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2">
+            <p className="text-[11px] font-semibold text-primary">
               اضغط على أي سن لتسجيل الحالة والإجراء
             </p>
           </div>

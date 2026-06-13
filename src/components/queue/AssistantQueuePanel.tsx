@@ -461,7 +461,7 @@ export function AssistantQueuePanel() {
     : null;
 
   return (
-    <div className="space-y-4 rounded-xl bg-slate-50 p-3 sm:p-4">
+    <div className="mc-exam-page">
       {pageError && <Alert variant="error">{pageError}</Alert>}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -510,22 +510,24 @@ export function AssistantQueuePanel() {
       {clinicalEntry?.patient_id && (
         <div
           id={CLINICAL_EXAM_ANCHOR}
-          className="scroll-mt-24 rounded-xl border-2 border-primary/20 bg-white p-4 shadow-md ring-1 ring-primary/5"
+          className="mc-exam-shell"
         >
-          <div className="mb-4 border-b border-slate-100 pb-3">
-            <p className="text-lg font-bold text-primary">
+          <div className="mc-exam-shell-header">
+            <p className="text-lg font-bold text-white">
               {clinicalEntry.patient?.full_name_ar ??
                 clinicalEntry.patient_name ??
                 t("queueUnnamedPatient")}
             </p>
-            <p className="mt-1 text-xs text-slate-500">{t("docVisualMedicalRecordHint")}</p>
+            <p className="mt-1 text-xs text-blue-100">{t("docVisualMedicalRecordHint")}</p>
           </div>
+          <div className="mc-exam-shell-body">
           <VisitSessionClinicalPanel
             portal="assistant"
             patientId={clinicalEntry.patient_id}
             queueEntryId={clinicalEntry.id}
             hideHeader
           />
+          </div>
         </div>
       )}
 

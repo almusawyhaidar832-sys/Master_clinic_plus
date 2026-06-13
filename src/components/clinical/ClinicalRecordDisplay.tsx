@@ -21,17 +21,11 @@ export function ClinicalRecordDisplay({
   return (
     <div className="space-y-3">
       {data.xrays.length > 0 && (
-        <div
-          className={
-            examLayout
-              ? "rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
-              : undefined
-          }
-        >
+        <div className={examLayout ? "mc-exam-xray-card" : undefined}>
           <p
             className={
               examLayout
-                ? "mb-2 text-sm font-bold text-primary"
+                ? "mb-2 text-sm font-bold text-cyan-800"
                 : "mb-2 text-xs font-medium text-slate-text"
             }
           >
@@ -75,13 +69,7 @@ export function ClinicalRecordDisplay({
       )}
 
       {data.teeth.length > 0 && (
-        <div
-          className={
-            examLayout
-              ? "rounded-xl border-2 border-primary/15 bg-white p-3 shadow-md ring-1 ring-primary/5"
-              : undefined
-          }
-        >
+        <div className={examLayout ? "mc-exam-record-card" : undefined}>
           {examLayout && (
             <p className="mb-2 text-sm font-bold text-primary">مخطط الأسنان</p>
           )}
@@ -90,6 +78,7 @@ export function ClinicalRecordDisplay({
             value={teethMap}
             readOnly
             embedded
+            examCanvas={examLayout}
           />
         </div>
       )}

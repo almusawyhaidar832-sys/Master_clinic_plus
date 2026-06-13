@@ -371,7 +371,7 @@ function DoctorQueuePageContent() {
 
   return (
     <>
-      <div className="space-y-4 rounded-xl bg-slate-50 p-3 sm:p-4">
+      <div className="mc-exam-page">
         <div>
           <h2 className="text-lg font-bold text-slate-800">{t("docQueueTitle")}</h2>
           <p className="text-sm text-slate-500">{t("docQueueSubtitle")}</p>
@@ -399,28 +399,31 @@ function DoctorQueuePageContent() {
         {clinicalEntry && (clinicalEntry.status === "in_progress" || clinicalEntryId === clinicalEntry.id) && (
           <div
             id={CLINICAL_EXAM_ANCHOR}
-            className="scroll-mt-24 rounded-xl border-2 border-primary/20 bg-white p-4 shadow-md ring-1 ring-primary/5"
+            className="mc-exam-shell"
           >
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              <div>
-                <p className="text-lg font-bold text-primary">
-                  {t("docExamPrefix")}{" "}
-                  {clinicalEntry.patient?.full_name_ar ??
-                    clinicalEntry.patient_name ??
-                    `${t("docTicketNumber")} ${clinicalEntry.ticket_number}`}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">{t("docExamChartHint")}</p>
+            <div className="mc-exam-shell-header">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-lg font-bold text-white">
+                    {t("docExamPrefix")}{" "}
+                    {clinicalEntry.patient?.full_name_ar ??
+                      clinicalEntry.patient_name ??
+                      `${t("docTicketNumber")} ${clinicalEntry.ticket_number}`}
+                  </p>
+                  <p className="mt-1 text-xs text-blue-100">{t("docExamChartHint")}</p>
+                </div>
+                {clinicalEntry.patient_id && (
+                  <Link
+                    href={buildDoctorPatientUrl(clinicalEntry.patient_id)}
+                    className="rounded-lg border border-white/30 bg-white/15 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/25"
+                  >
+                    {t("docFullPatientFile")}
+                  </Link>
+                )}
               </div>
-              {clinicalEntry.patient_id && (
-                <Link
-                  href={buildDoctorPatientUrl(clinicalEntry.patient_id)}
-                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
-                >
-                  {t("docFullPatientFile")}
-                </Link>
-              )}
             </div>
 
+            <div className="mc-exam-shell-body">
             <VisitSessionClinicalPanel
               patientId={clinicalEntry.patient_id}
               queueEntryId={clinicalEntry.id}
@@ -434,7 +437,7 @@ function DoctorQueuePageContent() {
               type="button"
               onClick={() => void sendToAccounting(clinicalEntry)}
               disabled={updating === clinicalEntry.id}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 py-3 text-sm font-bold text-white disabled:opacity-60"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 py-3.5 text-sm font-bold text-white shadow-md disabled:opacity-60"
             >
               {updating === clinicalEntry.id ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
@@ -443,6 +446,7 @@ function DoctorQueuePageContent() {
               )}
               {t("docSendToAccountingSave")}
             </button>
+            </div>
           </div>
         )}
 

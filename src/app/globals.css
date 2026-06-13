@@ -235,6 +235,67 @@
   .mc-icon-badge-warning {
     @apply inline-flex rounded-lg bg-warning p-2.5 text-warning-text;
   }
+
+  /* ── Clinical exam room (doctor + assistant) ── */
+  .mc-exam-page {
+    @apply space-y-4 rounded-xl bg-gradient-to-b from-slate-300/40 via-slate-100 to-slate-200/60 p-3 sm:p-4;
+  }
+
+  .mc-exam-shell {
+    @apply scroll-mt-24 overflow-hidden rounded-2xl border border-blue-300/60 bg-white shadow-lg ring-1 ring-blue-200/40;
+  }
+
+  .mc-exam-shell-header {
+    @apply bg-gradient-to-r from-primary via-blue-600 to-indigo-600 px-4 py-3.5 text-white shadow-md;
+  }
+
+  .mc-exam-shell-body {
+    @apply space-y-4 bg-gradient-to-b from-slate-100/90 via-white to-blue-50/30 p-4;
+  }
+
+  .mc-exam-section {
+    @apply rounded-xl border border-slate-300/80 bg-white p-4 shadow-md;
+  }
+
+  .mc-exam-section-header {
+    @apply mb-3 flex items-center gap-2 border-b border-slate-200 pb-2.5 text-sm font-bold text-primary;
+  }
+
+  .mc-exam-chart-card {
+    @apply rounded-xl border-2 border-blue-400/50 bg-gradient-to-b from-slate-300/90 via-slate-200 to-blue-100/70 p-1 shadow-inner;
+  }
+
+  .mc-exam-xray-card {
+    @apply rounded-xl border border-cyan-300/70 bg-gradient-to-br from-cyan-50 to-white p-4 shadow-sm;
+  }
+
+  .mc-exam-record-card {
+    @apply rounded-xl border-2 border-primary/30 bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/50 p-4 shadow-md ring-1 ring-primary/10;
+  }
+
+  .mc-exam-prescription-card {
+    @apply rounded-xl border border-violet-300/70 bg-gradient-to-br from-violet-50/90 via-white to-indigo-50/40 p-4 shadow-md;
+  }
+
+  .mc-exam-prescription-inner {
+    @apply space-y-3 rounded-xl border border-violet-200/80 bg-white/90 p-4 shadow-sm;
+  }
+
+  .mc-exam-input {
+    @apply border-slate-400 bg-white shadow-sm placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30;
+  }
+
+  .mc-exam-label {
+    @apply block text-sm font-semibold text-slate-700;
+  }
+
+  .mc-exam-med-row {
+    @apply grid gap-2 rounded-xl border border-slate-300 bg-slate-50/80 p-3 shadow-sm sm:grid-cols-2;
+  }
+
+  .master-odontogram.mc-exam-odontogram .mc-exam-chart-card {
+    min-height: 300px;
+  }
 }
 
 /* Auto page-title accent inside app shells */

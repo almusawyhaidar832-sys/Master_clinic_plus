@@ -23,6 +23,8 @@ type InteractiveDentalChartBase = {
   savingTooth?: number | null;
   /** داخل VisualMedicalRecord — إخفاء العناوين الطويلة */
   embedded?: boolean;
+  /** خلفية داكنة للمخطط — وضع غرفة الكشف */
+  examCanvas?: boolean;
 };
 
 export type InteractiveDentalChartProps = InteractiveDentalChartBase &
@@ -45,6 +47,7 @@ export function InteractiveDentalChart(props: InteractiveDentalChartProps) {
     readOnly = false,
     savingTooth = null,
     embedded = false,
+    examCanvas = false,
   } = props;
 
   const isSession = props.mode === "session";
@@ -113,8 +116,14 @@ export function InteractiveDentalChart(props: InteractiveDentalChartProps) {
   }
 
   return (
-    <div className={cn("master-odontogram space-y-3", embedded && "space-y-2")}>
-      {(!embedded || isSession) && (
+    <div
+      className={cn(
+        "master-odontogram space-y-3",
+        embedded && "space-y-2",
+        examCanvas && "mc-exam-odontogram"
+      )}
+    >
+      {!embedded && (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-medium text-slate-text">
@@ -133,7 +142,13 @@ export function InteractiveDentalChart(props: InteractiveDentalChartProps) {
         </>
       )}
 
-      <div className="min-h-[280px] overflow-x-auto rounded-xl border border-slate-border bg-white p-2 sm:p-4">
+      <div
+        className={cn(
+          examCanvas
+            ? "mc-exam-chart-card min-h-[300px] overflow-x-auto p-3 sm:p-4"
+            : "min-h-[280px] overflow-x-auto rounded-xl border border-slate-border bg-white p-2 sm:p-4"
+        )}
+      >
         <Odontogram
           className="mx-auto w-full min-h-[240px] max-w-lg"
           notation="FDI"
@@ -146,11 +161,19 @@ export function InteractiveDentalChart(props: InteractiveDentalChartProps) {
           teethConditions={teethConditions}
           onChange={handleOdontogramChange}
           theme="light"
-          colors={{
-            darkBlue: "#2563eb",
-            baseBlue: "#94a3b8",
-            lightBlue: "#dbeafe",
-          }}
+          colors={
+            examCanvas
+              ? {
+                  darkBlue: "#1d4ed8",
+                  baseBlue: "#475569",
+                  lightBlue: "#93c5fd",
+                }
+              : {
+                  darkBlue: "#2563eb",
+                  baseBlue: "#94a3b8",
+                  lightBlue: "#dbeafe",
+                }
+          }
         />
       </div>
 

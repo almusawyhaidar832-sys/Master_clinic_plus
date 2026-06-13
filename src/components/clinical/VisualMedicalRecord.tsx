@@ -175,13 +175,7 @@ export function VisualMedicalRecord({
       )}
 
       {operationId && !loading && hasExisting && existing && (
-        <div
-          className={
-            examMode
-              ? "rounded-xl border border-slate-200 bg-slate-50/80 p-3"
-              : undefined
-          }
-        >
+        <div className={examMode ? "mc-exam-section" : undefined}>
           <ClinicalRecordDisplay data={existing} examLayout={examMode} />
         </div>
       )}
@@ -229,18 +223,17 @@ export function VisualMedicalRecord({
 
   if (examMode) {
     return (
-      <div
-        className={cn(
-          "rounded-xl border border-slate-200 bg-white p-4 shadow-md",
-          className
-        )}
-      >
-        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
-          <Scan className="h-5 w-5 text-primary" />
-          <h4 className="text-base font-bold text-primary">السجل السريري</h4>
-          {summaryHint && (
-            <span className="text-xs font-normal text-slate-500">{summaryHint}</span>
-          )}
+      <div className={cn("mc-exam-section overflow-hidden", className)}>
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50/80 px-1 pb-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white shadow-sm">
+            <Scan className="h-5 w-5" />
+          </div>
+          <div>
+            <h4 className="text-base font-bold text-primary">السجل السريري</h4>
+            {summaryHint && (
+              <span className="text-xs text-slate-600">{summaryHint}</span>
+            )}
+          </div>
         </div>
         {body}
       </div>
