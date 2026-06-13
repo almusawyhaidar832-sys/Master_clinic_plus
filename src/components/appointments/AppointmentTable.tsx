@@ -204,6 +204,7 @@ export function AppointmentTable({
                 <AppointmentRow
                   key={a.id}
                   appointment={a}
+                  statusLabels={statusLabels}
                   showDoctorColumn={showDoctorColumn}
                   canManage={canManage}
                   actionId={actionId}
@@ -259,6 +260,7 @@ export function AppointmentTable({
 
 function AppointmentRow({
   appointment: a,
+  statusLabels,
   showDoctorColumn,
   canManage,
   actionId,
@@ -268,6 +270,7 @@ function AppointmentRow({
   onDelete,
 }: {
   appointment: AppointmentWithDoctor;
+  statusLabels: Record<string, string>;
   showDoctorColumn: boolean;
   canManage: boolean;
   actionId: string | null;
