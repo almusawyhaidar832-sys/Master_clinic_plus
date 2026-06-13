@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v5-no-auth-shell";
+const CACHE_NAME = "mcp-app-v6-push-alerts";
 
 function shouldSkipCache(url) {
   if (url.pathname.startsWith("/api/")) return true;
@@ -63,7 +63,8 @@ self.addEventListener("push", (event) => {
     tag,
     renotify: true,
     requireInteraction: true,
-    vibrate: [180, 80, 180, 80, 320],
+    silent: false,
+    vibrate: [200, 100, 200, 100, 400],
     data: { url, patientName: data.patientName, kind: data.kind },
   };
 

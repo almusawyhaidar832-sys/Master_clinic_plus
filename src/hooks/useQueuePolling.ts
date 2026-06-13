@@ -54,7 +54,7 @@ export function useDoctorQueuePolling(
   enabled = true
 ) {
   const readyRef = useRef(false);
-  const knownSentRef = useRef<Set<string>>(new Set());
+  const sentAtRef = useRef<Map<string, string>>(new Map());
   const fingerprintRef = useRef("");
 
   useEffect(() => {
@@ -77,19 +77,28 @@ export function useDoctorQueuePolling(
           if (!entry.sent_to_doctor_at) continue;
           if (entry.status !== "waiting" && entry.status !== "called") continue;
 
-          if (knownSentRef.current.has(entry.id)) continue;
-          knownSentRef.current.add(entry.id);
+          const prevSent = sentAtRef.current.get(entry.id);
+          sentAtRef.current.set(entry.id, entry.sent_to_doctor_at);
 
+          const isRecall =
+            Boolean(prevSent) && prevSent !== entry.sent_to_doctor_at;
+          const isFirstSend = !prevSent;
+
+          if (!isFirstSend && !isRecall) continue;
           if (!readyRef.current) continue;
 
-          const alertKey = `doctor-new-${entry.id}`;
-          if (!shouldFireQueueAlert(alertKey)) continue;
+          const alertKey = isRecall
+            ? `doctor-recall-${entry.id}-${entry.sent_to_doctor_at}`
+            : `doctor-new-${entry.id}`;
+          if (!shouldFireQueueAlert(alertKey, isRecall)) continue;
 
           const name = resolvePatientSpeechName(entry);
           void triggerQueueAlert({
             kind: "doctor_new",
-            title: "مراجع جديد 🔔",
-            message: `لديك مراجع جديد في الانتظار: ${name}`,
+            title: isRecall ? "تذكير — مراجع 🔔" : "مراجع جديد 🔔",
+            message: isRecall
+              ? `تذكير: المراجع ${name} بانتظارك — يرجى استقباله`
+              : `لديك مراجع جديد في الانتظار: ${name}`,
             linkPath: "/doctor/queue",
             patientName: name,
           });

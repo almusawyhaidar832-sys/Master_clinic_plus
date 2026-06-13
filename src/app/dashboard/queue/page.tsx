@@ -451,6 +451,7 @@ export default function QueuePage() {
         void broadcastPatientSentToDoctor(supabase, entry.doctor_id, {
           name,
           entryId: entry.id,
+          recall: true,
         });
         notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
       }
@@ -717,6 +718,10 @@ export default function QueuePage() {
               entry.status === "called" ||
               entry.status === "in_progress" ||
               (entry.status === "waiting" && !!entry.sent_to_doctor_at);
+            const recallLabel =
+              entry.status === "waiting" && entry.sent_to_doctor_at
+                ? t("queueReCallDoctorTitle")
+                : t("queueReCallTitle");
 
             return (
               <div
@@ -798,13 +803,13 @@ export default function QueuePage() {
                       onClick={() => recallPatient(entry)}
                       disabled={updating === entry.id}
                       className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-60"
-                      title={t("queueReCallTitle")}
+                      title={recallLabel}
                     >
                       {updating === entry.id
                         ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                         : <RotateCcw className="h-3.5 w-3.5" />
                       }
-                      <span className="hidden sm:inline">{t("queueReCallTitle")}</span>
+                      <span className="hidden sm:inline">{recallLabel}</span>
                     </button>
                   )}
                   {canSend && (

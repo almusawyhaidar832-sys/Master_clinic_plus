@@ -65,6 +65,8 @@ export function showBrowserNotification(
     body,
     icon: "/favicon.ico",
     tag: `queue-${Date.now()}`,
+    requireInteraction: true,
+    silent: false,
   });
 
   if (linkPath) {

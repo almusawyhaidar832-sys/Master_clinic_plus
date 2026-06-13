@@ -287,6 +287,7 @@ const translations = {
     queueSearchPlaceholder:       "ابحث بالاسم أو أدخل مراجع جديداً",
     queueTodayBookings:           "حجوزات اليوم",
     queueReCallTitle:             "إعادة النداء",
+    queueReCallDoctorTitle:       "إعادة نداء الطبيب",
     queueSendDoctorTitle:         "إرسال إلى الطبيب",
     queueFinishTitle:             "إنهاء الجلسة وتحويل للمحاسبة",
     queueCancelTitle:             "إلغاء الدور",
@@ -588,6 +589,8 @@ const translations = {
     docAlertsPermissionDenied:    "لم يُمنح إذن الإشعارات — فعّله من إعدادات المتصفح",
     docAlertsPushFailed:          "تعذر تفعيل تنبيهات الموبايل — جرّب إعادة فتح التطبيق",
     docAlertsEnabled:             "تم تفعيل التنبيهات — ستصلك حتى لو لم تكن في غرفة الانتظار",
+    docAlertsActive:              "التنبيهات مفعّلة — صوت + إشعار حتى خارج التطبيق",
+    docTestAlert:                 "جرّب النداء",
     docNewPatientAlert:           "مراجع جديد 🔔",
     docNewPatientAlertBody:       "لديك مراجع جديد في الانتظار:",
 
@@ -938,6 +941,7 @@ const translations = {
     queueSearchPlaceholder:       "Search by name or enter new patient",
     queueTodayBookings:           "Today's Bookings",
     queueReCallTitle:             "Re-call",
+    queueReCallDoctorTitle:       "Re-call doctor",
     queueSendDoctorTitle:         "Send to Doctor",
     queueFinishTitle:             "Finish session & send to billing",
     queueCancelTitle:             "Cancel ticket",
@@ -1239,6 +1243,8 @@ const translations = {
     docAlertsPermissionDenied:    "Notification permission denied — enable it in browser settings",
     docAlertsPushFailed:          "Failed to enable mobile alerts — try reopening the app",
     docAlertsEnabled:             "Alerts enabled — you'll receive them even outside the queue page",
+    docAlertsActive:              "Alerts on — sound + notification even outside the app",
+    docTestAlert:                 "Test alert",
     docNewPatientAlert:           "New patient 🔔",
     docNewPatientAlertBody:       "You have a new patient in the queue:",
 

@@ -137,8 +137,11 @@ export async function fetchClinicQueue(
   return (data ?? []) as unknown as QueueEntryRow[];
 }
 
-/** Notify assigned doctor: new patient in queue */
-export async function notifyDoctorNewQueuePatient(queueEntryId: string) {
+/** Notify assigned doctor: new patient in queue (or accountant recall) */
+export async function notifyDoctorNewQueuePatient(
+  queueEntryId: string,
+  options?: { recall?: boolean }
+) {
   const admin = getAdminClient();
 
   const { data: entry, error } = await admin
@@ -165,21 +168,31 @@ export async function notifyDoctorNewQueuePatient(queueEntryId: string) {
     ticket_number: entry.ticket_number,
   });
 
+  const recall = options?.recall === true;
+  const titleAr = recall
+    ? "تذكير — مراجع في الانتظار"
+    : "مراجع جديد في الانتظار";
+  const bodyAr = recall
+    ? `تذكير: المراجع ${name} بانتظارك — يرجى استقباله`
+    : `لديك مراجع جديد في الانتظار: ${name}`;
+
   await insertNotifications([
     {
       clinic_id: entry.clinic_id,
       recipient_profile_id: profileId,
-      title_ar: "مراجع جديد في الانتظار",
-      body_ar: `لديك مراجع جديد في الانتظار: ${name}`,
+      title_ar: titleAr,
+      body_ar: bodyAr,
       link_path: "/doctor/queue",
     },
   ]);
 
   await sendWebPushToProfile(profileId, {
-    title: "مراجع جديد 🔔",
-    body: `لديك مراجع جديد في الانتظار: ${name}`,
+    title: recall ? "تذكير — مراجع 🔔" : "مراجع جديد 🔔",
+    body: bodyAr,
     url: "/doctor/queue",
-    tag: `doctor-queue-${entry.id}`,
+    tag: recall
+      ? `doctor-recall-${entry.id}-${Date.now()}`
+      : `doctor-queue-${entry.id}`,
     patientName: name,
   }).catch((err) => {
     console.error("[queue] doctor web push failed:", err);
@@ -330,7 +343,7 @@ export async function sendQueueEntryToDoctor(
   const { error } = await query;
   if (error) throw new Error(error.message);
 
-  await notifyDoctorNewQueuePatient(queueEntryId).catch((err) => {
+  await notifyDoctorNewQueuePatient(queueEntryId, { recall: force }).catch((err) => {
     console.error("[queue] doctor notification failed:", err);
   });
 }

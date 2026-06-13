@@ -32,16 +32,27 @@ function parseQueueRow(row: Record<string, unknown>): QueuePayload | null {
   return row as unknown as QueuePayload;
 }
 
-function alertDoctorNewPatient(row: QueuePayload, dedupeKey: string, seen: Set<string>) {
+function alertDoctorNewPatient(
+  row: QueuePayload,
+  dedupeKey: string,
+  seen: Set<string>,
+  options?: { recall?: boolean }
+) {
   if (seen.has(dedupeKey)) return;
-  if (!shouldFireQueueAlert(`doctor-new-${row.id}`)) return;
+  const force = options?.recall === true;
+  const dedupeId = force
+    ? `doctor-recall-${row.id}-${row.sent_to_doctor_at ?? Date.now()}`
+    : `doctor-new-${row.id}`;
+  if (!shouldFireQueueAlert(dedupeId, force)) return;
   seen.add(dedupeKey);
 
   const name = resolvePatientSpeechName(row);
-  const msg = `لديك مراجع جديد في الانتظار: ${name}`;
+  const msg = force
+    ? `تذكير: المراجع ${name} بانتظارك — يرجى استقباله`
+    : `لديك مراجع جديد في الانتظار: ${name}`;
   void triggerQueueAlert({
     kind: "doctor_new",
-    title: "مراجع جديد 🔔",
+    title: force ? "تذكير — مراجع 🔔" : "مراجع جديد 🔔",
     message: msg,
     linkPath: "/doctor/queue",
     patientName: name,
@@ -92,20 +103,37 @@ function alertDoctorExamStart(row: QueuePayload, dedupeKey: string, seen: Set<st
 }
 
 function alertDoctorFromBroadcast(
-  payload: { name?: string; entryId?: string },
+  payload: { name?: string; entryId?: string; recall?: boolean },
   seen: Set<string>
 ) {
   const entryId = payload.entryId;
-  const key = entryId ? `new-${entryId}` : `broadcast-${payload.name ?? Date.now()}`;
+  const recall = payload.recall === true;
+  const key = entryId
+    ? recall
+      ? `recall-${entryId}-${Date.now()}`
+      : `new-${entryId}`
+    : `broadcast-${payload.name ?? Date.now()}`;
   if (seen.has(key)) return;
-  if (entryId && !shouldFireQueueAlert(`doctor-new-${entryId}`)) return;
+  if (
+    entryId &&
+    !shouldFireQueueAlert(
+      recall
+        ? `doctor-recall-${entryId}-${Date.now()}`
+        : `doctor-new-${entryId}`,
+      recall
+    )
+  ) {
+    return;
+  }
   seen.add(key);
 
   const name = formatNameForSpeech(payload.name?.trim() || "مراجع");
   void triggerQueueAlert({
     kind: "doctor_new",
-    title: "مراجع جديد 🔔",
-    message: `لديك مراجع جديد في الانتظار: ${name}`,
+    title: recall ? "تذكير — مراجع 🔔" : "مراجع جديد 🔔",
+    message: recall
+      ? `تذكير: المراجع ${name} بانتظارك — يرجى استقباله`
+      : `لديك مراجع جديد في الانتظار: ${name}`,
     linkPath: "/doctor/queue",
     patientName: name,
   });
@@ -164,7 +192,11 @@ export function useDoctorQueueRealtime(doctorId: string | null | undefined) {
                 );
           if (!row) return;
 
-          if (payload.eventType === "INSERT" && row.status === "waiting") {
+          if (
+            payload.eventType === "INSERT" &&
+            row.status === "waiting" &&
+            row.sent_to_doctor_at
+          ) {
             alertDoctorNewPatient(row, `new-${row.id}`, seenRef.current);
           }
 
@@ -178,6 +210,23 @@ export function useDoctorQueueRealtime(doctorId: string | null | undefined) {
               row,
               `sent-${row.id}-${row.sent_to_doctor_at}`,
               seenRef.current
+            );
+          }
+
+          if (
+            payload.eventType === "UPDATE" &&
+            row.sent_to_doctor_at &&
+            (payload.old as { sent_to_doctor_at?: string | null })
+              ?.sent_to_doctor_at &&
+            row.sent_to_doctor_at !==
+              (payload.old as { sent_to_doctor_at?: string | null })
+                ?.sent_to_doctor_at
+          ) {
+            alertDoctorNewPatient(
+              row,
+              `recall-${row.id}-${row.sent_to_doctor_at}`,
+              seenRef.current,
+              { recall: true }
             );
           }
 

@@ -1,14 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bell, X } from "lucide-react";
+import { Bell, Volume2, X } from "lucide-react";
 import { ensureNotificationPermission } from "@/lib/queue/realtime-client";
 import {
   isWebPushSupported,
   listenForPushAlertMessages,
   registerDoctorWebPush,
 } from "@/lib/push/client";
-import { triggerQueueAlert } from "@/lib/queue/audio-alerts";
+import { triggerQueueAlert, unlockQueueAudio } from "@/lib/queue/audio-alerts";
 import { formatNameForSpeech } from "@/lib/queue/arabic-speech-text";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -24,10 +24,15 @@ export function DoctorAlertsSetup() {
   const [showBanner, setShowBanner] = useState(false);
   const [activating, setActivating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("Notification" in window)) return;
-    if (Notification.permission === "granted") {
+
+    const granted = Notification.permission === "granted";
+    setEnabled(granted);
+
+    if (granted) {
       void registerDoctorWebPush(false);
       return;
     }
@@ -55,6 +60,7 @@ export function DoctorAlertsSetup() {
     setActivating(true);
     setMessage(null);
     try {
+      await unlockQueueAudio();
       const granted = await ensureNotificationPermission();
       if (!granted) {
         setMessage(t("docAlertsPermissionDenied"));
@@ -69,6 +75,7 @@ export function DoctorAlertsSetup() {
         }
       }
 
+      setEnabled(true);
       setShowBanner(false);
       localStorage.removeItem(DISMISS_KEY);
       setMessage(t("docAlertsEnabled"));
@@ -78,14 +85,23 @@ export function DoctorAlertsSetup() {
     }
   }, [t]);
 
+  const testAlert = useCallback(async () => {
+    await unlockQueueAudio();
+    void triggerQueueAlert({
+      kind: "doctor_new",
+      title: bi("تجربة النداء 🔔", "Test alert 🔔"),
+      message: bi(
+        "هكذا يسمع الطبيب عند وصول مراجع — تأكد من رفع الصوت",
+        "This is how alerts sound when a patient arrives — check your volume"
+      ),
+      linkPath: "/doctor/queue",
+      patientName: bi("مراجع", "Patient"),
+    });
+  }, [bi]);
+
   function dismiss() {
     localStorage.setItem(DISMISS_KEY, "1");
     setShowBanner(false);
-  }
-
-  if (!showBanner && !message) {
-    if (alertsEnabled()) return null;
-    return null;
   }
 
   return (
@@ -128,6 +144,22 @@ export function DoctorAlertsSetup() {
               <X className="h-4 w-4" />
             </button>
           </div>
+        </div>
+      )}
+
+      {enabled && !showBanner && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2">
+          <p className="text-xs font-medium text-emerald-900">
+            {t("docAlertsActive")}
+          </p>
+          <button
+            type="button"
+            onClick={() => void testAlert()}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm"
+          >
+            <Volume2 className="h-3.5 w-3.5" />
+            {t("docTestAlert")}
+          </button>
         </div>
       )}
 
