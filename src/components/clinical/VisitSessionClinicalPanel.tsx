@@ -42,7 +42,7 @@ export function VisitSessionClinicalPanel({
   hideHeader = false,
   queueStatusOverride,
 }: VisitSessionClinicalPanelProps) {
-  const { t } = useLanguage();
+  const { t, bi } = useLanguage();
   const { profile } = useClinicProfile();
   const clinicId = profile?.id ?? null;
   const { hasModule } = useClinicModules();
@@ -171,7 +171,10 @@ export function VisitSessionClinicalPanel({
               {t("docReviewVisualRecord")}
             </h3>
             <p className="text-xs text-slate-500">
-              {t("docReviewVisualRecordHint")}
+              {bi(
+                "راجع السجل — إذا نُسي المخطط أو الأشعة أو الوصفة يمكنك إضافتها أو تعديلها هنا",
+                "Review the record — add or edit chart, X-rays, or prescription if the doctor forgot"
+              )}
             </p>
           </div>
           <Button
@@ -259,9 +262,9 @@ export function VisitSessionClinicalPanel({
           portal={portal}
           examMode={isExamPortal}
           collapsible={!isExamPortal && !isAccountantView}
-          defaultOpen={isAccountantView ? false : defaultOpen}
+          defaultOpen={isAccountantView ? true : defaultOpen}
           compact={isAccountantView}
-          readOnly={isAccountantView}
+          readOnly={false}
         />
       )}
 
@@ -279,7 +282,7 @@ export function VisitSessionClinicalPanel({
             queueEntryId={session.queueEntryId}
             queueStatus={effectiveQueueStatus}
             portal={portal}
-            readOnly={isAccountantView}
+            readOnly={false}
             showSendToAccounting={isExamPortal && canSend}
             onSendToAccounting={() => void sendToAccounting()}
             sendingToAccounting={sending}

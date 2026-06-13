@@ -2158,7 +2158,7 @@ export function QuickEntryForm({
               patientId={selectedPatientId ?? defaultPatientId ?? null}
               queueEntryId={visitQueueEntryId}
               portal="accountant"
-              defaultOpen={false}
+              defaultOpen
             />
           </div>
         )}

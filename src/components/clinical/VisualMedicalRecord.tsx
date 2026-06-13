@@ -64,7 +64,7 @@ export function VisualMedicalRecord({
   readOnly = false,
   examMode = false,
 }: VisualMedicalRecordProps) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useState(defaultOpen || !collapsible);
   const [operationId, setOperationId] = useState<string | null>(
     operationIdProp ?? null
   );
@@ -82,8 +82,7 @@ export function VisualMedicalRecord({
   } | null>(null);
 
   const isDraftMode = externalDraft !== undefined && onDraftChange !== undefined;
-  const reviewOnly =
-    readOnly || (portal === "accountant" && !!operationIdProp && !isDraftMode);
+  const reviewOnly = readOnly;
   const draftValue = isDraftMode ? externalDraft : addDraft;
   const setDraft = isDraftMode ? onDraftChange : setAddDraft;
 
@@ -122,10 +121,11 @@ export function VisualMedicalRecord({
   }, [operationId, portal]);
 
   useEffect(() => {
-    if (!open || !operationId) return;
+    if (!operationId) return;
+    if (collapsible && !open) return;
     if (initialData && hasClinicalData(initialData)) return;
     void loadExisting();
-  }, [open, operationId, loadExisting, initialData]);
+  }, [open, operationId, loadExisting, initialData, collapsible]);
 
   /** غرفة الكشف — تحميل أولي للمسودة من السيرفر فقط إذا كانت فارغة */
   useEffect(() => {
@@ -184,6 +184,12 @@ export function VisualMedicalRecord({
             : "rounded-xl border border-teal-200/50 bg-teal-50/20 p-3"
       )}
     >
+      {portal === "accountant" && !reviewOnly && operationId && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          إذا نسي الطبيب المخطط أو الأشعة — أضفها هنا ثم اضغط «حفظ على هذه الجلسة»
+        </p>
+      )}
+
       {operationId && loading && (
         <p className="text-xs text-slate-500">جاري تحميل السجل...</p>
       )}

@@ -54,7 +54,7 @@ export function SessionPrescriptionPanel({
   onSendToAccounting,
   sendingToAccounting = false,
 }: SessionPrescriptionPanelProps) {
-  const isAccountant = readOnly || portal === "accountant";
+  const isReadOnlyView = readOnly;
 
   const [prescription, setPrescription] = useState<PatientPrescription | null>(
     null
@@ -89,7 +89,7 @@ export function SessionPrescriptionPanel({
             ? existing.medications
             : [emptyLine()]
         );
-      } else if (!isAccountant) {
+      } else if (!isReadOnlyView) {
         setPrescription(null);
         setDiagnosis("");
         setNotes("");
@@ -100,7 +100,7 @@ export function SessionPrescriptionPanel({
     } finally {
       setLoading(false);
     }
-  }, [operationId, portal, isAccountant, queueEntryId]);
+  }, [operationId, portal, isReadOnlyView, queueEntryId]);
 
   useEffect(() => {
     autoSaveReady.current = false;
@@ -174,7 +174,7 @@ export function SessionPrescriptionPanel({
   }
 
   useEffect(() => {
-    if (!examMode || isAccountant || loading) return;
+    if (!examMode || isReadOnlyView || loading) return;
 
     if (!autoSaveReady.current) {
       autoSaveReady.current = true;
@@ -192,7 +192,7 @@ export function SessionPrescriptionPanel({
     return () => {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     };
-  }, [diagnosis, notes, lines, examMode, isAccountant, loading]);
+  }, [diagnosis, notes, lines, examMode, isReadOnlyView, loading]);
 
   const canSendToAccounting =
     showSendToAccounting &&
@@ -200,8 +200,8 @@ export function SessionPrescriptionPanel({
     (queueStatus === "in_progress" || queueStatus === "called");
 
   const canPrint =
-    isAccountant &&
-    prescription &&
+    portal === "accountant" &&
+    !!prescription &&
     prescription.medications.length > 0;
 
   const statusLabel =
@@ -242,11 +242,13 @@ export function SessionPrescriptionPanel({
               الوصفة الذكية
             </h3>
             <p className={cn("mt-1 text-xs", examMode ? "text-violet-700/80" : "text-slate-500")}>
-            {isAccountant
+            {isReadOnlyView
               ? "وصفة الطبيب لهذه الجلسة — اطبعها وسلّمها للمراجع"
-              : examMode
-                ? "اكتب الوصفة — تُحفظ تلقائياً مع الجلسة"
-                : "اكتب الوصفة أو اختر قالباً — تُحفظ مع الجلسة وتصل للمحاسب"}
+              : portal === "accountant"
+                ? "أضف أو عدّل الوصفة إذا نسيها الطبيب — تُحفظ مع الجلسة"
+                : examMode
+                  ? "اكتب الوصفة — تُحفظ تلقائياً مع الجلسة"
+                  : "اكتب الوصفة أو اختر قالباً — تُحفظ مع الجلسة وتصل للمحاسب"}
             </p>
           </div>
         </div>
@@ -284,13 +286,13 @@ export function SessionPrescriptionPanel({
       {error && <Alert variant="error">{error}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
 
-      {!loading && isAccountant && !prescription && (
+      {!loading && isReadOnlyView && !prescription && (
         <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-muted">
           لم يكتب الطبيب وصفة لهذه الجلسة بعد.
         </p>
       )}
 
-      {!loading && (!isAccountant || prescription) && (
+      {!loading && (!isReadOnlyView || prescription) && (
         <div
           className={
             examMode
@@ -298,7 +300,7 @@ export function SessionPrescriptionPanel({
               : "space-y-3 rounded-xl border border-primary/15 bg-primary/[0.03] p-4"
           }
         >
-          {!isAccountant && (
+          {!isReadOnlyView && (
             <Select
               label="قالب جاهز (اختياري)"
               value={templateId}
@@ -316,7 +318,7 @@ export function SessionPrescriptionPanel({
             label="التشخيص"
             value={diagnosis}
             onChange={(e) => setDiagnosis(e.target.value)}
-            disabled={isAccountant}
+            disabled={isReadOnlyView}
             placeholder="مثال: التهاب لثة / ألم أسنان"
             className={examMode ? EXAM_INPUT_CLASS : undefined}
           />
@@ -337,14 +339,14 @@ export function SessionPrescriptionPanel({
                   onChange={(e) =>
                     updateLine(index, { drug_name_ar: e.target.value })
                   }
-                  disabled={isAccountant}
+                  disabled={isReadOnlyView}
                   className={examMode ? EXAM_INPUT_CLASS : undefined}
                 />
                 <Input
                   label="الجرعة"
                   value={line.dosage ?? ""}
                   onChange={(e) => updateLine(index, { dosage: e.target.value })}
-                  disabled={isAccountant}
+                  disabled={isReadOnlyView}
                   placeholder="500mg"
                   className={examMode ? EXAM_INPUT_CLASS : undefined}
                 />
@@ -354,7 +356,7 @@ export function SessionPrescriptionPanel({
                   onChange={(e) =>
                     updateLine(index, { frequency: e.target.value })
                   }
-                  disabled={isAccountant}
+                  disabled={isReadOnlyView}
                   placeholder="3 مرات يومياً"
                   className={examMode ? EXAM_INPUT_CLASS : undefined}
                 />
@@ -364,7 +366,7 @@ export function SessionPrescriptionPanel({
                   onChange={(e) =>
                     updateLine(index, { duration: e.target.value })
                   }
-                  disabled={isAccountant}
+                  disabled={isReadOnlyView}
                   placeholder="5 أيام"
                   className={examMode ? EXAM_INPUT_CLASS : undefined}
                 />
@@ -375,12 +377,12 @@ export function SessionPrescriptionPanel({
                     onChange={(e) =>
                       updateLine(index, { instructions: e.target.value })
                     }
-                    disabled={isAccountant}
+                    disabled={isReadOnlyView}
                     placeholder="بعد الأكل"
                     className={examMode ? EXAM_INPUT_CLASS : undefined}
                   />
                 </div>
-                {!isAccountant && lines.length > 1 && (
+                {!isReadOnlyView && lines.length > 1 && (
                   <div className="sm:col-span-2 flex justify-end">
                     <button
                       type="button"
@@ -395,7 +397,7 @@ export function SessionPrescriptionPanel({
               </div>
             ))}
 
-            {!isAccountant && (
+            {!isReadOnlyView && (
               <Button type="button" variant="outline" size="sm" onClick={addLine}>
                 <Plus className="h-4 w-4" />
                 إضافة دواء
@@ -417,12 +419,12 @@ export function SessionPrescriptionPanel({
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              disabled={isAccountant}
+              disabled={isReadOnlyView}
               placeholder="تعليمات عامة..."
             />
           </div>
 
-          {!isAccountant && !examMode && (
+          {!isReadOnlyView && !examMode && (
             <Button
               type="button"
               className="w-full sm:w-auto"

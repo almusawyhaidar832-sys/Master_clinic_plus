@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-/** POST — حفظ/تحديث وصفة جلسة الكشف (الطبيب أو مساعده) */
+/** POST — حفظ/تحديث وصفة جلسة الكشف (طبيب، مساعد، أو محاسب) */
 export async function POST(req: NextRequest) {
   try {
     const profile = await getApiCallerProfile(req);
@@ -139,8 +139,9 @@ export async function POST(req: NextRequest) {
     const role = String(profile.role ?? "").toLowerCase();
     const isDoctor = isApiDoctorRole(role);
     const isAssistant = isApiAssistantRole(role);
-    if (!isDoctor && !isAssistant) {
-      return NextResponse.json({ error: "للطبيب أو مساعده فقط" }, { status: 403 });
+    const isStaff = isApiStaffRole(role);
+    if (!isDoctor && !isAssistant && !isStaff) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
     let doctorId: string | null = null;
