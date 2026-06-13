@@ -246,6 +246,7 @@ export async function createPublicBooking(
   await notifyStaffBarcodeBooking({
     clinicId,
     doctorId: input.doctorId,
+    appointmentId: inserted.id as string,
     patientName: inserted.patient_name_ar as string,
     appointmentDate: inserted.appointment_date as string,
     startTime: inserted.start_time as string,

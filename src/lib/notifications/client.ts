@@ -3,7 +3,7 @@ import { notifyClinicSync } from "@/lib/sync/clinic-events";
 
 /** Columns that exist in all DB versions (link_path may be missing) */
 export const NOTIFICATION_SELECT =
-  "id, title_ar, body_ar, is_read, created_at";
+  "id, title_ar, body_ar, is_read, created_at, link_path";
 
 export interface NotificationRow {
   id: string;
@@ -24,6 +24,30 @@ export function notificationActionHref(
   if (title.includes("مرتجع")) return "/doctor/notifications";
   if (title.includes("سحب")) return "/dashboard/withdrawals";
   if (title.includes("جلسة") || title.includes("مراجع")) return "/dashboard/ledger";
+  return null;
+}
+
+/** روابط إشعارات الطبيب — غرفة الانتظار، الباركود، الدفع */
+export function resolveDoctorNotificationHref(n: NotificationRow): string | null {
+  if (n.link_path?.trim()) return n.link_path;
+
+  const title = n.title_ar;
+  if (
+    title.includes("الانتظار") ||
+    title.includes("غرفة") ||
+    title.includes("تذكير — مراجع")
+  ) {
+    return "/doctor/queue";
+  }
+  if (title.includes("باركود")) return "/doctor/schedule";
+  if (
+    title.includes("تسديد") ||
+    title.includes("دفعة") ||
+    title.includes("دفع")
+  ) {
+    return "/doctor/financial-ledger?tab=patients";
+  }
+
   return null;
 }
 

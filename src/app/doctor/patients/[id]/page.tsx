@@ -154,6 +154,16 @@ export default function DoctorPatientDetailPage() {
     if (id) load();
   }, [id, reloadOperations, loadTreatmentCases]);
 
+  useEffect(() => {
+    if (!patient || typeof window === "undefined") return;
+    if (window.location.hash !== "#patient-sessions") return;
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById("patient-sessions")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [patient, operations.length]);
+
   async function addLog() {
     if (!newLog.trim()) return;
     const supabase = createClient();
@@ -300,7 +310,7 @@ export default function DoctorPatientDetailPage() {
         </Card>
       )}
 
-      <div>
+      <div id="patient-sessions">
         <h3 className="mb-1 text-lg font-semibold text-slate-text">
           {t("docSessionsByCase")}
         </h3>

@@ -2,7 +2,10 @@
 
 import { NotificationsInbox } from "@/components/notifications/NotificationsInbox";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { NotificationRow } from "@/lib/notifications/client";
+import {
+  resolveDoctorNotificationHref,
+  type NotificationRow,
+} from "@/lib/notifications/client";
 
 export default function DoctorNotificationsPage() {
   const { t } = useLanguage();
@@ -11,9 +14,7 @@ export default function DoctorNotificationsPage() {
     <NotificationsInbox
       portal="doctor"
       title={t("notifications")}
-      resolveHref={(n: NotificationRow) =>
-        n.link_path ?? "/doctor/wallet"
-      }
+      resolveHref={(n: NotificationRow) => resolveDoctorNotificationHref(n)}
     />
   );
 }

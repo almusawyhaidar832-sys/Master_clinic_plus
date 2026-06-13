@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile } from "@/lib/clinic-context";
 import type { AuthPortalId } from "@/lib/auth/api-portal";
@@ -25,6 +26,7 @@ export function NotificationsInbox({
   title = "الإشعارات",
   resolveHref,
 }: NotificationsInboxProps) {
+  const router = useRouter();
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -91,8 +93,19 @@ export function NotificationsInbox({
             return (
               <Card
                 key={n.id}
-                className={n.is_read ? "opacity-70" : "border-primary/30"}
-                onClick={() => void markOneRead(n.id)}
+                className={
+                  href
+                    ? n.is_read
+                      ? "cursor-pointer opacity-70"
+                      : "cursor-pointer border-primary/30"
+                    : n.is_read
+                      ? "opacity-70"
+                      : "border-primary/30"
+                }
+                onClick={() => {
+                  void markOneRead(n.id);
+                  if (href) router.push(href);
+                }}
               >
                 <p className="font-semibold text-slate-text">{n.title_ar}</p>
                 <p className="text-sm text-slate-muted">{n.body_ar}</p>

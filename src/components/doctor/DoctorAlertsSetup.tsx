@@ -12,7 +12,6 @@ import {
 } from "@/lib/pwa/notification-permission";
 import {
   isWebPushSupported,
-  listenForPushAlertMessages,
   listenForServiceWorkerNavigation,
   registerDoctorWebPush,
   refreshDoctorWebPushIfGranted,
@@ -21,7 +20,6 @@ import {
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { triggerQueueAlert, unlockQueueAudio } from "@/lib/queue/audio-alerts";
 import { warmDoctorCloudTts } from "@/lib/queue/cloud-speech";
-import { formatNameForSpeech } from "@/lib/queue/arabic-speech-text";
 import {
   backgroundPushNeedsInstalledApp,
   getDoctorPushCapability,
@@ -174,22 +172,6 @@ export function DoctorAlertsSetup() {
       window.removeEventListener("focus", refreshPush);
     };
   }, [browserGranted, registerPush, syncPushStatus]);
-
-  useEffect(() => {
-    return listenForPushAlertMessages((payload) => {
-      const name = formatNameForSpeech(payload.patientName?.trim() || t("entityPatient"));
-      triggerQueueAlert({
-        kind: "doctor_new",
-        title: payload.title ?? t("docNewPatientAlert"),
-        message:
-          payload.body ??
-          `${t("docNewPatientAlertBody")} ${name}`,
-        linkPath: payload.url ?? "/doctor/queue",
-        patientName: name,
-        audioUrl: payload.audioUrl,
-      });
-    });
-  }, [t]);
 
   useEffect(() => {
     return listenForServiceWorkerNavigation((url) => {
@@ -430,6 +412,12 @@ export function DoctorAlertsSetup() {
               <X className="h-4 w-4" />
             </button>
           </div>
+        </div>
+      )}
+
+      {alertsActive && !pushReady && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs leading-relaxed text-amber-950">
+          {t("docAlertsPushPendingHint")}
         </div>
       )}
 

@@ -1,6 +1,8 @@
 import { isSalaryReasonRequired } from "@/lib/services/salary-entry-reason";
+import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { formatCurrency } from "@/lib/utils";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { sendWebPushToProfile } from "@/lib/push/server";
 
 function adminClient() {
   return getAdminClient();
@@ -206,10 +208,11 @@ function formatAppointmentTimeRange(startTime: string, endTime: string): string 
   return `${start} – ${end}`;
 }
 
-/** طلب حجز باركود pending → إشعار المحاسب ومساعد الطبيب */
+/** طلب حجز باركود pending → إشعار المحاسب ومساعد الطبيب والطبيب */
 export async function notifyStaffBarcodeBooking(input: {
   clinicId: string;
   doctorId: string;
+  appointmentId?: string;
   patientName: string;
   appointmentDate: string;
   startTime: string;
@@ -284,8 +287,30 @@ export async function notifyStaffBarcodeBooking(input: {
     }
   }
 
+  const doctorProfileId = await resolveDoctorProfileId(
+    admin,
+    input.doctorId,
+    input.clinicId
+  );
+  if (doctorProfileId) {
+    pushRow(doctorProfileId, "/doctor/schedule");
+  }
+
   if (!rows.length) return;
   await insertNotifications(rows);
+
+  if (doctorProfileId) {
+    const doctorBody = `المراجع ${input.patientName} يريد حجزاً بتاريخ ${input.appointmentDate} ${timeRange} — بانتظار الموافقة`;
+    await sendWebPushToProfile(doctorProfileId, {
+      title: "حجز عبر الباركود 📅",
+      body: doctorBody,
+      url: "/doctor/schedule",
+      tag: `doctor-barcode-${input.appointmentId ?? input.doctorId}`,
+      kind: "barcode_booking",
+    }).catch((err) => {
+      console.error("[notifications] doctor barcode push failed:", err);
+    });
+  }
 }
 
 /** Doctor requested withdrawal → notify accountants + clinic owner */
@@ -440,6 +465,9 @@ export async function notifyDoctorSessionPayment(
 
   if (error || !op) throw new Error("operation not found");
 
+  const paid = Number(op.paid_amount ?? 0);
+  if (paid <= FINANCIAL_EPSILON) return;
+
   const [{ data: doctor }, { data: patient }] = await Promise.all([
     admin
       .from("doctors")
@@ -460,7 +488,6 @@ export async function notifyDoctorSessionPayment(
 
   const patientName = patient?.full_name_ar ?? "مراجع";
   const opLabel = op.operation_name_ar ?? op.operation_type ?? "جلسة";
-  const paid = Number(op.paid_amount ?? 0);
   const agreed = Number(patient?.agreed_total ?? 0);
   const totalPaid = Number(patient?.total_paid ?? 0);
   const remaining =
@@ -473,22 +500,39 @@ export async function notifyDoctorSessionPayment(
     ? `\n🦷 ${extra.teethSummary.trim()}`
     : "";
 
-  const bodyParts = [
+  const linkPath = `/doctor/patients/${op.patient_id}#patient-sessions`;
+  const titleAr = "تم تسديد مبلغ";
+  const bodyAr = [
     patientName,
-    paid > 0 ? `دفع ${formatCurrency(paid)}` : null,
-    `متبقي ${formatCurrency(remaining)}`,
-    opLabel,
-  ].filter(Boolean);
+    formatCurrency(paid),
+    remaining > FINANCIAL_EPSILON
+      ? `المتبقي ${formatCurrency(remaining)}`
+      : "تم إكمال الذمة",
+    opLabel !== "جلسة" ? opLabel : null,
+  ]
+    .filter(Boolean)
+    .join(" — ")
+    .concat(teethLine);
 
   await insertNotifications([
     {
       clinic_id: op.clinic_id,
       recipient_profile_id: profileId,
-      title_ar: "دفعة / جلسة مراجع",
-      body_ar: `${bodyParts.join(" — ")}${teethLine}`,
-      link_path: `/doctor/patients/${op.patient_id}`,
+      title_ar: titleAr,
+      body_ar: bodyAr,
+      link_path: linkPath,
     },
   ]);
+
+  await sendWebPushToProfile(profileId, {
+    title: titleAr,
+    body: bodyAr,
+    url: linkPath,
+    tag: `doctor-payment-${operationId}`,
+    kind: "patient_payment",
+  }).catch((err) => {
+    console.error("[notifications] doctor payment push failed:", err);
+  });
 }
 
 /** Refund on doctor's session → notify doctor with amount + reason */

@@ -218,3 +218,64 @@ export function listenForServiceWorkerNavigation(
   navigator.serviceWorker.addEventListener("message", handler);
   return () => navigator.serviceWorker.removeEventListener("message", handler);
 }
+
+/** خيارات إشعار مخصص — من React (التطبيق مفتوح أو بخلفية) */
+export interface AppNotificationPayload {
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+  kind?: string;
+  patientName?: string;
+  silent?: boolean;
+  requireInteraction?: boolean;
+  renotify?: boolean;
+}
+
+/**
+ * إظهار إشعار مخصص من React عبر Service Worker.
+ * يعمل عندما التطبيق مفتوح أو في تبويب بالخلفية — وليس عندما التطبيق مغلق بالكامل
+ * (للحالة الأخيرة استخدم Web Push من السيرفر: sendWebPushToProfile).
+ */
+export async function showAppNotification(
+  payload: AppNotificationPayload
+): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (!("Notification" in window) || Notification.permission !== "granted") {
+    return false;
+  }
+
+  const registration = await ensureServiceWorkerRegistration();
+  if (!registration) return false;
+
+  await navigator.serviceWorker.ready.catch(() => undefined);
+
+  const message = { type: "SHOW_APP_NOTIFICATION", payload };
+
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage(message);
+    return true;
+  }
+
+  try {
+    await registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: payload.tag ?? "mcp-doctor",
+      renotify: payload.renotify !== false,
+      requireInteraction: payload.requireInteraction !== false,
+      silent: payload.silent !== false,
+      vibrate: [200, 100, 200, 100, 400],
+      data: {
+        url: payload.url ?? "/doctor/queue",
+        kind: payload.kind ?? "custom",
+        patientName: payload.patientName ?? null,
+      },
+    });
+    return true;
+  } catch (err) {
+    console.error("[notification] showAppNotification failed:", err);
+    return false;
+  }
+}

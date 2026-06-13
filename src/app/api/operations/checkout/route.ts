@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile, isApiStaffRole } from "@/lib/auth/api-session";
 import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { notifyDoctorSessionPayment } from "@/lib/notifications/server";
 import { processSessionCheckout } from "@/lib/services/session-checkout";
 /** POST — دفع الحساب النهائي بعد جلسة الطبيب */
 export async function POST(req: NextRequest) {
@@ -48,6 +49,10 @@ export async function POST(req: NextRequest) {
         },
         note: "دفعة — حساب نهائي (طابور)",
       });
+
+      void notifyDoctorSessionPayment(result.operationId).catch((e) =>
+        console.error("[checkout] doctor payment notify", e)
+      );
     }
 
     return NextResponse.json({ success: true, ...result });
