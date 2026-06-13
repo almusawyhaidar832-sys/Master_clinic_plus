@@ -19,6 +19,11 @@ export default function AppointmentsError({
       <p className="mt-2 text-sm text-red-700">
         حدث خطأ أثناء عرض المواعيد. جرّب التحديث — إذا تكرر، تواصل مع الدعم.
       </p>
+      {error.message ? (
+        <p className="mt-2 break-all font-mono text-xs text-red-600/80">
+          {error.message}
+        </p>
+      ) : null}
       <button
         type="button"
         onClick={reset}

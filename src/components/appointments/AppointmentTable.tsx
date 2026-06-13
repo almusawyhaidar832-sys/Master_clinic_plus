@@ -51,7 +51,6 @@ export function AppointmentTable({
   subtitle,
   compact = false,
 }: AppointmentTableProps) {
-  const statusLabels = useAppointmentStatusLabels();
   const filterDoctorId = role === "doctor" ? doctorId : role === "assistant" ? doctorId : null;
 
   const { appointments, loading, refresh, pendingCount } = useCentralizedAppointments({
@@ -204,7 +203,6 @@ export function AppointmentTable({
                 <AppointmentRow
                   key={a.id}
                   appointment={a}
-                  statusLabels={statusLabels}
                   showDoctorColumn={showDoctorColumn}
                   canManage={canManage}
                   actionId={actionId}
@@ -260,7 +258,6 @@ export function AppointmentTable({
 
 function AppointmentRow({
   appointment: a,
-  statusLabels,
   showDoctorColumn,
   canManage,
   actionId,
@@ -270,7 +267,6 @@ function AppointmentRow({
   onDelete,
 }: {
   appointment: AppointmentWithDoctor;
-  statusLabels: Record<string, string>;
   showDoctorColumn: boolean;
   canManage: boolean;
   actionId: string | null;
@@ -279,6 +275,7 @@ function AppointmentRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const statusLabels = useAppointmentStatusLabels();
   const doctorName = a.doctor?.full_name_ar;
   const isPending = a.status === "pending";
   const canDelete = ["pending", "scheduled", "confirmed", "waiting"].includes(a.status);

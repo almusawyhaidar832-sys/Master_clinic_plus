@@ -41,5 +41,12 @@ export function normalizeAppointmentRow(
 export function normalizeAppointmentRows(
   rows: Record<string, unknown>[] | null | undefined
 ): AppointmentWithDoctor[] {
-  return (rows ?? []).map(normalizeAppointmentRow);
+  return (rows ?? []).flatMap((row) => {
+    try {
+      return [normalizeAppointmentRow(row)];
+    } catch (err) {
+      console.error("[appointments] skip invalid row", err, row);
+      return [];
+    }
+  });
 }
