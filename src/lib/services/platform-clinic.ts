@@ -192,7 +192,16 @@ export async function deletePlatformClinic(
     { p_clinic_id: clinicId }
   );
 
-  if (!rpcError && rpcData && typeof rpcData === "object") {
+  if (rpcError) {
+    const fnMissing =
+      rpcError.message.includes("platform_delete_clinic_completely") ||
+      rpcError.message.includes("Could not find the function") ||
+      rpcError.code === "PGRST202";
+    if (!fnMissing) {
+      return { ok: false, error: rpcError.message };
+    }
+    console.warn("[deletePlatformClinic] RPC missing, fallback:", rpcError.message);
+  } else if (rpcData && typeof rpcData === "object") {
     const row = rpcData as Record<string, unknown>;
     if (row.error) {
       return { ok: false, error: String(row.error) };
@@ -210,14 +219,34 @@ export async function deletePlatformClinic(
     }
   }
 
-  if (rpcError && !rpcError.message.includes("platform_delete_clinic_completely")) {
-    console.warn("[deletePlatformClinic] RPC failed, fallback:", rpcError.message);
-  }
+  // وضع احتياطي — فقط إذا RPC غير موجود على Supabase
 
   const { data: profiles } = await admin
     .from("profiles")
     .select("id")
     .eq("clinic_id", clinicId);
+
+  await admin.from("session_refunds").delete().eq("clinic_id", clinicId);
+
+  const { data: clinicDoctors } = await admin
+    .from("doctors")
+    .select("id")
+    .eq("clinic_id", clinicId);
+  const { data: clinicPatients } = await admin
+    .from("patients")
+    .select("id")
+    .eq("clinic_id", clinicId);
+
+  const doctorIds = (clinicDoctors ?? []).map((d) => d.id);
+  const patientIds = (clinicPatients ?? []).map((p) => p.id);
+
+  if (doctorIds.length > 0) {
+    await admin.from("patient_operations").delete().in("doctor_id", doctorIds);
+  }
+  if (patientIds.length > 0) {
+    await admin.from("patient_operations").delete().in("patient_id", patientIds);
+  }
+  await admin.from("patient_operations").delete().eq("clinic_id", clinicId);
 
   for (const row of profiles ?? []) {
     try {
@@ -226,8 +255,6 @@ export async function deletePlatformClinic(
       console.error("[deletePlatformClinic] auth_delete", row.id, e);
     }
   }
-
-  await admin.from("session_refunds").delete().eq("clinic_id", clinicId);
 
   const { error } = await admin.from("clinics").delete().eq("id", clinicId);
 

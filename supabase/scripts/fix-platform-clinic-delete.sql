@@ -6,6 +6,14 @@
 -- انسخ كامل الملف → Supabase SQL Editor → Run → أعد الحذف من /developer
 -- =============================================================================
 
+-- =============================================================================
+-- إصلاح فشل حذف العيادة — شغّل الملف كاملاً ثم أعد الحذف من /developer
+-- أخطاء: doctor_share_total / doctor_id violates not-null constraint
+-- =============================================================================
+-- تحقق بعد التشغيل (اختياري):
+-- SELECT prosrc LIKE '%session_replication_role%' AS delete_fix_applied
+-- FROM pg_proc WHERE proname = 'platform_delete_clinic_completely';
+
 -- Fix clinic delete failing when financial triggers re-run on FK SET NULL
 
 CREATE OR REPLACE FUNCTION public.calculate_operation_shares()
