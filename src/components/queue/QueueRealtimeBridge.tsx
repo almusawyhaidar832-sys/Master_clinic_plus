@@ -18,7 +18,7 @@ import { QueueAlertOverlay } from "@/components/queue/QueueAlertOverlay";
 
 interface QueueRealtimeBridgeProps {
   portal: "dashboard" | "doctor";
-  /** polling كل 3 ث — fallback عند بطء Realtime أو خلفية التطبيق */
+  /** polling — fallback للتحديث فقط؛ النداء من Realtime داخل التطبيق */
   enablePolling?: boolean;
 }
 
@@ -51,11 +51,9 @@ export function QueueRealtimeBridge({
     }
 
     void loadDoctorId();
-    const retry = setInterval(loadDoctorId, 5_000);
 
     return () => {
       cancelled = true;
-      clearInterval(retry);
     };
   }, [portal]);
 

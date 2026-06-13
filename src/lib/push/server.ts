@@ -78,9 +78,8 @@ export async function sendWebPushToProfile(
   });
 
   const pushOptions = {
-    TTL: 120,
+    TTL: 86400,
     urgency: "high" as const,
-    topic: payload.tag ?? "doctor-queue",
   };
 
   let sent = 0;

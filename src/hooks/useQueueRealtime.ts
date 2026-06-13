@@ -39,20 +39,20 @@ function alertDoctorNewPatient(
   options?: { recall?: boolean }
 ) {
   if (seen.has(dedupeKey)) return;
-  const force = options?.recall === true;
-  const dedupeId = force
-    ? `doctor-recall-${row.id}-${row.sent_to_doctor_at ?? Date.now()}`
+  const recall = options?.recall === true;
+  const dedupeId = recall
+    ? `doctor-recall-${row.id}-${row.sent_to_doctor_at ?? "0"}`
     : `doctor-new-${row.id}`;
-  if (!shouldFireQueueAlert(dedupeId, force)) return;
+  if (!shouldFireQueueAlert(dedupeId)) return;
   seen.add(dedupeKey);
 
   const name = resolvePatientSpeechName(row);
-  const msg = force
+  const msg = recall
     ? `تذكير: المراجع ${name} بانتظارك — يرجى استقباله`
     : `لديك مراجع جديد في الانتظار: ${name}`;
   void triggerQueueAlert({
     kind: "doctor_new",
-    title: force ? "تذكير — مراجع 🔔" : "مراجع جديد 🔔",
+    title: recall ? "تذكير — مراجع 🔔" : "مراجع جديد 🔔",
     message: msg,
     linkPath: "/doctor/queue",
     patientName: name,
@@ -110,21 +110,16 @@ function alertDoctorFromBroadcast(
   const recall = payload.recall === true;
   const key = entryId
     ? recall
-      ? `recall-${entryId}-${Date.now()}`
-      : `new-${entryId}`
-    : `broadcast-${payload.name ?? Date.now()}`;
+      ? `broadcast-recall-${entryId}-${payload.sentAt ?? "0"}`
+      : `broadcast-new-${entryId}`
+    : `broadcast-${payload.name ?? "x"}`;
   if (seen.has(key)) return;
-  if (
-    entryId &&
-    !shouldFireQueueAlert(
-      recall
-        ? `doctor-recall-${entryId}-${Date.now()}`
-        : `doctor-new-${entryId}`,
-      recall
-    )
-  ) {
-    return;
-  }
+  const dedupeId = entryId
+    ? recall
+      ? `doctor-recall-${entryId}-${payload.sentAt ?? "0"}`
+      : `doctor-new-${entryId}`
+    : `doctor-broadcast-${payload.name ?? Date.now()}`;
+  if (!shouldFireQueueAlert(dedupeId)) return;
   seen.add(key);
 
   const name = formatNameForSpeech(payload.name?.trim() || "مراجع");

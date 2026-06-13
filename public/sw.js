@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v15-custom-notify";
+const CACHE_NAME = "mcp-app-v16-stable-alerts";
 
 const NOTIFICATION_ICON = "/icons/icon-192.png";
 
@@ -16,7 +16,7 @@ function buildCustomNotification(title, payload) {
       badge: NOTIFICATION_ICON,
       tag,
       renotify: data.renotify !== false,
-      requireInteraction: data.requireInteraction !== false,
+      requireInteraction: false,
       silent: data.silent !== false,
       vibrate: data.vibrate || [200, 100, 200, 100, 400],
       data: {

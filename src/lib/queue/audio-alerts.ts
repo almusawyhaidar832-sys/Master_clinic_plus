@@ -254,10 +254,18 @@ export function replayQueueAlert(detail: QueueAlertDetail): void {
   })();
 }
 
-/** Sound + voice + browser notification + on-screen banner — فوري بدون انتظار TTS */
+/** Sound + voice + on-screen banner — بدون إشعار متصفح داخل التطبيق */
 export function triggerQueueAlert(detail: QueueAlertDetail): void {
   dispatchQueueAlertUI(detail);
-  showBrowserNotification(detail.title, detail.message, detail.linkPath);
+
+  const inApp =
+    typeof document !== "undefined" &&
+    document.visibilityState === "visible";
+
+  if (!inApp) {
+    showBrowserNotification(detail.title, detail.message, detail.linkPath);
+  }
+
   void (async () => {
     await unlockQueueAudio();
     void playQueueAlertSound(detail.kind);

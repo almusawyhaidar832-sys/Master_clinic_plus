@@ -14,7 +14,6 @@ import {
   isWebPushSupported,
   listenForServiceWorkerNavigation,
   registerDoctorWebPush,
-  refreshDoctorWebPushIfGranted,
   fetchPushSubscriptionStatus,
 } from "@/lib/push/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
@@ -67,6 +66,8 @@ export function DoctorAlertsSetup() {
   const [pushRegistering, setPushRegistering] = useState(false);
   const [needsInstallForBackground, setNeedsInstallForBackground] = useState(false);
   const pushInflightRef = useRef(false);
+  const lastPushSyncRef = useRef(0);
+  const PUSH_SYNC_COOLDOWN_MS = 60_000;
 
   const showActivationBanner =
     !browserGranted &&
@@ -148,7 +149,7 @@ export function DoctorAlertsSetup() {
     }
     void warmDoctorCloudTts();
     void syncPushStatus().then((ready) => {
-      if (!ready) void registerPush({ force: true });
+      if (!ready) void registerPush({ force: false });
     });
   }, [browserGranted, registerPush, syncPushStatus]);
 
@@ -157,19 +158,25 @@ export function DoctorAlertsSetup() {
 
     const refreshPush = () => {
       if (document.visibilityState !== "visible") return;
-      void refreshDoctorWebPushIfGranted()
-        .then(() => syncPushStatus())
-        .then((ready) => {
-          if (!ready) void registerPush();
-        });
+      const now = Date.now();
+      if (now - lastPushSyncRef.current < PUSH_SYNC_COOLDOWN_MS) return;
+      lastPushSyncRef.current = now;
+
+      void syncPushStatus().then((ready) => {
+        if (!ready && !pushInflightRef.current) {
+          void registerPush({ force: false });
+        }
+      });
     };
 
-    refreshPush();
-    document.addEventListener("visibilitychange", refreshPush);
-    window.addEventListener("focus", refreshPush);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshPush();
+    };
+
+    onVisible();
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
-      document.removeEventListener("visibilitychange", refreshPush);
-      window.removeEventListener("focus", refreshPush);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [browserGranted, registerPush, syncPushStatus]);
 

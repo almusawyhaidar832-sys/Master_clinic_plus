@@ -7,7 +7,7 @@ import { triggerQueueAlert } from "@/lib/queue/audio-alerts";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { resolvePatientSpeechName } from "@/lib/queue/utils";
 
-const POLL_MS = 2_000;
+const POLL_MS = 8_000;
 
 function queueFingerprint(queue: QueueRow[]): string {
   return (queue ?? [])
@@ -86,11 +86,18 @@ export function useDoctorQueuePolling(
 
           if (!isFirstSend && !isRecall) continue;
           if (!readyRef.current) continue;
+          // داخل التطبيق — Realtime يكفي؛ polling للتبويب بالخلفية فقط
+          if (
+            typeof document !== "undefined" &&
+            document.visibilityState === "visible"
+          ) {
+            continue;
+          }
 
           const alertKey = isRecall
             ? `doctor-recall-${entry.id}-${entry.sent_to_doctor_at}`
             : `doctor-new-${entry.id}`;
-          if (!shouldFireQueueAlert(alertKey, isRecall)) continue;
+          if (!shouldFireQueueAlert(alertKey)) continue;
 
           const name = resolvePatientSpeechName(entry);
           void triggerQueueAlert({
