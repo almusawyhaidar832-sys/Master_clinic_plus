@@ -1,18 +1,15 @@
 {
-  "id": "/",
   "name": "Master Clinic",
   "short_name": "Master Clinic",
   "description": "نظام إدارة العيادات — ماستر كلينك",
-  "start_url": "/?source=pwa",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "fullscreen"],
-  "orientation": "any",
+  "orientation": "portrait",
   "background_color": "#0056b3",
   "theme_color": "#0056b3",
   "lang": "ar",
   "dir": "rtl",
-  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/icon-192.png",

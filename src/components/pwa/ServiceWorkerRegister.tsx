@@ -2,17 +2,28 @@
 
 import { useEffect } from "react";
 
+const SW_URL = "/sw.js";
+const SW_SCOPE = "/";
+
 /**
- * Registers the PWA service worker early — required for Android installability.
- * Does not intercept the browser install prompt (no custom install UI).
+ * Registers the PWA service worker — required for Chrome "Install app" on Android.
  */
 export function ServiceWorkerRegister() {
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      return;
+    }
 
-    void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
-      /* registration optional in dev */
-    });
+    void navigator.serviceWorker
+      .register(SW_URL, { scope: SW_SCOPE })
+      .then((registration) => {
+        if (process.env.NODE_ENV === "development") {
+          console.info("[PWA] Service worker registered", registration.scope);
+        }
+      })
+      .catch((error: unknown) => {
+        console.error("[PWA] Service worker registration failed:", error);
+      });
   }, []);
 
   return null;

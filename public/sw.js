@@ -1,12 +1,10 @@
-const CACHE_NAME = "mcp-app-v9-installable-pwa";
+const CACHE_NAME = "mcp-app-v10-chrome-install";
 
 const PRECACHE_URLS = [
   "/",
   "/manifest.json",
-  "/manifest-doctor.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
-  "/login?portal=doctor&source=pwa",
 ];
 
 function shouldSkipCache(url) {

@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { APP_NAME, DEVELOPER } from "@/lib/constants";
-import { PWAProvider } from "@/components/pwa/PWAProvider";
+import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 
 const notoArabic = Noto_Sans_Arabic({
@@ -63,8 +64,11 @@ export default function RootLayout({
       <body className="min-h-screen">
         <LanguageProvider>
           {children}
-          <PWAProvider />
+          <ServiceWorkerRegister />
         </LanguageProvider>
+        <Script id="mcp-sw-register" strategy="afterInteractive">
+          {`if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js",{scope:"/"}).catch(function(e){console.error("[PWA] sw.js register failed",e);});});}`}
+        </Script>
       </body>
     </html>
   );
