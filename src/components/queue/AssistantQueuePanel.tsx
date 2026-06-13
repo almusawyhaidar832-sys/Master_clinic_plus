@@ -373,8 +373,8 @@ export function AssistantQueuePanel() {
     if (
       !confirm(
         bi(
-          `إلغاء دور «${name}»؟`,
-          `Cancel ticket for "${name}"?`
+          `إلغاء دور «${name}»؟\nسيُبلَّغ المحاسب — يحوّلك أو يلغي الحجز نهائياً.`,
+          `Cancel ticket for "${name}"?\nThe accountant will be notified — they can transfer you or cancel the booking.`
         )
       )
     ) {
@@ -525,6 +525,7 @@ export function AssistantQueuePanel() {
             portal="assistant"
             patientId={clinicalEntry.patient_id}
             queueEntryId={clinicalEntry.id}
+            queueStatusOverride={clinicalEntry.status}
             hideHeader
           />
           </div>

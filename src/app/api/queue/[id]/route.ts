@@ -7,13 +7,16 @@ import {
 } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
+  accountantTransferAfterCancellation,
   confirmQueueTransferByAccountant,
   dismissQueueTransferRequest,
+  finalizeQueueCancellationByAccountant,
   getDoctorByProfileId,
   notifyAccountantsReadyForBilling,
   notifyAccountantsReadyForPayment,
   rejectQueueEntryByDoctor,
   requestQueueTransferByDoctor,
+  requestQueueCancellationByStaff,
   updateQueueStatus,
   type QueueStatus,
 } from "@/lib/queue/server";
@@ -74,16 +77,28 @@ export async function PATCH(
         | "reject"
         | "request_transfer"
         | "confirm_transfer"
-        | "dismiss_transfer";
+        | "dismiss_transfer"
+        | "finalize_cancel"
+        | "transfer_after_cancel";
       target_doctor_id?: string;
     };
 
     const admin = getAdminClient();
 
     if (body.action === "cancel") {
-      if (!staffRolesOk(role)) {
-        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      if (isApiDoctorRole(role)) {
+        const doctor = await getDoctorByProfileId(profile.id);
+        if (!doctor) {
+          return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+        }
+        await requestQueueCancellationByStaff(id, {
+          profileId: profile.id,
+          role: "doctor",
+          doctorId: doctor.id,
+        });
+        return NextResponse.json({ success: true, pending_accountant: true });
       }
+
       if (isApiAssistantRole(role)) {
         const ctx = await resolveAssistantApiContext(profile);
         if (!ctx) {
@@ -93,8 +108,44 @@ export async function PATCH(
         if (!owned.ok) {
           return NextResponse.json({ error: owned.error }, { status: owned.status });
         }
+        await requestQueueCancellationByStaff(id, {
+          profileId: profile.id,
+          role: "assistant",
+          doctorId: ctx.doctorId,
+        });
+        return NextResponse.json({ success: true, pending_accountant: true });
       }
+
+      if (!staffRolesOk(role)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+
       await updateQueueAndSync(admin, id, "cancelled", { clinicId: profile.clinic_id });
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === "finalize_cancel") {
+      if (!staffRolesOk(role) || isApiAssistantRole(role)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+      await finalizeQueueCancellationByAccountant(id, profile.clinic_id as string);
+      await syncAppointmentFromQueueStatus(admin, id, "cancelled").catch(console.error);
+      return NextResponse.json({ success: true, status: "cancelled" });
+    }
+
+    if (body.action === "transfer_after_cancel") {
+      if (!staffRolesOk(role) || isApiAssistantRole(role)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+      const targetDoctorId = String(body.target_doctor_id ?? "").trim();
+      if (!targetDoctorId) {
+        return NextResponse.json({ error: "اختر الطبيب المستهدف" }, { status: 400 });
+      }
+      await accountantTransferAfterCancellation(
+        id,
+        profile.clinic_id as string,
+        targetDoctorId
+      );
       return NextResponse.json({ success: true });
     }
 
@@ -106,9 +157,8 @@ export async function PATCH(
       if (!doctor) {
         return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
       }
-      await rejectQueueEntryByDoctor(id, doctor.id);
-      await syncAppointmentFromQueueStatus(admin, id, "cancelled").catch(console.error);
-      return NextResponse.json({ success: true, status: "cancelled" });
+      await rejectQueueEntryByDoctor(id, doctor.id, profile.id);
+      return NextResponse.json({ success: true, pending_accountant: true });
     }
 
     if (body.action === "request_transfer") {

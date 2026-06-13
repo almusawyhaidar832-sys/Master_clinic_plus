@@ -36,17 +36,18 @@ export const TOOTH_STATUS_LABELS_AR: Record<ToothStatus, string> = {
   implant: "زرعة",
 };
 
+/** ألوان مشبعة وواضحة — تظهر على الطبيب والمساعد بنفس الشكل */
 export const TOOTH_STATUS_COLORS: Record<
   ToothStatus,
   { fill: string; stroke: string; text: string }
 > = {
-  healthy: { fill: "#ffffff", stroke: "#cbd5e1", text: "#64748b" },
-  caries: { fill: "#fef3c7", stroke: "#f59e0b", text: "#b45309" },
-  filled: { fill: "#dbeafe", stroke: "#3b82f6", text: "#1d4ed8" },
-  crowned: { fill: "#fef9c3", stroke: "#ca8a04", text: "#a16207" },
-  missing: { fill: "#f1f5f9", stroke: "#94a3b8", text: "#94a3b8" },
-  root_canal: { fill: "#ede9fe", stroke: "#7c3aed", text: "#5b21b6" },
-  implant: { fill: "#ccfbf1", stroke: "#0d9488", text: "#0f766e" },
+  healthy: { fill: "#f8fafc", stroke: "#64748b", text: "#475569" },
+  caries: { fill: "#fbbf24", stroke: "#b45309", text: "#78350f" },
+  filled: { fill: "#3b82f6", stroke: "#1e3a8a", text: "#ffffff" },
+  crowned: { fill: "#fde047", stroke: "#a16207", text: "#713f12" },
+  missing: { fill: "#94a3b8", stroke: "#334155", text: "#f8fafc" },
+  root_canal: { fill: "#c084fc", stroke: "#6b21a8", text: "#ffffff" },
+  implant: { fill: "#2dd4bf", stroke: "#0f766e", text: "#ffffff" },
 };
 
 /** ربط إجراء الجلسة (القائمة الحالية) بحالة بصرية */
@@ -140,6 +141,23 @@ export type OdontogramConditionGroup = {
 };
 
 /** تحويل حالات قاعدة البيانات إلى teethConditions للمكتبة */
+function resolveToothStatus(
+  statusRaw: string | undefined | null,
+  procedure: string
+): ToothStatus {
+  if (statusRaw && isToothStatus(statusRaw)) return statusRaw;
+  if (procedure) return procedureToStatus(procedure);
+  return "healthy";
+}
+
+function shouldShowToothOnChart(
+  status: ToothStatus,
+  procedure: string
+): boolean {
+  if (status !== "healthy") return true;
+  return Boolean(procedure);
+}
+
 /** تحويل مخطط الجلسة (operation_tooth_records) لعرض odontogram */
 export function sessionTeethToChartMap(
   teeth: Record<number, ToothRecordInput>
@@ -147,11 +165,12 @@ export function sessionTeethToChartMap(
   const map: PatientToothChartMap = {};
   for (const rec of Object.values(teeth)) {
     const procedure = String(rec.procedure_ar ?? "").trim();
-    if (!procedure) continue;
+    const status = resolveToothStatus(rec.status, procedure);
+    if (!shouldShowToothOnChart(status, procedure)) continue;
     map[rec.tooth_number] = {
       tooth_number: rec.tooth_number,
-      status: procedureToStatus(procedure),
-      procedure_ar: procedure,
+      status,
+      procedure_ar: procedure || null,
       note: rec.note ?? null,
     };
   }
@@ -163,9 +182,13 @@ export function chartStateToSessionTooth(
 ): ToothRecordInput {
   const procedure =
     String(update.procedure_ar ?? "").trim() || TOOTH_PROCEDURES[0];
+  const status = update.status && isToothStatus(update.status)
+    ? update.status
+    : procedureToStatus(procedure);
   return {
     tooth_number: update.tooth_number,
     procedure_ar: procedure,
+    status,
     note: update.note?.trim() || undefined,
   };
 }
@@ -177,7 +200,8 @@ export function buildOdontogramTeethConditions(
   const byStatus = new Map<ToothStatus, string[]>();
 
   for (const row of Object.values(value)) {
-    if (row.status === "healthy" && !row.procedure_ar?.trim()) continue;
+    const procedure = String(row.procedure_ar ?? "").trim();
+    if (!shouldShowToothOnChart(row.status, procedure)) continue;
     const id = odontogramToothId(row.tooth_number);
     const list = byStatus.get(row.status) ?? [];
     if (!list.includes(id)) list.push(id);
@@ -202,13 +226,13 @@ export function buildOdontogramTeethConditions(
     const activeId = odontogramToothId(activeTooth);
     const host = conditions.find((g) => g.teeth.includes(activeId));
     if (host) {
-      host.outlineColor = "#2563eb";
+      host.outlineColor = "#1d4ed8";
     } else {
       conditions.push({
         label: "active",
         teeth: [activeId],
-        fillColor: "#ffffff",
-        outlineColor: "#2563eb",
+        fillColor: "#e0e7ff",
+        outlineColor: "#1d4ed8",
       });
     }
   }

@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v18-assistant-portal";
+const CACHE_NAME = "mcp-app-v19-exam-autosave";
 
 const NOTIFICATION_ICON = "/icons/icon-192.png";
 
@@ -94,6 +94,33 @@ async function putInCache(request, response) {
   await cache.put(request, response.clone());
 }
 
+/** Network-First: الشبكة أولاً — يضمن وصول تحديثات Vercel فوراً */
+async function networkFirst(request, options) {
+  const cache = await caches.open(CACHE_NAME);
+
+  try {
+    const response = await fetch(request);
+    if (response && response.ok && response.type === "basic") {
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+
+    const fallbackUrl = options?.fallbackUrl;
+    if (fallbackUrl) {
+      const fallback = await cache.match(fallbackUrl);
+      if (fallback) return fallback;
+    }
+
+    const root = await cache.match("/");
+    if (root) return root;
+
+    return Response.error();
+  }
+}
+
 /** Cache-First: الكاش أولاً، ثم الشبكة، مع تحديث بالخلفية إن وُجد كاش */
 async function cacheFirst(request, options) {
   const cache = await caches.open(CACHE_NAME);
@@ -187,6 +214,12 @@ self.addEventListener("push", (event) => {
 self.addEventListener("message", (event) => {
   const data = event.data;
   if (!data || typeof data !== "object") return;
+
+  if (data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+    return;
+  }
+
   if (data.type !== "SHOW_APP_NOTIFICATION" || !data.payload) return;
 
   const payload = data.payload;
@@ -248,15 +281,15 @@ self.addEventListener("fetch", (event) => {
 
   if (isNavigationRequest(event.request)) {
     event.respondWith(
-      cacheFirst(event.request, { fallbackUrl: navigationFallback(url) })
+      networkFirst(event.request, { fallbackUrl: navigationFallback(url) })
     );
     return;
   }
 
   if (isStaticAsset(url)) {
-    event.respondWith(cacheFirst(event.request));
+    event.respondWith(networkFirst(event.request));
     return;
   }
 
-  event.respondWith(cacheFirst(event.request, { fallbackUrl: "/" }));
+  event.respondWith(networkFirst(event.request, { fallbackUrl: "/" }));
 });

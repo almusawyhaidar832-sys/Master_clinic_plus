@@ -296,6 +296,17 @@
   .master-odontogram.mc-exam-odontogram .mc-exam-chart-card {
     min-height: 300px;
   }
+
+  /* تلوين أوضح للأسنان المحددة في المخطط */
+  .master-odontogram svg path[fill]:not([fill="none"]) {
+    stroke-width: 2.5px;
+  }
+
+  .master-odontogram svg g[class*="condition"] path,
+  .master-odontogram svg [data-condition] path {
+    stroke-width: 3px;
+    opacity: 1;
+  }
 }
 
 /* Auto page-title accent inside app shells */

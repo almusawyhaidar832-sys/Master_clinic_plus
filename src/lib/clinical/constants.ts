@@ -28,6 +28,8 @@ export type ToothProcedure = (typeof TOOTH_PROCEDURES)[number];
 export interface ToothRecordInput {
   tooth_number: number;
   procedure_ar: string;
+  /** الحالة البصرية — تسوس، محشو، تاج، إلخ */
+  status?: string;
   note?: string;
 }
 

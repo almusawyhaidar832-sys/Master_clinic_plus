@@ -24,6 +24,8 @@ interface VisitSessionClinicalPanelProps {
   portal?: AuthPortalId;
   /** زر إرسال للمحاسبة — للطبيب فقط */
   showSendToAccounting?: boolean;
+  /** حالة الطابور من القائمة — احتياط إذا لم تُرجَع من API الجلسة */
+  queueStatusOverride?: string | null;
   defaultOpen?: boolean;
   className?: string;
   /** إخفاء العنوان العلوي — عند وجود عنوان في الصفحة الأم (غرفة الانتظار) */
@@ -38,6 +40,7 @@ export function VisitSessionClinicalPanel({
   defaultOpen = true,
   className,
   hideHeader = false,
+  queueStatusOverride,
 }: VisitSessionClinicalPanelProps) {
   const { t } = useLanguage();
   const { profile } = useClinicProfile();
@@ -152,9 +155,12 @@ export function VisitSessionClinicalPanel({
 
   const isAccountantView = portal === "accountant";
   const isExamPortal = portal === "doctor" || portal === "assistant";
+  const effectiveQueueStatus =
+    session?.queueStatus ?? queueStatusOverride ?? null;
   const canSend =
     session?.queueEntryId &&
-    (session.queueStatus === "in_progress" || session.queueStatus === "called");
+    (effectiveQueueStatus === "in_progress" ||
+      effectiveQueueStatus === "called");
 
   return (
     <div className={className}>
@@ -271,7 +277,7 @@ export function VisitSessionClinicalPanel({
             patientId={session.patientId}
             doctorId={session.doctorId}
             queueEntryId={session.queueEntryId}
-            queueStatus={session.queueStatus}
+            queueStatus={effectiveQueueStatus}
             portal={portal}
             readOnly={isAccountantView}
             showSendToAccounting={isExamPortal && canSend}

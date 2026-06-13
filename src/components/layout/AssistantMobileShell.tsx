@@ -43,9 +43,22 @@ export function AssistantMobileShell({ children }: { children: React.ReactNode }
     document.documentElement.classList.add("mcp-assistant-portal");
     document.body.classList.add("mcp-assistant-portal");
     void ensureServiceWorkerRegistration();
+
+    const onControllerChange = () => {
+      window.location.reload();
+    };
+    navigator.serviceWorker?.addEventListener(
+      "controllerchange",
+      onControllerChange
+    );
+
     return () => {
       document.documentElement.classList.remove("mcp-assistant-portal");
       document.body.classList.remove("mcp-assistant-portal");
+      navigator.serviceWorker?.removeEventListener(
+        "controllerchange",
+        onControllerChange
+      );
     };
   }, [t]);
 

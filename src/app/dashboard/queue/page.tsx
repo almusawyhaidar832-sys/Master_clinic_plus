@@ -55,6 +55,8 @@ interface QueueEntry {
   appointment_id: string | null;
   transfer_to_doctor_id: string | null;
   transfer_requested_at: string | null;
+  cancellation_requested_at: string | null;
+  cancellation_actor_label: string | null;
   doctor: { full_name_ar: string } | null;
   transfer_to_doctor?: { full_name_ar: string } | null;
   patient: { full_name_ar: string; speech_name_ar?: string | null } | null;
@@ -279,6 +281,8 @@ export default function QueuePage() {
   const [showAdd, setShowAdd] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [filterDoctor, setFilterDoctor] = useState<string>("all");
+  const [cancelTransferEntry, setCancelTransferEntry] = useState<QueueEntry | null>(null);
+  const [cancelTransferTargetId, setCancelTransferTargetId] = useState("");
 
   const fetchQueue = useCallback(async () => {
     setPageError(null);
@@ -461,15 +465,86 @@ export default function QueuePage() {
     }
   };
 
-  const cancelEntry = async (id: string) => {
+  const cancelEntry = async (entry: QueueEntry) => {
+    const patient =
+      entry.patient?.full_name_ar ?? entry.patient_name ?? `${bi("رقم", "Ticket #")} ${entry.ticket_number}`;
+    const pendingCancel = Boolean(entry.cancellation_requested_at);
+    if (
+      !confirm(
+        pendingCancel
+          ? bi(
+              `إلغاء حجز «${patient}» نهائياً؟`,
+              `Permanently cancel booking for "${patient}"?`
+            )
+          : bi(
+              `إلغاء دور «${patient}» نهائياً؟`,
+              `Permanently cancel ticket for "${patient}"?`
+            )
+      )
+    ) {
+      return;
+    }
+    setUpdating(entry.id);
     try {
-      await apiJson(`/api/queue/${id}`, lang, t, {
+      await apiJson(`/api/queue/${entry.id}`, lang, t, {
         method: "PATCH",
-        body: JSON.stringify({ action: "cancel" }),
+        body: JSON.stringify({
+          action: pendingCancel ? "finalize_cancel" : "cancel",
+        }),
       });
+      if (clinicId) {
+        notifyQueueRefresh({ scope: "clinic", clinicId });
+        notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
+      }
       await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errCancel"));
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const submitCancelTransfer = async () => {
+    if (!cancelTransferEntry || !cancelTransferTargetId) return;
+    const patient =
+      cancelTransferEntry.patient?.full_name_ar ??
+      cancelTransferEntry.patient_name ??
+      t("queueUnnamedPatient");
+    if (
+      !confirm(
+        bi(
+          `تحويل «${patient}» إلى الطبيب المختار؟`,
+          `Transfer "${patient}" to the selected doctor?`
+        )
+      )
+    ) {
+      return;
+    }
+    setUpdating(cancelTransferEntry.id);
+    try {
+      await apiJson(`/api/queue/${cancelTransferEntry.id}`, lang, t, {
+        method: "PATCH",
+        body: JSON.stringify({
+          action: "transfer_after_cancel",
+          target_doctor_id: cancelTransferTargetId,
+        }),
+      });
+      if (clinicId) {
+        notifyQueueRefresh({ scope: "clinic", clinicId });
+        notifyQueueRefresh({ scope: "doctor", doctorId: cancelTransferTargetId });
+        notifyQueueRefresh({ scope: "doctor", doctorId: cancelTransferEntry.doctor_id });
+        void broadcastPatientSentToDoctor(supabase, cancelTransferTargetId, {
+          name: patient,
+          entryId: cancelTransferEntry.id,
+        });
+      }
+      setCancelTransferEntry(null);
+      setCancelTransferTargetId("");
+      await fetchQueue();
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : t("errTransferConfirm"));
+    } finally {
+      setUpdating(null);
     }
   };
 
@@ -709,14 +784,17 @@ export default function QueuePage() {
               entry.status === "ready_for_billing" ||
               entry.status === "ready_for_payment";
             const transferPending = Boolean(entry.transfer_to_doctor_id);
+            const cancellationPending = Boolean(entry.cancellation_requested_at);
             const canSend =
               entry.status === "waiting" &&
               !entry.sent_to_doctor_at &&
-              !transferPending;
+              !transferPending &&
+              !cancellationPending;
             const canRecall =
-              entry.status === "called" ||
+              !cancellationPending &&
+              (entry.status === "called" ||
               entry.status === "in_progress" ||
-              (entry.status === "waiting" && !!entry.sent_to_doctor_at);
+              (entry.status === "waiting" && !!entry.sent_to_doctor_at));
             const recallLabel =
               entry.status === "waiting" && entry.sent_to_doctor_at
                 ? t("queueReCallDoctorTitle")
@@ -727,7 +805,11 @@ export default function QueuePage() {
                 key={entry.id}
                 className={cn(
                   "flex items-center gap-4 rounded-2xl border bg-white p-4 shadow-sm transition-all",
-                  transferPending ? "border-violet-300 ring-1 ring-violet-200" : cfg.border
+                  transferPending
+                    ? "border-violet-300 ring-1 ring-violet-200"
+                    : cancellationPending
+                      ? "border-red-300 ring-1 ring-red-200"
+                      : cfg.border
                 )}
               >
                 <div className={cn(
@@ -755,6 +837,15 @@ export default function QueuePage() {
                         </span>
                       </>
                     )}
+                    {cancellationPending && (
+                      <>
+                        <span>•</span>
+                        <span className="font-medium text-red-700">
+                          {bi("طلب إلغاء", "Cancel request")}:{" "}
+                          {entry.cancellation_actor_label ?? "—"}
+                        </span>
+                      </>
+                    )}
                     <span>•</span>
                     <span>{entry.doctor?.full_name_ar ?? "—"}</span>
                     {entry.patient_phone && (
@@ -774,7 +865,34 @@ export default function QueuePage() {
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  {transferPending && (
+                  {cancellationPending && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setCancelTransferEntry(entry);
+                          setCancelTransferTargetId("");
+                        }}
+                        disabled={updating === entry.id}
+                        className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                      >
+                        <ArrowRightLeft className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">
+                          {bi("تحويل لطبيب", "Transfer doctor")}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => void cancelEntry(entry)}
+                        disabled={updating === entry.id}
+                        className="flex items-center gap-1.5 rounded-xl bg-red-600 px-3 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">
+                          {bi("إلغاء نهائي", "Cancel booking")}
+                        </span>
+                      </button>
+                    </>
+                  )}
+                  {transferPending && !cancellationPending && (
                     <>
                       <button
                         onClick={() => void confirmTransfer(entry)}
@@ -853,7 +971,7 @@ export default function QueuePage() {
                       <span className="hidden sm:inline">{t("apptPay")}</span>
                     </button>
                   )}
-                  {nextAction && !transferPending && (
+                  {nextAction && !transferPending && !cancellationPending && (
                     <button
                       onClick={() => advanceStatus(entry)}
                       disabled={updating === entry.id}
@@ -872,13 +990,15 @@ export default function QueuePage() {
                       <span className="hidden sm:inline">{nextLabel}</span>
                     </button>
                   )}
-                  <button
-                    onClick={() => cancelEntry(entry.id)}
-                    className="rounded-xl p-2 text-slate-400 hover:bg-red-50 hover:text-red-500"
-                    title={t("queueCancelTitle")}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  {!cancellationPending && (
+                    <button
+                      onClick={() => void cancelEntry(entry)}
+                      className="rounded-xl p-2 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                      title={t("queueCancelTitle")}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -909,6 +1029,69 @@ export default function QueuePage() {
 
         </div>
       </div>
+
+      {cancelTransferEntry && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-800">
+                {bi("تحويل المراجع لطبيب آخر", "Transfer patient to another doctor")}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelTransferEntry(null);
+                  setCancelTransferTargetId("");
+                }}
+                className="rounded-lg p-1 hover:bg-slate-100"
+              >
+                <X className="h-5 w-5 text-slate-500" />
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-slate-600">
+              {bi(
+                "بعد طلب الإلغاء من الطبيب/المساعد — اختر الطبيب الجديد",
+                "After doctor/assistant cancel request — choose the new doctor"
+              )}
+            </p>
+            <select
+              value={cancelTransferTargetId}
+              onChange={(e) => setCancelTransferTargetId(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+            >
+              <option value="">{t("selectDoctor")}</option>
+              {doctors
+                .filter((d) => d.id !== cancelTransferEntry.doctor_id)
+                .map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.full_name_ar}
+                    {d.specialty_ar ? ` — ${d.specialty_ar}` : ""}
+                  </option>
+                ))}
+            </select>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelTransferEntry(null);
+                  setCancelTransferTargetId("");
+                }}
+                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600"
+              >
+                {t("cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitCancelTransfer()}
+                disabled={!cancelTransferTargetId || updating === cancelTransferEntry.id}
+                className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              >
+                {bi("تأكيد التحويل", "Confirm transfer")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAdd && (
         <AddToQueueModal

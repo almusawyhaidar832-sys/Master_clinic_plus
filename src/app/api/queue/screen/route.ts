@@ -25,7 +25,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "العيادة غير موجودة" }, { status: 404 });
     }
 
-    const queue = await fetchClinicQueue(clinicId, { includeDone: false });
+    const queue = await fetchClinicQueue(clinicId, {
+      includeDone: false,
+      excludeCancellationPending: true,
+    });
     const hiddenOnScreen = new Set([
       "done",
       "cancelled",

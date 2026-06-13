@@ -61,7 +61,7 @@ export function ToothProcedureModal({
               السن {toothNumber}
             </h3>
             <p className="text-xs text-slate-muted">
-              اختر الإجراء أو الحالة — يُحفظ في مخطط المريض
+              اختر الحالة — يظهر لون واضح على السن ويُحفظ للطبيب والمساعد
             </p>
           </div>
           <button

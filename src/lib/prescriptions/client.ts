@@ -20,7 +20,7 @@ export async function fetchPrescriptionByOperation(
     headers: authPortalHeaders(portal),
   });
 
-  if (res.status === 404) return null;
+    if (res.status === 404) return null;
 
   const json = (await res.json().catch(() => ({}))) as {
     prescription?: PatientPrescription;

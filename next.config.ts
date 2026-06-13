@@ -21,6 +21,7 @@ const nextConfig: NextConfig = {
     {
       source: "/doctor/:path*",
       headers: [
+        { key: "Cache-Control", value: "no-cache, must-revalidate" },
         { key: "X-Content-Type-Options", value: "nosniff" },
         { key: "X-Frame-Options", value: "DENY" },
       ],
@@ -65,6 +66,7 @@ const nextConfig: NextConfig = {
     {
       source: "/assistant/:path*",
       headers: [
+        { key: "Cache-Control", value: "no-cache, must-revalidate" },
         { key: "X-Content-Type-Options", value: "nosniff" },
         { key: "X-Frame-Options", value: "DENY" },
       ],

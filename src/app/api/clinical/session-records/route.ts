@@ -10,12 +10,18 @@ import {
   resolveAssistantApiContext,
 } from "@/lib/auth/resolve-assistant-api";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { isToothStatus } from "@/lib/clinical/tooth-status";
 
 const XRAY_BUCKET = "clinical-xrays";
 const SIGNED_URL_TTL_SEC = 3600;
 
 type ClinicalPayload = {
-  teeth: { tooth_number: number; procedure_ar: string; note?: string | null }[];
+  teeth: {
+    tooth_number: number;
+    procedure_ar: string;
+    status?: string | null;
+    note?: string | null;
+  }[];
   xrays: {
     id: string;
     url: string;
@@ -36,10 +42,37 @@ async function loadClinicalByOperationIds(
     byOperation[id] = { teeth: [], xrays: [] };
   }
 
-  const { data: teethRows, error: teethErr } = await admin
+  let teethRows:
+    | {
+        operation_id: string;
+        tooth_number: number;
+        procedure_ar: string;
+        status?: string | null;
+        note?: string | null;
+      }[]
+    | null = null;
+  let teethErr: { message: string } | null = null;
+
+  const withStatus = await admin
     .from("operation_tooth_records")
-    .select("operation_id, tooth_number, procedure_ar, note")
+    .select("operation_id, tooth_number, procedure_ar, status, note")
     .in("operation_id", operationIds);
+
+  if (
+    withStatus.error &&
+    (withStatus.error.message.includes("status") ||
+      withStatus.error.message.includes("column"))
+  ) {
+    const legacy = await admin
+      .from("operation_tooth_records")
+      .select("operation_id, tooth_number, procedure_ar, note")
+      .in("operation_id", operationIds);
+    teethRows = legacy.data;
+    teethErr = legacy.error;
+  } else {
+    teethRows = withStatus.data;
+    teethErr = withStatus.error;
+  }
 
   if (teethErr) {
     const missing =
@@ -57,6 +90,7 @@ async function loadClinicalByOperationIds(
     byOperation[opId].teeth.push({
       tooth_number: Number(row.tooth_number),
       procedure_ar: String(row.procedure_ar),
+      status: row.status != null ? String(row.status) : null,
       note: row.note as string | null | undefined,
     });
   }
@@ -248,7 +282,12 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json()) as {
       operation_id?: string;
-      teeth?: { tooth_number: number; procedure_ar: string; note?: string }[];
+      teeth?: {
+        tooth_number: number;
+        procedure_ar: string;
+        status?: string;
+        note?: string;
+      }[];
     };
 
     if (!body.operation_id || !body.teeth?.length) {
@@ -296,6 +335,10 @@ export async function POST(req: NextRequest) {
       operation_id: op.id,
       tooth_number: t.tooth_number,
       procedure_ar: t.procedure_ar.trim(),
+      status:
+        typeof t.status === "string" && isToothStatus(t.status.trim())
+          ? t.status.trim()
+          : "healthy",
       note: t.note?.trim() || null,
     }));
 

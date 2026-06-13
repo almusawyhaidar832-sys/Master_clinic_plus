@@ -286,8 +286,8 @@ function DoctorQueuePageContent() {
     if (
       !confirm(
         bi(
-          `رفض المراجع «${name}»؟\nسيُلغى الدور ويُبلَّغ المحاسب — لن يظهر على شاشة النداء.`,
-          `Reject patient "${name}"?\nThe ticket will be cancelled and the accountant notified — it won't appear on the call screen.`
+          `رفض المراجع «${name}»؟\nسيُبلَّغ المحاسب — يحوّله أو يلغي الحجز نهائياً.`,
+          `Reject patient "${name}"?\nThe accountant will be notified — they can transfer or cancel the booking permanently.`
         )
       )
     ) {
@@ -408,6 +408,7 @@ function DoctorQueuePageContent() {
             <VisitSessionClinicalPanel
               patientId={clinicalEntry.patient_id}
               queueEntryId={clinicalEntry.id}
+              queueStatusOverride={clinicalEntry.status}
               portal="doctor"
               defaultOpen
               hideHeader
