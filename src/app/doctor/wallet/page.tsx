@@ -14,6 +14,7 @@ import {
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/Button";
+import { DoctorPrivateBalance } from "@/components/doctor/DoctorPrivateBalance";
 import { ArrowDownToLine } from "lucide-react";
 
 export default function DoctorWalletPage() {
@@ -98,11 +99,6 @@ export default function DoctorWalletPage() {
   });
 
   const rows = [
-    {
-      label: salaryDoctor ? t("docNetSalaryDue") : t("docTotalEarningsLabel"),
-      value: stats?.totalEarnings,
-      highlight: false,
-    },
     { label: t("docDoctorExpenses"), value: stats?.expenseDeductions, highlight: true },
     {
       label: salaryDoctor ? t("docSalaryPaidOut") : t("docWithdrawnPaid"),
@@ -157,19 +153,12 @@ export default function DoctorWalletPage() {
               ? t("docBalanceDebtLabel")
               : t("docWithdrawableBalanceLabel")}
         </p>
-        <p className="mt-2 text-4xl font-bold tabular-nums">
-          {stats !== null ? (
-            <>
-              {stats.isDebtor ? "−" : ""}
-              {formatMoney(Math.abs(stats.availableBalance))}
-              {stats.isDebtor && (
-                <span className="mr-2 text-base font-bold">{t("debtLabel")}</span>
-              )}
-            </>
-          ) : (
-            "…"
-          )}
-        </p>
+        <DoctorPrivateBalance
+          amount={stats?.availableBalance ?? null}
+          className="mt-2 text-4xl font-bold"
+          isDebtor={stats?.isDebtor === true}
+          showDebtLabel
+        />
       </div>
 
       <div className="space-y-2 rounded-xl border border-slate-border bg-surface-card p-4">

@@ -12,6 +12,7 @@ import { useModuleNav } from "@/hooks/useModuleNav";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 import { Bell, TrendingUp, Wallet, ArrowDownToLine } from "lucide-react";
+import { DoctorPrivateBalance } from "@/components/doctor/DoctorPrivateBalance";
 import { useClinicSync } from "@/hooks/useClinicSync";
 
 export function DoctorHomeDashboard() {
@@ -85,31 +86,18 @@ export function DoctorHomeDashboard() {
 
       <div className="rounded-2xl bg-gradient-to-br from-primary to-primary-700 p-5 text-white shadow-premium">
         <div className="flex items-start justify-between">
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-xs opacity-90">{t("currentBalance")}</p>
-            <p className="mt-1 text-3xl font-bold tabular-nums">
-              {wallet ? (
-                <>
-                  {wallet.availableBalance < 0 ? "−" : ""}
-                  {formatMoney(Math.abs(wallet.availableBalance))}
-                  {wallet.availableBalance < 0 && (
-                    <span className="mr-1 text-sm font-bold">{t("debtLabel")}</span>
-                  )}
-                </>
-              ) : (
-                "…"
-              )}
-            </p>
+            <DoctorPrivateBalance
+              amount={wallet?.availableBalance ?? null}
+              className="mt-1 text-3xl font-bold"
+              isDebtor={(wallet?.availableBalance ?? 0) < 0}
+              showDebtLabel
+            />
           </div>
-          <Wallet className="h-8 w-8 opacity-80" />
+          <Wallet className="h-8 w-8 shrink-0 opacity-80" />
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[10px]">
-          <div className="rounded-lg bg-white/10 p-2">
-            <p className="opacity-80">{t("earningsShort")}</p>
-            <p className="font-semibold">
-              {wallet ? formatMoney(wallet.totalEarnings) : "—"}
-            </p>
-          </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 text-center text-[10px]">
           <div className="rounded-lg bg-white/10 p-2">
             <p className="opacity-80">{t("withdrawnShort")}</p>
             <p className="font-semibold">

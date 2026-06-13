@@ -3,6 +3,7 @@ import { Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { APP_NAME, DEVELOPER } from "@/lib/constants";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
+import { OfflineToast } from "@/components/pwa/OfflineToast";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 
 const notoArabic = Noto_Sans_Arabic({
@@ -63,6 +64,7 @@ export default function RootLayout({
       <body className="min-h-screen">
         <LanguageProvider>
           {children}
+          <OfflineToast />
           <ServiceWorkerRegister />
         </LanguageProvider>
       </body>

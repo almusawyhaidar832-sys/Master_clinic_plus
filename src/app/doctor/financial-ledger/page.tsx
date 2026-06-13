@@ -13,6 +13,7 @@ import { DoctorLedgerInvoicesTab } from "@/components/doctor/DoctorLedgerInvoice
 import { DoctorLedgerPatientsTab } from "@/components/doctor/DoctorLedgerPatientsTab";
 import { DoctorLedgerOperationsTab } from "@/components/doctor/DoctorLedgerOperationsTab";
 import { DoctorFinancialReportPanel } from "@/components/doctor/DoctorFinancialReportPanel";
+import { DoctorPrivateBalance } from "@/components/doctor/DoctorPrivateBalance";
 import { cn } from "@/lib/utils";
 import {
   FileText,
@@ -44,12 +45,11 @@ const TAB_ITEMS: {
 export default function DoctorFinancialLedgerPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t, formatMoney } = useLanguage();
+  const { t } = useLanguage();
 
   const [doctorId, setDoctorId] = useState<string | null>(null);
   const [salaryDoctor, setSalaryDoctor] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
-  const [earnings, setEarnings] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<LedgerTab>(() =>
     parseTab(searchParams.get("tab"))
   );
@@ -80,7 +80,6 @@ export default function DoctorFinancialLedgerPage() {
 
     const stats = await fetchDoctorWalletStats(supabase, doctor.id);
     setBalance(stats.availableBalance);
-    setEarnings(stats.totalEarnings);
   }, []);
 
   useEffect(() => {
@@ -108,26 +107,16 @@ export default function DoctorFinancialLedgerPage() {
       </div>
 
       {balance !== null && (
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl bg-gradient-to-br from-primary to-primary-700 p-4 text-white">
-            <p className="text-xs opacity-90">
-              {salaryDoctor ? t("docRemainingSalary") : t("docWithdrawableBalanceLabel")}
-            </p>
-            <p className="mt-1 text-xl font-bold tabular-nums">
-              {formatMoney(Math.abs(balance))}
-              {balance < 0 && (
-                <span className="mr-1 text-xs">{t("debtLabel")}</span>
-              )}
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-border bg-surface-card p-4">
-            <p className="text-xs text-slate-muted">
-              {salaryDoctor ? t("docSalaryDue") : t("docTotalEarningsLabel")}
-            </p>
-            <p className="mt-1 text-xl font-bold text-emerald-600 tabular-nums">
-              {formatMoney(earnings ?? 0)}
-            </p>
-          </div>
+        <div className="rounded-xl bg-gradient-to-br from-primary to-primary-700 p-4 text-white">
+          <p className="text-xs opacity-90">
+            {salaryDoctor ? t("docRemainingSalary") : t("docWithdrawableBalanceLabel")}
+          </p>
+          <DoctorPrivateBalance
+            amount={balance}
+            className="mt-1 text-xl font-bold"
+            isDebtor={balance < 0}
+            showDebtLabel
+          />
         </div>
       )}
 

@@ -1,6 +1,32 @@
-const CACHE_NAME = "mcp-app-v16-stable-alerts";
+const CACHE_NAME = "mcp-app-v17-offline-shell";
 
 const NOTIFICATION_ICON = "/icons/icon-192.png";
+
+/** App shell — يُخزَّن عند install */
+const APP_SHELL_URLS = [
+  "/",
+  "/doctor",
+  "/doctor/queue",
+  "/login",
+  "/manifest.json",
+  "/manifest-doctor.json",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+];
+
+const STATIC_EXTENSIONS = new Set([
+  "js",
+  "css",
+  "woff",
+  "woff2",
+  "png",
+  "jpg",
+  "jpeg",
+  "svg",
+  "webp",
+  "ico",
+  "gif",
+]);
 
 /** بناء إشعار مخصص — يُستخدم من Push (السيرفر) ومن React (postMessage) */
 function buildCustomNotification(title, payload) {
@@ -33,30 +59,83 @@ function showCustomNotification(title, payload) {
   return self.registration.showNotification(built.title, built.options);
 }
 
-const PRECACHE_URLS = [
-  "/",
-  "/manifest.json",
-  "/manifest-doctor.json",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/api/sounds/doctor-chime",
-];
+function isApiRequest(url) {
+  return url.pathname.startsWith("/api/");
+}
 
-function shouldSkipCache(url) {
-  if (url.pathname.startsWith("/api/")) return true;
-  if (url.pathname.startsWith("/_next/")) return true;
-  if (url.pathname === "/login" || url.pathname.startsWith("/login/")) return true;
-  if (url.pathname.startsWith("/doctor")) return true;
-  if (url.pathname.startsWith("/dashboard")) return true;
-  if (url.pathname.startsWith("/admin")) return true;
-  if (url.pathname.startsWith("/assistant")) return true;
-  if (url.pathname.includes(".")) {
-    const ext = url.pathname.split(".").pop() ?? "";
-    if (["js", "css", "woff", "woff2", "png", "jpg", "svg", "webp", "ico"].includes(ext)) {
-      return false;
-    }
+function isStaticAsset(url) {
+  if (url.pathname.startsWith("/_next/static/")) return true;
+  if (url.pathname.startsWith("/icons/")) return true;
+  const parts = url.pathname.split(".");
+  if (parts.length < 2) return false;
+  const ext = parts.pop()?.toLowerCase() ?? "";
+  return STATIC_EXTENSIONS.has(ext);
+}
+
+function isNavigationRequest(request) {
+  return request.mode === "navigate";
+}
+
+function navigationFallback(url) {
+  if (url.pathname.startsWith("/doctor")) return "/doctor";
+  if (url.pathname.startsWith("/dashboard")) return "/dashboard";
+  if (url.pathname.startsWith("/assistant")) return "/assistant";
+  if (url.pathname.startsWith("/admin")) return "/admin";
+  return "/";
+}
+
+async function putInCache(request, response) {
+  if (!response || !response.ok || response.type !== "basic") return;
+  const cache = await caches.open(CACHE_NAME);
+  await cache.put(request, response.clone());
+}
+
+/** Cache-First: الكاش أولاً، ثم الشبكة، مع تحديث بالخلفية إن وُجد كاش */
+async function cacheFirst(request, options) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+
+  const networkPromise = fetch(request)
+    .then(async (response) => {
+      await putInCache(request, response);
+      return response;
+    })
+    .catch(() => null);
+
+  if (cached) {
+    void networkPromise;
+    return cached;
   }
-  return true;
+
+  const networkResponse = await networkPromise;
+  if (networkResponse) return networkResponse;
+
+  const fallbackUrl = options?.fallbackUrl;
+  if (fallbackUrl) {
+    const fallback = await cache.match(fallbackUrl);
+    if (fallback) return fallback;
+  }
+
+  const root = await cache.match("/");
+  if (root) return root;
+
+  return Response.error();
+}
+
+async function precacheAppShell() {
+  const cache = await caches.open(CACHE_NAME);
+  await Promise.all(
+    APP_SHELL_URLS.map(async (url) => {
+      try {
+        const response = await fetch(url, { credentials: "same-origin" });
+        if (response.ok) {
+          await cache.put(url, response);
+        }
+      } catch {
+        /* offline during install — skip */
+      }
+    })
+  );
 }
 
 function parsePushPayload(event) {
@@ -69,9 +148,7 @@ function parsePushPayload(event) {
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+    precacheAppShell()
       .catch(() => undefined)
       .then(() => self.skipWaiting())
   );
@@ -103,7 +180,6 @@ self.addEventListener("push", (event) => {
   );
 });
 
-/** إشعار من React داخل التطبيق — navigator.serviceWorker.controller.postMessage */
 self.addEventListener("message", (event) => {
   const data = event.data;
   if (!data || typeof data !== "object") return;
@@ -164,26 +240,19 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  if (event.request.mode === "navigate") {
+  if (isApiRequest(url)) return;
+
+  if (isNavigationRequest(event.request)) {
     event.respondWith(
-      fetch(event.request).catch(() =>
-        caches.match(event.request).then((cached) => cached || caches.match("/"))
-      )
+      cacheFirst(event.request, { fallbackUrl: navigationFallback(url) })
     );
     return;
   }
 
-  if (shouldSkipCache(url)) return;
+  if (isStaticAsset(url)) {
+    event.respondWith(cacheFirst(event.request));
+    return;
+  }
 
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response.ok && response.type === "basic") {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      })
-      .catch(() => caches.match(event.request))
-  );
+  event.respondWith(cacheFirst(event.request, { fallbackUrl: "/" }));
 });
