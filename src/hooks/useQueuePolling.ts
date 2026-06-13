@@ -24,10 +24,11 @@ interface QueueRow {
   sent_to_doctor_at: string | null;
   patient_name: string | null;
   ticket_number: number;
+  doctor_id?: string;
   patient?: { full_name_ar: string; speech_name_ar?: string | null } | null;
 }
 
-async function fetchQueueRows(portal: "doctor" | "accountant"): Promise<{
+async function fetchQueueRows(portal: "doctor" | "accountant" | "assistant"): Promise<{
   queue: QueueRow[];
   doctorId?: string | null;
   clinicId?: string;
@@ -131,11 +132,19 @@ export function useDoctorQueuePolling(
  */
 export function useAccountantQueuePolling(
   clinicId: string | null | undefined,
-  enabled = true
+  enabled = true,
+  options?: {
+    admitLinkPath?: string;
+    doctorId?: string;
+    portal?: "accountant" | "assistant";
+  }
 ) {
   const readyRef = useRef(false);
   const statusRef = useRef<Map<string, string>>(new Map());
   const fingerprintRef = useRef("");
+  const admitLinkPath = options?.admitLinkPath ?? "/dashboard/queue";
+  const filterDoctorId = options?.doctorId;
+  const portal = options?.portal ?? "accountant";
 
   useEffect(() => {
     if (!enabled || !clinicId) return;
@@ -144,16 +153,22 @@ export function useAccountantQueuePolling(
 
     async function poll() {
       try {
-        const data = await fetchQueueRows("accountant");
+        const data = await fetchQueueRows(portal);
         if (!active) return;
 
         const fingerprint = queueFingerprint(data.queue ?? []);
         if (fingerprint !== fingerprintRef.current) {
           fingerprintRef.current = fingerprint;
           notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
+          if (filterDoctorId) {
+            notifyQueueRefresh({ scope: "doctor", doctorId: filterDoctorId });
+          }
         }
 
         for (const entry of data.queue ?? []) {
+          if (filterDoctorId && entry.doctor_id && entry.doctor_id !== filterDoctorId) {
+            continue;
+          }
           const prev = statusRef.current.get(entry.id);
           statusRef.current.set(entry.id, entry.status);
 
@@ -169,7 +184,7 @@ export function useAccountantQueuePolling(
             kind: "accountant_admit",
             title: "طلب دخول مراجع 🔔",
             message: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
-            linkPath: "/dashboard/queue",
+            linkPath: admitLinkPath,
             patientName: name,
           });
         }
@@ -186,7 +201,7 @@ export function useAccountantQueuePolling(
       active = false;
       clearInterval(timer);
     };
-  }, [clinicId, enabled]);
+  }, [clinicId, enabled, admitLinkPath, filterDoctorId, portal]);
 }
 
 /** Load doctor id via API (more reliable than client-side doctor lookup) */

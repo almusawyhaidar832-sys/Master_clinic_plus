@@ -8,17 +8,35 @@ import {
 
 interface ClinicalRecordDisplayProps {
   data: OperationClinicalData;
+  examLayout?: boolean;
 }
 
 /** عرض محفوظ — أشعة + مخطط أسنان الجلسة (قراءة فقط) */
-export function ClinicalRecordDisplay({ data }: ClinicalRecordDisplayProps) {
+export function ClinicalRecordDisplay({
+  data,
+  examLayout = false,
+}: ClinicalRecordDisplayProps) {
   const teethMap = teethArrayToMap(data.teeth ?? []);
 
   return (
     <div className="space-y-3">
       {data.xrays.length > 0 && (
-        <div>
-          <p className="mb-2 text-xs font-medium text-slate-text">صور الأشعة</p>
+        <div
+          className={
+            examLayout
+              ? "rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+              : undefined
+          }
+        >
+          <p
+            className={
+              examLayout
+                ? "mb-2 text-sm font-bold text-primary"
+                : "mb-2 text-xs font-medium text-slate-text"
+            }
+          >
+            صور الأشعة
+          </p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {data.xrays.map((x) => {
               const isPdf =
@@ -57,12 +75,23 @@ export function ClinicalRecordDisplay({ data }: ClinicalRecordDisplayProps) {
       )}
 
       {data.teeth.length > 0 && (
-        <InteractiveDentalChart
-          mode="session"
-          value={teethMap}
-          readOnly
-          embedded
-        />
+        <div
+          className={
+            examLayout
+              ? "rounded-xl border-2 border-primary/15 bg-white p-3 shadow-md ring-1 ring-primary/5"
+              : undefined
+          }
+        >
+          {examLayout && (
+            <p className="mb-2 text-sm font-bold text-primary">مخطط الأسنان</p>
+          )}
+          <InteractiveDentalChart
+            mode="session"
+            value={teethMap}
+            readOnly
+            embedded
+          />
+        </div>
       )}
     </div>
   );

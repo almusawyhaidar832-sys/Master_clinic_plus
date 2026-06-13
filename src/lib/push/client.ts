@@ -50,11 +50,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | "timeout">
   ]);
 }
 
-export async function fetchPushSubscriptionStatus(): Promise<PushSubscriptionStatus | null> {
+export async function fetchPushSubscriptionStatus(
+  portal: "doctor" | "assistant" = "doctor"
+): Promise<PushSubscriptionStatus | null> {
   try {
     const res = await fetch("/api/push/status", {
       credentials: "include",
-      headers: authPortalHeaders("doctor"),
+      headers: authPortalHeaders(portal),
     });
     if (!res.ok) return null;
     return (await res.json()) as PushSubscriptionStatus;
@@ -64,22 +66,23 @@ export async function fetchPushSubscriptionStatus(): Promise<PushSubscriptionSta
 }
 
 async function savePushSubscription(
-  subscription: PushSubscription
+  subscription: PushSubscription,
+  portal: "doctor" | "assistant" = "doctor"
 ): Promise<boolean> {
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...authPortalHeaders("doctor"),
+      ...authPortalHeaders(portal),
     },
     body: JSON.stringify({ subscription: subscription.toJSON() }),
   });
   return res.ok;
 }
 
-/** اشتراك Web Push لموبايل الطبيب — Android + iPhone (PWA مثبّت) */
-export async function registerDoctorWebPush(
+async function registerWebPushForPortal(
+  portal: "doctor" | "assistant",
   requestPermission = false,
   options?: { forceResubscribe?: boolean }
 ): Promise<PushRegisterResult> {
@@ -115,7 +118,7 @@ export async function registerDoctorWebPush(
     await navigator.serviceWorker.ready.catch(() => undefined);
 
     const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!.trim();
-    const serverStatus = await fetchPushSubscriptionStatus();
+    const serverStatus = await fetchPushSubscriptionStatus(portal);
 
     let subscription = await registration.pushManager.getSubscription();
 
@@ -143,12 +146,12 @@ export async function registerDoctorWebPush(
       }
     }
 
-    const saved = await savePushSubscription(subscription);
+    const saved = await savePushSubscription(subscription, portal);
     if (!saved) {
       return { ok: false, reason: "server-failed" };
     }
 
-    const verified = await fetchPushSubscriptionStatus();
+    const verified = await fetchPushSubscriptionStatus(portal);
     const serverSaved = (verified?.subscriptionCount ?? 0) > 0;
     if (!serverSaved) {
       return { ok: false, reason: "server-not-saved" };
@@ -164,6 +167,22 @@ export async function registerDoctorWebPush(
   return result;
 }
 
+/** اشتراك Web Push لموبايل الطبيب — Android + iPhone (PWA مثبّت) */
+export async function registerDoctorWebPush(
+  requestPermission = false,
+  options?: { forceResubscribe?: boolean }
+): Promise<PushRegisterResult> {
+  return registerWebPushForPortal("doctor", requestPermission, options);
+}
+
+/** اشتراك Web Push لموبايل المساعد */
+export async function registerAssistantWebPush(
+  requestPermission = false,
+  options?: { forceResubscribe?: boolean }
+): Promise<PushRegisterResult> {
+  return registerWebPushForPortal("assistant", requestPermission, options);
+}
+
 /** إعادة تسجيل Push عند العودة للتطبيق (iOS/Android) */
 export async function refreshDoctorWebPushIfGranted(): Promise<PushRegisterResult | null> {
   if (
@@ -174,6 +193,17 @@ export async function refreshDoctorWebPushIfGranted(): Promise<PushRegisterResul
     return null;
   }
   return registerDoctorWebPush(false);
+}
+
+export async function refreshAssistantWebPushIfGranted(): Promise<PushRegisterResult | null> {
+  if (
+    typeof window === "undefined" ||
+    !("Notification" in window) ||
+    Notification.permission !== "granted"
+  ) {
+    return null;
+  }
+  return registerAssistantWebPush(false);
 }
 
 /** استمع لرسائل Service Worker — تشغيل النداء إذا التطبيق مفتوح بالخلفية */

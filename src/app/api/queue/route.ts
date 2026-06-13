@@ -14,6 +14,10 @@ import {
   recallAccountantNotification,
   sendQueueEntryToDoctor,
 } from "@/lib/queue/server";
+import {
+  assertAssistantOwnsQueueEntry,
+  resolveAssistantApiContext,
+} from "@/lib/auth/resolve-assistant-api";
 
 function staffRolesOk(role: string) {
   return isApiStaffRole(role) || isApiAssistantRole(role);
@@ -28,7 +32,11 @@ export async function GET(req: NextRequest) {
     }
 
     const role = String(profile.role ?? "");
-    if (!isApiStaffRole(role) && !isApiDoctorRole(role)) {
+    if (
+      !isApiStaffRole(role) &&
+      !isApiDoctorRole(role) &&
+      !isApiAssistantRole(role)
+    ) {
       return NextResponse.json(
         { error: `غير مصرح — دورك "${profile.role ?? "?"}" لا يسمح` },
         { status: 403 }
@@ -47,6 +55,15 @@ export async function GET(req: NextRequest) {
         );
       }
       doctorId = doctor.id;
+    } else if (isApiAssistantRole(role)) {
+      const ctx = await resolveAssistantApiContext(profile);
+      if (!ctx) {
+        return NextResponse.json(
+          { error: "حساب المساعد غير مربوط بطبيب" },
+          { status: 403 }
+        );
+      }
+      doctorId = ctx.doctorId;
     }
 
     const [queue, doctorsRes] = await Promise.all([
@@ -58,7 +75,16 @@ export async function GET(req: NextRequest) {
         .from("doctors")
         .select("id, full_name_ar, specialty_ar")
         .eq("clinic_id", profile.clinic_id)
-        .eq("is_active", true),
+        .eq("is_active", true)
+        .then((res) => {
+          if (isApiAssistantRole(role) && doctorId) {
+            return {
+              ...res,
+              data: (res.data ?? []).filter((d) => d.id === doctorId),
+            };
+          }
+          return res;
+        }),
     ]);
 
     return NextResponse.json({
@@ -139,6 +165,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "معرّف الدور مطلوب" }, { status: 400 });
       }
 
+      if (isApiAssistantRole(role)) {
+        const ctx = await resolveAssistantApiContext(profile);
+        if (!ctx) {
+          return NextResponse.json({ error: "حساب المساعد غير مربوط" }, { status: 403 });
+        }
+        const owned = await assertAssistantOwnsQueueEntry(entryId, ctx);
+        if (!owned.ok) {
+          return NextResponse.json({ error: owned.error }, { status: owned.status });
+        }
+      }
+
       await sendQueueEntryToDoctor(entryId);
       return NextResponse.json({ success: true });
     }
@@ -173,6 +210,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
 
+      if (isApiAssistantRole(role)) {
+        const ctx = await resolveAssistantApiContext(profile);
+        if (!ctx) {
+          return NextResponse.json({ error: "حساب المساعد غير مربوط" }, { status: 403 });
+        }
+        const owned = await assertAssistantOwnsQueueEntry(entryId, ctx);
+        if (!owned.ok) {
+          return NextResponse.json({ error: owned.error }, { status: owned.status });
+        }
+      }
+
       const { data: entry } = await admin
         .from("patient_queue")
         .select("id, status, doctor_id, clinic_id")
@@ -201,6 +249,16 @@ export async function POST(req: NextRequest) {
     const doctorId = String(body.doctor_id ?? "").trim();
     if (!doctorId) {
       return NextResponse.json({ error: "اختر الطبيب" }, { status: 400 });
+    }
+
+    if (isApiAssistantRole(role)) {
+      const ctx = await resolveAssistantApiContext(profile);
+      if (!ctx) {
+        return NextResponse.json({ error: "حساب المساعد غير مربوط" }, { status: 403 });
+      }
+      if (doctorId !== ctx.doctorId) {
+        return NextResponse.json({ error: "غير مصرح — طبيب آخر" }, { status: 403 });
+      }
     }
 
     const sendToDoctor =

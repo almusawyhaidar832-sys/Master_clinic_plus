@@ -105,11 +105,7 @@ export function isRoleAllowedForPath(
   }
 
   if (normalized === "assistant") {
-    return (
-      pathname === "/assistant" ||
-      pathname === "/assistant/dashboard" ||
-      pathname.startsWith("/assistant/dashboard/")
-    );
+    return pathname === "/assistant" || pathname.startsWith("/assistant/");
   }
 
   if (normalized === "doctor") {

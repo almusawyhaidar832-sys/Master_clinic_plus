@@ -1,8 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, Suspense } from "react";
 import Link from "next/link";
-import { buildDoctorPatientUrl } from "@/lib/queue/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  buildDoctorPatientUrl,
+  buildDoctorQueueClinicalUrl,
+  CLINICAL_EXAM_ANCHOR,
+  scrollToClinicalExamView,
+} from "@/lib/queue/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { translateDbError } from "@/lib/db-errors";
 import { cn } from "@/lib/utils";
@@ -111,7 +117,24 @@ async function apiJson<T>(
 }
 
 export default function DoctorQueuePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
+        </div>
+      }
+    >
+      <DoctorQueuePageContent />
+    </Suspense>
+  );
+}
+
+function DoctorQueuePageContent() {
   const supabase = createClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const examFromUrl = searchParams.get("exam");
   const { profile } = useClinicProfile();
   const { t, lang, bi } = useLanguage();
   const clinicId = profile?.id ?? null;
@@ -159,6 +182,26 @@ export default function DoctorQueuePage() {
   }, [fetchQueue]);
 
   useQueueListRefresh("doctor", doctorId, fetchQueue);
+
+  useEffect(() => {
+    if (!examFromUrl) return;
+    setClinicalEntryId(examFromUrl);
+    scrollToClinicalExamView();
+  }, [examFromUrl]);
+
+  const openClinicalExam = useCallback(
+    (entry: QueueEntry) => {
+      setClinicalEntryId(entry.id);
+      router.replace(
+        buildDoctorQueueClinicalUrl({
+          queueEntryId: entry.id,
+          patientId: entry.patient_id,
+        })
+      );
+      scrollToClinicalExamView();
+    },
+    [router]
+  );
 
   const admitPatient = async (entry: QueueEntry) => {
     setUpdating(entry.id);
@@ -225,7 +268,7 @@ export default function DoctorQueuePage() {
         method: "PATCH",
         body: JSON.stringify({ action: "enter" }),
       });
-      setClinicalEntryId(entry.id);
+      openClinicalExam(entry);
       if (clinicId) {
         notifyQueueRefresh({ scope: "clinic", clinicId });
       }
@@ -328,7 +371,7 @@ export default function DoctorQueuePage() {
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="space-y-4 rounded-xl bg-slate-50 p-3 sm:p-4">
         <div>
           <h2 className="text-lg font-bold text-slate-800">{t("docQueueTitle")}</h2>
           <p className="text-sm text-slate-500">{t("docQueueSubtitle")}</p>
@@ -337,14 +380,14 @@ export default function DoctorQueuePage() {
         {pageError && <Alert variant="error">{pageError}</Alert>}
 
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+          <div className="rounded-xl border border-amber-100 bg-white p-4 shadow-sm">
             <div className="flex items-center gap-2 text-amber-700">
               <Clock className="h-5 w-5" />
               <span className="text-sm font-medium">{t("waitingCount")}</span>
             </div>
             <p className="mt-1 text-2xl font-bold text-amber-800">{waiting.length}</p>
           </div>
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+          <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
             <div className="flex items-center gap-2 text-emerald-700">
               <UserCheck className="h-5 w-5" />
               <span className="text-sm font-medium">{t("docQueueActiveNow")}</span>
@@ -354,21 +397,24 @@ export default function DoctorQueuePage() {
         </div>
 
         {clinicalEntry && (clinicalEntry.status === "in_progress" || clinicalEntryId === clinicalEntry.id) && (
-          <div className="rounded-2xl border border-teal-200 bg-white p-4 shadow-sm">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div
+            id={CLINICAL_EXAM_ANCHOR}
+            className="scroll-mt-24 rounded-xl border-2 border-primary/20 bg-white p-4 shadow-md ring-1 ring-primary/5"
+          >
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
               <div>
-                <p className="font-bold text-slate-800">
+                <p className="text-lg font-bold text-primary">
                   {t("docExamPrefix")}{" "}
                   {clinicalEntry.patient?.full_name_ar ??
                     clinicalEntry.patient_name ??
                     `${t("docTicketNumber")} ${clinicalEntry.ticket_number}`}
                 </p>
-                <p className="text-xs text-slate-500">{t("docExamChartHint")}</p>
+                <p className="mt-1 text-xs text-slate-500">{t("docExamChartHint")}</p>
               </div>
               {clinicalEntry.patient_id && (
                 <Link
                   href={buildDoctorPatientUrl(clinicalEntry.patient_id)}
-                  className="text-xs font-medium text-primary hover:underline"
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
                 >
                   {t("docFullPatientFile")}
                 </Link>
@@ -381,6 +427,7 @@ export default function DoctorQueuePage() {
               portal="doctor"
               showSendToAccounting={false}
               defaultOpen
+              hideHeader
             />
 
             <button
@@ -554,7 +601,7 @@ export default function DoctorQueuePage() {
                     {entry.status === "in_progress" && (
                       <button
                         type="button"
-                        onClick={() => setClinicalEntryId(entry.id)}
+                        onClick={() => openClinicalExam(entry)}
                         className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 py-2.5 text-sm font-bold text-teal-900 hover:bg-teal-100"
                       >
                         <UserCheck className="h-4 w-4" />

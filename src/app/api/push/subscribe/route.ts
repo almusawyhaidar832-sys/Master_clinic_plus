@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile, isApiDoctorRole } from "@/lib/auth/api-session";
+import { getApiCallerProfile, isApiAssistantRole, isApiDoctorRole } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { isWebPushConfigured } from "@/lib/push/server";
 
@@ -8,7 +8,7 @@ interface PushSubscriptionJson {
   keys?: { p256dh?: string; auth?: string };
 }
 
-/** POST — حفظ اشتراك Web Push للطبيب */
+/** POST — حفظ اشتراك Web Push للطبيب أو المساعد */
 export async function POST(req: NextRequest) {
   try {
     if (!isWebPushConfigured()) {
@@ -19,7 +19,11 @@ export async function POST(req: NextRequest) {
     }
 
     const profile = await getApiCallerProfile(req);
-    if (!profile || !isApiDoctorRole(profile.role)) {
+    const role = profile?.role ?? "";
+    if (
+      !profile ||
+      (!isApiDoctorRole(role) && !isApiAssistantRole(role))
+    ) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
     if (!profile.clinic_id) {
@@ -75,7 +79,7 @@ export async function POST(req: NextRequest) {
       .eq("clinic_id", profile.clinic_id)
       .maybeSingle();
 
-    if (!linkedDoctor) {
+    if (isApiDoctorRole(role) && !linkedDoctor) {
       const { data: unlinkedDoctors } = await admin
         .from("doctors")
         .select("id")

@@ -25,6 +25,10 @@ import {
 import { syncAppointmentFromQueueStatus } from "@/lib/services/appointment-queue-sync";
 import { ensureQueueEntryPatient } from "@/lib/services/ensure-queue-entry-patient";
 import { ensureVisitSessionOperation } from "@/lib/services/visit-session";
+import {
+  assertAssistantOwnsQueueEntry,
+  resolveAssistantApiContext,
+} from "@/lib/auth/resolve-assistant-api";
 
 const NEXT_STATUS: Partial<Record<QueueStatus, QueueStatus>> = {
   waiting: "called",
@@ -80,6 +84,16 @@ export async function PATCH(
       if (!staffRolesOk(role)) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
+      if (isApiAssistantRole(role)) {
+        const ctx = await resolveAssistantApiContext(profile);
+        if (!ctx) {
+          return NextResponse.json({ error: "حساب المساعد غير مربوط" }, { status: 403 });
+        }
+        const owned = await assertAssistantOwnsQueueEntry(id, ctx);
+        if (!owned.ok) {
+          return NextResponse.json({ error: owned.error }, { status: owned.status });
+        }
+      }
       await updateQueueAndSync(admin, id, "cancelled", { clinicId: profile.clinic_id });
       return NextResponse.json({ success: true });
     }
@@ -130,14 +144,39 @@ export async function PATCH(
     }
 
     if (body.action === "enter") {
-      if (!isApiDoctorRole(role)) {
+      let doctorId: string;
+
+      if (isApiDoctorRole(role)) {
+        const doctor = await getDoctorByProfileId(profile.id);
+        if (!doctor) {
+          return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+        }
+        doctorId = doctor.id;
+      } else if (isApiAssistantRole(role)) {
+        const ctx = await resolveAssistantApiContext(profile);
+        if (!ctx) {
+          return NextResponse.json({ error: "حساب المساعد غير مربوط" }, { status: 403 });
+        }
+        const owned = await assertAssistantOwnsQueueEntry(id, ctx);
+        if (!owned.ok) {
+          return NextResponse.json({ error: owned.error }, { status: owned.status });
+        }
+        doctorId = ctx.doctorId;
+      } else {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
-      const doctor = await getDoctorByProfileId(profile.id);
-      if (!doctor) {
-        return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+
+      const { data: entryCheck } = await admin
+        .from("patient_queue")
+        .select("doctor_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (!entryCheck || entryCheck.doctor_id !== doctorId) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
-      await updateQueueAndSync(admin, id, "in_progress", { doctorId: doctor.id });
+
+      await updateQueueAndSync(admin, id, "in_progress", { doctorId });
 
       let visitSession: Awaited<ReturnType<typeof ensureVisitSessionOperation>> | null =
         null;
@@ -150,7 +189,7 @@ export async function PATCH(
         );
         visitSession = await ensureVisitSessionOperation(admin, {
           clinicId: patientCtx.clinicId,
-          doctorId: doctor.id,
+          doctorId,
           patientId: patientCtx.patientId,
           queueEntryId: id,
           createdBy: profile.id,
@@ -168,6 +207,9 @@ export async function PATCH(
     }
 
     if (body.action === "ready_for_billing") {
+      if (isApiAssistantRole(role)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
       const isDoctor = isApiDoctorRole(role);
       if (!isDoctor && !staffRolesOk(role)) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
@@ -209,6 +251,9 @@ export async function PATCH(
     }
 
     if (body.action === "ready_for_payment") {
+      if (isApiAssistantRole(role)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
       const isDoctor = isApiDoctorRole(role);
       if (isDoctor) {
         return NextResponse.json(
@@ -262,6 +307,11 @@ export async function PATCH(
     if (role === "doctor" || isApiDoctorRole(role)) {
       const doctor = await getDoctorByProfileId(profile.id);
       if (!doctor || doctor.id !== entry.doctor_id) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+    } else if (isApiAssistantRole(role)) {
+      const ctx = await resolveAssistantApiContext(profile);
+      if (!ctx || ctx.doctorId !== entry.doctor_id) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
     } else if (!staffRolesOk(role)) {

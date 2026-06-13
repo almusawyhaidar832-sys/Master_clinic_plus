@@ -3,6 +3,38 @@ export function buildDoctorPatientUrl(patientId: string) {
   return `/doctor/patients/${patientId}`;
 }
 
+export const CLINICAL_EXAM_ANCHOR = "clinical-exam";
+
+/** غرفة الانتظار — السجل الطبي البصري مباشرة (مخطط + أشعة + وصفة) */
+export function buildDoctorQueueClinicalUrl(input: {
+  queueEntryId: string;
+  patientId?: string | null;
+}) {
+  const params = new URLSearchParams({ exam: input.queueEntryId });
+  if (input.patientId) params.set("patientId", input.patientId);
+  return `/doctor/queue?${params.toString()}#${CLINICAL_EXAM_ANCHOR}`;
+}
+
+/** غرفة انتظار المساعد — نفس الشاشة السريرية */
+export function buildAssistantQueueClinicalUrl(input: {
+  queueEntryId: string;
+  patientId?: string | null;
+}) {
+  const params = new URLSearchParams({ exam: input.queueEntryId });
+  if (input.patientId) params.set("patientId", input.patientId);
+  return `/assistant/queue?${params.toString()}#${CLINICAL_EXAM_ANCHOR}`;
+}
+
+export function scrollToClinicalExamView() {
+  if (typeof window === "undefined") return;
+  requestAnimationFrame(() => {
+    document.getElementById(CLINICAL_EXAM_ANCHOR)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  });
+}
+
 /** كشف حساب + سجل بصري — مع ربط الزيارة من الطابور */
 export function buildDoctorStatementUrl(input: {
   patientId: string;

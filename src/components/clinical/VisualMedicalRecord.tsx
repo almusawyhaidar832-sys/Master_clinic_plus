@@ -42,6 +42,8 @@ export interface VisualMedicalRecordProps {
   compact?: boolean;
   /** عرض فقط — للمحاسب عند مراجعة سجل الطبيب (مخطط واحد بدون نموذج إضافة) */
   readOnly?: boolean;
+  /** تخطيط غرفة الكشف — كارتات بيضاء وتباين أزرق */
+  examMode?: boolean;
 }
 
 export function VisualMedicalRecord({
@@ -59,6 +61,7 @@ export function VisualMedicalRecord({
   className,
   compact = false,
   readOnly = false,
+  examMode = false,
 }: VisualMedicalRecordProps) {
   const [open, setOpen] = useState(defaultOpen);
   const [operationId, setOperationId] = useState<string | null>(
@@ -159,22 +162,32 @@ export function VisualMedicalRecord({
   const body = (
     <div
       className={cn(
-        "space-y-3",
-        collapsible
-          ? "border-t border-teal-200/40 px-3 pb-3 pt-2"
-          : "rounded-xl border border-teal-200/50 bg-teal-50/20 p-3"
+        "space-y-4",
+        collapsible && !examMode
+          ? "border-t border-slate-100 px-3 pb-3 pt-2"
+          : examMode
+            ? ""
+            : "rounded-xl border border-teal-200/50 bg-teal-50/20 p-3"
       )}
     >
       {operationId && loading && (
-        <p className="text-xs text-slate-muted">جاري تحميل السجل...</p>
+        <p className="text-xs text-slate-500">جاري تحميل السجل...</p>
       )}
 
       {operationId && !loading && hasExisting && existing && (
-        <ClinicalRecordDisplay data={existing} />
+        <div
+          className={
+            examMode
+              ? "rounded-xl border border-slate-200 bg-slate-50/80 p-3"
+              : undefined
+          }
+        >
+          <ClinicalRecordDisplay data={existing} examLayout={examMode} />
+        </div>
       )}
 
       {operationId && !loading && !hasExisting && !isDraftMode && (
-        <p className="text-xs text-slate-muted">
+        <p className="text-xs text-slate-500">
           لا يوجد مخطط أسنان أو صور أشعة مسجّلة لهذه الجلسة بعد
         </p>
       )}
@@ -182,7 +195,7 @@ export function VisualMedicalRecord({
       {!reviewOnly && (isDraftMode || operationId) && (
         <>
           {operationId && !isDraftMode && hasExisting && (
-            <p className="text-xs font-medium text-teal-900">
+            <p className="text-xs font-semibold text-primary">
               إضافة أشعة / أسنان لهذه الجلسة
             </p>
           )}
@@ -191,7 +204,8 @@ export function VisualMedicalRecord({
             onChange={setDraft}
             disabled={disabled || saving}
             chartResetKey={chartResetKey}
-            showHeader={!collapsible}
+            showHeader={!collapsible && !examMode}
+            examLayout={examMode}
           />
         </>
       )}
@@ -212,6 +226,26 @@ export function VisualMedicalRecord({
       {message && <Alert variant={message.type}>{message.text}</Alert>}
     </div>
   );
+
+  if (examMode) {
+    return (
+      <div
+        className={cn(
+          "rounded-xl border border-slate-200 bg-white p-4 shadow-md",
+          className
+        )}
+      >
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
+          <Scan className="h-5 w-5 text-primary" />
+          <h4 className="text-base font-bold text-primary">السجل السريري</h4>
+          {summaryHint && (
+            <span className="text-xs font-normal text-slate-500">{summaryHint}</span>
+          )}
+        </div>
+        {body}
+      </div>
+    );
+  }
 
   if (!collapsible) {
     return (

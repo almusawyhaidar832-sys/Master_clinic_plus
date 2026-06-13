@@ -59,6 +59,12 @@ export const assistantModuleNav: ModuleNavItem[] = [
     labelKey: "navAssistantBookings",
     icon: "calendarClock",
   },
+  {
+    href: "/assistant/queue",
+    labelKey: "navWaitingRoom",
+    icon: "listOrdered",
+    requiredModule: "patient_queue",
+  },
 ];
 
 // =============================================================================

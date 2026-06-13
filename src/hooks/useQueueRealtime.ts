@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -9,10 +9,8 @@ import {
   clinicQueueChannelName,
   doctorQueueChannelName,
 } from "@/lib/queue/realtime-client";
-import { buildDoctorPatientUrl } from "@/lib/queue/navigation";
-import {
-  resolvePatientSpeechName,
-} from "@/lib/queue/utils";
+import { buildDoctorQueueClinicalUrl } from "@/lib/queue/navigation";
+import { resolvePatientSpeechName } from "@/lib/queue/utils";
 import { formatNameForSpeech } from "@/lib/queue/arabic-speech-text";
 
 interface QueuePayload {
@@ -59,7 +57,12 @@ function alertDoctorNewPatient(
   });
 }
 
-function alertAccountantAdmit(row: QueuePayload, dedupeKey: string, seen: Set<string>) {
+function alertAccountantAdmit(
+  row: QueuePayload,
+  dedupeKey: string,
+  seen: Set<string>,
+  linkPath = "/dashboard/queue"
+) {
   if (seen.has(dedupeKey)) return;
   if (!shouldFireQueueAlert(`accountant-called-${row.id}`)) return;
   seen.add(dedupeKey);
@@ -70,7 +73,28 @@ function alertAccountantAdmit(row: QueuePayload, dedupeKey: string, seen: Set<st
     kind: "accountant_admit",
     title: "طلب دخول مراجع 🔔",
     message: msg,
-    linkPath: "/dashboard/queue",
+    linkPath,
+    patientName: name,
+  });
+}
+
+function alertAccountantFromBroadcast(
+  payload: { name?: string; entryId?: string },
+  seen: Set<string>,
+  linkPath = "/dashboard/queue"
+) {
+  const entryId = payload.entryId;
+  const key = entryId ? `called-${entryId}` : `broadcast-${payload.name ?? Date.now()}`;
+  if (seen.has(key)) return;
+  if (entryId && !shouldFireQueueAlert(`accountant-called-${entryId}`)) return;
+  seen.add(key);
+
+  const name = formatNameForSpeech(payload.name?.trim() || "مراجع");
+  void triggerQueueAlert({
+    kind: "accountant_admit",
+    title: "طلب دخول مراجع 🔔",
+    message: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
+    linkPath,
     patientName: name,
   });
 }
@@ -81,29 +105,22 @@ function alertDoctorExamStart(row: QueuePayload, dedupeKey: string, seen: Set<st
   seen.add(dedupeKey);
 
   const name = resolvePatientSpeechName(row);
-  const linkPath = row.patient_id
-    ? buildDoctorPatientUrl(row.patient_id)
-    : "/doctor/queue";
+  const linkPath = buildDoctorQueueClinicalUrl({
+    queueEntryId: row.id,
+    patientId: row.patient_id,
+  });
 
   void triggerQueueAlert({
     kind: "doctor_exam",
     title: "بدء الكشف",
-    message: `${name} داخل العيادة — افتح ملف المريض`,
+    message: `${name} داخل العيادة — افتح السجل الطبي البصري`,
     linkPath,
     patientName: name,
   });
-
-  if (
-    row.patient_id &&
-    typeof window !== "undefined" &&
-    window.location.pathname.startsWith("/doctor/queue")
-  ) {
-    window.location.href = linkPath;
-  }
 }
 
 function alertDoctorFromBroadcast(
-  payload: { name?: string; entryId?: string; recall?: boolean },
+  payload: { name?: string; entryId?: string; recall?: boolean; sentAt?: string },
   seen: Set<string>
 ) {
   const entryId = payload.entryId;
@@ -134,31 +151,15 @@ function alertDoctorFromBroadcast(
   });
 }
 
-function alertAccountantFromBroadcast(
-  payload: { name?: string; entryId?: string },
-  seen: Set<string>
-) {
-  const entryId = payload.entryId;
-  const key = entryId ? `called-${entryId}` : `broadcast-${payload.name ?? Date.now()}`;
-  if (seen.has(key)) return;
-  if (entryId && !shouldFireQueueAlert(`accountant-called-${entryId}`)) return;
-  seen.add(key);
-
-  const name = formatNameForSpeech(payload.name?.trim() || "مراجع");
-  void triggerQueueAlert({
-    kind: "accountant_admit",
-    title: "طلب دخول مراجع 🔔",
-    message: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
-    linkPath: "/dashboard/queue",
-    patientName: name,
-  });
-}
-
 /**
  * Doctor-side: realtime alerts + signals queue pages to refetch.
  */
-export function useDoctorQueueRealtime(doctorId: string | null | undefined) {
+export function useDoctorQueueRealtime(
+  doctorId: string | null | undefined,
+  options?: { alerts?: boolean }
+) {
   const seenRef = useRef<Set<string>>(new Set());
+  const alertsEnabled = options?.alerts !== false;
 
   useEffect(() => {
     if (!doctorId) return;
@@ -178,6 +179,8 @@ export function useDoctorQueueRealtime(doctorId: string | null | undefined) {
         },
         (payload) => {
           notifyQueueRefresh({ scope: "doctor", doctorId });
+
+          if (!alertsEnabled) return;
 
           const row =
             payload.eventType === "DELETE"
@@ -232,11 +235,7 @@ export function useDoctorQueueRealtime(doctorId: string | null | undefined) {
             row.status === "in_progress" &&
             oldStatus === "called"
           ) {
-            alertDoctorExamStart(
-              row,
-              `exam-${row.id}`,
-              seenRef.current
-            );
+            alertDoctorExamStart(row, `exam-${row.id}`, seenRef.current);
           }
         }
       )
@@ -244,9 +243,16 @@ export function useDoctorQueueRealtime(doctorId: string | null | undefined) {
         "broadcast",
         { event: "queue_patient_sent" },
         ({ payload }) => {
-          const p = payload as { name?: string; entryId?: string };
+          const p = payload as {
+            name?: string;
+            entryId?: string;
+            recall?: boolean;
+            sentAt?: string;
+          };
           notifyQueueRefresh({ scope: "doctor", doctorId });
-          alertDoctorFromBroadcast(p, seenRef.current);
+          if (alertsEnabled) {
+            alertDoctorFromBroadcast(p, seenRef.current);
+          }
         }
       )
       .subscribe((status) => {
@@ -258,14 +264,19 @@ export function useDoctorQueueRealtime(doctorId: string | null | undefined) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [doctorId]);
+  }, [doctorId, alertsEnabled]);
 }
 
 /**
  * Accountant-side: realtime alerts + signals queue pages to refetch.
  */
-export function useAccountantQueueRealtime(clinicId: string | null | undefined) {
+export function useAccountantQueueRealtime(
+  clinicId: string | null | undefined,
+  options?: { admitLinkPath?: string; doctorId?: string }
+) {
   const seenRef = useRef<Set<string>>(new Set());
+  const admitLinkPath = options?.admitLinkPath ?? "/dashboard/queue";
+  const filterDoctorId = options?.doctorId;
 
   useEffect(() => {
     if (!clinicId) return;
@@ -285,13 +296,17 @@ export function useAccountantQueueRealtime(clinicId: string | null | undefined) 
         },
         (payload) => {
           notifyQueueRefresh({ scope: "clinic", clinicId });
+          if (filterDoctorId) {
+            notifyQueueRefresh({ scope: "doctor", doctorId: filterDoctorId });
+          }
 
           if (payload.eventType !== "UPDATE") return;
 
           const row = parseQueueRow(payload.new as Record<string, unknown>);
           const old = payload.old as { status?: string } | undefined;
           if (!row || row.status !== "called" || old?.status === "called") return;
-          alertAccountantAdmit(row, `called-${row.id}`, seenRef.current);
+          if (filterDoctorId && row.doctor_id !== filterDoctorId) return;
+          alertAccountantAdmit(row, `called-${row.id}`, seenRef.current, admitLinkPath);
         }
       )
       .on(
@@ -300,7 +315,10 @@ export function useAccountantQueueRealtime(clinicId: string | null | undefined) 
         ({ payload }) => {
           const p = payload as { name?: string; entryId?: string };
           notifyQueueRefresh({ scope: "clinic", clinicId });
-          alertAccountantFromBroadcast(p, seenRef.current);
+          if (filterDoctorId) {
+            notifyQueueRefresh({ scope: "doctor", doctorId: filterDoctorId });
+          }
+          alertAccountantFromBroadcast(p, seenRef.current, admitLinkPath);
         }
       )
       .subscribe((status) => {
@@ -312,5 +330,5 @@ export function useAccountantQueueRealtime(clinicId: string | null | undefined) 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [clinicId]);
+  }, [clinicId, admitLinkPath, filterDoctorId]);
 }

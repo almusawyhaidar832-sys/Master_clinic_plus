@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v17-offline-shell";
+const CACHE_NAME = "mcp-app-v18-assistant-portal";
 
 const NOTIFICATION_ICON = "/icons/icon-192.png";
 
@@ -7,9 +7,13 @@ const APP_SHELL_URLS = [
   "/",
   "/doctor",
   "/doctor/queue",
+  "/assistant",
+  "/assistant/dashboard",
+  "/assistant/queue",
   "/login",
   "/manifest.json",
   "/manifest-doctor.json",
+  "/manifest-assistant.json",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
 ];

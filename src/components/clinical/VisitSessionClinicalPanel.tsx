@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Send, RefreshCw } from "lucide-react";
+import { Send, RefreshCw, Scan } from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { VisualMedicalRecord } from "@/components/clinical/VisualMedicalRecord";
@@ -26,6 +26,8 @@ interface VisitSessionClinicalPanelProps {
   showSendToAccounting?: boolean;
   defaultOpen?: boolean;
   className?: string;
+  /** إخفاء العنوان العلوي — عند وجود عنوان في الصفحة الأم (غرفة الانتظار) */
+  hideHeader?: boolean;
 }
 
 export function VisitSessionClinicalPanel({
@@ -35,6 +37,7 @@ export function VisitSessionClinicalPanel({
   showSendToAccounting = false,
   defaultOpen = true,
   className,
+  hideHeader = false,
 }: VisitSessionClinicalPanelProps) {
   const { t } = useLanguage();
   const { profile } = useClinicProfile();
@@ -148,6 +151,7 @@ export function VisitSessionClinicalPanel({
   if (!patientId && !queueEntryId) return null;
 
   const isAccountantView = portal === "accountant";
+  const isExamPortal = portal === "doctor" || portal === "assistant";
   const canSend =
     showSendToAccounting &&
     session?.queueEntryId &&
@@ -155,7 +159,7 @@ export function VisitSessionClinicalPanel({
 
   return (
     <div className={className}>
-      {isAccountantView ? (
+      {!hideHeader && isAccountantView ? (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="text-base font-bold text-slate-800">
@@ -175,13 +179,20 @@ export function VisitSessionClinicalPanel({
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
         </div>
-      ) : (
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+      ) : !hideHeader ? (
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3">
           <div>
-            <h3 className="text-base font-bold text-slate-800">
+            <h3
+              className={
+                isExamPortal
+                  ? "flex items-center gap-2 text-lg font-bold text-primary"
+                  : "text-base font-bold text-slate-800"
+              }
+            >
+              {isExamPortal && <Scan className="h-5 w-5 shrink-0" />}
               {t("docVisualMedicalRecord")}
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="mt-1 text-xs text-slate-500">
               {t("docVisualMedicalRecordHint")}
             </p>
           </div>
@@ -212,10 +223,24 @@ export function VisitSessionClinicalPanel({
             )}
           </div>
         </div>
+      ) : null}
+
+      {hideHeader && !isAccountantView && (
+        <div className="mb-3 flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void loadSession()}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
       )}
 
       {loading && (
-        <p className="text-sm text-slate-muted">{t("docPreparingExamSession")}</p>
+        <p className="text-sm text-slate-500">{t("docPreparingExamSession")}</p>
       )}
 
       {error && <Alert variant="error">{error}</Alert>}
@@ -227,7 +252,8 @@ export function VisitSessionClinicalPanel({
           key={session.operationId}
           operationId={session.operationId}
           portal={portal}
-          collapsible
+          examMode={isExamPortal}
+          collapsible={!isExamPortal && !isAccountantView}
           defaultOpen={isAccountantView ? false : defaultOpen}
           compact={isAccountantView}
           readOnly={isAccountantView}
@@ -240,7 +266,8 @@ export function VisitSessionClinicalPanel({
         session.doctorId &&
         !loading && (
           <SessionPrescriptionPanel
-            className="mt-4"
+            className={isExamPortal ? "mt-4" : "mt-4"}
+            examMode={isExamPortal}
             operationId={session.operationId}
             patientId={session.patientId}
             doctorId={session.doctorId}

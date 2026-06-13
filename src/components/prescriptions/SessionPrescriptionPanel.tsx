@@ -17,6 +17,7 @@ import type {
   PrescriptionMedication,
 } from "@/lib/prescriptions/types";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
+import { cn } from "@/lib/utils";
 
 const emptyLine = (): PrescriptionMedication => ({ drug_name_ar: "" });
 
@@ -28,6 +29,7 @@ interface SessionPrescriptionPanelProps {
   portal?: AuthPortalId;
   readOnly?: boolean;
   className?: string;
+  examMode?: boolean;
 }
 
 export function SessionPrescriptionPanel({
@@ -38,6 +40,7 @@ export function SessionPrescriptionPanel({
   portal = "doctor",
   readOnly = false,
   className,
+  examMode = false,
 }: SessionPrescriptionPanelProps) {
   const isAccountant = readOnly || portal === "accountant";
 
@@ -159,11 +162,22 @@ export function SessionPrescriptionPanel({
         : null;
 
   return (
-    <div className={className}>
+    <div
+      className={cn(
+        examMode && "rounded-xl border border-slate-200 bg-white p-4 shadow-md",
+        className
+      )}
+    >
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="flex items-center gap-2 text-base font-bold text-slate-800">
-            <FilePen className="h-4 w-4 text-primary" />
+          <h3
+            className={
+              examMode
+                ? "flex items-center gap-2 text-base font-bold text-primary"
+                : "flex items-center gap-2 text-base font-bold text-slate-800"
+            }
+          >
+            <FilePen className={`h-4 w-4 ${examMode ? "text-primary" : "text-primary"}`} />
             الوصفة الذكية
           </h3>
           <p className="text-xs text-slate-500 mt-1">
@@ -210,7 +224,13 @@ export function SessionPrescriptionPanel({
       )}
 
       {!loading && (!isAccountant || prescription) && (
-        <div className="space-y-3 rounded-xl border border-primary/15 bg-primary/[0.03] p-4">
+        <div
+          className={
+            examMode
+              ? "space-y-3"
+              : "space-y-3 rounded-xl border border-primary/15 bg-primary/[0.03] p-4"
+          }
+        >
           {!isAccountant && (
             <Select
               label="قالب جاهز (اختياري)"
@@ -230,6 +250,7 @@ export function SessionPrescriptionPanel({
             onChange={(e) => setDiagnosis(e.target.value)}
             disabled={isAccountant}
             placeholder="مثال: التهاب لثة / ألم أسنان"
+            className={examMode ? "border-gray-300 bg-white" : undefined}
           />
 
           <div className="space-y-2">
@@ -237,7 +258,10 @@ export function SessionPrescriptionPanel({
             {lines.map((line, index) => (
               <div
                 key={index}
-                className="grid gap-2 rounded-lg border border-slate-border bg-white p-3 sm:grid-cols-2"
+                className={cn(
+                  "grid gap-2 rounded-lg border bg-white p-3 sm:grid-cols-2",
+                  examMode ? "border-gray-300 shadow-sm" : "border-slate-border"
+                )}
               >
                 <Input
                   label="اسم الدواء"
@@ -246,6 +270,7 @@ export function SessionPrescriptionPanel({
                     updateLine(index, { drug_name_ar: e.target.value })
                   }
                   disabled={isAccountant}
+                  className={examMode ? "border-gray-300" : undefined}
                 />
                 <Input
                   label="الجرعة"
@@ -253,6 +278,7 @@ export function SessionPrescriptionPanel({
                   onChange={(e) => updateLine(index, { dosage: e.target.value })}
                   disabled={isAccountant}
                   placeholder="500mg"
+                  className={examMode ? "border-gray-300" : undefined}
                 />
                 <Input
                   label="التكرار"
@@ -262,6 +288,7 @@ export function SessionPrescriptionPanel({
                   }
                   disabled={isAccountant}
                   placeholder="3 مرات يومياً"
+                  className={examMode ? "border-gray-300" : undefined}
                 />
                 <Input
                   label="المدة"
@@ -271,6 +298,7 @@ export function SessionPrescriptionPanel({
                   }
                   disabled={isAccountant}
                   placeholder="5 أيام"
+                  className={examMode ? "border-gray-300" : undefined}
                 />
                 <div className="sm:col-span-2">
                   <Input
@@ -281,6 +309,7 @@ export function SessionPrescriptionPanel({
                     }
                     disabled={isAccountant}
                     placeholder="بعد الأكل"
+                    className={examMode ? "border-gray-300" : undefined}
                   />
                 </div>
                 {!isAccountant && lines.length > 1 && (
@@ -309,7 +338,12 @@ export function SessionPrescriptionPanel({
           <div>
             <label className="mc-label mb-1.5">ملاحظات للمراجع</label>
             <textarea
-              className="w-full rounded-lg border border-slate-border bg-surface-card px-3 py-2 text-sm disabled:opacity-70"
+              className={cn(
+                "w-full rounded-lg border bg-surface-card px-3 py-2 text-sm disabled:opacity-70",
+                examMode
+                  ? "border-gray-300 bg-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  : "border-slate-border"
+              )}
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}

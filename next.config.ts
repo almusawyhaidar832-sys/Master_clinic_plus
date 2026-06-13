@@ -56,6 +56,20 @@ const nextConfig: NextConfig = {
       ],
     },
     {
+      source: "/manifest-assistant.json",
+      headers: [
+        { key: "Cache-Control", value: "public, max-age=86400" },
+        { key: "Content-Type", value: "application/manifest+json; charset=utf-8" },
+      ],
+    },
+    {
+      source: "/assistant/:path*",
+      headers: [
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "X-Frame-Options", value: "DENY" },
+      ],
+    },
+    {
       source: "/icons/:path*",
       headers: [{ key: "Cache-Control", value: "public, max-age=604800, immutable" }],
     },

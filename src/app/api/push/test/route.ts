@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile, isApiDoctorRole } from "@/lib/auth/api-session";
+import { getApiCallerProfile, isApiAssistantRole, isApiDoctorRole } from "@/lib/auth/api-session";
 import { sendWebPushToProfile, isWebPushConfigured } from "@/lib/push/server";
 
 /** POST — اختبار إشعار Push من السيرفر (طبيب فقط) */
@@ -13,15 +13,22 @@ export async function POST(req: NextRequest) {
     }
 
     const profile = await getApiCallerProfile(req);
-    if (!profile || !isApiDoctorRole(profile.role)) {
+    const role = profile?.role ?? "";
+    if (
+      !profile ||
+      (!isApiDoctorRole(role) && !isApiAssistantRole(role))
+    ) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
+
+    const url = isApiAssistantRole(role) ? "/assistant/queue" : "/doctor/queue";
+    const tag = isApiAssistantRole(role) ? "assistant-queue-test" : "doctor-queue-test";
 
     const result = await sendWebPushToProfile(profile.id, {
       title: "تجربة النداء 🔔",
       body: "إذا وصلك هذا الإشعار — التنبيهات تعمل حتى والتطبيق مغلق",
-      url: "/doctor/queue",
-      tag: "doctor-queue-test",
+      url,
+      tag,
     });
 
     return NextResponse.json({
