@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { getDoctorForCurrentUser } from "@/lib/clinic-context";
+import { createClient } from "@/lib/supabase/client";
 import {
   useAccountantQueuePolling,
   useDoctorQueuePolling,
@@ -16,14 +18,13 @@ import { QueueAlertOverlay } from "@/components/queue/QueueAlertOverlay";
 
 interface QueueRealtimeBridgeProps {
   portal: "dashboard" | "doctor";
-  /** polling كل 3 ث — فقط على صفحات الطابور؛ Realtime يبقى يعمل للتنبيهات */
+  /** polling كل 3 ث — fallback عند بطء Realtime أو خلفية التطبيق */
   enablePolling?: boolean;
 }
 
 /**
- * Queue alerts: Realtime + (optional) polling fallback.
+ * Queue alerts: Realtime + polling fallback.
  * Doctor portal: mounted globally in DoctorMobileShell (all pages).
- * Dashboard: mount on queue page only.
  */
 export function QueueRealtimeBridge({
   portal,
@@ -38,12 +39,19 @@ export function QueueRealtimeBridge({
     let cancelled = false;
 
     async function loadDoctorId() {
+      const supabase = createClient();
+      const doc = await getDoctorForCurrentUser(supabase);
+      if (cancelled) return;
+      if (doc?.id) {
+        setDoctorId(doc.id);
+        return;
+      }
       const id = await fetchDoctorIdForPolling();
-      if (!cancelled) setDoctorId(id);
+      if (!cancelled && id) setDoctorId(id);
     }
 
     void loadDoctorId();
-    const retry = setInterval(loadDoctorId, 30_000);
+    const retry = setInterval(loadDoctorId, 5_000);
 
     return () => {
       cancelled = true;

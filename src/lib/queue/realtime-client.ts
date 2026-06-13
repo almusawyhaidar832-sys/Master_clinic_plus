@@ -49,6 +49,8 @@ export {
   readNotificationPermission,
   refreshNotificationPermission,
   watchNotificationPermission,
+  subscribeNotificationPermission,
+  getNotificationPermissionKey,
 } from "@/lib/pwa/notification-permission";
 
 /** Show a native browser notification (works when tab is in background) */

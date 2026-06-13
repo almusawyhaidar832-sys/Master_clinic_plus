@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, Share, Smartphone, Volume2, X } from "lucide-react";
 import { PwaInstallButton } from "@/components/pwa/PwaInstallButton";
 import { ensureNotificationPermission } from "@/lib/queue/realtime-client";
 import {
+  getNotificationPermissionKey,
   refreshNotificationPermission,
-  watchNotificationPermission,
+  subscribeNotificationPermission,
 } from "@/lib/pwa/notification-permission";
 import {
   isWebPushSupported,
@@ -33,67 +34,78 @@ import { useLanguage } from "@/contexts/LanguageContext";
 
 const DISMISS_KEY = "mcp-doctor-alerts-banner-dismissed";
 
+function readDismissed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(DISMISS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function DoctorAlertsSetup() {
   const { t, bi } = useLanguage();
   const router = useRouter();
-  const [showBanner, setShowBanner] = useState(false);
+
+  /** مصدر الحقيقة — حالة المتصفح الفعلية */
+  const permissionKey = useSyncExternalStore(
+    subscribeNotificationPermission,
+    getNotificationPermissionKey,
+    () => "unsupported" as const
+  );
+  const browserGranted = permissionKey === "granted";
+
+  const [bannerDismissed, setBannerDismissed] = useState(readDismissed);
   const [activating, setActivating] = useState(false);
   const [testingPush, setTestingPush] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [enabled, setEnabled] = useState(false);
+  const [messageIsError, setMessageIsError] = useState(false);
   const [pushReady, setPushReady] = useState(false);
   const [standalone, setStandalone] = useState(false);
   const [platform, setPlatform] = useState<"ios" | "android" | "other">("other");
+  const [pushRegistered, setPushRegistered] = useState(false);
 
-  const applyGrantedState = useCallback(() => {
-    setEnabled(true);
-    setShowBanner(false);
-    localStorage.removeItem(DISMISS_KEY);
-    void warmDoctorCloudTts();
-    if (isWebPushSupported()) {
-      void registerDoctorWebPush(false).then((result) => {
-        if (result.ok) setPushReady(true);
-      });
-    }
-  }, []);
+  const showActivationBanner =
+    !browserGranted &&
+    permissionKey !== "denied" &&
+    !bannerDismissed;
+
+  const alertsActive = browserGranted;
+
+  const registerPushOnce = useCallback(() => {
+    if (!browserGranted || !isWebPushSupported() || pushRegistered) return;
+    setPushRegistered(true);
+    void registerDoctorWebPush(false).then((result) => {
+      if (result.ok) setPushReady(true);
+      else setPushRegistered(false);
+    });
+  }, [browserGranted, pushRegistered]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     setStandalone(isStandalonePwa());
     if (isIOS()) setPlatform("ios");
     else if (isAndroid()) setPlatform("android");
-
-    void refreshNotificationPermission().then((snap) => {
-      if (snap.granted) {
-        applyGrantedState();
-        return;
-      }
-      if (snap.permission === "denied") return;
-      if (localStorage.getItem(DISMISS_KEY) === "1") return;
-      setShowBanner(true);
-    });
-
-    return watchNotificationPermission((snap) => {
-      if (snap.granted) applyGrantedState();
-    });
-  }, [applyGrantedState]);
+  }, []);
 
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
-      void refreshNotificationPermission().then((snap) => {
-        if (snap.granted) applyGrantedState();
-      });
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [applyGrantedState]);
+    if (!browserGranted) return;
+    setMessage(null);
+    setMessageIsError(false);
+    setBannerDismissed(false);
+    try {
+      localStorage.removeItem(DISMISS_KEY);
+    } catch {
+      // ignore
+    }
+    void warmDoctorCloudTts();
+    registerPushOnce();
+  }, [browserGranted, registerPushOnce]);
 
   useEffect(() => {
     return listenForPushAlertMessages((payload) => {
       const name = formatNameForSpeech(payload.patientName?.trim() || t("entityPatient"));
-      void triggerQueueAlert({
+      triggerQueueAlert({
         kind: "doctor_new",
         title: payload.title ?? t("docNewPatientAlert"),
         message:
@@ -101,6 +113,7 @@ export function DoctorAlertsSetup() {
           `${t("docNewPatientAlertBody")} ${name}`,
         linkPath: payload.url ?? "/doctor/queue",
         patientName: name,
+        audioUrl: payload.audioUrl,
       });
     });
   }, [t]);
@@ -114,8 +127,17 @@ export function DoctorAlertsSetup() {
   const activate = useCallback(async () => {
     setActivating(true);
     setMessage(null);
+    setMessageIsError(false);
     try {
       await unlockQueueAudio();
+
+      if (typeof window !== "undefined" && Notification.permission === "granted") {
+        setBannerDismissed(true);
+        setMessage(t("docAlertsEnabled"));
+        window.setTimeout(() => setMessage(null), 6000);
+        registerPushOnce();
+        return;
+      }
 
       let snap = await refreshNotificationPermission();
       let granted = snap.granted || (await ensureNotificationPermission());
@@ -127,10 +149,9 @@ export function DoctorAlertsSetup() {
 
       if (!granted) {
         if (!snap.supported && isIOS() && !isStandalonePwa()) {
-          setEnabled(true);
-          setShowBanner(false);
-          localStorage.removeItem(DISMISS_KEY);
+          setBannerDismissed(true);
           setMessage(t("docAlertsInAppOnly"));
+          setMessageIsError(false);
           window.setTimeout(() => setMessage(null), 8000);
           void warmDoctorCloudTts();
           return;
@@ -143,24 +164,33 @@ export function DoctorAlertsSetup() {
               )} ${t("docAlertsReopenHint")}`
             : t("docAlertsPermissionRetry")
         );
+        setMessageIsError(true);
         return;
       }
 
-      applyGrantedState();
+      setBannerDismissed(true);
+      try {
+        localStorage.removeItem(DISMISS_KEY);
+      } catch {
+        // ignore
+      }
 
       const capability = getDoctorPushCapability();
       if (capability.level === "in-app-only") {
         setMessage(t("docAlertsInAppOnly"));
+        setMessageIsError(false);
         window.setTimeout(() => setMessage(null), 8000);
         return;
       }
 
       setMessage(t("docAlertsEnabled"));
+      setMessageIsError(false);
       window.setTimeout(() => setMessage(null), 6000);
+      registerPushOnce();
     } finally {
       setActivating(false);
     }
-  }, [applyGrantedState, bi, t]);
+  }, [bi, registerPushOnce, t]);
 
   const testAlert = useCallback(async () => {
     await unlockQueueAudio();
@@ -181,6 +211,7 @@ export function DoctorAlertsSetup() {
     if (!pushReady) return;
     setTestingPush(true);
     setMessage(null);
+    setMessageIsError(false);
     try {
       const res = await fetch("/api/push/test", {
         method: "POST",
@@ -189,9 +220,11 @@ export function DoctorAlertsSetup() {
       });
       if (!res.ok) {
         setMessage(t("docAlertsPushFailed"));
+        setMessageIsError(true);
         return;
       }
       setMessage(t("docAlertsPushTestSent"));
+      setMessageIsError(false);
       window.setTimeout(() => setMessage(null), 6000);
     } finally {
       setTestingPush(false);
@@ -199,8 +232,12 @@ export function DoctorAlertsSetup() {
   }, [pushReady, t]);
 
   function dismiss() {
-    localStorage.setItem(DISMISS_KEY, "1");
-    setShowBanner(false);
+    try {
+      localStorage.setItem(DISMISS_KEY, "1");
+    } catch {
+      // ignore
+    }
+    setBannerDismissed(true);
   }
 
   const iosNeedsInstall = platform === "ios" && !standalone;
@@ -240,7 +277,7 @@ export function DoctorAlertsSetup() {
         </div>
       )}
 
-      {showBanner && (
+      {showActivationBanner && (
         <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-200 text-violet-800">
@@ -281,7 +318,7 @@ export function DoctorAlertsSetup() {
         </div>
       )}
 
-      {enabled && !showBanner && (
+      {alertsActive && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2">
           <p className="text-xs font-medium text-emerald-900">
             {pushReady ? t("docAlertsActive") : t("docAlertsInAppActive")}
@@ -310,8 +347,14 @@ export function DoctorAlertsSetup() {
         </div>
       )}
 
-      {message && (
-        <p className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+      {message && !browserGranted && (
+        <p
+          className={
+            messageIsError
+              ? "rounded-xl bg-red-50 px-4 py-2 text-sm text-red-800"
+              : "rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800"
+          }
+        >
           {message}
         </p>
       )}

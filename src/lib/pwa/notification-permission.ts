@@ -117,3 +117,28 @@ export function watchNotificationPermission(
     permissionStatus?.removeEventListener("change", emit);
   };
 }
+
+/** Stable snapshot for useSyncExternalStore — reads live browser permission. */
+export function getNotificationPermissionKey(): NotificationPermission | "unsupported" {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    return "unsupported";
+  }
+  return Notification.permission;
+}
+
+export function subscribeNotificationPermission(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  const notify = () => onStoreChange();
+
+  const unwatch = watchNotificationPermission(() => notify());
+
+  const interval = window.setInterval(() => {
+    notify();
+  }, 2_000);
+
+  return () => {
+    window.clearInterval(interval);
+    unwatch();
+  };
+}

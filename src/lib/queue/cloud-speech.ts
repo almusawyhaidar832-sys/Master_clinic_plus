@@ -10,6 +10,15 @@ let speechChain: Promise<void> = Promise.resolve();
 
 const CLOUD_TTS_TIMEOUT_MS = 18_000;
 const CLOUD_TTS_ATTEMPTS = 3;
+const DOCTOR_CLOUD_TTS_TIMEOUT_MS = 8_000;
+const DOCTOR_CLOUD_TTS_ATTEMPTS = 1;
+
+function isDoctorPortal(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/doctor")
+  );
+}
 
 function ttsRequestHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -87,11 +96,14 @@ async function fetchCloudAudioOnce(
 }
 
 async function fetchCloudAudio(body: Record<string, unknown>): Promise<Blob | null> {
-  for (let attempt = 0; attempt < CLOUD_TTS_ATTEMPTS; attempt += 1) {
+  const attempts = isDoctorPortal() ? DOCTOR_CLOUD_TTS_ATTEMPTS : CLOUD_TTS_ATTEMPTS;
+  const timeoutMs = isDoctorPortal() ? DOCTOR_CLOUD_TTS_TIMEOUT_MS : CLOUD_TTS_TIMEOUT_MS;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     const controller = new AbortController();
     const timer = window.setTimeout(
       () => controller.abort(),
-      CLOUD_TTS_TIMEOUT_MS
+      timeoutMs
     );
 
     try {
@@ -103,7 +115,7 @@ async function fetchCloudAudio(body: Record<string, unknown>): Promise<Blob | nu
       window.clearTimeout(timer);
     }
 
-    if (attempt < CLOUD_TTS_ATTEMPTS - 1) {
+    if (attempt < attempts - 1) {
       await new Promise((r) => window.setTimeout(r, 400 * (attempt + 1)));
     }
   }

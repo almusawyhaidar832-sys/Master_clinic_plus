@@ -24,6 +24,8 @@ export interface QueueAlertDetail {
   linkPath?: string;
   /** لنطق الاسم بمخارج أوضح */
   patientName?: string;
+  /** MP3 جاهز من السيرفر — أسرع من TTS على الموبايل */
+  audioUrl?: string;
 }
 
 const QUEUE_ALERT_EVENT = "master-clinic-queue-alert";
@@ -199,6 +201,12 @@ async function speakQueueAlertVoice(
   options?: { clearQueue?: boolean }
 ): Promise<void> {
   prepareSpeechAuto();
+
+  if (detail.audioUrl) {
+    const played = await playDoctorCallAudioUrl(detail.audioUrl);
+    if (played) return;
+  }
+
   /** صوت Bassel العراقي من السحابة — نفس نطق المحاسب وشاشة الانتظار */
   const speechOpts = { useCloud: true as const, clearQueue: options?.clearQueue };
 
@@ -221,20 +229,38 @@ async function speakQueueAlertVoice(
   await speakArabic(detail.message, speechOpts);
 }
 
+/** تشغيل MP3 جاهز من السيرفر (Push / signed URL) */
+export async function playDoctorCallAudioUrl(url: string): Promise<boolean> {
+  if (typeof window === "undefined" || !url.trim()) return false;
+  try {
+    await unlockQueueAudio();
+    const res = await fetch(url, { cache: "force-cache", credentials: "omit" });
+    if (!res.ok) return false;
+    const blob = await res.blob();
+    if (blob.size < 128) return false;
+    await playBlobViaQueueAudio(blob);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** إعادة تشغيل صوت التنبيه فوراً */
 export function replayQueueAlert(detail: QueueAlertDetail): void {
   void (async () => {
     await unlockQueueAudio();
-    await playQueueAlertSound(detail.kind);
-    await speakQueueAlertVoice(detail, { clearQueue: true });
+    void playQueueAlertSound(detail.kind);
+    void speakQueueAlertVoice(detail, { clearQueue: true });
   })();
 }
 
-/** Sound + voice + browser notification + on-screen banner */
-export async function triggerQueueAlert(detail: QueueAlertDetail) {
+/** Sound + voice + browser notification + on-screen banner — فوري بدون انتظار TTS */
+export function triggerQueueAlert(detail: QueueAlertDetail): void {
   dispatchQueueAlertUI(detail);
-  await unlockQueueAudio();
-  await playQueueAlertSound(detail.kind);
-  await speakQueueAlertVoice(detail);
   showBrowserNotification(detail.title, detail.message, detail.linkPath);
+  void (async () => {
+    await unlockQueueAudio();
+    void playQueueAlertSound(detail.kind);
+    void speakQueueAlertVoice(detail, { clearQueue: true });
+  })();
 }

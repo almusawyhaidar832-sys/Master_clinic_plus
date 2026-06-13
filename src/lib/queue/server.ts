@@ -5,6 +5,7 @@ import {
   resolvePatientDisplayName,
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
+import { buildDoctorCallAudioUrl } from "@/lib/queue/doctor-call-audio-url";
 
 export type QueueStatus =
   | "waiting"
@@ -210,6 +211,7 @@ export async function notifyDoctorNewQueuePatient(
       ? `doctor-recall-${entry.id}-${Date.now()}`
       : `doctor-queue-${entry.id}`,
     patientName: speechName,
+    audioUrl: buildDoctorCallAudioUrl(entry.id),
   }).catch((err) => {
     console.error("[queue] doctor web push failed:", err);
   });

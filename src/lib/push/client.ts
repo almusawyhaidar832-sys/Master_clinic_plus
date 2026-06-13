@@ -135,6 +135,7 @@ export function listenForPushAlertMessages(
     url?: string;
     patientName?: string;
     kind?: string;
+    audioUrl?: string;
   }) => void
 ): () => void {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {

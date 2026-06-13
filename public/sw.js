@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v10-chrome-install";
+const CACHE_NAME = "mcp-app-v11-doctor-call-audio";
 
 const PRECACHE_URLS = [
   "/",
@@ -70,6 +70,7 @@ self.addEventListener("push", (event) => {
     data.body || "لديك مراجع جديد في الانتظار — افتح التطبيق";
   const url = data.url || "/doctor/queue";
   const tag = data.tag || "doctor-queue";
+  const audioUrl = data.audioUrl || null;
 
   const options = {
     body,
@@ -80,8 +81,16 @@ self.addEventListener("push", (event) => {
     requireInteraction: true,
     silent: false,
     vibrate: [200, 100, 200, 100, 400],
-    data: { url, patientName: data.patientName, kind: data.kind },
+    data: { url, patientName: data.patientName, kind: data.kind, audioUrl },
   };
+
+  if (audioUrl) {
+    try {
+      options.sound = new URL(audioUrl, self.location.origin).href;
+    } catch {
+      /* ignore invalid sound url */
+    }
+  }
 
   event.waitUntil(
     Promise.all([
@@ -99,6 +108,7 @@ self.addEventListener("notificationclick", (event) => {
     url: targetUrl,
     kind: event.notification.data?.kind,
     patientName: event.notification.data?.patientName,
+    audioUrl: event.notification.data?.audioUrl,
   };
 
   event.waitUntil(
