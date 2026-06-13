@@ -280,6 +280,9 @@ BEGIN
   BEGIN
     DELETE FROM public.session_refunds WHERE clinic_id = p_clinic_id;
 
+    -- احذف الجلسات قبل الأطباء/المرضى حتى لا يُفرّغ doctor_id (NOT NULL) أثناء CASCADE
+    DELETE FROM public.patient_operations WHERE clinic_id = p_clinic_id;
+
     IF v_user_ids IS NOT NULL THEN
       DELETE FROM auth.users WHERE id = ANY(v_user_ids);
       GET DIAGNOSTICS v_users = ROW_COUNT;
@@ -305,5 +308,13 @@ $$;
 
 REVOKE ALL ON FUNCTION public.platform_delete_clinic_completely(UUID) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.platform_delete_clinic_completely(UUID) TO service_role;
+
+-- تأكد أن حذف الطبيب لا يُفرّغ doctor_id (NOT NULL) في الجلسات
+ALTER TABLE public.patient_operations
+  DROP CONSTRAINT IF EXISTS patient_operations_doctor_id_fkey;
+
+ALTER TABLE public.patient_operations
+  ADD CONSTRAINT patient_operations_doctor_id_fkey
+  FOREIGN KEY (doctor_id) REFERENCES public.doctors(id) ON DELETE RESTRICT;
 
 NOTIFY pgrst, 'reload schema';
