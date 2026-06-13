@@ -5,7 +5,7 @@ import { AppProviders } from "@/components/providers/AppProviders";
 export const metadata: Metadata = {
   title: "Doctor App | Master Clinic Plus",
   applicationName: "Master Clinic Doctor",
-  manifest: "/manifest.json",
+  manifest: "/manifest-doctor.json",
   icons: {
     icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
     apple: [{ url: "/icons/icon-192.png", sizes: "180x180", type: "image/png" }],

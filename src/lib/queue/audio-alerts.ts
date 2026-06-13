@@ -69,6 +69,27 @@ export async function unlockQueueAudio(): Promise<boolean> {
   }
 }
 
+/** تشغيل MP3 عبر Web Audio (Android يمنع HTMLAudioElement بعد fetch بعيد) */
+export async function playBlobViaQueueAudio(blob: Blob): Promise<void> {
+  const ok = await unlockQueueAudio();
+  if (!ok || !ctx) throw new Error("audio locked");
+
+  const buffer = await blob.arrayBuffer();
+  const audioBuffer = await ctx.decodeAudioData(buffer.slice(0));
+
+  await new Promise<void>((resolve, reject) => {
+    const source = ctx!.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(ctx!.destination);
+    source.onended = () => resolve();
+    try {
+      source.start(0);
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
 /**
  * Install once per tab — any click/keypress unlocks audio silently.
  * No UI prompt; consent is saved to localStorage for future sessions.

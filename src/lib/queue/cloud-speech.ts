@@ -36,6 +36,14 @@ export function clearCloudSpeechQueue(): void {
 }
 
 async function playAudioBlob(blob: Blob): Promise<void> {
+  try {
+    const { playBlobViaQueueAudio } = await import("@/lib/queue/audio-alerts");
+    await playBlobViaQueueAudio(blob);
+    return;
+  } catch {
+    // fallback for browsers without decodeAudioData on mp3
+  }
+
   const url = URL.createObjectURL(blob);
   try {
     const audio = new Audio(url);
@@ -140,7 +148,7 @@ export function speakViaCloudTtsParts(
   });
 }
 
-/** تسخين TTS عند فتح تطبيق الطبيب — يقلّل فشل أول نداء على الموبايل */
+/** تسخين TTS + تشغيل قصير — يفتح مسار الصوت على Android */
 export async function warmDoctorCloudTts(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (!window.location.pathname.startsWith("/doctor")) return false;
@@ -156,7 +164,11 @@ export async function warmDoctorCloudTts(): Promise<boolean> {
       body: JSON.stringify({ text: "تجربة" }),
       cache: "no-store",
     });
-    return res.ok;
+    if (!res.ok) return false;
+    const blob = await res.blob();
+    if (blob.size < 128) return false;
+    await playAudioBlob(blob);
+    return true;
   } catch {
     return false;
   }

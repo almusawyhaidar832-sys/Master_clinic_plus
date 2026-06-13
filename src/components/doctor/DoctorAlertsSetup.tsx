@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, Share, Smartphone, Volume2, X } from "lucide-react";
+import { PwaInstallButton } from "@/components/pwa/PwaInstallButton";
 import { ensureNotificationPermission } from "@/lib/queue/realtime-client";
 import {
   isWebPushSupported,
@@ -204,9 +205,17 @@ export function DoctorAlertsSetup() {
         <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3">
           <div className="flex items-start gap-2">
             <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
-            <p className="text-xs leading-relaxed text-sky-950">
-              {t("docAlertsAndroidHint")}
-            </p>
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="text-xs leading-relaxed text-sky-950">
+                {t("docAlertsAndroidHint")}
+              </p>
+              <PwaInstallButton
+                label={t("docInstallApp")}
+                installingLabel={t("docInstallingApp")}
+                className="touch-target inline-flex items-center gap-1.5 rounded-lg bg-sky-700 px-4 py-2 text-xs font-bold text-white shadow-sm disabled:opacity-60"
+                onInstalled={() => setStandalone(true)}
+              />
+            </div>
           </div>
         </div>
       )}

@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
 import { APP_NAME, DEVELOPER } from "@/lib/constants";
@@ -66,9 +65,6 @@ export default function RootLayout({
           {children}
           <ServiceWorkerRegister />
         </LanguageProvider>
-        <Script id="mcp-sw-register" strategy="afterInteractive">
-          {`if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js",{scope:"/"}).catch(function(e){console.error("[PWA] sw.js register failed",e);});});}`}
-        </Script>
       </body>
     </html>
   );

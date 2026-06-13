@@ -85,7 +85,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
   const filteredNav = useModuleNav(doctorModuleNav);
 
   return (
-    <div className="flex min-h-screen flex-col bg-surface pb-20">
+    <div className="flex min-h-dvh flex-col bg-surface">
       <ClinicDataSyncBridge />
       <QueueRealtimeBridge portal="doctor" enablePolling />
       <header className="safe-top sticky top-0 z-30 bg-primary px-4 py-3 text-white shadow-premium">
@@ -143,7 +143,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="mc-app-main flex-1 px-4 py-4">
+      <main className="mc-app-main min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-4 pb-24">
         <DoctorAlertsSetup />
         {children}
       </main>

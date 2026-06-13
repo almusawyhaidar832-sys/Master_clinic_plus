@@ -1,8 +1,8 @@
 {
-  "name": "Master Clinic",
-  "short_name": "Master Clinic",
-  "description": "نظام إدارة العيادات — ماستر كلينك",
-  "start_url": "/",
+  "name": "Master Clinic Doctor",
+  "short_name": "Doctor",
+  "description": "تطبيق الطبيب — ماستر كلينك",
+  "start_url": "/doctor",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
