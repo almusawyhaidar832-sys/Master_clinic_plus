@@ -6,10 +6,13 @@ import { Bell, Share, Smartphone, Volume2, X } from "lucide-react";
 import { PwaInstallButton } from "@/components/pwa/PwaInstallButton";
 import { ensureNotificationPermission } from "@/lib/queue/realtime-client";
 import {
+  refreshNotificationPermission,
+  watchNotificationPermission,
+} from "@/lib/pwa/notification-permission";
+import {
   isWebPushSupported,
   listenForPushAlertMessages,
   listenForServiceWorkerNavigation,
-  refreshDoctorWebPushIfGranted,
   registerDoctorWebPush,
 } from "@/lib/push/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
@@ -18,6 +21,10 @@ import { warmDoctorCloudTts } from "@/lib/queue/cloud-speech";
 import { formatNameForSpeech } from "@/lib/queue/arabic-speech-text";
 import {
   getDoctorPushCapability,
+  getNotificationSettingsHintAr,
+  getNotificationSettingsHintEn,
+  getPwaInstallHintAr,
+  getPwaInstallHintEn,
   isAndroid,
   isIOS,
   isStandalonePwa,
@@ -38,42 +45,50 @@ export function DoctorAlertsSetup() {
   const [standalone, setStandalone] = useState(false);
   const [platform, setPlatform] = useState<"ios" | "android" | "other">("other");
 
+  const applyGrantedState = useCallback(() => {
+    setEnabled(true);
+    setShowBanner(false);
+    localStorage.removeItem(DISMISS_KEY);
+    void warmDoctorCloudTts();
+    if (isWebPushSupported()) {
+      void registerDoctorWebPush(false).then((result) => {
+        if (result.ok) setPushReady(true);
+      });
+    }
+  }, []);
+
   useEffect(() => {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (typeof window === "undefined") return;
 
     setStandalone(isStandalonePwa());
     if (isIOS()) setPlatform("ios");
     else if (isAndroid()) setPlatform("android");
 
-    const granted = Notification.permission === "granted";
-    setEnabled(granted);
-    setPushReady(granted && isWebPushSupported());
+    void refreshNotificationPermission().then((snap) => {
+      if (snap.granted) {
+        applyGrantedState();
+        return;
+      }
+      if (snap.permission === "denied") return;
+      if (localStorage.getItem(DISMISS_KEY) === "1") return;
+      setShowBanner(true);
+    });
 
-    if (granted) {
-      void warmDoctorCloudTts();
-      void registerDoctorWebPush(false).then((result) => {
-        if (result.ok) setPushReady(true);
-      });
-      return;
-    }
-    if (Notification.permission === "denied") return;
-    if (localStorage.getItem(DISMISS_KEY) === "1") return;
-    setShowBanner(true);
-  }, []);
+    return watchNotificationPermission((snap) => {
+      if (snap.granted) applyGrantedState();
+    });
+  }, [applyGrantedState]);
 
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void refreshDoctorWebPushIfGranted().then(() => {
-          if (Notification.permission === "granted" && isWebPushSupported()) {
-            setPushReady(true);
-          }
-        });
-      }
+      if (document.visibilityState !== "visible") return;
+      void refreshNotificationPermission().then((snap) => {
+        if (snap.granted) applyGrantedState();
+      });
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, []);
+  }, [applyGrantedState]);
 
   useEffect(() => {
     return listenForPushAlertMessages((payload) => {
@@ -101,44 +116,51 @@ export function DoctorAlertsSetup() {
     setMessage(null);
     try {
       await unlockQueueAudio();
-      const granted = await ensureNotificationPermission();
+
+      let snap = await refreshNotificationPermission();
+      let granted = snap.granted || (await ensureNotificationPermission());
+
       if (!granted) {
-        setMessage(t("docAlertsPermissionDenied"));
+        snap = await refreshNotificationPermission();
+        granted = snap.granted;
+      }
+
+      if (!granted) {
+        if (!snap.supported && isIOS() && !isStandalonePwa()) {
+          setEnabled(true);
+          setShowBanner(false);
+          localStorage.removeItem(DISMISS_KEY);
+          setMessage(t("docAlertsInAppOnly"));
+          window.setTimeout(() => setMessage(null), 8000);
+          void warmDoctorCloudTts();
+          return;
+        }
+        setMessage(
+          snap.permission === "denied"
+            ? `${t("docAlertsPermissionDenied")} — ${bi(
+                getNotificationSettingsHintAr(),
+                getNotificationSettingsHintEn()
+              )} ${t("docAlertsReopenHint")}`
+            : t("docAlertsPermissionRetry")
+        );
         return;
       }
 
-      setEnabled(true);
-      setShowBanner(false);
-      localStorage.removeItem(DISMISS_KEY);
+      applyGrantedState();
 
       const capability = getDoctorPushCapability();
       if (capability.level === "in-app-only") {
         setMessage(t("docAlertsInAppOnly"));
         window.setTimeout(() => setMessage(null), 8000);
-        void warmDoctorCloudTts();
         return;
       }
 
       setMessage(t("docAlertsEnabled"));
       window.setTimeout(() => setMessage(null), 6000);
-      void warmDoctorCloudTts();
-
-      if (isWebPushSupported()) {
-        void registerDoctorWebPush(false).then((result) => {
-          if (result.ok) {
-            setPushReady(true);
-            return;
-          }
-          if (result.reason === "server-failed" || result.reason === "no-sw") {
-            setMessage(t("docAlertsPushFailed"));
-            window.setTimeout(() => setMessage(null), 8000);
-          }
-        });
-      }
     } finally {
       setActivating(false);
     }
-  }, [t]);
+  }, [applyGrantedState, bi, t]);
 
   const testAlert = useCallback(async () => {
     await unlockQueueAudio();
@@ -204,7 +226,8 @@ export function DoctorAlertsSetup() {
             <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
             <div className="min-w-0 flex-1 space-y-2">
               <p className="text-xs leading-relaxed text-sky-950">
-                {t("docAlertsAndroidHint")}
+                {t("docAlertsAndroidHint")}{" "}
+                {bi(getPwaInstallHintAr(), getPwaInstallHintEn())}
               </p>
               <PwaInstallButton
                 label={t("docInstallApp")}

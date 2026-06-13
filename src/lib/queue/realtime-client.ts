@@ -44,23 +44,12 @@ export async function announceArabicAsync(text: string) {
 }
 
 /** Request browser notification permission (call once on user gesture if possible) */
-export async function ensureNotificationPermission(): Promise<boolean> {
-  if (typeof window === "undefined" || !("Notification" in window)) return false;
-  if (Notification.permission === "granted") return true;
-  if (Notification.permission === "denied") return false;
-
-  try {
-    const result = await Promise.race([
-      Notification.requestPermission(),
-      new Promise<NotificationPermission>((resolve) => {
-        window.setTimeout(() => resolve(Notification.permission), 30_000);
-      }),
-    ]);
-    return result === "granted";
-  } catch {
-    return Notification.permission === "granted";
-  }
-}
+export {
+  ensureNotificationPermission,
+  readNotificationPermission,
+  refreshNotificationPermission,
+  watchNotificationPermission,
+} from "@/lib/pwa/notification-permission";
 
 /** Show a native browser notification (works when tab is in background) */
 export function showBrowserNotification(
