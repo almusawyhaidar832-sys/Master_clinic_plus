@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ClinicProfile, ClinicProfileUpdate } from "@/types/clinic-profile";
 import { getActiveClinicId } from "@/lib/clinic-context";
+import {
+  cacheClinicProfile,
+  getCachedClinicProfile,
+  isBrowserOffline,
+} from "@/lib/offline-cache";
 
 /** Arabic display name for reports, WhatsApp, headers */
 export function getClinicDisplayName(
@@ -37,6 +42,10 @@ export async function fetchClinicProfile(
   }
   if (!id) return null;
 
+  if (isBrowserOffline()) {
+    return getCachedClinicProfile(id);
+  }
+
   // Try full query (including optional columns)
   const { data, error } = await supabase
     .from("clinics")
@@ -44,16 +53,30 @@ export async function fetchClinicProfile(
     .eq("id", id)
     .maybeSingle();
 
-  if (!error && data) return data as ClinicProfile;
+  if (!error && data) {
+    const profile = data as ClinicProfile;
+    cacheClinicProfile(profile);
+    return profile;
+  }
 
   // Fallback: fetch only core columns if schema cache doesn't know optional cols yet
-  const { data: coreData } = await supabase
+  const { data: coreData, error: coreError } = await supabase
     .from("clinics")
     .select(CLINIC_CORE_COLS)
     .eq("id", id)
     .maybeSingle();
 
-  return coreData as ClinicProfile | null;
+  if (coreData) {
+    const profile = coreData as ClinicProfile;
+    cacheClinicProfile(profile);
+    return profile;
+  }
+
+  if (coreError || error) {
+    return getCachedClinicProfile(id);
+  }
+
+  return null;
 }
 
 export async function updateClinicProfile(

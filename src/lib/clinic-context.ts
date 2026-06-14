@@ -3,6 +3,11 @@ import type { Assistant, Doctor, Profile } from "@/types";
 import { fetchDeveloperActingClinic } from "@/lib/auth/developer-acting-clinic";
 import type { ActiveClinicResult } from "@/lib/clinic-types";
 import { getCurrentUser } from "@/lib/supabase/auth-helpers";
+import {
+  cacheAuthProfile,
+  getCachedAuthProfile,
+  isBrowserOffline,
+} from "@/lib/offline-cache";
 
 export type { ActiveClinicResult } from "@/lib/clinic-types";
 
@@ -12,14 +17,23 @@ export async function getAuthProfile(
   const user = await getCurrentUser(supabase);
   if (!user) return null;
 
+  if (isBrowserOffline()) {
+    return getCachedAuthProfile(user.id);
+  }
+
   const { data, error } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (error || !data) return null;
-  return data as Profile;
+  if (error || !data) {
+    return getCachedAuthProfile(user.id);
+  }
+
+  const profile = data as Profile;
+  cacheAuthProfile(profile);
+  return profile;
 }
 
 export async function getDoctorForCurrentUser(

@@ -24,6 +24,11 @@ import {
   scrollToClinicalExamView,
 } from "@/lib/queue/navigation";
 import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
+import {
+  cachePortalQueue,
+  getCachedPortalQueue,
+  isBrowserOffline,
+} from "@/lib/offline-cache";
 import { PatientSearchField } from "@/components/patients/PatientSearchField";
 import { getPatientDisplayPhone } from "@/lib/phone";
 import type { PatientSearchResult } from "@/lib/services/patient-search";
@@ -264,15 +269,27 @@ export function AssistantQueuePanel() {
           e.status !== "cancelled"
       );
       setQueue(rows);
+      cachePortalQueue("assistant", data.doctorId ?? assistant?.doctor_id ?? null, rows);
       setClinicalEntryId((prev) =>
         prev && !rows.some((e) => e.id === prev) ? null : prev
       );
     } catch (err) {
+      if (isBrowserOffline()) {
+        const cached = getCachedPortalQueue<QueueEntry>(
+          "assistant",
+          assistant?.doctor_id ?? doctorId
+        );
+        if (cached && cached.length > 0) {
+          setQueue(cached);
+          setPageError(t("offlineModeHint"));
+          return;
+        }
+      }
       setPageError(err instanceof Error ? err.message : t("errQueueLoad"));
     } finally {
       setLoading(false);
     }
-  }, [assistant?.doctor_id, lang, t]);
+  }, [assistant?.doctor_id, doctorId, lang, t]);
 
   useEffect(() => {
     if (assistant?.doctor_id) void fetchQueue();

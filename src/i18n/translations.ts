@@ -17,7 +17,7 @@ const translations = {
     // ── App ──
     appName:            "ماستر كلينك بلس",
     appTagline:         "نظام إدارة العيادات الذكي",
-    offlineModeHint:    "أنت الآن في وضع الأوفلاين، البيانات قد تكون قديمة",
+    offlineModeHint:    "لا يوجد اتصال — الواجهة للعرض فقط، لا يمكن الحفظ أو الإرسال حتى يعود النت",
 
     // ── Navigation ──
     dashboard:          "لوحة التحكم",
@@ -693,7 +693,7 @@ const translations = {
     // ── App ──
     appName:            "Master Clinic Plus",
     appTagline:         "Smart Clinic Management System",
-    offlineModeHint:    "You are offline — data may be outdated",
+    offlineModeHint:    "No connection — view only; save and send are disabled until you're back online",
 
     // ── Navigation ──
     dashboard:          "Dashboard",

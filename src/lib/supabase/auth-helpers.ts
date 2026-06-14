@@ -2,19 +2,45 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 type AuthUser = { id: string; email?: string };
 
-/** Workaround: @supabase/ssr narrows auth types and omits getUser in strict builds */
+type AuthApi = {
+  getUser: () => Promise<{ data: { user: AuthUser | null }; error: Error | null }>;
+  getSession: () => Promise<{
+    data: { session: { user: AuthUser } | null };
+    error: Error | null;
+  }>;
+};
+
+async function getSessionUser(supabase: SupabaseClient): Promise<AuthUser | null> {
+  const auth = supabase.auth as AuthApi;
+  const { data } = await auth.getSession();
+  return data.session?.user ?? null;
+}
+
+/**
+ * Prefer validated user when online; fall back to local session when offline
+ * or when the network/Supabase validation request fails (PWA offline UX).
+ */
 export async function getCurrentUser(
   supabase: SupabaseClient
 ): Promise<AuthUser | null> {
+  const auth = supabase.auth as AuthApi;
+  const offline =
+    typeof navigator !== "undefined" && navigator.onLine === false;
+
+  if (offline) {
+    return getSessionUser(supabase);
+  }
+
   try {
-    const auth = supabase.auth as {
-      getUser: () => Promise<{ data: { user: AuthUser | null }; error: Error | null }>;
-    };
     const { data, error } = await auth.getUser();
-    if (error) return null;
-    return data.user;
+    if (!error && data.user) return data.user;
+    return getSessionUser(supabase);
   } catch {
-    return null;
+    try {
+      return getSessionUser(supabase);
+    } catch {
+      return null;
+    }
   }
 }
 

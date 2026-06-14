@@ -25,8 +25,12 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { getQueueStatusLabel, type QueueStatusKey } from "@/i18n/localized-labels";
 import type { Language, TranslationKey } from "@/i18n/translations";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
-import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
 import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
+import {
+  cachePortalQueue,
+  getCachedPortalQueue,
+  isBrowserOffline,
+} from "@/lib/offline-cache";
 import {
   Clock, UserCheck, RefreshCw, LogIn, Send, Users, RotateCcw,
   UserX, ArrowRightLeft, X,
@@ -166,16 +170,25 @@ function DoctorQueuePageContent() {
           e.status !== "ready_for_payment"
       );
       setQueue(rows);
+      cachePortalQueue("doctor", data.doctorId, rows);
 
       setClinicalEntryId((prev) =>
         prev && !rows.some((e) => e.id === prev) ? null : prev
       );
     } catch (err) {
+      if (isBrowserOffline()) {
+        const cached = getCachedPortalQueue<QueueEntry>("doctor", doctorId);
+        if (cached && cached.length > 0) {
+          setQueue(cached);
+          setPageError(t("offlineModeHint"));
+          return;
+        }
+      }
       setPageError(err instanceof Error ? err.message : t("errQueueLoad"));
     } finally {
       setLoading(false);
     }
-  }, [lang, t]);
+  }, [lang, t, doctorId]);
 
   useEffect(() => {
     fetchQueue();

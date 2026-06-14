@@ -9,6 +9,7 @@ import {
   getAuthPortalForPath,
   isRoleAllowedForPath,
 } from "@/lib/auth/portal-access";
+import { isBrowserOffline } from "@/lib/offline-cache";
 
 /**
  * Client guard: if session role does not match the current portal path,
@@ -40,6 +41,15 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
       sessionOkRef.current && portalIdRef.current === portal.loginPortalId;
 
     async function enforce(hideWhileChecking: boolean) {
+      if (
+        isBrowserOffline() &&
+        sessionOkRef.current &&
+        portalIdRef.current === portal.loginPortalId
+      ) {
+        setReady(true);
+        return;
+      }
+
       if (hideWhileChecking) {
         setReady(false);
       }
@@ -88,6 +98,10 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = onAuthStateChange(supabase, () => {
+      if (isBrowserOffline() && sessionOkRef.current) {
+        setReady(true);
+        return;
+      }
       sessionOkRef.current = false;
       void enforce(true);
     });

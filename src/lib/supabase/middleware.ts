@@ -125,16 +125,21 @@ export async function updateSession(request: NextRequest) {
 
   const portal = getAuthPortalForPath(path);
   if (portal) {
-    const { data: profile } = await activeClient
+    const { data: profile, error: profileError } = await activeClient
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .maybeSingle();
 
     let role = normalizeRole(profile?.role as string | undefined);
-    if (!role) {
+    if (!role && !profileError) {
       const { data: rpcRole } = await activeClient.rpc("get_my_role");
       role = normalizeRole(rpcRole as string | undefined);
+    }
+
+    // DB unreachable — keep local session so PWA pages stay usable offline
+    if (!role && profileError) {
+      return supabaseResponse;
     }
 
     if (!isRoleAllowedForPath(role, path)) {
