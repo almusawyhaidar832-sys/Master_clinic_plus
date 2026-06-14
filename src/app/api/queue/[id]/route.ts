@@ -277,7 +277,7 @@ export async function PATCH(
         const status = await markQueueReadyForBilling(admin, id, {
           doctorId: ctx.doctorId,
         });
-        await notifyAccountantsReadyForBilling(id).catch((err) => {
+        void notifyAccountantsReadyForBilling(id).catch((err) => {
           console.error("[api/queue] billing notify failed:", err);
         });
 
@@ -316,7 +316,7 @@ export async function PATCH(
         : { clinicId: profile.clinic_id as string };
 
       const status = await markQueueReadyForBilling(admin, id, opts);
-      await notifyAccountantsReadyForBilling(id).catch((err) => {
+      void notifyAccountantsReadyForBilling(id).catch((err) => {
         console.error("[api/queue] billing notify failed:", err);
       });
 

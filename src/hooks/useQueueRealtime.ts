@@ -107,7 +107,7 @@ function alertAccountantBilling(
   void triggerQueueAlert({
     kind: "accountant_billing",
     title: "جلسة جاهزة للمحاسبة 🔔",
-    message: `تم إكمال جلسة المراجع ${name} — أكمل الفاتورة الآن`,
+    message: `المراجع ${name} — أكمل الجلسة وتوجّه إليك للدفع`,
     linkPath,
     patientName: name,
     patientGender: payload.gender ?? null,
@@ -129,7 +129,7 @@ function alertAccountantBillingFromRow(
   void triggerQueueAlert({
     kind: "accountant_billing",
     title: "جلسة جاهزة للمحاسبة 🔔",
-    message: `تم إكمال جلسة المراجع ${name} — أكمل الفاتورة الآن`,
+    message: `المراجع ${name} — أكمل الجلسة وتوجّه إليك للدفع`,
     linkPath,
     patientName: name,
     patientGender: gender,

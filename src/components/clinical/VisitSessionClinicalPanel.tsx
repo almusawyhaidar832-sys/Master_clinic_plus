@@ -30,6 +30,8 @@ interface VisitSessionClinicalPanelProps {
   className?: string;
   /** إخفاء العنوان العلوي — عند وجود عنوان في الصفحة الأم (غرفة الانتظار) */
   hideHeader?: boolean;
+  /** إدخال جلسة المحاسب — عرض مضغوط قابل للطي (لا يملأ الصفحة) */
+  entryReviewMode?: boolean;
 }
 
 export function VisitSessionClinicalPanel({
@@ -41,6 +43,7 @@ export function VisitSessionClinicalPanel({
   className,
   hideHeader = false,
   queueStatusOverride,
+  entryReviewMode = false,
 }: VisitSessionClinicalPanelProps) {
   const { t, bi } = useLanguage();
   const { profile } = useClinicProfile();
@@ -261,10 +264,15 @@ export function VisitSessionClinicalPanel({
           operationId={session.operationId}
           portal={portal}
           examMode={isExamPortal}
-          collapsible={!isExamPortal && !isAccountantView}
-          defaultOpen={isAccountantView ? true : defaultOpen}
-          compact={isAccountantView}
+          collapsible={
+            entryReviewMode || (!isExamPortal && !isAccountantView)
+          }
+          defaultOpen={
+            entryReviewMode ? false : isAccountantView ? true : defaultOpen
+          }
+          compact={isAccountantView || entryReviewMode}
           readOnly={false}
+          accountantSingleChart={entryReviewMode || isAccountantView}
         />
       )}
 
@@ -282,7 +290,7 @@ export function VisitSessionClinicalPanel({
             queueEntryId={session.queueEntryId}
             queueStatus={effectiveQueueStatus}
             portal={portal}
-            readOnly={false}
+            readOnly={entryReviewMode || isAccountantView}
             showSendToAccounting={isExamPortal && canSend}
             onSendToAccounting={() => void sendToAccounting()}
             sendingToAccounting={sending}

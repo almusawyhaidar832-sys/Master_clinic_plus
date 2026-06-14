@@ -373,31 +373,11 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
     patient_name: entry.patient_name,
   });
 
-  await insertNotifications(
-    staff.map((s) => ({
-      clinic_id: entry.clinic_id,
-      recipient_profile_id: s.id,
-      title_ar: "جلسة جاهزة للمحاسبة",
-      body_ar: `المراجع ${name} — أُرسلت الجلسة من الطبيب، أكمل الفاتورة`,
-      link_path: ledgerPath,
-    }))
-  );
+  const clinicId = entry.clinic_id as string;
 
-  await Promise.allSettled(
-    staff.map((s) =>
-      sendWebPushToProfile(s.id, {
-        title: "جلسة جاهزة للمحاسبة 🔔",
-        body: `المراجع ${name} — أكمل الفاتورة الآن`,
-        url: ledgerPath,
-        tag: `billing-${entry.id}`,
-        patientName: speechName,
-        kind: "accountant_billing",
-      })
-    )
-  );
-
+  // 1) بث فوري أولاً — يصل للمحاسب مباشرة على أي صفحة (Realtime)
   await pushQueueBroadcasts([
-    broadcastBillingReadyServer(entry.clinic_id as string, {
+    broadcastBillingReadyServer(clinicId, {
       name: speechName,
       entryId: entry.id as string,
       linkPath: ledgerPath,
@@ -405,6 +385,31 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
     }),
   ]).catch((err) => {
     console.error("[queue] billing broadcast failed:", err);
+  });
+
+  // 2) جرس + Push بالخلفية — لا تُبطئ النداء داخل التطبيق
+  void Promise.allSettled([
+    insertNotifications(
+      staff.map((s) => ({
+        clinic_id: clinicId,
+        recipient_profile_id: s.id,
+        title_ar: "جلسة جاهزة للمحاسبة",
+        body_ar: `المراجع ${name} — أكمل الجلسة وتوجّه إليك للدفع، افتح إدخال الجلسة`,
+        link_path: ledgerPath,
+      }))
+    ),
+    ...staff.map((s) =>
+      sendWebPushToProfile(s.id, {
+        title: "جلسة جاهزة للمحاسبة 🔔",
+        body: `المراجع ${name} — أكمل الجلسة وتوجّه إليك للدفع`,
+        url: ledgerPath,
+        tag: `billing-${entry.id}`,
+        patientName: speechName,
+        kind: "accountant_billing",
+      })
+    ),
+  ]).catch((err) => {
+    console.error("[queue] billing notify background failed:", err);
   });
 }
 
@@ -510,18 +515,30 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
     patient_name: entry.patient_name,
   });
 
-  await insertNotifications(
-    staff.map((s) => ({
-      clinic_id: entry.clinic_id,
-      recipient_profile_id: s.id,
-      title_ar: "ادخل المراجع للعيادة",
-      body_ar: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
-      link_path: "/dashboard/queue",
-    }))
-  );
+  const clinicId = entry.clinic_id as string;
 
-  await Promise.allSettled(
-    staff.map((s) =>
+  // بث فوري أولاً — نداء المحاسب مباشرة
+  await pushQueueBroadcasts([
+    broadcastAdmitRequestServer(clinicId, {
+      name: speechName,
+      entryId: entry.id as string,
+      gender: gender ?? undefined,
+    }),
+  ]).catch((err) => {
+    console.error("[queue] admit broadcast failed:", err);
+  });
+
+  void Promise.allSettled([
+    insertNotifications(
+      staff.map((s) => ({
+        clinic_id: clinicId,
+        recipient_profile_id: s.id,
+        title_ar: "ادخل المراجع للعيادة",
+        body_ar: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
+        link_path: "/dashboard/queue",
+      }))
+    ),
+    ...staff.map((s) =>
       sendWebPushToProfile(s.id, {
         title: "طلب دخول مراجع 🔔",
         body: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
@@ -530,17 +547,9 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
         patientName: speechName,
         kind: "accountant_admit",
       })
-    )
-  );
-
-  await pushQueueBroadcasts([
-    broadcastAdmitRequestServer(entry.clinic_id as string, {
-      name: speechName,
-      entryId: entry.id as string,
-      gender: gender ?? undefined,
-    }),
+    ),
   ]).catch((err) => {
-    console.error("[queue] admit broadcast failed:", err);
+    console.error("[queue] admit notify background failed:", err);
   });
 }
 

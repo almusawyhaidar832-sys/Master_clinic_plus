@@ -36,6 +36,15 @@ export function QueueAlertOverlay() {
     alert.title.includes("تجربة") ||
     alert.title.toLowerCase().includes("test alert");
 
+  const linkHint =
+    alert.kind === "accountant_billing"
+      ? "اضغط لفتح إدخال الجلسة والفاتورة"
+      : alert.kind === "accountant_admit"
+        ? "اضغط للانتقال إلى غرفة الانتظار"
+        : alert.linkPath
+          ? "اضغط للانتقال"
+          : null;
+
   const AlertIcon =
     alert.kind === "doctor_exam"
       ? Stethoscope
@@ -85,10 +94,8 @@ export function QueueAlertOverlay() {
         <div className="min-w-0 flex-1">
           <p className="text-base font-bold leading-snug">{alert.title}</p>
           <p className="mt-1 text-sm leading-relaxed text-white/90">{alert.message}</p>
-          {alert.linkPath && !isTestAlert && (
-            <p className="mt-2 text-xs font-medium text-white/70">
-              اضغط للانتقال إلى غرفة الانتظار
-            </p>
+          {alert.linkPath && linkHint && !isTestAlert && (
+            <p className="mt-2 text-xs font-medium text-white/70">{linkHint}</p>
           )}
           <button
             type="button"

@@ -8,6 +8,7 @@ import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { resolvePatientSpeechName } from "@/lib/queue/utils";
 
 const POLL_MS = 3_000;
+const ACCOUNTANT_POLL_MS = 1_000;
 
 function queueFingerprint(queue: QueueRow[]): string {
   return (queue ?? [])
@@ -184,7 +185,7 @@ export function useAccountantQueuePolling(
               void triggerQueueAlert({
                 kind: "accountant_billing",
                 title: "جلسة جاهزة للمحاسبة 🔔",
-                message: `تم إكمال جلسة المراجع ${name} — أكمل الفاتورة الآن`,
+                message: `المراجع ${name} — أكمل الجلسة وتوجّه إليك للدفع`,
                 linkPath: `/dashboard/ledger?queue_entry_id=${entry.id}`,
                 patientName: name,
               });
@@ -214,7 +215,7 @@ export function useAccountantQueuePolling(
     }
 
     void poll();
-    const timer = setInterval(poll, POLL_MS);
+    const timer = setInterval(poll, ACCOUNTANT_POLL_MS);
     return () => {
       active = false;
       clearInterval(timer);

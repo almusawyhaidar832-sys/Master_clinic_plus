@@ -80,6 +80,7 @@ import {
   buildSessionInvoiceData,
   type SessionInvoiceData,
 } from "@/lib/invoices/session-invoice";
+import { Scan, X } from "lucide-react";
 
 /** Common dental procedure suggestions — user can also type freely */
 const DENTAL_SUGGESTIONS = [
@@ -342,6 +343,11 @@ export function QuickEntryForm({
     id: string;
     full_name_ar: string;
   } | null>(null);
+  const [showVisualRecordReview, setShowVisualRecordReview] = useState(false);
+
+  useEffect(() => {
+    setShowVisualRecordReview(false);
+  }, [visitQueueEntryId]);
 
   const handleCaseDoctorTransferred = useCallback(
     async (caseId: string, doc: PatientPrimaryDoctor) => {
@@ -2152,13 +2158,47 @@ export function QuickEntryForm({
         )}
 
         {visitQueueEntryId && (selectedPatientId || defaultPatientId) && (
-          <div className="sm:col-span-2">
-            <VisitSessionClinicalPanel
-              patientId={selectedPatientId ?? defaultPatientId ?? null}
-              queueEntryId={visitQueueEntryId}
-              portal="accountant"
-              defaultOpen
-            />
+          <div className="sm:col-span-2 space-y-3">
+            {!showVisualRecordReview ? (
+              <div className="rounded-lg border border-slate-border bg-surface/80 p-4">
+                <p className="text-sm font-semibold text-slate-text">
+                  مراجعة السجل البصري
+                </p>
+                <p className="mt-1 text-xs text-slate-muted">
+                  ما سجّله الطبيب أثناء الكشف — اضغط الزر للعرض دون إطالة صفحة
+                  إدخال الجلسة
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => setShowVisualRecordReview(true)}
+                >
+                  <Scan className="h-4 w-4" />
+                  مراجعة السجل البصري
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowVisualRecordReview(false)}
+                >
+                  <X className="h-4 w-4" />
+                  إغلاق السجل البصري — العودة لإدخال الجلسة
+                </Button>
+                <VisitSessionClinicalPanel
+                  patientId={selectedPatientId ?? defaultPatientId ?? null}
+                  queueEntryId={visitQueueEntryId}
+                  portal="accountant"
+                  entryReviewMode
+                  hideHeader
+                />
+              </>
+            )}
           </div>
         )}
 

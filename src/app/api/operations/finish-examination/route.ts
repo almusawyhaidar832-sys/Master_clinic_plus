@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (entry?.id) {
-        await notifyAccountantsReadyForBilling(entry.id as string).catch((err) => {
+        void notifyAccountantsReadyForBilling(entry.id as string).catch((err) => {
           console.error("[operations/finish-examination] billing notify failed:", err);
         });
       }

@@ -45,6 +45,8 @@ export interface VisualMedicalRecordProps {
   readOnly?: boolean;
   /** تخطيط غرفة الكشف — كارتات بيضاء وتباين أزرق */
   examMode?: boolean;
+  /** محاسب — مخطط واحد: عرض سجل الطبيب ثم تعديل على نفس الجلسة عند الطلب */
+  accountantSingleChart?: boolean;
 }
 
 export function VisualMedicalRecord({
@@ -63,8 +65,10 @@ export function VisualMedicalRecord({
   compact = false,
   readOnly = false,
   examMode = false,
+  accountantSingleChart = false,
 }: VisualMedicalRecordProps) {
   const [open, setOpen] = useState(defaultOpen || !collapsible);
+  const [showAdditionForm, setShowAdditionForm] = useState(false);
   const [operationId, setOperationId] = useState<string | null>(
     operationIdProp ?? null
   );
@@ -88,6 +92,7 @@ export function VisualMedicalRecord({
 
   useEffect(() => {
     setOperationId(operationIdProp ?? null);
+    setShowAdditionForm(false);
   }, [operationIdProp]);
 
   useEffect(() => {
@@ -141,6 +146,15 @@ export function VisualMedicalRecord({
   }, [examMode, operationId, existing]);
 
   const hasExisting = hasClinicalData(existing);
+  const singleChartAccountant =
+    accountantSingleChart && portal === "accountant" && !!operationId;
+  const showChartEditor =
+    !reviewOnly &&
+    (isDraftMode ||
+      !operationId ||
+      !hasExisting ||
+      !singleChartAccountant ||
+      showAdditionForm);
 
   const summaryHint = hasExisting
     ? `(${existing!.teeth.length} سن${
@@ -184,9 +198,15 @@ export function VisualMedicalRecord({
             : "rounded-xl border border-teal-200/50 bg-teal-50/20 p-3"
       )}
     >
-      {portal === "accountant" && !reviewOnly && operationId && (
+      {portal === "accountant" && !reviewOnly && operationId && !singleChartAccountant && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           إذا نسي الطبيب المخطط أو الأشعة — أضفها هنا ثم اضغط «حفظ على هذه الجلسة»
+        </p>
+      )}
+
+      {singleChartAccountant && hasExisting && !showAdditionForm && (
+        <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+          هذا مخطط الطبيب لهذه الجلسة — للتعديل أو الإضافة على نفس السجل اضغط الزر أدناه
         </p>
       )}
 
@@ -208,31 +228,47 @@ export function VisualMedicalRecord({
 
       {!reviewOnly && (isDraftMode || operationId) && (
         <>
-          {operationId && !isDraftMode && hasExisting && !examMode && (
+          {operationId &&
+            !isDraftMode &&
+            hasExisting &&
+            !examMode &&
+            !singleChartAccountant && (
             <p className="text-xs font-semibold text-primary">
               إضافة أشعة / أسنان لهذه الجلسة
             </p>
           )}
-          <SessionClinicalRecord
-            value={draftValue}
-            onChange={setDraft}
-            disabled={disabled || saving}
-            chartResetKey={chartResetKey}
-            showHeader={!collapsible && !examMode}
-            examLayout={examMode}
-            autoSave={examMode && !!operationId && !reviewOnly}
-            operationId={operationId ?? undefined}
-            portal={portal}
-            savedXrays={examMode && existing ? existing.xrays : undefined}
-            onAutoSaved={(kind) => {
-              if (kind === "xray") void loadExisting(true);
-            }}
-            onAutoSaveError={(text) => setMessage({ type: "error", text })}
-          />
+          {singleChartAccountant && hasExisting && !showAdditionForm && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAdditionForm(true)}
+            >
+              تعديل / إضافة على سجل الطبيب
+            </Button>
+          )}
+          {showChartEditor && (
+            <SessionClinicalRecord
+              value={draftValue}
+              onChange={setDraft}
+              disabled={disabled || saving}
+              chartResetKey={chartResetKey}
+              showHeader={!collapsible && !examMode}
+              examLayout={examMode}
+              autoSave={examMode && !!operationId && !reviewOnly}
+              operationId={operationId ?? undefined}
+              portal={portal}
+              savedXrays={examMode && existing ? existing.xrays : undefined}
+              onAutoSaved={(kind) => {
+                if (kind === "xray") void loadExisting(true);
+              }}
+              onAutoSaveError={(text) => setMessage({ type: "error", text })}
+            />
+          )}
         </>
       )}
 
-      {operationId && !isDraftMode && !reviewOnly && !examMode && (
+      {operationId && !isDraftMode && !reviewOnly && !examMode && showChartEditor && (
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
