@@ -11,7 +11,7 @@ import {
 } from "@/lib/queue/realtime-client";
 import { buildDoctorQueueClinicalUrl } from "@/lib/queue/navigation";
 import { resolvePatientSpeechName } from "@/lib/queue/utils";
-import { resolvePatientGender } from "@/lib/queue/patient-gender";
+import { resolvePatientGender, type PatientGender } from "@/lib/queue/patient-gender";
 import { formatNameForSpeech } from "@/lib/queue/arabic-speech-text";
 
 interface QueuePayload {
@@ -88,7 +88,12 @@ function alertAccountantAdmit(
 }
 
 function alertAccountantBilling(
-  payload: { name?: string; entryId?: string; linkPath?: string },
+  payload: {
+    name?: string;
+    entryId?: string;
+    linkPath?: string;
+    gender?: PatientGender;
+  },
   seen: Set<string>
 ) {
   const entryId = payload.entryId;
@@ -100,11 +105,34 @@ function alertAccountantBilling(
   const name = formatNameForSpeech(payload.name?.trim() || "مراجع");
   const linkPath = payload.linkPath ?? "/dashboard/ledger";
   void triggerQueueAlert({
-    kind: "accountant_admit",
+    kind: "accountant_billing",
     title: "جلسة جاهزة للمحاسبة 🔔",
-    message: `المراجع ${name} — أكمل الفاتورة الآن`,
+    message: `تم إكمال جلسة المراجع ${name} — أكمل الفاتورة الآن`,
     linkPath,
     patientName: name,
+    patientGender: payload.gender ?? null,
+  });
+}
+
+function alertAccountantBillingFromRow(
+  row: QueuePayload,
+  dedupeKey: string,
+  seen: Set<string>
+) {
+  if (seen.has(dedupeKey)) return;
+  if (!shouldFireQueueAlert(`accountant-billing-${row.id}`)) return;
+  seen.add(dedupeKey);
+
+  const name = resolvePatientSpeechName(row);
+  const gender = resolvePatientGender(row);
+  const linkPath = `/dashboard/ledger?queue_entry_id=${row.id}`;
+  void triggerQueueAlert({
+    kind: "accountant_billing",
+    title: "جلسة جاهزة للمحاسبة 🔔",
+    message: `تم إكمال جلسة المراجع ${name} — أكمل الفاتورة الآن`,
+    linkPath,
+    patientName: name,
+    patientGender: gender,
   });
 }
 
@@ -336,7 +364,22 @@ export function useAccountantQueueRealtime(
 
           const row = parseQueueRow(payload.new as Record<string, unknown>);
           const old = payload.old as { status?: string } | undefined;
-          if (!row || row.status !== "called" || old?.status === "called") return;
+          if (!row) return;
+
+          if (
+            row.status === "ready_for_billing" &&
+            old?.status !== "ready_for_billing"
+          ) {
+            if (filterDoctorId && row.doctor_id !== filterDoctorId) return;
+            alertAccountantBillingFromRow(
+              row,
+              `billing-row-${row.id}`,
+              seenRef.current
+            );
+            return;
+          }
+
+          if (row.status !== "called" || old?.status === "called") return;
           if (filterDoctorId && row.doctor_id !== filterDoctorId) return;
           alertAccountantAdmit(row, `called-${row.id}`, seenRef.current, admitLinkPath);
         }
@@ -357,7 +400,12 @@ export function useAccountantQueueRealtime(
         "broadcast",
         { event: "queue_billing_ready" },
         ({ payload }) => {
-          const p = payload as { name?: string; entryId?: string; linkPath?: string };
+          const p = payload as {
+            name?: string;
+            entryId?: string;
+            linkPath?: string;
+            gender?: PatientGender;
+          };
           notifyQueueRefresh({ scope: "clinic", clinicId });
           alertAccountantBilling(p, seenRef.current);
         }

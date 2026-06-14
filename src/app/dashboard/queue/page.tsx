@@ -15,7 +15,6 @@ import {
   resolveDoctorSpeechName,
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
-import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
 import { TodayAppointmentsPanel } from "@/components/operations/TodayAppointmentsPanel";
 import { InProgressOverridePanel } from "@/components/queue/InProgressOverridePanel";
 import { resolveAppointmentPaymentUrl } from "@/lib/ledger/open-appointment-payment";
@@ -441,6 +440,7 @@ export default function QueuePage() {
             name,
             doctorName,
             entryId: entry.id,
+            recall: true,
           });
         }
         return;
@@ -667,7 +667,6 @@ export default function QueuePage() {
 
   return (
     <>
-      <QueueRealtimeBridge portal="dashboard" />
     <div className="mx-auto max-w-6xl space-y-6">
 
       {pageError && (

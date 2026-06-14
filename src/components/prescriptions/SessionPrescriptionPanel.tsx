@@ -70,8 +70,33 @@ export function SessionPrescriptionPanel({
   const [showPrint, setShowPrint] = useState(false);
   const autoSaveReady = useRef(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const linesRef = useRef(lines);
+  const diagnosisRef = useRef(diagnosis);
+  const notesRef = useRef(notes);
+  const saveInFlightRef = useRef(false);
+  const pendingSilentSaveRef = useRef(false);
+
+  useEffect(() => {
+    linesRef.current = lines;
+  }, [lines]);
+
+  useEffect(() => {
+    diagnosisRef.current = diagnosis;
+  }, [diagnosis]);
+
+  useEffect(() => {
+    notesRef.current = notes;
+  }, [notes]);
+
+  function withTrailingEmptyLine(meds: PrescriptionMedication[]): PrescriptionMedication[] {
+    if (meds.length === 0) return [emptyLine()];
+    const last = meds[meds.length - 1];
+    if (last.drug_name_ar.trim()) return [...meds, emptyLine()];
+    return meds;
+  }
 
   const load = useCallback(async () => {
+    if (saveInFlightRef.current) return;
     setLoading(true);
     setError(null);
     try {
@@ -135,7 +160,15 @@ export function SessionPrescriptionPanel({
   }
 
   async function handleSave(silent = false) {
-    const meds = lines.filter((line) => line.drug_name_ar.trim());
+    if (saveInFlightRef.current) {
+      if (silent) pendingSilentSaveRef.current = true;
+      return;
+    }
+
+    const currentLines = linesRef.current;
+    const currentDiagnosis = diagnosisRef.current;
+    const currentNotes = notesRef.current;
+    const meds = currentLines.filter((line) => line.drug_name_ar.trim());
     if (meds.length === 0) {
       if (!silent) {
         setError("أضف اسم دواء واحد على الأقل قبل الحفظ");
@@ -143,8 +176,9 @@ export function SessionPrescriptionPanel({
       return;
     }
 
-    setSaving(true);
+    saveInFlightRef.current = true;
     if (!silent) {
+      setSaving(true);
       setError(null);
       setSuccess(null);
     }
@@ -155,21 +189,31 @@ export function SessionPrescriptionPanel({
           patientId,
           doctorId,
           queueEntryId,
-          diagnosisAr: diagnosis,
-          notesAr: notes,
+          diagnosisAr: currentDiagnosis,
+          notesAr: currentNotes,
           medications: meds,
         },
         portal
       );
       setPrescription(saved);
-      setLines(meds.length > 0 ? meds : [emptyLine()]);
+      // الحفظ الصامت: لا نلمس الحقول — يمنع مسح ما يكتبه الطبيب أثناء الكتابة
       if (!silent) {
+        setLines(withTrailingEmptyLine(meds));
         setSuccess("✓ تم حفظ الوصفة — ستظهر للمحاسب للطباعة");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "تعذر حفظ الوصفة");
+      if (!silent) {
+        setError(e instanceof Error ? e.message : "تعذر حفظ الوصفة");
+      }
     } finally {
-      setSaving(false);
+      saveInFlightRef.current = false;
+      if (!silent) {
+        setSaving(false);
+      }
+      if (pendingSilentSaveRef.current) {
+        pendingSilentSaveRef.current = false;
+        void handleSave(true);
+      }
     }
   }
 
@@ -187,7 +231,7 @@ export function SessionPrescriptionPanel({
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
       void handleSave(true);
-    }, 900);
+    }, 2200);
 
     return () => {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
@@ -266,6 +310,9 @@ export function SessionPrescriptionPanel({
           )}
           {examMode && saving && (
             <span className="text-[11px] font-medium text-violet-700">جاري الحفظ...</span>
+          )}
+          {examMode && prescription && !saving && (
+            <span className="text-[11px] font-medium text-emerald-700">محفوظ</span>
           )}
           <Button
             type="button"

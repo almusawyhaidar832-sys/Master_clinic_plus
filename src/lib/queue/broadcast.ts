@@ -72,7 +72,12 @@ export function broadcastAdmitRequest(
 export function broadcastQueueScreenCall(
   supabase: AppSupabaseClient,
   clinicId: string,
-  payload: { name: string; doctorName: string; entryId?: string }
+  payload: {
+    name: string;
+    doctorName: string;
+    entryId?: string;
+    recall?: boolean;
+  }
 ) {
   return sendBroadcast(
     supabase,

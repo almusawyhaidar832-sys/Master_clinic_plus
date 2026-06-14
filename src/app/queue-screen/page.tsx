@@ -118,7 +118,9 @@ function QueueScreenContent() {
     entryId?: string;
     ticketNumber?: number;
     gender?: PatientGender | null;
+    recall?: boolean;
   } | null>(null);
+  const [liveCallTick, setLiveCallTick] = useState(0);
 
   const voiceEnabledRef = useRef(true);
   const prevCalledRef = useRef<Set<string>>(new Set());
@@ -256,11 +258,13 @@ function QueueScreenContent() {
         entryId?: string;
         ticketNumber?: number;
         gender?: PatientGender;
+        recall?: boolean;
       };
       if (p.name && p.doctorName) {
+        const now = new Date().toISOString();
         if (p.entryId) {
           prevCalledRef.current.add(p.entryId);
-          prevCalledAtRef.current.set(p.entryId, new Date().toISOString());
+          prevCalledAtRef.current.set(p.entryId, now);
         }
         setLiveCall({
           name: p.name,
@@ -268,7 +272,9 @@ function QueueScreenContent() {
           entryId: p.entryId,
           ticketNumber: p.ticketNumber,
           gender: p.gender ?? null,
+          recall: p.recall === true,
         });
+        setLiveCallTick((t) => t + 1);
         handleQueueScreenCall(p.name, p.doctorName, p.gender ?? null);
         void fetchQueue();
       }
@@ -406,12 +412,14 @@ function QueueScreenContent() {
                 const isInProgress = entry.status === "in_progress";
                 return (
                   <div
-                    key={entry.id}
+                    key={`${entry.id}-${entry.id === liveCall?.entryId ? liveCallTick : 0}`}
                     className={cn(
                       "rounded-2xl border-2 p-6 transition-all",
                       isInProgress
                         ? "border-emerald-400/60 bg-emerald-500/20"
-                        : "border-primary/60 bg-primary/20 animate-pulse"
+                        : liveCall?.entryId === entry.id && liveCall.recall
+                          ? "border-amber-400/80 bg-amber-500/25 animate-pulse"
+                          : "border-primary/60 bg-primary/20 animate-pulse"
                     )}
                   >
                     <div className="flex items-center gap-4">

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Stethoscope, UserPlus, Volume2, X } from "lucide-react";
+import { Bell, Receipt, Stethoscope, UserPlus, Volume2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   replayQueueAlert,
@@ -41,7 +41,9 @@ export function QueueAlertOverlay() {
       ? Stethoscope
       : alert.kind === "doctor_new"
         ? UserPlus
-        : Bell;
+        : alert.kind === "accountant_billing"
+          ? Receipt
+          : Bell;
 
   return (
     <div
@@ -60,7 +62,9 @@ export function QueueAlertOverlay() {
           ? "border-violet-400/60 bg-violet-950/95 text-white"
           : alert.kind === "doctor_exam"
             ? "border-sky-400/60 bg-sky-950/95 text-white"
-            : "border-emerald-400/60 bg-emerald-950/95 text-white"
+            : alert.kind === "accountant_billing"
+              ? "border-fuchsia-400/60 bg-fuchsia-950/95 text-white"
+              : "border-emerald-400/60 bg-emerald-950/95 text-white"
       )}
     >
       <div className="flex items-start gap-3">
@@ -71,7 +75,9 @@ export function QueueAlertOverlay() {
               ? "bg-violet-500/30 text-violet-100"
               : alert.kind === "doctor_exam"
                 ? "bg-sky-500/30 text-sky-100"
-                : "bg-emerald-500/30 text-emerald-100"
+                : alert.kind === "accountant_billing"
+                  ? "bg-fuchsia-500/30 text-fuchsia-100"
+                  : "bg-emerald-500/30 text-emerald-100"
           )}
         >
           <AlertIcon className="h-6 w-6" />

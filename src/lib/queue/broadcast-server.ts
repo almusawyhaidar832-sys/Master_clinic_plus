@@ -14,6 +14,7 @@ export type QueueScreenCallPayload = {
   entryId?: string;
   ticketNumber?: number;
   gender?: PatientGender;
+  recall?: boolean;
 };
 
 export type QueuePatientSentPayload = {
@@ -106,7 +107,12 @@ export function broadcastQueueScreenCallServer(
 
 export function broadcastBillingReadyServer(
   clinicId: string,
-  payload: { name: string; entryId: string; linkPath: string }
+  payload: {
+    name: string;
+    entryId: string;
+    linkPath: string;
+    gender?: PatientGender;
+  }
 ): Promise<void> {
   return sendServerBroadcast(
     clinicQueueChannelName(clinicId),

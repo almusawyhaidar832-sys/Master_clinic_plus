@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       entry.doctor as { full_name_ar: string } | null
     );
 
-    void emitQueueScreenCall(entryId).catch(console.error);
+    void emitQueueScreenCall(entryId, { recall: true }).catch(console.error);
 
     return NextResponse.json({
       success: true,

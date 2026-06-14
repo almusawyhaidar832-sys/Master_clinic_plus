@@ -13,6 +13,7 @@ import { useClinicSync } from "@/hooks/useClinicSync";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { DeveloperImpersonationBanner } from "@/components/developer/DeveloperImpersonationBanner";
 import { ClinicDataSyncBridge } from "@/components/sync/ClinicDataSyncBridge";
+import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
 import type { NavItem, UserRole } from "@/types";
 
 export function DashboardLayoutClient({
@@ -94,6 +95,7 @@ export function DashboardLayoutClient({
     >
       <DeveloperImpersonationBanner />
       <ClinicDataSyncBridge />
+      <QueueRealtimeBridge portal="dashboard" />
       {children}
     </DashboardShell>
   );

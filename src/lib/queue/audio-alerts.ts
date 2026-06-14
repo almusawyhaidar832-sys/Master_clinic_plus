@@ -2,6 +2,7 @@
 
 import {
   splitAccountantAdmitSpeech,
+  splitAccountantBillingSpeech,
   splitDoctorExamSpeech,
   splitDoctorNewPatientSpeech,
 } from "@/lib/queue/arabic-speech-text";
@@ -16,7 +17,8 @@ import {
 export type QueueAlertKind =
   | "doctor_new"
   | "doctor_exam"
-  | "accountant_admit";
+  | "accountant_admit"
+  | "accountant_billing";
 
 export interface QueueAlertDetail {
   kind: QueueAlertKind;
@@ -226,6 +228,10 @@ async function speakQueueAlertVoice(
     }
     if (detail.kind === "accountant_admit") {
       await speakPatientCallParts(splitAccountantAdmitSpeech(name, gender), speechOpts);
+      return;
+    }
+    if (detail.kind === "accountant_billing") {
+      await speakPatientCallParts(splitAccountantBillingSpeech(name, gender), speechOpts);
       return;
     }
   }

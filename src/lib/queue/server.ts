@@ -174,7 +174,10 @@ function queueBroadcastContext(entry: {
 }
 
 /** نداء شاشة الانتظار — من السيرفر فور تغيير الحالة */
-export async function emitQueueScreenCall(queueEntryId: string) {
+export async function emitQueueScreenCall(
+  queueEntryId: string,
+  options?: { recall?: boolean }
+) {
   const entry = await loadQueueEntryContext(queueEntryId);
   const ctx = queueBroadcastContext(entry);
   await broadcastQueueScreenCallServer(entry.clinic_id, {
@@ -183,6 +186,7 @@ export async function emitQueueScreenCall(queueEntryId: string) {
     entryId: ctx.entryId,
     ticketNumber: ctx.ticketNumber,
     gender: ctx.gender ?? undefined,
+    recall: options?.recall === true,
   });
 }
 
@@ -332,7 +336,7 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
   const { data: entry, error } = await admin
     .from("patient_queue")
     .select(
-      "id, clinic_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar, speech_name_ar)"
+      "id, clinic_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar, speech_name_ar, gender)"
     )
     .eq("id", queueEntryId)
     .maybeSingle();
@@ -347,7 +351,11 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
 
   if (!staff?.length) return;
 
-  const patientRow = entry.patient as { full_name_ar?: string } | null;
+  const patientRow = entry.patient as {
+    full_name_ar?: string;
+    speech_name_ar?: string | null;
+    gender?: string | null;
+  } | null;
   const name = resolvePatientDisplayName({
     patient: patientRow ? { full_name_ar: patientRow.full_name_ar ?? "" } : null,
     patient_name: entry.patient_name,
@@ -359,6 +367,10 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
     patient: patientRow ? { full_name_ar: patientRow.full_name_ar ?? "" } : null,
     patient_name: entry.patient_name,
     ticket_number: entry.ticket_number,
+  });
+  const gender = resolvePatientGender({
+    patient: patientRow,
+    patient_name: entry.patient_name,
   });
 
   await insertNotifications(
@@ -389,6 +401,7 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
       name: speechName,
       entryId: entry.id as string,
       linkPath: ledgerPath,
+      gender: gender ?? undefined,
     }),
   ]).catch((err) => {
     console.error("[queue] billing broadcast failed:", err);

@@ -173,6 +173,24 @@ export function useAccountantQueuePolling(
           statusRef.current.set(entry.id, entry.status);
 
           if (!readyRef.current) continue;
+
+          if (
+            entry.status === "ready_for_billing" &&
+            prev !== "ready_for_billing"
+          ) {
+            const billingKey = `accountant-billing-${entry.id}`;
+            if (shouldFireQueueAlert(billingKey)) {
+              const name = resolvePatientSpeechName(entry);
+              void triggerQueueAlert({
+                kind: "accountant_billing",
+                title: "جلسة جاهزة للمحاسبة 🔔",
+                message: `تم إكمال جلسة المراجع ${name} — أكمل الفاتورة الآن`,
+                linkPath: `/dashboard/ledger?queue_entry_id=${entry.id}`,
+                patientName: name,
+              });
+            }
+          }
+
           if (entry.status !== "called") continue;
           if (prev === "called") continue;
 
