@@ -47,6 +47,7 @@ import { downloadSessionInvoicePdf } from "@/lib/reports/pdf-export";
 import { generateElementPdfBase64 } from "@/lib/reports/pdf-from-html";
 
 import { sendSessionWhatsAppPackage } from "@/lib/whatsapp/send-session-package-client";
+import { sendWhatsAppPdf } from "@/lib/whatsapp/send-pdf-client";
 
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 
@@ -175,151 +176,135 @@ export function SessionInvoiceModal({
 
 
   async function sendWhatsAppPackage() {
-
     if (!data.patientPhone?.trim()) {
-
       setActionMessage({
-
         type: "error",
-
         text: "لا يوجد رقم جوال للمراجع — أضف الرقم في ملف المريض",
-
       });
-
       return;
-
     }
-
-
 
     setWaLoading(true);
-
     setActionMessage(null);
 
-
-
     try {
-
-      const invoicePdfBase64 = await generateElementPdfBase64(invoicePrintId);
-
       const inv = data.invoiceNumber.replace(/\s/g, "");
+      const phone = data.patientPhone.trim();
 
-
-
-      let prescriptionPdfBase64: string | undefined;
-
-      let prescriptionCaption: string | undefined;
-
-      if (hasPrescription && prescriptionData) {
-
-        prescriptionPdfBase64 = await generateElementPdfBase64(rxPrintId);
-
-        prescriptionCaption = prescriptionWhatsAppMessage(prescriptionData);
-
-      }
-
-
-
-      const result = await sendSessionWhatsAppPackage(
-
+      const textResult = await sendSessionWhatsAppPackage(
         {
-
           operationId: data.operationId,
-
           queueEntryId,
-
-          phone: data.patientPhone,
-
+          phone,
           patientId: data.patientId ?? undefined,
-
           invoiceText: sessionInvoiceWhatsAppMessage(data),
-
-          invoicePdfBase64,
-
-          invoiceFilename: `فاتورة-${inv}.pdf`,
-
-          prescriptionPdfBase64,
-
-          prescriptionFilename: hasPrescription
-
-            ? `وصفة-${data.patientName.replace(/\s/g, "-")}.pdf`
-
-            : undefined,
-
-          prescriptionCaption,
-
         },
-
         "accountant"
-
       );
 
-
-
-      if (!result.ok) {
-
+      if (textResult.configured === false) {
         setActionMessage({
-
-          type: "error",
-
-          text: result.error ?? "تعذر إرسال واتساب",
-
-        });
-
-        return;
-
-      }
-
-
-
-      if (result.configured === false) {
-
-        setActionMessage({
-
           type: "info",
-
-          text: "واتساب غير مضبوط — اضبط WHATSAPP_* في الإعدادات",
-
+          text:
+            textResult.error ??
+            "واتساب غير مضبوط — اضبط WHATSAPP_API_URL و WHATSAPP_API_KEY في الإعدادات",
         });
-
         return;
-
       }
 
+      if (!textResult.ok) {
+        setActionMessage({
+          type: "error",
+          text: textResult.error ?? "تعذر إرسال تفاصيل الجلسة على واتساب",
+        });
+        return;
+      }
 
+      const invoicePdfBase64 = await generateElementPdfBase64(invoicePrintId);
+      const invoiceResult = await sendWhatsAppPdf({
+        pdfBase64: invoicePdfBase64,
+        filename: `invoice-${inv}.pdf`,
+        caption: "📎 إيصال الدفع — PDF",
+        messageType: "session_invoice_pdf",
+        phone,
+        patientId: data.patientId ?? undefined,
+        operationId: data.operationId,
+        portal: "accountant",
+      });
 
-      const parts = ["تفاصيل الجلسة"];
+      if (invoiceResult.configured === false) {
+        setActionMessage({
+          type: "info",
+          text:
+            invoiceResult.error ??
+            "واتساب غير مضبوط — اضبط WHATSAPP_API_URL و WHATSAPP_API_KEY في الإعدادات",
+        });
+        return;
+      }
 
-      if (result.invoiceSent) parts.push("PDF الفاتورة");
+      if (!invoiceResult.ok) {
+        setActionMessage({
+          type: "error",
+          text:
+            invoiceResult.error ??
+            "أُرسلت التفاصيل لكن تعذر إرسال PDF الفاتورة — حاول مرة أخرى",
+        });
+        return;
+      }
 
-      if (result.prescriptionSent) parts.push("PDF الوصفة");
+      let prescriptionSent = false;
+      if (hasPrescription && prescriptionData) {
+        const prescriptionPdfBase64 = await generateElementPdfBase64(rxPrintId);
+        const rxResult = await sendWhatsAppPdf({
+          pdfBase64: prescriptionPdfBase64,
+          filename: `prescription-${data.patientName.replace(/\s/g, "-")}.pdf`,
+          caption: prescriptionWhatsAppMessage(prescriptionData),
+          messageType: "prescription_pdf",
+          phone,
+          patientId: data.patientId ?? undefined,
+          operationId: data.operationId,
+          prescriptionId: prescriptionId ?? undefined,
+          portal: "accountant",
+        });
 
+        if (rxResult.configured === false) {
+          setActionMessage({
+            type: "info",
+            text:
+              rxResult.error ??
+              "واتساب غير مضبوط — اضبط WHATSAPP_API_URL و WHATSAPP_API_KEY في الإعدادات",
+          });
+          return;
+        }
 
+        if (!rxResult.ok) {
+          setActionMessage({
+            type: "error",
+            text:
+              rxResult.error ??
+              "أُرسلت التفاصيل والفاتورة لكن تعذر إرسال PDF الوصفة — حاول مرة أخرى",
+          });
+          return;
+        }
+
+        prescriptionSent = true;
+      }
+
+      const parts = ["تفاصيل الجلسة", "PDF الفاتورة"];
+      if (prescriptionSent) parts.push("PDF الوصفة");
 
       setActionMessage({
-
         type: "success",
-
         text: `✓ أُرسل للمراجع (${parts.join(" + ")})`,
-
       });
-
     } catch (e) {
-
       setActionMessage({
-
         type: "error",
-
         text: e instanceof Error ? e.message : "تعذر إرسال واتساب",
-
       });
-
     } finally {
-
       setWaLoading(false);
-
     }
-
   }
 
 

@@ -157,7 +157,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json(result);
   } catch (err) {
     console.error("[whatsapp/send-session-package]", err);
     return NextResponse.json(

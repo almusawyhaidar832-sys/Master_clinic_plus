@@ -24,6 +24,20 @@ export interface WhatsAppSendOutcome {
 
 const LOG_PREFIX = "[whatsapp]";
 
+/** Evolution يرفض أحياناً أسماء ملفات عربية — نستخدم ASCII آمن */
+function safeWhatsAppFileName(name: string, fallback: string): string {
+  const base = String(name ?? "")
+    .trim()
+    .replace(/[^\w.\-()+\s]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const withExt = base.toLowerCase().endsWith(".pdf")
+    ? base
+    : `${base || fallback}.pdf`;
+  return withExt.replace(/[^\x20-\x7E]/g, "") || `${fallback}.pdf`;
+}
+
 /**
  * Normalize, call provider, log failures (visible in hosting / Supabase Edge logs).
  */
@@ -269,7 +283,7 @@ export async function deliverWhatsAppDocument(
         normalizedPhone,
         {
           base64: params.pdfBase64,
-          fileName: params.fileName,
+          fileName: safeWhatsAppFileName(params.fileName, "document"),
           caption: params.caption,
         },
         { clinicId: params.clinicId, instanceName }

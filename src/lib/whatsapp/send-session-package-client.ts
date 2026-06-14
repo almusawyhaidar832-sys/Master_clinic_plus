@@ -51,14 +51,42 @@ export async function sendSessionWhatsAppPackage(
     invoiceSent?: boolean;
     prescriptionSent?: boolean;
     error?: string;
+    errors?: string[];
+    hint?: string;
   };
 
+  const errorMessage =
+    json.error ??
+    (json.errors?.length ? json.errors.join(" — ") : undefined) ??
+    (!res.ok ? "تعذر إرسال واتساب" : undefined);
+
   if (!res.ok) {
-    return { ok: false, error: json.error ?? "تعذر إرسال واتساب" };
+    return { ok: false, error: errorMessage, configured: json.configured };
+  }
+
+  if (json.configured === false) {
+    return {
+      ok: false,
+      configured: false,
+      error:
+        errorMessage ??
+        "واتساب غير مضبوط — أضف WHATSAPP_API_URL و WHATSAPP_API_KEY في إعدادات الخادم",
+    };
+  }
+
+  if (!json.ok) {
+    return {
+      ok: false,
+      configured: json.configured,
+      textSent: json.textSent,
+      invoiceSent: json.invoiceSent,
+      prescriptionSent: json.prescriptionSent,
+      error: errorMessage ?? "تعذر إرسال واتساب",
+    };
   }
 
   return {
-    ok: Boolean(json.ok),
+    ok: true,
     configured: json.configured,
     textSent: json.textSent,
     invoiceSent: json.invoiceSent,

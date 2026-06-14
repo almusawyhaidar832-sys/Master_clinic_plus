@@ -41,9 +41,26 @@ export async function sendWhatsAppPdf(input: {
     return { ok: false, error: json.error ?? "تعذر إرسال الواتساب" };
   }
 
+  if (json.configured === false) {
+    return {
+      ok: false,
+      configured: false,
+      error:
+        json.error ??
+        "واتساب غير مضبوط — أضف WHATSAPP_API_URL و WHATSAPP_API_KEY في إعدادات الخادم",
+    };
+  }
+
+  if (!json.ok) {
+    return {
+      ok: false,
+      configured: json.configured,
+      error: json.error ?? "تعذر إرسال الواتساب",
+    };
+  }
+
   return {
-    ok: Boolean(json.ok),
+    ok: true,
     configured: json.configured,
-    error: json.error,
   };
 }
