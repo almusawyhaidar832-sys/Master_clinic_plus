@@ -2,7 +2,15 @@ import { getAdminClient } from "@/lib/supabase/admin";
 import { resolveDoctorProfileId, insertNotifications } from "@/lib/notifications/server";
 import { sendWebPushToProfile } from "@/lib/push/server";
 import {
+  broadcastAdmitRequestServer,
+  broadcastBillingReadyServer,
+  broadcastPatientSentToDoctorServer,
+  broadcastQueueScreenCallServer,
+} from "@/lib/queue/broadcast-server";
+import { resolvePatientGender } from "@/lib/queue/patient-gender";
+import {
   resolvePatientDisplayName,
+  resolveDoctorSpeechName,
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
 
@@ -37,7 +45,7 @@ export interface QueueEntryRow {
   cancellation_actor_label: string | null;
   doctor: { full_name_ar: string } | null;
   transfer_to_doctor?: { full_name_ar: string } | null;
-  patient: { full_name_ar: string } | null;
+  patient: { full_name_ar: string; speech_name_ar?: string | null; gender?: string | null } | null;
 }
 
 const QUEUE_ENTRY_SELECT = `
@@ -48,8 +56,14 @@ const QUEUE_ENTRY_SELECT = `
   cancellation_requested_at, cancellation_requested_by, cancellation_actor_label,
   doctor:doctors!doctor_id(full_name_ar),
   transfer_to_doctor:doctors!transfer_to_doctor_id(full_name_ar),
-  patient:patients(full_name_ar, speech_name_ar)
+  patient:patients(full_name_ar, speech_name_ar, gender)
 `;
+
+async function pushQueueBroadcasts(
+  tasks: Array<Promise<void>>
+): Promise<void> {
+  await Promise.allSettled(tasks);
+}
 
 async function loadQueueEntryContext(queueEntryId: string) {
   const admin = getAdminClient();
@@ -89,7 +103,8 @@ function resolveQueuePatientName(entry: QueueEntryRow): string {
 
 async function notifyAccountantProfiles(
   clinicId: string,
-  payload: { title_ar: string; body_ar: string; link_path: string }
+  payload: { title_ar: string; body_ar: string; link_path: string },
+  options?: { patientName?: string; webPushTag?: string; webPushKind?: string }
 ) {
   const admin = getAdminClient();
   const { data: staff } = await admin
@@ -109,6 +124,66 @@ async function notifyAccountantProfiles(
       link_path: payload.link_path,
     }))
   );
+
+  if (!options?.patientName) return;
+
+  await Promise.allSettled(
+    staff.map((s) =>
+      sendWebPushToProfile(s.id, {
+        title: payload.title_ar,
+        body: payload.body_ar,
+        url: payload.link_path,
+        tag: options.webPushTag ?? `accountant-${Date.now()}`,
+        patientName: options.patientName,
+        kind: options.webPushKind ?? "accountant_queue",
+      })
+    )
+  );
+}
+
+function queueBroadcastContext(entry: {
+  id: string;
+  clinic_id: string;
+  doctor_id: string;
+  patient_name: string | null;
+  ticket_number: number;
+  patient: {
+    full_name_ar: string;
+    speech_name_ar?: string | null;
+    gender?: string | null;
+  } | null;
+  doctor: { full_name_ar: string; speech_name_ar?: string | null } | null;
+}) {
+  const patientRow = entry.patient;
+  return {
+    entryId: entry.id,
+    clinicId: entry.clinic_id,
+    doctorId: entry.doctor_id,
+    ticketNumber: entry.ticket_number,
+    name: resolvePatientSpeechName({
+      patient: patientRow,
+      patient_name: entry.patient_name,
+      ticket_number: entry.ticket_number,
+    }),
+    doctorName: resolveDoctorSpeechName(entry.doctor),
+    gender: resolvePatientGender({
+      patient: patientRow,
+      patient_name: entry.patient_name,
+    }),
+  };
+}
+
+/** نداء شاشة الانتظار — من السيرفر فور تغيير الحالة */
+export async function emitQueueScreenCall(queueEntryId: string) {
+  const entry = await loadQueueEntryContext(queueEntryId);
+  const ctx = queueBroadcastContext(entry);
+  await broadcastQueueScreenCallServer(entry.clinic_id, {
+    name: ctx.name,
+    doctorName: ctx.doctorName,
+    entryId: ctx.entryId,
+    ticketNumber: ctx.ticketNumber,
+    gender: ctx.gender ?? undefined,
+  });
 }
 
 function todayIsoDate() {
@@ -162,7 +237,7 @@ export async function notifyDoctorNewQueuePatient(
   const { data: entry, error } = await admin
     .from("patient_queue")
     .select(
-      "id, clinic_id, doctor_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar, speech_name_ar)"
+      "id, clinic_id, doctor_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar, speech_name_ar, gender)"
     )
     .eq("id", queueEntryId)
     .maybeSingle();
@@ -178,6 +253,7 @@ export async function notifyDoctorNewQueuePatient(
   const patientRow = entry.patient as {
     full_name_ar?: string;
     speech_name_ar?: string | null;
+    gender?: string | null;
   } | null;
   const displayName = resolvePatientDisplayName({
     patient: patientRow ? { full_name_ar: patientRow.full_name_ar ?? "" } : null,
@@ -236,6 +312,17 @@ export async function notifyDoctorNewQueuePatient(
       console.error("[queue] doctor web push failed:", err);
     });
   }
+
+  await pushQueueBroadcasts([
+    broadcastPatientSentToDoctorServer(entry.doctor_id as string, {
+      name: speechName,
+      entryId: entry.id as string,
+      recall,
+      sentAt: recall ? new Date().toISOString() : undefined,
+    }),
+  ]).catch((err) => {
+    console.error("[queue] doctor broadcast failed:", err);
+  });
 }
 
 /** Notify accountants: doctor sent session for billing */
@@ -268,6 +355,11 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
   });
 
   const ledgerPath = `/dashboard/ledger?queue_entry_id=${entry.id}`;
+  const speechName = resolvePatientSpeechName({
+    patient: patientRow ? { full_name_ar: patientRow.full_name_ar ?? "" } : null,
+    patient_name: entry.patient_name,
+    ticket_number: entry.ticket_number,
+  });
 
   await insertNotifications(
     staff.map((s) => ({
@@ -278,6 +370,29 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
       link_path: ledgerPath,
     }))
   );
+
+  await Promise.allSettled(
+    staff.map((s) =>
+      sendWebPushToProfile(s.id, {
+        title: "جلسة جاهزة للمحاسبة 🔔",
+        body: `المراجع ${name} — أكمل الفاتورة الآن`,
+        url: ledgerPath,
+        tag: `billing-${entry.id}`,
+        patientName: speechName,
+        kind: "accountant_billing",
+      })
+    )
+  );
+
+  await pushQueueBroadcasts([
+    broadcastBillingReadyServer(entry.clinic_id as string, {
+      name: speechName,
+      entryId: entry.id as string,
+      linkPath: ledgerPath,
+    }),
+  ]).catch((err) => {
+    console.error("[queue] billing broadcast failed:", err);
+  });
 }
 
 /** Notify accountants: patient ready for checkout after doctor session */
@@ -310,6 +425,11 @@ export async function notifyAccountantsReadyForPayment(queueEntryId: string) {
   });
 
   const ledgerPath = `/dashboard/ledger?queue_entry_id=${entry.id}`;
+  const speechName = resolvePatientSpeechName({
+    patient: patientRow ? { full_name_ar: patientRow.full_name_ar ?? "" } : null,
+    patient_name: entry.patient_name,
+    ticket_number: entry.ticket_number,
+  });
 
   await insertNotifications(
     staff.map((s) => ({
@@ -319,6 +439,19 @@ export async function notifyAccountantsReadyForPayment(queueEntryId: string) {
       body_ar: `المراجع ${name} — الجلسة جاهزة، أكمل الحساب الآن`,
       link_path: ledgerPath,
     }))
+  );
+
+  await Promise.allSettled(
+    staff.map((s) =>
+      sendWebPushToProfile(s.id, {
+        title: "جاهز للدفع 🔔",
+        body: `المراجع ${name} — أكمل الحساب الآن`,
+        url: ledgerPath,
+        tag: `payment-${entry.id}`,
+        patientName: speechName,
+        kind: "accountant_payment",
+      })
+    )
   );
 }
 
@@ -344,11 +477,24 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
 
   if (!staff?.length) return;
 
-  const patientRow = entry.patient as { full_name_ar?: string } | null;
+  const patientRow = entry.patient as {
+    full_name_ar?: string;
+    speech_name_ar?: string | null;
+    gender?: string | null;
+  } | null;
   const name = resolvePatientDisplayName({
     patient: patientRow ? { full_name_ar: patientRow.full_name_ar ?? "" } : null,
     patient_name: entry.patient_name,
     ticket_number: entry.ticket_number,
+  });
+  const speechName = resolvePatientSpeechName({
+    patient: patientRow ? { full_name_ar: patientRow.full_name_ar ?? "" } : null,
+    patient_name: entry.patient_name,
+    ticket_number: entry.ticket_number,
+  });
+  const gender = resolvePatientGender({
+    patient: patientRow,
+    patient_name: entry.patient_name,
   });
 
   await insertNotifications(
@@ -360,6 +506,29 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
       link_path: "/dashboard/queue",
     }))
   );
+
+  await Promise.allSettled(
+    staff.map((s) =>
+      sendWebPushToProfile(s.id, {
+        title: "طلب دخول مراجع 🔔",
+        body: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
+        url: "/dashboard/queue",
+        tag: `admit-${entry.id}`,
+        patientName: speechName,
+        kind: "accountant_admit",
+      })
+    )
+  );
+
+  await pushQueueBroadcasts([
+    broadcastAdmitRequestServer(entry.clinic_id as string, {
+      name: speechName,
+      entryId: entry.id as string,
+      gender: gender ?? undefined,
+    }),
+  ]).catch((err) => {
+    console.error("[queue] admit broadcast failed:", err);
+  });
 }
 
 /** Mark entry as sent to doctor + persist notification */

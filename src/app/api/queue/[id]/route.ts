@@ -10,6 +10,7 @@ import {
   accountantTransferAfterCancellation,
   confirmQueueTransferByAccountant,
   dismissQueueTransferRequest,
+  emitQueueScreenCall,
   finalizeQueueCancellationByAccountant,
   getDoctorByProfileId,
   notifyAccountantsReadyForBilling,
@@ -417,6 +418,10 @@ export async function PATCH(
       clinicId: profile.clinic_id,
       doctorId: role === "doctor" ? entry.doctor_id : undefined,
     });
+
+    if (next === "called") {
+      void emitQueueScreenCall(id).catch(console.error);
+    }
 
     return NextResponse.json({ success: true, status: next });
   } catch (err) {

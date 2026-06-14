@@ -5,7 +5,7 @@ import {
   clinicQueueChannelName,
   clinicQueueScreenChannelName,
   doctorQueueChannelName,
-} from "@/lib/queue/realtime-client";
+} from "@/lib/queue/realtime-channels";
 
 function sendBroadcast(
   supabase: AppSupabaseClient,
@@ -21,13 +21,12 @@ function sendBroadcast(
     const timeout = setTimeout(() => {
       supabase.removeChannel(channel);
       resolve();
-    }, 8000);
+    }, 2500);
 
     channel.subscribe(async (status) => {
       if (status === "SUBSCRIBED") {
         try {
           await channel.send({ type: "broadcast", event, payload });
-          await new Promise((r) => setTimeout(r, 400));
         } catch {
           // ignore
         }

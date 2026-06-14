@@ -7,7 +7,7 @@ import { triggerQueueAlert } from "@/lib/queue/audio-alerts";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { resolvePatientSpeechName } from "@/lib/queue/utils";
 
-const POLL_MS = 8_000;
+const POLL_MS = 3_000;
 
 function queueFingerprint(queue: QueueRow[]): string {
   return (queue ?? [])

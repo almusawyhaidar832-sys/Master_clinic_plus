@@ -19,6 +19,14 @@ export function describeWhatsAppDeliveryError(
       return "واتساب غير مربوط — افتح «إعدادات واتساب» وامسح رمز QR من الهاتف.";
     case "invalid_phone_after_normalize":
       return "رقم الجوال غير صالح — استخدم صيغة عراقية مثل 07XX XXX XXXX.";
+    case "text_send_failed":
+      return "تعذر إرسال رسالة التفاصيل — تحقق من ربط واتساب العيادة.";
+    case "invoice_pdf_failed":
+      return "تعذر إرسال PDF الفاتورة — حاول مرة أخرى أو أرسل النص فقط.";
+    case "prescription_pdf_failed":
+      return "تعذر إرسال PDF الوصفة — تحقق من حجم الملف وربط واتساب.";
+    case "pdf_requires_evolution":
+      return "إرسال PDF يتطلب Evolution API — راجع إعدادات WHATSAPP.";
     default:
       if (error?.includes("not connected") || error?.includes("disconnected")) {
         return "جلسة واتساب غير متصلة — أعد الربط من إعدادات واتساب.";
@@ -30,4 +38,11 @@ export function describeWhatsAppDeliveryError(
         ? `تعذر إرسال واتساب: ${error}`
         : "تعذر إرسال رسالة واتساب للمراجع.";
   }
+}
+
+/** تجميع أخطاء حزمة المحاسب (نص + PDF) */
+export function describeWhatsAppPackageErrors(errors: string[]): string {
+  if (errors.length === 0) return describeWhatsAppDeliveryError(null);
+  const parts = errors.map((e) => describeWhatsAppDeliveryError(e));
+  return parts.join(" — ");
 }

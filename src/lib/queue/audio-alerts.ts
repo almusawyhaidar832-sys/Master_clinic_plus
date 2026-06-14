@@ -5,6 +5,7 @@ import {
   splitDoctorExamSpeech,
   splitDoctorNewPatientSpeech,
 } from "@/lib/queue/arabic-speech-text";
+import type { PatientGender } from "@/lib/queue/patient-gender";
 import { showBrowserNotification } from "@/lib/queue/realtime-client";
 import {
   prepareSpeechAuto,
@@ -24,6 +25,8 @@ export interface QueueAlertDetail {
   linkPath?: string;
   /** لنطق الاسم بمخارج أوضح */
   patientName?: string;
+  /** ذكر / أنثى — يغيّر «مراجع» / «مراجعة» */
+  patientGender?: PatientGender | null;
   /** MP3 جاهز من السيرفر — أسرع من TTS على الموبايل */
   audioUrl?: string;
 }
@@ -207,21 +210,22 @@ async function speakQueueAlertVoice(
     if (played) return;
   }
 
-  /** صوت Bassel العراقي من السحابة — نفس نطق المحاسب وشاشة الانتظار */
-  const speechOpts = { useCloud: true as const, clearQueue: options?.clearQueue };
+  /** نطق فوري من المتصفح — السحابة تسبّب تأخير 3–8 ثوانٍ */
+  const speechOpts = { useCloud: false as const, clearQueue: options?.clearQueue };
+  const gender = detail.patientGender ?? null;
 
   if (detail.patientName?.trim()) {
     const name = detail.patientName.trim();
     if (detail.kind === "doctor_new") {
-      await speakPatientCallParts(splitDoctorNewPatientSpeech(name), speechOpts);
+      await speakPatientCallParts(splitDoctorNewPatientSpeech(name, gender), speechOpts);
       return;
     }
     if (detail.kind === "doctor_exam") {
-      await speakPatientCallParts(splitDoctorExamSpeech(name), speechOpts);
+      await speakPatientCallParts(splitDoctorExamSpeech(name, gender), speechOpts);
       return;
     }
     if (detail.kind === "accountant_admit") {
-      await speakPatientCallParts(splitAccountantAdmitSpeech(name), speechOpts);
+      await speakPatientCallParts(splitAccountantAdmitSpeech(name, gender), speechOpts);
       return;
     }
   }

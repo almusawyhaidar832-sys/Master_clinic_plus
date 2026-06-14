@@ -1372,8 +1372,7 @@ export function QuickEntryForm({
 
     const invoicePatientName =
       patientQuery.trim() || defaultPatientName?.trim() || "مراجع";
-    const invoicePatientPhone =
-      patientPhone.trim() || defaultPatientPhone?.trim() || null;
+    const invoicePatientPhone = phoneReady.phone;
     const invoiceDoctorName =
       selectedDoctor?.full_name_ar?.trim() ||
       lockDoctorName?.trim() ||

@@ -1,5 +1,6 @@
 /** صوت عراقي Neural — أوضح مخارج للأسماء والعبارات */
 export const ARABIC_TTS_VOICE = "ar-IQ-BasselNeural";
+export const ARABIC_TTS_VOICE_FEMALE = "ar-SA-ZariyahNeural";
 
 export const ARABIC_TTS_LANG = "ar-IQ";
 

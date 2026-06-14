@@ -20,6 +20,10 @@ import {
   resolveDoctorSpeechName,
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
+import {
+  resolvePatientGender,
+  type PatientGender,
+} from "@/lib/queue/patient-gender";
 import { cn } from "@/lib/utils";
 import { Volume2, Clock, CheckCircle2, Monitor, Copy, RotateCcw } from "lucide-react";
 
@@ -29,7 +33,7 @@ interface QueueEntry {
   status: "waiting" | "called" | "in_progress" | "done" | "cancelled";
   patient_name: string | null;
   doctor: { full_name_ar: string } | null;
-  patient: { full_name_ar: string; speech_name_ar?: string | null } | null;
+  patient: { full_name_ar: string; speech_name_ar?: string | null; gender?: string | null } | null;
   called_at: string | null;
 }
 
@@ -108,6 +112,13 @@ function QueueScreenContent() {
   const [clinicName, setClinicName] = useState("العيادة");
   const [currentTime, setCurrentTime] = useState("");
   const [screenUrl, setScreenUrl] = useState("");
+  const [liveCall, setLiveCall] = useState<{
+    name: string;
+    doctorName: string;
+    entryId?: string;
+    ticketNumber?: number;
+    gender?: PatientGender | null;
+  } | null>(null);
 
   const voiceEnabledRef = useRef(true);
   const prevCalledRef = useRef<Set<string>>(new Set());
@@ -145,12 +156,13 @@ function QueueScreenContent() {
   }, []);
 
   const handleQueueScreenCall = useCallback(
-    (name?: string, doctorName?: string) => {
+    (name?: string, doctorName?: string, gender?: PatientGender | null) => {
       if (!name?.trim() || !doctorName?.trim()) return;
       speakQueueScreenAnnouncement(
         name.trim(),
         doctorName.trim(),
-        voiceEnabledRef.current
+        voiceEnabledRef.current,
+        gender
       );
     },
     []
@@ -194,7 +206,8 @@ function QueueScreenContent() {
           if (isFirstCall || isRecall) {
             handleQueueScreenCall(
               resolvePatientName(entry),
-              resolveDoctorName(entry)
+              resolveDoctorName(entry),
+              resolvePatientGender(entry)
             );
           }
 
@@ -219,9 +232,16 @@ function QueueScreenContent() {
   useEffect(() => {
     if (!clinicId) return;
     void fetchQueue();
-    const poll = setInterval(fetchQueue, 2500);
+    const poll = setInterval(fetchQueue, 1500);
     return () => clearInterval(poll);
   }, [fetchQueue, clinicId]);
+
+  useEffect(() => {
+    if (!liveCall?.entryId) return;
+    if (called.some((entry) => entry.id === liveCall.entryId)) {
+      setLiveCall(null);
+    }
+  }, [called, liveCall]);
 
   useEffect(() => {
     if (!clinicId) return;
@@ -230,8 +250,28 @@ function QueueScreenContent() {
     const screenChannel = clinicQueueScreenChannelName(clinicId);
 
     const onScreenCall = ({ payload }: { payload: Record<string, unknown> }) => {
-      const p = payload as { name?: string; doctorName?: string };
-      handleQueueScreenCall(p.name, p.doctorName);
+      const p = payload as {
+        name?: string;
+        doctorName?: string;
+        entryId?: string;
+        ticketNumber?: number;
+        gender?: PatientGender;
+      };
+      if (p.name && p.doctorName) {
+        if (p.entryId) {
+          prevCalledRef.current.add(p.entryId);
+          prevCalledAtRef.current.set(p.entryId, new Date().toISOString());
+        }
+        setLiveCall({
+          name: p.name,
+          doctorName: p.doctorName,
+          entryId: p.entryId,
+          ticketNumber: p.ticketNumber,
+          gender: p.gender ?? null,
+        });
+        handleQueueScreenCall(p.name, p.doctorName, p.gender ?? null);
+        void fetchQueue();
+      }
     };
 
     const screenChannelRef = supabase
@@ -283,6 +323,26 @@ function QueueScreenContent() {
     return <SetupScreen onClinicResolved={handleClinicResolved} />;
   }
 
+  const displayCalled =
+    liveCall &&
+    !called.some((entry) => entry.id === liveCall.entryId && liveCall.entryId)
+      ? [
+          {
+            id: liveCall.entryId ?? `live-${Date.now()}`,
+            ticket_number: liveCall.ticketNumber ?? 0,
+            status: "called" as const,
+            patient_name: liveCall.name,
+            doctor: { full_name_ar: liveCall.doctorName },
+            patient: {
+              full_name_ar: liveCall.name,
+              gender: liveCall.gender ?? null,
+            },
+            called_at: new Date().toISOString(),
+          },
+          ...called,
+        ]
+      : called;
+
   return (
     <div className="relative flex min-h-screen flex-col bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
       <header className="flex items-center justify-between border-b border-white/10 px-8 py-4">
@@ -294,11 +354,12 @@ function QueueScreenContent() {
           <button
             type="button"
             onClick={() => {
-              if (called[0]) {
+              if (displayCalled[0]) {
                 repeatQueueScreenAnnouncement(
-                  resolvePatientName(called[0]),
-                  resolveDoctorName(called[0]),
-                  true
+                  resolvePatientName(displayCalled[0]),
+                  resolveDoctorName(displayCalled[0]),
+                  true,
+                  resolvePatientGender(displayCalled[0])
                 );
               }
             }}
@@ -333,14 +394,15 @@ function QueueScreenContent() {
             <h2 className="text-xl font-bold text-white/90">ادخل الآن</h2>
           </div>
 
-          {called.length === 0 ? (
+          {displayCalled.length === 0 ? (
             <div className="flex flex-1 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
               <p className="text-white/30">لا يوجد نداء حالياً</p>
             </div>
           ) : (
             <div className="grid gap-4">
-              {called.map((entry) => {
+              {displayCalled.map((entry) => {
                 const name = resolvePatientName(entry);
+                const gender = resolvePatientGender(entry);
                 const isInProgress = entry.status === "in_progress";
                 return (
                   <div
@@ -386,7 +448,8 @@ function QueueScreenContent() {
                           repeatQueueScreenAnnouncement(
                             name,
                             resolveDoctorName(entry),
-                            true
+                            true,
+                            gender
                           )
                         }
                         className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white/80 hover:bg-white/20"

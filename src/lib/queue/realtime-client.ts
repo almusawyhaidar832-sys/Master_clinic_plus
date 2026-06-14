@@ -79,24 +79,10 @@ export function showBrowserNotification(
   }
 }
 
-export function doctorQueueChannelName(doctorId: string) {
-  return `queue-doctor-${doctorId}`;
-}
-
-export function clinicQueueChannelName(clinicId: string) {
-  return `queue-clinic-${clinicId}`;
-}
-
-/** Separate channel for page list sync — avoids collision with alert listeners */
-export function doctorQueueListChannelName(doctorId: string) {
-  return `queue-doctor-list-${doctorId}`;
-}
-
-export function clinicQueueListChannelName(clinicId: string) {
-  return `queue-clinic-list-${clinicId}`;
-}
-
-/** قناة شاشة انتظار المرضى (التلفاز) — منفصلة عن تنبيهات المحاسب */
-export function clinicQueueScreenChannelName(clinicId: string) {
-  return `queue-screen-${clinicId}`;
-}
+export {
+  doctorQueueChannelName,
+  clinicQueueChannelName,
+  doctorQueueListChannelName,
+  clinicQueueListChannelName,
+  clinicQueueScreenChannelName,
+} from "@/lib/queue/realtime-channels";

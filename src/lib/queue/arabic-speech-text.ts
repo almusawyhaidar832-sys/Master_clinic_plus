@@ -4,6 +4,7 @@ import {
   hasArabicDiacritics,
   vocalizeArabicName,
 } from "@/lib/queue/arabic-name-pronunciation";
+import type { PatientGender } from "@/lib/queue/patient-gender";
 import { ARABIC_TTS_LANG, ARABIC_TTS_VOICE } from "@/lib/queue/tts-config";
 const ALEF_VARIANTS = /[\u0622\u0623\u0625\u0671]/g;
 const TATWEEL = /\u0640/g;
@@ -11,8 +12,14 @@ const TATWEEL = /\u0640/g;
 /** سرعة النطق — جملة واحدة متصلة */
 export const ARABIC_SPEECH_RATE = "+8%";
 
-export const SPEECH_INTRO_CALLED = "يُرْجَى مِنَ المُراجعِ";
-export const SPEECH_INTRO_ENTER = "يُرْجَى مِنَ المُراجعِ";
+export const SPEECH_INTRO_CALLED_MALE = "يُرْجَى مِنَ المُراجعِ";
+export const SPEECH_INTRO_CALLED_FEMALE = "يُرْجَى مِنَ المُراجعةِ";
+export const SPEECH_INTRO_ENTER_MALE = "يُرْجَى مِنَ المُراجعِ";
+export const SPEECH_INTRO_ENTER_FEMALE = "يُرْجَى مِنَ المُراجعةِ";
+/** @deprecated استخدم SPEECH_INTRO_CALLED_MALE */
+export const SPEECH_INTRO_CALLED = SPEECH_INTRO_CALLED_MALE;
+/** @deprecated استخدم SPEECH_INTRO_ENTER_MALE */
+export const SPEECH_INTRO_ENTER = SPEECH_INTRO_ENTER_MALE;
 export const SPEECH_MIDDLE_CALLED = "، التوجُّه إلى عِيادةِ الدكتورِ";
 export const SPEECH_MIDDLE_ENTER = "، تَفَضَّلْ بالدُخول إلى عِيادةِ الدكتورِ";
 
@@ -46,11 +53,14 @@ export function formatNameForSpeech(name: string): string {
 }
 export function buildQueueScreenAnnouncement(
   patientName: string,
-  doctorName: string
+  doctorName: string,
+  gender?: PatientGender | null
 ): string {
   const patient = formatNameForSpeech(patientName) || "المُراجع";
   const doctor = formatNameForSpeech(doctorName) || "الطبيب";
-  return `${SPEECH_INTRO_CALLED} ${patient}${SPEECH_MIDDLE_CALLED} ${doctor}`;
+  const intro =
+    gender === "female" ? SPEECH_INTRO_CALLED_FEMALE : SPEECH_INTRO_CALLED_MALE;
+  return `${intro} ${patient}${SPEECH_MIDDLE_CALLED} ${doctor}`;
 }
 
 export function buildAccountantCallAnnouncement(
@@ -78,21 +88,30 @@ export type PatientCallSpeechParts = {
 export function splitPatientCallSpeech(
   patientName: string,
   doctorName: string,
-  variant: "called" | "enter" | "queue_screen" = "called"
+  variant: "called" | "enter" | "queue_screen" = "called",
+  gender?: PatientGender | null
 ): PatientCallSpeechParts {
   const patient = formatNameForSpeech(patientName) || "المُراجع";
   const doctor = formatNameForSpeech(doctorName) || "الطبيب";
+  const female = gender === "female";
 
   if (variant === "enter") {
     return {
-      intro: SPEECH_INTRO_ENTER,
+      intro: female ? SPEECH_INTRO_ENTER_FEMALE : SPEECH_INTRO_ENTER_MALE,
       patientName: patient,
       tail: `${SPEECH_MIDDLE_ENTER} ${doctor}`,
     };
   }
 
+  const intro =
+    variant === "queue_screen" && female
+      ? SPEECH_INTRO_CALLED_FEMALE
+      : female
+        ? SPEECH_INTRO_CALLED_FEMALE
+        : SPEECH_INTRO_CALLED_MALE;
+
   return {
-    intro: SPEECH_INTRO_CALLED,
+    intro,
     patientName: patient,
     tail: `${SPEECH_MIDDLE_CALLED} ${doctor}`,
   };
@@ -112,19 +131,21 @@ export function joinPatientCallSpeech(parts: PatientCallSpeechParts): string {
 export function buildPatientCallAnnouncement(
   patientName: string,
   doctorName: string,
-  variant: "called" | "enter" | "queue_screen" = "called"
+  variant: "called" | "enter" | "queue_screen" = "called",
+  gender?: PatientGender | null
 ): string {
   return joinPatientCallSpeech(
-    splitPatientCallSpeech(patientName, doctorName, variant)
+    splitPatientCallSpeech(patientName, doctorName, variant, gender)
   );
 }
 
 export function splitDoctorNewPatientSpeech(
-  patientName: string
+  patientName: string,
+  gender?: PatientGender | null
 ): PatientCallSpeechParts {
   return {
     intro: SPEECH_DOCTOR_NEW_INTRO,
-    patientName: formatNameForSpeech(patientName) || "مُراجع",
+    patientName: formatNameForSpeech(patientName) || (gender === "female" ? "مُراجعة" : "مُراجع"),
     tail: "",
   };
 }
@@ -133,10 +154,13 @@ export function buildDoctorNewPatientAnnouncement(patientName: string): string {
   return joinPatientCallSpeech(splitDoctorNewPatientSpeech(patientName));
 }
 
-export function splitDoctorExamSpeech(patientName: string): PatientCallSpeechParts {
+export function splitDoctorExamSpeech(
+  patientName: string,
+  gender?: PatientGender | null
+): PatientCallSpeechParts {
   return {
-    intro: "الْمُراجعُ",
-    patientName: formatNameForSpeech(patientName) || "مُراجع",
+    intro: gender === "female" ? "الْمُراجعةُ" : "الْمُراجعُ",
+    patientName: formatNameForSpeech(patientName) || (gender === "female" ? "مُراجعة" : "مُراجع"),
     tail: SPEECH_DOCTOR_EXAM_TAIL,
   };
 }
@@ -146,11 +170,12 @@ export function buildDoctorExamAnnouncement(patientName: string): string {
 }
 
 export function splitAccountantAdmitSpeech(
-  patientName: string
+  patientName: string,
+  gender?: PatientGender | null
 ): PatientCallSpeechParts {
   return {
-    intro: "الْمُراجعُ",
-    patientName: formatNameForSpeech(patientName) || "مُراجع",
+    intro: gender === "female" ? "الْمُراجعةُ" : "الْمُراجعُ",
+    patientName: formatNameForSpeech(patientName) || (gender === "female" ? "مُراجعة" : "مُراجع"),
     tail: SPEECH_ACCOUNTANT_ADMIT_TAIL,
   };
 }

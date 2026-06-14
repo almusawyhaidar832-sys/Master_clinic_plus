@@ -6,11 +6,15 @@ import {
   isApiStaffRole,
 } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
-import { getPatientDisplayPhone } from "@/lib/phone";
+import { getPatientDisplayPhone, validatePatientPhone } from "@/lib/phone";
 import {
   resolveWhatsAppClinic,
   whatsappNoClinicError,
 } from "@/lib/whatsapp/resolve-clinic";
+import { getWhatsAppConfig } from "@/lib/whatsapp/config";
+import { resolveEvolutionSession } from "@/lib/whatsapp/evolution-client";
+import { resolveWhatsAppInstanceForClinic } from "@/lib/whatsapp/resolve-instance";
+import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
 import { sendAccountingWhatsAppPackage } from "@/lib/whatsapp/session-package-server";
 
 const MAX_PDF_BYTES = 8 * 1024 * 1024;
@@ -99,9 +103,34 @@ export async function POST(req: NextRequest) {
 
     if (!phone) {
       return NextResponse.json(
-        { error: "لا يوجد رقم جوال للمراجع" },
+        { error: describeWhatsAppDeliveryError("no_patient_phone") },
         { status: 400 }
       );
+    }
+
+    const phoneCheck = validatePatientPhone(phone);
+    if (!phoneCheck.ok) {
+      return NextResponse.json({ error: phoneCheck.message }, { status: 400 });
+    }
+    phone = phoneCheck.normalized;
+
+    const cfg = getWhatsAppConfig();
+    if (cfg.configured && cfg.provider === "evolution") {
+      const instanceName = await resolveWhatsAppInstanceForClinic(
+        resolved.clinicId
+      );
+      const session = await resolveEvolutionSession(instanceName);
+      if (!session.linked) {
+        return NextResponse.json(
+          {
+            error: describeWhatsAppDeliveryError("whatsapp_not_linked"),
+            hint: `جلسة واتساب عيادتك (${instanceName}) غير متصلة — افتح /dashboard/whatsapp وامسح QR`,
+            instanceName,
+            configured: true,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     const result = await sendAccountingWhatsAppPackage(admin, {
@@ -120,7 +149,7 @@ export async function POST(req: NextRequest) {
     if (!result.ok && result.configured) {
       return NextResponse.json(
         {
-          error: result.errors[0] ?? "تعذر إرسال الحزمة",
+          error: result.errors.join(" — ") || "تعذر إرسال الحزمة",
           configured: true,
           ...result,
         },

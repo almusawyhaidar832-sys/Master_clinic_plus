@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildClinicalWhatsAppAppendix } from "@/lib/automation/notification-service";
+import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
 import {
   deliverWhatsAppDocument,
   deliverWhatsAppMessage,
@@ -55,7 +56,11 @@ export async function sendAccountingWhatsAppPackage(
   if (!textOutcome.configured) configured = false;
   textSent = textOutcome.ok && textOutcome.status === "sent";
   if (!textOutcome.ok && textOutcome.configured) {
-    errors.push(textOutcome.providerError ?? "text_send_failed");
+    errors.push(
+      describeWhatsAppDeliveryError(
+        textOutcome.providerError ?? "text_send_failed"
+      )
+    );
   }
 
   if (input.invoicePdfBase64?.trim()) {
@@ -70,7 +75,11 @@ export async function sendAccountingWhatsAppPackage(
     if (!invOutcome.configured) configured = false;
     invoiceSent = invOutcome.ok && invOutcome.status === "sent";
     if (!invOutcome.ok && invOutcome.configured) {
-      errors.push(invOutcome.providerError ?? "invoice_pdf_failed");
+      errors.push(
+        describeWhatsAppDeliveryError(
+          invOutcome.providerError ?? "invoice_pdf_failed"
+        )
+      );
     }
   }
 
@@ -86,7 +95,11 @@ export async function sendAccountingWhatsAppPackage(
     if (!rxOutcome.configured) configured = false;
     prescriptionSent = rxOutcome.ok && rxOutcome.status === "sent";
     if (!rxOutcome.ok && rxOutcome.configured) {
-      errors.push(rxOutcome.providerError ?? "prescription_pdf_failed");
+      errors.push(
+        describeWhatsAppDeliveryError(
+          rxOutcome.providerError ?? "prescription_pdf_failed"
+        )
+      );
     }
   }
 

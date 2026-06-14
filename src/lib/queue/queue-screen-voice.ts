@@ -12,7 +12,11 @@ import {
 
 export { buildQueueScreenAnnouncement } from "@/lib/queue/arabic-speech-text";
 
-type AnnouncementJob = { patientName: string; doctorName: string };
+type AnnouncementJob = {
+  patientName: string;
+  doctorName: string;
+  gender?: import("@/lib/queue/patient-gender").PatientGender | null;
+};
 
 const pendingJobs: AnnouncementJob[] = [];
 let speaking = false;
@@ -26,7 +30,8 @@ async function drainQueue() {
     const parts = splitPatientCallSpeech(
       job.patientName,
       job.doctorName,
-      "queue_screen"
+      "queue_screen",
+      job.gender
     );
 
     await playAttentionBeep();
@@ -49,23 +54,30 @@ export function isQueueScreenSpeechUnlocked(): boolean {
 export function speakQueueScreenAnnouncement(
   patientName: string,
   doctorName: string,
-  enabled = true
+  enabled = true,
+  gender?: AnnouncementJob["gender"]
 ): void {
   if (!enabled) return;
   if (typeof window === "undefined") return;
-  enqueue({ patientName, doctorName });
+  enqueue({ patientName, doctorName, gender });
 }
 
 export function repeatQueueScreenAnnouncement(
   patientName: string,
   doctorName: string,
-  enabled = true
+  enabled = true,
+  gender?: AnnouncementJob["gender"]
 ): void {
   if (!enabled || typeof window === "undefined") return;
   stopAllSpeech();
   pendingJobs.length = 0;
   speaking = false;
-  const parts = splitPatientCallSpeech(patientName, doctorName, "queue_screen");
+  const parts = splitPatientCallSpeech(
+    patientName,
+    doctorName,
+    "queue_screen",
+    gender
+  );
   void (async () => {
     await playAttentionBeep();
     await speakPatientCallParts(parts, { clearQueue: true, useCloud: false });

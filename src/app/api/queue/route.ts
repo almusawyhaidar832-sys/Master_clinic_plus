@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
+  emitQueueScreenCall,
   fetchClinicQueue,
   getDoctorByProfileId,
   insertQueueEntry,
@@ -148,6 +149,7 @@ export async function POST(req: NextRequest) {
       }
 
       await notifyAccountantsPatientAdmit(entryId).catch(console.error);
+      void emitQueueScreenCall(entryId).catch(console.error);
 
       return NextResponse.json({ success: true });
     }

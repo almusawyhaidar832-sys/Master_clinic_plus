@@ -6,6 +6,7 @@ import {
   isApiStaffRole,
 } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { emitQueueScreenCall } from "@/lib/queue/server";
 import {
   resolveDoctorSpeechName,
   resolvePatientSpeechName,
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
         `
         id, status, clinic_id, patient_name, ticket_number,
         doctor:doctors(full_name_ar),
-        patient:patients(full_name_ar, speech_name_ar)
+        patient:patients(full_name_ar, speech_name_ar, gender)
       `
       )
       .eq("id", entryId)
@@ -82,6 +83,8 @@ export async function POST(req: NextRequest) {
     const doctorName = resolveDoctorSpeechName(
       entry.doctor as { full_name_ar: string } | null
     );
+
+    void emitQueueScreenCall(entryId).catch(console.error);
 
     return NextResponse.json({
       success: true,
