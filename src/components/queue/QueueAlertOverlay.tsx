@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, BellOff, Volume2, X } from "lucide-react";
+import { Bell, Stethoscope, UserPlus, Volume2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   replayQueueAlert,
@@ -32,6 +32,17 @@ export function QueueAlertOverlay() {
 
   if (!alert) return null;
 
+  const isTestAlert =
+    alert.title.includes("تجربة") ||
+    alert.title.toLowerCase().includes("test alert");
+
+  const AlertIcon =
+    alert.kind === "doctor_exam"
+      ? Stethoscope
+      : alert.kind === "doctor_new"
+        ? UserPlus
+        : Bell;
+
   return (
     <div
       role="alert"
@@ -42,13 +53,14 @@ export function QueueAlertOverlay() {
         }
       }}
       className={cn(
-        "fixed left-4 right-4 top-20 z-[100] mx-auto max-w-lg rounded-2xl border-2 p-4 shadow-2xl",
-        alert.linkPath && "cursor-pointer hover:brightness-[0.98]",
+        "fixed inset-x-3 top-[calc(3.75rem+env(safe-area-inset-top,0px))] z-[100] mx-auto max-w-md",
+        "rounded-2xl border p-4 shadow-lg backdrop-blur-sm transition-transform",
+        alert.linkPath && "cursor-pointer active:scale-[0.99]",
         alert.kind === "doctor_new"
-          ? "border-violet-300 bg-violet-50 text-violet-950"
+          ? "border-violet-400/60 bg-violet-950/95 text-white"
           : alert.kind === "doctor_exam"
-          ? "border-blue-300 bg-blue-50 text-blue-950"
-          : "border-emerald-300 bg-emerald-50 text-emerald-950"
+            ? "border-sky-400/60 bg-sky-950/95 text-white"
+            : "border-emerald-400/60 bg-emerald-950/95 text-white"
       )}
     >
       <div className="flex items-start gap-3">
@@ -56,24 +68,20 @@ export function QueueAlertOverlay() {
           className={cn(
             "flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl",
             alert.kind === "doctor_new"
-              ? "bg-violet-200 text-violet-700"
+              ? "bg-violet-500/30 text-violet-100"
               : alert.kind === "doctor_exam"
-              ? "bg-blue-200 text-blue-700"
-              : "bg-emerald-200 text-emerald-700"
+                ? "bg-sky-500/30 text-sky-100"
+                : "bg-emerald-500/30 text-emerald-100"
           )}
         >
-          {alert.kind === "doctor_new" ? (
-            <Bell className="h-6 w-6" />
-          ) : (
-            <BellOff className="h-6 w-6" />
-          )}
+          <AlertIcon className="h-6 w-6" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-bold">{alert.title}</p>
-          <p className="mt-1 text-sm leading-relaxed">{alert.message}</p>
-          {alert.linkPath && (
-            <p className="mt-1 text-xs font-medium opacity-80">
-              اضغط لفتح الصفحة
+          <p className="text-base font-bold leading-snug">{alert.title}</p>
+          <p className="mt-1 text-sm leading-relaxed text-white/90">{alert.message}</p>
+          {alert.linkPath && !isTestAlert && (
+            <p className="mt-2 text-xs font-medium text-white/70">
+              اضغط للانتقال إلى غرفة الانتظار
             </p>
           )}
           <button
@@ -82,10 +90,10 @@ export function QueueAlertOverlay() {
               e.stopPropagation();
               replayQueueAlert(alert);
             }}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-white/80 px-3 py-1.5 text-xs font-semibold shadow-sm hover:bg-white"
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25"
           >
             <Volume2 className="h-3.5 w-3.5" />
-            إعادة الصوت
+            إعادة النداء
           </button>
         </div>
         <button

@@ -43,7 +43,12 @@ function readDismissed(): boolean {
   }
 }
 
-export function DoctorAlertsSetup() {
+type DoctorAlertsSetupProps = {
+  /** أزرار التجربة — في صفحة الإشعارات فقط، مو في كل الصفحات */
+  showTestControls?: boolean;
+};
+
+export function DoctorAlertsSetup({ showTestControls = false }: DoctorAlertsSetupProps) {
   const { t, bi } = useLanguage();
   const router = useRouter();
 
@@ -261,18 +266,14 @@ export function DoctorAlertsSetup() {
 
   const testAlert = useCallback(async () => {
     await unlockQueueAudio();
-    await warmDoctorCloudTts();
     void triggerQueueAlert({
       kind: "doctor_new",
-      title: bi("تجربة النداء 🔔", "Test alert 🔔"),
-      message: bi(
-        "هكذا يسمع الطبيب عند وصول مراجع — تأكد من رفع الصوت",
-        "This is how alerts sound when a patient arrives — check your volume"
-      ),
+      title: t("docNewPatientAlert"),
+      message: `${t("docNewPatientAlertBody")} ${bi("أحمد", "Ahmad")}`,
       linkPath: "/doctor/queue",
-      patientName: bi("مراجع", "Patient"),
+      patientName: bi("أحمد", "Ahmad"),
     });
-  }, [bi]);
+  }, [bi, t]);
 
   const testServerPush = useCallback(async () => {
     if (!pushReady) return;
@@ -428,31 +429,36 @@ export function DoctorAlertsSetup() {
         </div>
       )}
 
-      {alertsActive && (
+      {alertsActive && !pushReady && isWebPushSupported() && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2">
           <p className="text-xs font-medium text-emerald-900">
-            {pushReady
-              ? t("docAlertsActive")
-              : platform === "android"
-                ? t("docAlertsAndroidPushPending")
-                : t("docAlertsInAppActive")}
+            {platform === "android"
+              ? t("docAlertsAndroidPushPending")
+              : t("docAlertsInAppActive")}
           </p>
-          <div className="flex flex-wrap gap-2">
-            {!pushReady && isWebPushSupported() && (
-              <button
-                type="button"
-                disabled={pushRegistering}
-                onClick={() => void registerPush({ force: true })}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:opacity-60"
-              >
-                <Bell className="h-3.5 w-3.5" />
-                {pushRegistering ? t("docActivatingAlerts") : t("docEnableBackgroundPush")}
-              </button>
-            )}
+          <button
+            type="button"
+            disabled={pushRegistering}
+            onClick={() => void registerPush({ force: true })}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:opacity-60"
+          >
+            <Bell className="h-3.5 w-3.5" />
+            {pushRegistering ? t("docActivatingAlerts") : t("docEnableBackgroundPush")}
+          </button>
+        </div>
+      )}
+
+      {showTestControls && alertsActive && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-sm font-bold text-slate-800">{t("docAlertsSettingsTitle")}</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500">
+            {pushReady ? t("docAlertsActive") : t("docAlertsInAppActive")}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => void testAlert()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-xs font-semibold text-violet-900"
             >
               <Volume2 className="h-3.5 w-3.5" />
               {t("docTestAlert")}
@@ -462,7 +468,7 @@ export function DoctorAlertsSetup() {
                 type="button"
                 disabled={testingPush}
                 onClick={() => void testServerPush()}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-violet-700 px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
               >
                 <Bell className="h-3.5 w-3.5" />
                 {testingPush ? t("docActivatingAlerts") : t("docTestPush")}

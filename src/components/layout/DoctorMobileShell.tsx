@@ -152,7 +152,9 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="mc-app-main flex-1 px-4 py-4">
-        <DoctorAlertsSetup />
+        <div className="mb-3">
+          <DoctorAlertsSetup />
+        </div>
         {children}
       </main>
 
