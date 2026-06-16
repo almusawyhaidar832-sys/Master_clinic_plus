@@ -76,6 +76,7 @@ import { SessionInvoiceModal } from "@/components/invoices/SessionInvoiceModal";
 import { PrescriptionPrintModal } from "@/components/prescriptions/PrescriptionPrintModal";
 import { fetchVisitSessionByQueue } from "@/lib/clinical/visit-session-client";
 import { fetchPrescriptionByOperation } from "@/lib/prescriptions/client";
+import { prescriptionHasContent } from "@/lib/prescriptions/content";
 import {
   buildSessionInvoiceData,
   type SessionInvoiceData,
@@ -271,19 +272,32 @@ export function QuickEntryForm({
       openImmediately = true
     ) => {
       if (!queueEntryId) return;
-      try {
-        const session = await fetchVisitSessionByQueue(queueEntryId, "accountant");
-        if (!session?.operationId) return;
+
+      // محاولة مع إعادة مرة واحدة بعد ثانيتين — الوصفة قد تتأخر في الحفظ
+      async function attempt(): Promise<boolean> {
+        const session = await fetchVisitSessionByQueue(queueEntryId!, "accountant");
+        if (!session?.operationId) return false;
         const rx = await fetchPrescriptionByOperation(
           session.operationId,
           "accountant",
           queueEntryId
         );
-        if (rx?.medications?.length) {
+        if (rx && prescriptionHasContent(rx)) {
           setPendingPrescriptionId(rx.id);
           if (openImmediately) {
             setPrescriptionModalId(rx.id);
           }
+          return true;
+        }
+        return false;
+      }
+
+      try {
+        const found = await attempt();
+        if (!found) {
+          // أعد المحاولة بعد ثانيتين — احتمال أن الطبيب لم ينته من الحفظ
+          await new Promise((r) => setTimeout(r, 2000));
+          await attempt();
         }
       } catch {
         /* لا وصفة — طبيعي */
@@ -343,10 +357,12 @@ export function QuickEntryForm({
     id: string;
     full_name_ar: string;
   } | null>(null);
-  const [showVisualRecordReview, setShowVisualRecordReview] = useState(false);
+  const [showVisualRecordReview, setShowVisualRecordReview] = useState(
+    () => Boolean(visitQueueEntryId)
+  );
 
   useEffect(() => {
-    setShowVisualRecordReview(false);
+    setShowVisualRecordReview(Boolean(visitQueueEntryId));
   }, [visitQueueEntryId]);
 
   const handleCaseDoctorTransferred = useCallback(

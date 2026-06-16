@@ -11,8 +11,14 @@ import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
-import { fetchPatientTreatmentCases } from "@/lib/services/patient-treatment-cases";
-import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
+import {
+  patientBelongsToDoctor,
+  filterTreatmentCasesForDoctor,
+} from "@/lib/services/doctor-patients";
+import {
+  fetchPatientTreatmentCases,
+  type PatientTreatmentCase,
+} from "@/lib/services/patient-treatment-cases";
 import type { Patient, PatientOperation, MedicalLog } from "@/types";
 import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
 
@@ -35,12 +41,30 @@ function StatementContent() {
   >([]);
   const [generated, setGenerated] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [accessError, setAccessError] = useState("");
 
   useEffect(() => {
     if (!preselectedId) return;
 
     async function loadPreselected() {
       const supabase = createClient();
+      const doctor = await getDoctorForCurrentUser(supabase);
+      if (!doctor) {
+        setAccessDenied(true);
+        return;
+      }
+      const allowed = await patientBelongsToDoctor(
+        supabase,
+        preselectedId,
+        doctor.id
+      );
+      if (!allowed) {
+        setAccessDenied(true);
+        setAccessError(t("docPatientNotLinked"));
+        return;
+      }
+
       const { data } = await supabase
         .from("patients")
         .select("id, full_name_ar")
@@ -54,13 +78,26 @@ function StatementContent() {
     }
 
     void loadPreselected();
-  }, [preselectedId]);
+  }, [preselectedId, t]);
 
   async function generate() {
     if (!patientId) return;
     const supabase = createClient();
     const doctor = await getDoctorForCurrentUser(supabase);
-    if (!doctor) return;
+    if (!doctor) {
+      setAccessDenied(true);
+      return;
+    }
+
+    const allowed = await patientBelongsToDoctor(supabase, patientId, doctor.id);
+    if (!allowed) {
+      setAccessDenied(true);
+      setAccessError(t("docPatientNotLinked"));
+      setGenerated(false);
+      return;
+    }
+    setAccessDenied(false);
+    setAccessError("");
 
     const [pRes, oRes, lRes, cases] = await Promise.all([
       supabase.from("patients").select("*").eq("id", patientId).single(),
@@ -79,9 +116,10 @@ function StatementContent() {
       fetchPatientTreatmentCases(supabase, patientId, doctor.clinic_id),
     ]);
     if (pRes.data) setPatient(pRes.data as Patient);
-    setOperations((oRes.data as PatientOperation[]) || []);
+    const ops = (oRes.data as PatientOperation[]) || [];
+    setOperations(ops);
     setLogs(lRes.data ?? []);
-    setTreatmentCases(cases);
+    setTreatmentCases(filterTreatmentCasesForDoctor(cases, ops));
     setGenerated(true);
   }
 
@@ -90,6 +128,12 @@ function StatementContent() {
       <h2 className="text-lg font-bold text-slate-text no-print">
         {t("docStatementTitle")}
       </h2>
+
+      {accessDenied && accessError && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 no-print">
+          {accessError}
+        </p>
+      )}
 
       <div className="no-print space-y-3">
         <div className="w-full space-y-1.5">

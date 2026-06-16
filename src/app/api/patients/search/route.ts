@@ -69,7 +69,16 @@ export async function GET(req: NextRequest) {
 
     let searchDoctorId: string | null = null;
 
-    if (scope === "clinic") {
+    if (isApiDoctorRole(role)) {
+      const doctor = await getDoctorByProfileId(profile.id);
+      if (!doctor || doctor.clinic_id !== profile.clinic_id) {
+        return NextResponse.json(
+          { error: "حساب الطبيب غير مربوط" },
+          { status: 403 }
+        );
+      }
+      searchDoctorId = doctor.id;
+    } else if (scope === "clinic") {
       searchDoctorId = null;
     } else if (doctorIdParam) {
       if (!(await doctorBelongsToClinic(admin, doctorIdParam, profile.clinic_id))) {
@@ -82,15 +91,6 @@ export async function GET(req: NextRequest) {
         }
       }
       searchDoctorId = doctorIdParam;
-    } else if (isApiDoctorRole(role)) {
-      const doctor = await getDoctorByProfileId(profile.id);
-      if (!doctor || doctor.clinic_id !== profile.clinic_id) {
-        return NextResponse.json(
-          { error: "حساب الطبيب غير مربوط" },
-          { status: 403 }
-        );
-      }
-      searchDoctorId = doctor.id;
     } else if (isApiAssistantRole(role)) {
       const ctx = await resolveAssistantContext(admin, profile.id);
       if (!ctx) {

@@ -284,7 +284,8 @@ export async function ensureVisitSessionOperation(
   }
 ): Promise<VisitSessionContext> {
   const entry = await findActiveQueueEntryForVisit(admin, input);
-  const queueEntryId = (entry?.id as string | null) ?? null;
+  const queueEntryId =
+    ((entry?.id as string | null) ?? input.queueEntryId?.trim()) || null;
   const queueStatus = entry
     ? (entry.status as QueueStatus)
     : null;
@@ -301,28 +302,20 @@ export async function ensureVisitSessionOperation(
         appointmentId: (entry?.appointment_id as string | null) ?? null,
       };
     }
-  }
+    /* كل دور طابور = جلسة كشف مستقلة — لا نعيد استخدام جلسة اليوم السابقة */
+  } else {
+    const existingToday = await findTodayClinicalOperation(admin, input);
 
-  const existingToday = await findTodayClinicalOperation(admin, input);
-
-  if (existingToday?.id) {
-    let operationId = existingToday.id as string;
-    if (queueEntryId) {
-      operationId = await linkQueueEntryToOperation(
-        admin,
-        operationId,
-        queueEntryId
-      );
+    if (existingToday?.id) {
+      return {
+        operationId: existingToday.id as string,
+        queueEntryId: null,
+        queueStatus,
+        patientId: input.patientId,
+        doctorId: input.doctorId,
+        appointmentId: (entry?.appointment_id as string | null) ?? null,
+      };
     }
-
-    return {
-      operationId,
-      queueEntryId,
-      queueStatus,
-      patientId: input.patientId,
-      doctorId: input.doctorId,
-      appointmentId: (entry?.appointment_id as string | null) ?? null,
-    };
   }
 
   if (!queueEntryId && !input.allowWithoutQueue) {

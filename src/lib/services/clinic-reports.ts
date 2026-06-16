@@ -53,6 +53,10 @@ import {
 } from "@/lib/withdrawals/display";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import { currentMonthYear, monthDateRange, todayISO } from "@/lib/utils";
+import {
+  labDetailsFromOperation,
+  sumMaterialsCosts,
+} from "@/lib/invoices/lab-session-details";
 
 function mapWithdrawalLine(
   row: {
@@ -210,7 +214,14 @@ export interface MasterClinicReport {
     total_amount: number;
     paid_amount: number;
     remaining_debt: number;
+    materials_cost: number;
+    lab_notes: string | null;
   }[];
+  /** ملخص تكاليف المختبر — للعرض فقط (لا يُضاف للإيرادات) */
+  labCostsSummary: {
+    totalMaterialsCost: number;
+    sessionsWithLab: number;
+  };
   refunds: {
     id: string;
     patientName: string;
@@ -743,6 +754,47 @@ export async function fetchMasterClinicReport(
     return q;
   };
 
+  const monthOpsDetailSelect =
+    "operation_date, operation_type, operation_name_ar, total_amount, paid_amount, remaining_debt, materials_cost, lab_notes, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)";
+  const monthOpsDetailSelectBase =
+    "operation_date, operation_type, operation_name_ar, total_amount, paid_amount, remaining_debt, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)";
+
+  type MonthOpDetailRow = {
+    operation_date?: string;
+    operation_type?: string;
+    operation_name_ar?: string;
+    total_amount?: number | string | null;
+    paid_amount?: number | string | null;
+    remaining_debt?: number | string | null;
+    materials_cost?: number | string | null;
+    lab_notes?: string | null;
+    patient?:
+      | { full_name_ar: string }
+      | { full_name_ar: string }[]
+      | null;
+    doctor?:
+      | { full_name_ar: string }
+      | { full_name_ar: string }[]
+      | null;
+  };
+
+  async function fetchMonthOperationsDetail(): Promise<MonthOpDetailRow[]> {
+    let res = await monthOpsQuery(monthOpsDetailSelect)
+      .order("operation_date", { ascending: false })
+      .limit(200);
+
+    if (
+      res.error?.message?.includes("materials_cost") ||
+      res.error?.message?.includes("lab_notes")
+    ) {
+      res = await monthOpsQuery(monthOpsDetailSelectBase)
+        .order("operation_date", { ascending: false })
+        .limit(200);
+    }
+
+    return (res.data ?? []) as MonthOpDetailRow[];
+  }
+
   const [
     profitStats,
     today,
@@ -770,36 +822,41 @@ export async function fetchMasterClinicReport(
         }),
     fetchDaySummary(supabase, daySnapshotDate),
     fetchDoctorLedgers(supabase, my),
-    supabase
-      .from("doctor_withdrawals")
-      .select("id, amount, requested_at, doctor:doctors!doctor_id(full_name_ar)")
-      .eq("status", "pending")
-      .order("requested_at", { ascending: false }),
-    supabase
-      .from("expenses")
-      .select("description_ar, amount, expense_date")
-      .gte("expense_date", start)
-      .lte("expense_date", end)
-      .order("expense_date", { ascending: false }),
-    supabase
-      .from("salary_entries")
-      .select(
-        `entry_type, amount, entry_date, notes_ar,
+    clinicId
+      ? supabase
+          .from("doctor_withdrawals")
+          .select("id, amount, requested_at, doctor:doctors!doctor_id(full_name_ar)")
+          .eq("clinic_id", clinicId)
+          .eq("status", "pending")
+          .order("requested_at", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+    clinicId
+      ? supabase
+          .from("expenses")
+          .select("description_ar, amount, expense_date")
+          .eq("clinic_id", clinicId)
+          .gte("expense_date", start)
+          .lte("expense_date", end)
+          .order("expense_date", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+    clinicId
+      ? supabase
+          .from("salary_entries")
+          .select(
+            `entry_type, amount, entry_date, notes_ar,
          staff_id, assistant_id, doctor_id,
          staff:staff_members!staff_id(full_name_ar, job_title_ar),
          assistant:assistants!assistant_id(full_name_ar),
          doctor:doctors!doctor_id(full_name_ar)`
-      )
-      .gte("entry_date", start)
-      .lte("entry_date", end)
-      .order("entry_date", { ascending: false }),
-    monthOpsQuery(
-      "operation_date, operation_type, operation_name_ar, total_amount, paid_amount, remaining_debt, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
-    )
-      .order("operation_date", { ascending: false })
-      .limit(200),
+          )
+          .eq("clinic_id", clinicId)
+          .gte("entry_date", start)
+          .lte("entry_date", end)
+          .order("entry_date", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
+    fetchMonthOperationsDetail(),
     monthOpsQuery("paid_amount, remaining_debt, total_amount"),
-    fetchRefundsForReport(supabase, start, end),
+    fetchRefundsForReport(supabase, start, end, clinicId ?? undefined),
     clinicId
       ? fetchTotalRefundsAmount(supabase, {
           clinicId,
@@ -833,6 +890,39 @@ export async function fetchMasterClinicReport(
     start,
     end
   );
+
+  const monthOperationRows = (monthOpsRes ?? []).map((op) => {
+    const lab = labDetailsFromOperation(op as { materials_cost?: unknown; lab_notes?: unknown });
+    return {
+      operation_date: op.operation_date,
+      operation_name_ar: op.operation_type || op.operation_name_ar,
+      operation_type: op.operation_type,
+      patientName:
+        relationName(
+          op.patient as { full_name_ar: string } | { full_name_ar: string }[]
+        ) ?? "—",
+      doctorName: formatDoctorDisplayName(
+        relationName(
+          op.doctor as { full_name_ar: string } | { full_name_ar: string }[]
+        )
+      ),
+      total_amount: Number(op.total_amount),
+      paid_amount: Number(op.paid_amount),
+      remaining_debt: Number(
+        op.remaining_debt ??
+          Math.max(0, Number(op.total_amount) - Number(op.paid_amount))
+      ),
+      materials_cost: lab.materialsCost,
+      lab_notes: lab.labNotes,
+    };
+  });
+
+  const labCostsSummary = {
+    totalMaterialsCost: sumMaterialsCosts(
+      monthOperationRows.map((op) => ({ materialsCost: op.materials_cost }))
+    ),
+    sessionsWithLab: monthOperationRows.filter((op) => op.materials_cost > 0).length,
+  };
 
   return {
     generatedAt: new Date().toISOString(),
@@ -901,23 +991,8 @@ export async function fetchMasterClinicReport(
       reason: r.reason,
     })),
     monthWithdrawals,
-    monthOperations: (monthOpsRes.data ?? []).map((op) => ({
-      operation_date: op.operation_date,
-      operation_name_ar: op.operation_type || op.operation_name_ar,
-      operation_type: op.operation_type,
-      patientName:
-        relationName(
-          op.patient as { full_name_ar: string } | { full_name_ar: string }[]
-        ) ?? "—",
-      doctorName: formatDoctorDisplayName(
-        relationName(
-          op.doctor as { full_name_ar: string } | { full_name_ar: string }[]
-        )
-      ),
-      total_amount: Number(op.total_amount),
-      paid_amount: Number(op.paid_amount),
-      remaining_debt: Number(op.remaining_debt ?? Math.max(0, Number(op.total_amount) - Number(op.paid_amount))),
-    })),
+    monthOperations: monthOperationRows,
+    labCostsSummary,
   };
 }
 

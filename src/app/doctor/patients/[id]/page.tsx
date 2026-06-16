@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import {
   patientBelongsToDoctor,
+  filterTreatmentCasesForDoctor,
 } from "@/lib/services/doctor-patients";
 import { formatDate } from "@/lib/utils";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
@@ -20,7 +21,6 @@ import type { ClinicalByOperationId } from "@/lib/clinical/types";
 import { getPatientDisplayPhone } from "@/lib/phone";
 import {
   fetchPatientTreatmentCases,
-  isPersistedTreatmentCaseId,
   type PatientTreatmentCase,
 } from "@/lib/services/patient-treatment-cases";
 import { fetchPatientOperationsForProfile } from "@/lib/services/patient-operations-profile";
@@ -33,18 +33,6 @@ import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { ArrowRight, FileText, Plus, X } from "lucide-react";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useLanguage } from "@/contexts/LanguageContext";
-
-function treatmentCasesForDoctor(
-  cases: PatientTreatmentCase[],
-  operations: PatientOperation[]
-): PatientTreatmentCase[] {
-  const doctorCaseIds = new Set(
-    operations
-      .map((o) => o.treatment_case_id?.trim())
-      .filter((id): id is string => !!id && isPersistedTreatmentCaseId(id))
-  );
-  return cases.filter((c) => doctorCaseIds.has(c.id));
-}
 
 export default function DoctorPatientDetailPage() {
   const { t, formatMoney, dateLocale } = useLanguage();
@@ -63,7 +51,7 @@ export default function DoctorPatientDetailPage() {
   const [accessDenied, setAccessDenied] = useState(false);
 
   const doctorCases = useMemo(
-    () => treatmentCasesForDoctor(treatmentCases, operations),
+    () => filterTreatmentCasesForDoctor(treatmentCases, operations),
     [treatmentCases, operations]
   );
 
@@ -137,11 +125,13 @@ export default function DoctorPatientDetailPage() {
           .from("medical_logs")
           .select("*, doctor:doctors!doctor_id(full_name_ar)")
           .eq("patient_id", id)
+          .eq("doctor_id", doc.id)
           .order("log_date", { ascending: false }),
         supabase
           .from("treatments")
           .select("*")
           .eq("patient_id", id)
+          .eq("doctor_id", doc.id)
           .eq("status", "active"),
       ]);
 

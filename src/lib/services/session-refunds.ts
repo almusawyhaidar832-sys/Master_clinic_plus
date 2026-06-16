@@ -428,13 +428,17 @@ export async function fetchTotalRefundsAmount(
 export async function fetchRefundsForReport(
   supabase: SupabaseClient,
   from: string,
-  to: string
+  to: string,
+  clinicId?: string
 ): Promise<RefundReportRow[]> {
+  if (!clinicId) return [];
+
   const { data } = await supabase
     .from("session_refunds")
     .select(
       "id, amount, reason, created_at, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
     )
+    .eq("clinic_id", clinicId)
     .gte("created_at", `${from}T00:00:00`)
     .lte("created_at", `${to}T23:59:59.999`)
     .order("created_at", { ascending: false });

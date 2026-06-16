@@ -7,6 +7,8 @@ import {
 } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { getDoctorByProfileId } from "@/lib/queue/server";
+import { assertDoctorOwnsQueueEntry } from "@/lib/auth/resolve-doctor-api";
+import { patientBelongsToDoctor } from "@/lib/services/doctor-patients";
 import { buildLedgerPayUrl } from "@/lib/ledger/navigation";
 import { ensureQueueEntryPatient } from "@/lib/services/ensure-queue-entry-patient";
 import {
@@ -60,6 +62,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "queue_entry_id مطلوب" }, { status: 400 });
     }
 
+    const admin = getAdminClient();
+
     if (isApiAssistantRole(role)) {
       const ctx = await resolveAssistantApiContext(profile);
       if (!ctx) {
@@ -74,7 +78,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const admin = getAdminClient();
+    if (isApiDoctorRole(role)) {
+      const doctor = await getDoctorByProfileId(profile.id);
+      if (!doctor || doctor.clinic_id !== profile.clinic_id) {
+        return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+      }
+      const check = await assertDoctorOwnsQueueEntry(queueEntryId, {
+        clinicId: profile.clinic_id,
+        doctorId: doctor.id,
+      });
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error }, { status: check.status });
+      }
+    }
+
     const session = await getVisitSessionByQueueEntry(
       admin,
       profile.clinic_id as string,
@@ -145,6 +162,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
       }
       doctorId = doctor.id;
+      if (queueEntryId) {
+        const check = await assertDoctorOwnsQueueEntry(queueEntryId, {
+          clinicId: profile.clinic_id as string,
+          doctorId: doctor.id,
+        });
+        if (!check.ok) {
+          return NextResponse.json({ error: check.error }, { status: check.status });
+        }
+      }
     }
 
     if (!patientId && queueEntryId) {
@@ -174,6 +200,13 @@ export async function POST(req: NextRequest) {
         { error: "patient_id أو queue_entry_id مطلوب" },
         { status: 400 }
       );
+    }
+
+    if (isDoctor && doctorId) {
+      const allowed = await patientBelongsToDoctor(admin, patientId, doctorId);
+      if (!allowed) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
     }
 
     if (!doctorId) {

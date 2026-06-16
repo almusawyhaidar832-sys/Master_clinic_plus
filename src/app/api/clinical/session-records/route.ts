@@ -100,19 +100,22 @@ async function loadClinicalByOperationIds(
     .select("id, operation_id, storage_path, file_name, mime_type")
     .in("operation_id", operationIds);
 
-  if (!xrayErr) {
-    for (const row of xrayRows ?? []) {
+  if (!xrayErr && xrayRows?.length) {
+    const validRows = xrayRows.filter(
+      (row) => byOperation[row.operation_id as string] && String(row.storage_path ?? "")
+    );
+
+    // توليد جميع signed URLs بشكل متوازٍ بدل المتسلسل
+    const paths = validRows.map((row) => String(row.storage_path));
+    const { data: signedList } = await admin.storage
+      .from(XRAY_BUCKET)
+      .createSignedUrls(paths, SIGNED_URL_TTL_SEC);
+
+    for (let i = 0; i < validRows.length; i++) {
+      const row = validRows[i];
+      const signed = signedList?.[i];
+      if (!signed?.signedUrl) continue;
       const opId = row.operation_id as string;
-      if (!byOperation[opId]) continue;
-      const path = String(row.storage_path ?? "");
-      if (!path) continue;
-
-      const { data: signed, error: signErr } = await admin.storage
-        .from(XRAY_BUCKET)
-        .createSignedUrl(path, SIGNED_URL_TTL_SEC);
-
-      if (signErr || !signed?.signedUrl) continue;
-
       byOperation[opId].xrays.push({
         id: row.id as string,
         url: signed.signedUrl,

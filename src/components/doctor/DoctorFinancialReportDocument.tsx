@@ -1,6 +1,7 @@
 "use client";
 
 import type { DoctorFinancialReportData } from "@/lib/services/doctor-financial-ledger";
+import { truncateLabNotes } from "@/lib/invoices/lab-session-details";
 import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -70,6 +71,7 @@ export function DoctorFinancialReportDocument({
     t("docColDate"),
     t("docColPatient"),
     t("docColSession"),
+    t("docColLabCost"),
     t("docColPaid"),
     t("docColYourShare"),
   ];
@@ -167,6 +169,9 @@ export function DoctorFinancialReportDocument({
             formatDate(row.payment_date, dateLocale),
             row.patient_name_ar,
             row.procedure_label,
+            row.materials_cost > 0
+              ? formatMoney(row.materials_cost)
+              : "—",
             formatMoney(row.paid_amount),
             formatMoney(row.doctor_share),
           ])}
@@ -187,7 +192,11 @@ export function DoctorFinancialReportDocument({
               : t("docKindSession"),
             row.record_kind === "doctor_expense"
               ? row.procedure_label
-              : `${row.patient_name_ar} — ${row.procedure_label}`,
+              : `${row.patient_name_ar} — ${row.procedure_label}${
+                  row.lab_notes
+                    ? ` (${truncateLabNotes(row.lab_notes, 24)})`
+                    : ""
+                }`,
             formatMoney(row.paid_amount),
             row.record_kind === "doctor_expense"
               ? `−${formatMoney(row.doctor_share)}`

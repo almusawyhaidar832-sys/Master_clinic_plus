@@ -7,6 +7,7 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn, formatDate } from "@/lib/utils";
 import type { DoctorLedgerInvoiceRow } from "@/lib/services/doctor-financial-ledger";
+import { truncateLabNotes } from "@/lib/invoices/lab-session-details";
 import { RefreshCw } from "lucide-react";
 
 function invoiceStatement(
@@ -112,10 +113,31 @@ export function DoctorLedgerInvoicesTab({
       key: "statement",
       header: t("docColDescription"),
       render: (row) => (
-        <span className="text-slate-700">
-          {invoiceStatement(row, clinicExpenseLabel)}
-        </span>
+        <div className="text-slate-700">
+          <span>
+            {row.record_kind === "doctor_expense"
+              ? invoiceStatement(row, clinicExpenseLabel)
+              : `${row.patient_name_ar} — ${invoiceStatement(row, clinicExpenseLabel)}`}
+          </span>
+          {row.record_kind !== "doctor_expense" && row.lab_notes ? (
+            <span className="mt-0.5 block text-[10px] text-slate-500">
+              {truncateLabNotes(row.lab_notes, 48)}
+            </span>
+          ) : null}
+        </div>
       ),
+    },
+    {
+      key: "lab",
+      header: t("docColLabCost"),
+      render: (row) =>
+        row.materials_cost > 0 ? (
+          <span className="tabular-nums text-amber-800">
+            {formatMoney(row.materials_cost)}
+          </span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
     },
     {
       key: "amount",

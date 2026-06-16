@@ -1,3 +1,41 @@
+/** حد آمن لإرسال PDF عبر واتساب (أقل من حد الخادم 8MB) */
+export const WHATSAPP_PDF_MAX_BYTES = 6 * 1024 * 1024;
+
+export function isPdfBase64TooLarge(
+  base64: string,
+  maxBytes = WHATSAPP_PDF_MAX_BYTES
+): boolean {
+  if (!base64.trim()) return true;
+  return Math.ceil((base64.trim().length * 3) / 4) > maxBytes;
+}
+
+export function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message = "انتهت المهلة"
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
+function waitForPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
 /**
  * تصدير PDF من عنصر HTML — يعتمد على خطوط المتصفح (Noto Sans Arabic)
  * بدلاً من jsPDF + TTF الذي يفشل في Next.js / jsPDF 4.
@@ -12,6 +50,8 @@ async function renderElementToPdf(elementId: string) {
     await document.fonts.ready;
   }
 
+  await waitForPaint();
+
   element.querySelectorAll(".statement-case-body").forEach((panel) => {
     panel.classList.remove("hidden");
   });
@@ -20,7 +60,7 @@ async function renderElementToPdf(elementId: string) {
   const { jsPDF } = await import("jspdf");
 
   const canvas = await html2canvas(element, {
-    scale: 2,
+    scale: 1.5,
     useCORS: true,
     logging: false,
     backgroundColor: "#ffffff",
@@ -34,7 +74,7 @@ async function renderElementToPdf(elementId: string) {
     },
   });
 
-  const imgData = canvas.toDataURL("image/png", 1.0);
+  const imgData = canvas.toDataURL("image/jpeg", 0.88);
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -49,13 +89,13 @@ async function renderElementToPdf(elementId: string) {
   let heightLeft = imgHeight;
   let position = 0;
 
-  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+  pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
   heightLeft -= pageHeight;
 
   while (heightLeft > 0) {
     position = heightLeft - imgHeight;
     pdf.addPage();
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
     heightLeft -= pageHeight;
   }
 

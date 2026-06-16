@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { getDoctorByProfileId } from "@/lib/queue/server";
 import { assignPrimaryDoctorForSession } from "@/lib/services/patient-primary-doctor";
+import {
+  patientBelongsToDoctor,
+  filterTreatmentCasesForDoctor,
+} from "@/lib/services/doctor-patients";
 import {
   createTreatmentCase,
   fetchPatientTreatmentCasesDirect,
 } from "@/lib/services/patient-treatment-cases";
+import type { PatientOperation } from "@/types";
 
 /** GET — كل حالات المريض (يتجاوز RLS — يظهر الحالات الجديدة في ملخص الحالات) */
 export async function GET(req: NextRequest) {
@@ -42,6 +48,33 @@ export async function GET(req: NextRequest) {
 
     if (!patient || patient.clinic_id !== profile.clinic_id) {
       return NextResponse.json({ error: "المريض غير موجود" }, { status: 404 });
+    }
+
+    if (roleNorm === "doctor") {
+      const doctor = await getDoctorByProfileId(profile.id);
+      if (!doctor || doctor.clinic_id !== profile.clinic_id) {
+        return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+      }
+      const allowed = await patientBelongsToDoctor(admin, patientId, doctor.id);
+      if (!allowed) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+
+      let cases = await fetchPatientTreatmentCasesDirect(admin, patientId, {
+        skipReconcile: true,
+      });
+
+      const { data: doctorOps } = await admin
+        .from("patient_operations")
+        .select("treatment_case_id")
+        .eq("patient_id", patientId)
+        .eq("doctor_id", doctor.id);
+      cases = filterTreatmentCasesForDoctor(
+        cases,
+        (doctorOps ?? []) as Pick<PatientOperation, "treatment_case_id">[]
+      );
+
+      return NextResponse.json({ cases });
     }
 
     const cases = await fetchPatientTreatmentCasesDirect(admin, patientId, {
@@ -125,6 +158,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let effectiveDoctorId = doctorId;
+    if (roleNorm === "doctor") {
+      const sessionDoctor = await getDoctorByProfileId(profile.id);
+      if (!sessionDoctor || sessionDoctor.clinic_id !== profile.clinic_id) {
+        return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+      }
+      const allowed = await patientBelongsToDoctor(
+        admin,
+        patientId,
+        sessionDoctor.id
+      );
+      if (!allowed) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+      effectiveDoctorId = sessionDoctor.id;
+    }
+
     const created = await createTreatmentCase(admin, {
       patientId,
       clinicId: profile.clinic_id,
@@ -134,7 +184,7 @@ export async function POST(req: NextRequest) {
       paid: Number.isFinite(paid) ? paid : 0,
       doctorShare: Number.isFinite(doctorShare) ? doctorShare : 0,
       clinicShare: Number.isFinite(clinicShare) ? clinicShare : 0,
-      primaryDoctorId: doctorId,
+      primaryDoctorId: effectiveDoctorId,
     });
 
     if (!created.case) {
@@ -146,7 +196,7 @@ export async function POST(req: NextRequest) {
 
     await assignPrimaryDoctorForSession(admin, {
       patientId,
-      doctorId,
+      doctorId: effectiveDoctorId,
       caseId: created.case.id,
     });
 

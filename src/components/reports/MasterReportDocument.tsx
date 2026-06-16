@@ -1,6 +1,7 @@
 "use client";
 
 import type { MasterClinicReport } from "@/lib/services/clinic-reports";
+import { truncateLabNotes } from "@/lib/invoices/lab-session-details";
 import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
 import { withdrawalStatusLabel } from "@/lib/withdrawals/display";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -286,6 +287,22 @@ export function MasterReportDocument({
         </section>
       )}
 
+      {report.labCostsSummary.sessionsWithLab > 0 && (
+        <section className="mb-6 rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-sm">
+          <h3 className="mb-1 font-bold text-amber-900">تكاليف المختبر (معلوماتية)</h3>
+          <p>
+            جلسات بمختبر:{" "}
+            <strong>{report.labCostsSummary.sessionsWithLab}</strong> — إجمالي
+            التكلفة:{" "}
+            <strong>{formatCurrency(report.labCostsSummary.totalMaterialsCost)}</strong>
+          </p>
+          <p className="mt-1 text-xs text-amber-900/80">
+            تُسجّل ضمن الجلسات وتُخصم من حصة الطبيب حسب الاتفاق — لا تُحسب كإيراد
+            إضافي ولا تُضاف مرتين للربح الصافي.
+          </p>
+        </section>
+      )}
+
       {report.monthOperations.length > 0 && (
         <section>
           <h3 className="mb-2 text-sm font-bold">
@@ -298,6 +315,7 @@ export function MasterReportDocument({
                 <th className="py-1">المريض</th>
                 <th className="py-1">الطبيب</th>
                 <th className="py-1">العملية</th>
+                <th className="py-1">المختبر</th>
                 <th className="py-1">المدفوع</th>
               </tr>
             </thead>
@@ -310,6 +328,20 @@ export function MasterReportDocument({
                     {op.doctorName}
                   </td>
                   <td className="py-0.5">{op.operation_type || op.operation_name_ar || "—"}</td>
+                  <td className="py-0.5">
+                    {op.materials_cost > 0 ? (
+                      <span title={op.lab_notes ?? undefined}>
+                        {formatCurrency(op.materials_cost)}
+                        {op.lab_notes ? (
+                          <span className="block text-[9px] text-slate-muted">
+                            {truncateLabNotes(op.lab_notes, 28)}
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="py-0.5">{formatCurrency(op.paid_amount)}</td>
                 </tr>
               ))}

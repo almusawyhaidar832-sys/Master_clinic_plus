@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Patient } from "@/types";
+import type { Patient, PatientOperation } from "@/types";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
+import {
+  isPersistedTreatmentCaseId,
+  type PatientTreatmentCase,
+} from "@/lib/services/patient-treatment-cases";
 import {
   PATIENT_SEARCH_MIN_LENGTH,
   type PatientSearchResult,
@@ -154,3 +158,16 @@ function caseBelongsToDoctor(
 }
 
 export { caseBelongsToDoctor };
+
+/** حالات علاج مرتبطة بجلسات الطبيب فقط */
+export function filterTreatmentCasesForDoctor(
+  cases: PatientTreatmentCase[],
+  doctorOperations: Pick<PatientOperation, "treatment_case_id">[]
+): PatientTreatmentCase[] {
+  const doctorCaseIds = new Set(
+    doctorOperations
+      .map((o) => o.treatment_case_id?.trim())
+      .filter((id): id is string => !!id && isPersistedTreatmentCaseId(id))
+  );
+  return cases.filter((c) => doctorCaseIds.has(c.id));
+}

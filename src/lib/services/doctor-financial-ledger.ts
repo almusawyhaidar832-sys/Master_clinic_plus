@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildInvoiceNumber } from "@/lib/invoices/session-invoice";
+import {
+  labDetailsFromOperation,
+  labDetailsFromSnapshot,
+} from "@/lib/invoices/lab-session-details";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import {
   calcOperationEarned,
@@ -35,6 +39,8 @@ export interface DoctorLedgerInvoiceRow {
   paid_amount: number;
   doctor_share: number;
   total_amount: number;
+  materials_cost: number;
+  lab_notes: string | null;
 }
 
 export interface DoctorLedgerPatientRow {
@@ -46,6 +52,8 @@ export interface DoctorLedgerPatientRow {
   payment_date: string;
   procedure_label: string;
   is_first_payment: boolean;
+  materials_cost: number;
+  lab_notes: string | null;
 }
 
 export type DoctorLedgerOperationKind =
@@ -106,6 +114,8 @@ interface SessionPaymentRow {
   treatment_name: string;
   total_amount: number;
   invoice_number: string;
+  materials_cost: number;
+  lab_notes: string | null;
 }
 
 function inDateRange(
@@ -218,9 +228,15 @@ type OperationEarningSource = {
 };
 
 const OPS_SELECT_WITH_CASE =
-  "id, patient_id, paid_amount, doctor_share_amount, operation_date, created_at, operation_name_ar, operation_type, total_amount, session_kind, treatment_case_id, patient_treatment_cases(doctor_share_total, final_price)";
+  "id, patient_id, paid_amount, doctor_share_amount, operation_date, created_at, operation_name_ar, operation_type, total_amount, session_kind, treatment_case_id, materials_cost, lab_notes, patient_treatment_cases(doctor_share_total, final_price)";
 
 const OPS_SELECT_BASE =
+  "id, patient_id, paid_amount, doctor_share_amount, operation_date, created_at, operation_name_ar, operation_type, total_amount, session_kind, materials_cost, lab_notes";
+
+const OPS_SELECT_WITH_CASE_NO_LAB =
+  "id, patient_id, paid_amount, doctor_share_amount, operation_date, created_at, operation_name_ar, operation_type, total_amount, session_kind, treatment_case_id, patient_treatment_cases(doctor_share_total, final_price)";
+
+const OPS_SELECT_BASE_NO_LAB =
   "id, patient_id, paid_amount, doctor_share_amount, operation_date, created_at, operation_name_ar, operation_type, total_amount, session_kind";
 
 const OPS_SELECT_MINIMAL =
@@ -273,6 +289,51 @@ async function fetchDoctorPaidOperations(
   }
 
   if (
+    res.error?.message?.includes("materials_cost") ||
+    res.error?.message?.includes("lab_notes")
+  ) {
+    let withoutLab = admin
+      .from("patient_operations")
+      .select(OPS_SELECT_WITH_CASE_NO_LAB)
+      .eq("clinic_id", clinicId)
+      .eq("doctor_id", doctorId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (filters.dateFrom) {
+      withoutLab = withoutLab.gte("operation_date", filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      withoutLab = withoutLab.lte("operation_date", filters.dateTo);
+    }
+
+    res = (await withoutLab) as typeof res;
+
+    if (
+      res.error?.message?.includes("patient_treatment_cases") ||
+      res.error?.message?.includes("treatment_case_id") ||
+      res.error?.message?.includes("session_kind")
+    ) {
+      let baseNoLab = admin
+        .from("patient_operations")
+        .select(OPS_SELECT_BASE_NO_LAB)
+        .eq("clinic_id", clinicId)
+        .eq("doctor_id", doctorId)
+        .order("created_at", { ascending: false })
+        .limit(500);
+
+      if (filters.dateFrom) {
+        baseNoLab = baseNoLab.gte("operation_date", filters.dateFrom);
+      }
+      if (filters.dateTo) {
+        baseNoLab = baseNoLab.lte("operation_date", filters.dateTo);
+      }
+
+      res = (await baseNoLab) as typeof res;
+    }
+  }
+
+  if (
     res.error?.message?.includes("operation_type") ||
     res.error?.message?.includes("operation_name_ar")
   ) {
@@ -320,6 +381,9 @@ async function loadDoctorHistoryRecords(
 function mapHistoryToInvoiceRow(row: InvoiceHistoryRow): DoctorLedgerInvoiceRow {
   const isExpense =
     row.record_kind === "doctor_expense" || !!row.doctor_expense_id;
+  const lab = isExpense
+    ? { materialsCost: 0, labNotes: null }
+    : labDetailsFromSnapshot(row.snapshot_json);
 
   return {
     id: row.id,
@@ -334,6 +398,8 @@ function mapHistoryToInvoiceRow(row: InvoiceHistoryRow): DoctorLedgerInvoiceRow 
     paid_amount: row.paid_amount,
     doctor_share: row.doctor_share,
     total_amount: row.total_amount,
+    materials_cost: lab.materialsCost,
+    lab_notes: lab.labNotes,
   };
 }
 
@@ -355,6 +421,7 @@ function historyToSessionPayment(
 
   const raw = row as unknown as Record<string, unknown>;
   const doctorShare = resolveHistoryDoctorShare(raw, paid, doctorPct, salaryDoctor);
+  const lab = labDetailsFromSnapshot(row.snapshot_json);
 
   return {
     id: row.id,
@@ -371,6 +438,8 @@ function historyToSessionPayment(
     invoice_number:
       String(row.invoice_number ?? "") ||
       (row.operation_id ? buildInvoiceNumber(row.operation_id) : ""),
+    materials_cost: lab.materialsCost,
+    lab_notes: lab.labNotes,
   };
 }
 
@@ -471,6 +540,7 @@ async function fetchDoctorSessionPayments(
           "full_name_ar" in op.patient
             ? String(op.patient.full_name_ar ?? "").trim()
             : "")) || "مراجع";
+      const lab = labDetailsFromOperation(op);
 
       rows.push({
         id: `op-${op.id}`,
@@ -485,6 +555,8 @@ async function fetchDoctorSessionPayments(
         treatment_name: "",
         total_amount: Number(op.total_amount ?? paid),
         invoice_number: buildInvoiceNumber(op.id),
+        materials_cost: lab.materialsCost,
+        lab_notes: lab.labNotes,
       });
     }
   }
@@ -515,6 +587,8 @@ function markFirstPayments(
     payment_date: p.payment_date,
     procedure_label: p.procedure_label,
     is_first_payment: counts.get(patientKey(p)) === 1,
+    materials_cost: p.materials_cost,
+    lab_notes: p.lab_notes,
   }));
 }
 

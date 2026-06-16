@@ -129,6 +129,21 @@ export function DoctorLedgerPatientsTab({
       ),
     },
     {
+      key: "lab",
+      header: t("docColLabCost"),
+      render: (row) =>
+        row.materials_cost > 0 ? (
+          <span
+            className="tabular-nums text-amber-800"
+            title={row.lab_notes ?? undefined}
+          >
+            {formatMoney(row.materials_cost)}
+          </span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
+    {
       key: "paid",
       header: t("docColPaid"),
       render: (row) => (

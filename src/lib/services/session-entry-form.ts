@@ -85,7 +85,7 @@ export function buildSessionEntrySchema(opts: {
     showAssignedDoctor:
       !opts.lockDoctorId && !!opts.hasAssignedDoctor,
     showPatientSearch: !opts.defaultPatientId,
-    showMaterials: isFirst && !picking,
+    showMaterials: !picking,
     showFinancialPreview:
       (!picking && isFirst) ||
       (isFollowUp && hasTreatmentPlan(opts.plan) && opts.plan.final_price > 0),

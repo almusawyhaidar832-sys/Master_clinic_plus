@@ -103,11 +103,8 @@ export async function sendAccountingWhatsAppPackage(
     }
   }
 
-  const ok =
-    errors.length === 0 &&
-    (textSent || !configured) &&
-    (!input.invoicePdfBase64?.trim() || invoiceSent || !configured) &&
-    (!input.prescriptionPdfBase64?.trim() || prescriptionSent || !configured);
+  // النجاح يعتمد على إرسال النص (الفاتورة كنص) — فشل PDF اختياري لا يُلغي الإرسال
+  const ok = configured ? textSent : textSent || invoiceSent || prescriptionSent;
 
   return {
     ok,

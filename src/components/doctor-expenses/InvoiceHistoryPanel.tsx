@@ -7,7 +7,23 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import type { InvoiceHistoryRow } from "@/lib/services/invoice-archive";
+import {
+  hasLabDetails,
+  labDetailsFromSnapshot,
+  truncateLabNotes,
+} from "@/lib/invoices/lab-session-details";
 import { History, RefreshCw } from "lucide-react";
+
+function historyPatientLabel(row: InvoiceHistoryRow): string {
+  if (row.record_kind === "doctor_expense" || row.doctor_expense_id) {
+    return "صرفية عيادة";
+  }
+  return String(row.patient_name_ar ?? "").trim() || "مراجع";
+}
+
+function historyLabDetails(row: InvoiceHistoryRow) {
+  return labDetailsFromSnapshot(row.snapshot_json);
+}
 
 interface DoctorOption {
   id: string;
@@ -114,11 +130,51 @@ export function InvoiceHistoryPanel({
       render: (row) => row.doctor_name_ar || "—",
     },
     {
+      key: "patient",
+      header: "المراجع",
+      render: (row) => (
+        <span className="font-medium text-slate-800">
+          {historyPatientLabel(row)}
+        </span>
+      ),
+    },
+    {
       key: "procedure",
       header: "البيان",
       render: (row) => (
         <span className="text-slate-700">{row.procedure_label}</span>
       ),
+    },
+    {
+      key: "lab_cost",
+      header: "تكلفة المختبر",
+      render: (row) => {
+        const lab = historyLabDetails(row);
+        if (!lab.materialsCost) return <span className="text-slate-400">—</span>;
+        return (
+          <span className="tabular-nums text-amber-800">
+            {formatCurrency(lab.materialsCost)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "lab_notes",
+      header: "ملاحظات المختبر",
+      render: (row) => {
+        const lab = historyLabDetails(row);
+        if (!hasLabDetails(lab) || !lab.labNotes) {
+          return <span className="text-slate-400">—</span>;
+        }
+        return (
+          <span
+            className="max-w-[12rem] truncate text-xs text-slate-600"
+            title={lab.labNotes}
+          >
+            {truncateLabNotes(lab.labNotes, 56)}
+          </span>
+        );
+      },
     },
     {
       key: "paid",
@@ -149,7 +205,7 @@ export function InvoiceHistoryPanel({
             السجل التاريخي
           </h2>
           <p className="text-sm text-slate-500">
-            فواتير الجلسات + صرفيات العيادة + رواتب الأطباء — فلترة حسب الطبيب
+            فواتير الجلسات + فواتير وصرفيات الأطباء + رواتب الأطباء — فلترة حسب الطبيب
             والتاريخ
           </p>
         </div>

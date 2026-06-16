@@ -49,3 +49,27 @@ export async function resolveDoctorFromApiRequest(
     },
   };
 }
+
+/** يتحقق أن دور الطابور يخص الطبيب الحالي */
+export async function assertDoctorOwnsQueueEntry(
+  entryId: string,
+  ctx: { clinicId: string; doctorId: string }
+): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
+  const admin = getAdminClient();
+  const { data: entry } = await admin
+    .from("patient_queue")
+    .select("id, doctor_id, clinic_id")
+    .eq("id", entryId)
+    .maybeSingle();
+
+  if (!entry) {
+    return { ok: false, error: "الدور غير موجود", status: 404 };
+  }
+  if (
+    entry.clinic_id !== ctx.clinicId ||
+    entry.doctor_id !== ctx.doctorId
+  ) {
+    return { ok: false, error: "غير مصرح", status: 403 };
+  }
+  return { ok: true };
+}
