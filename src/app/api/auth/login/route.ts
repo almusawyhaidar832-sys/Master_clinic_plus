@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { performPortalLogin, portalLoginDestination } from "@/lib/auth/portal-login";
+import { performPortalLogin, performUnifiedLogin, portalLoginDestination } from "@/lib/auth/portal-login";
 import { createServerAuthClient } from "@/lib/supabase/create-auth-client";
 import { loginPortalToAuthPortalId } from "@/lib/auth/portal-access";
 
@@ -18,14 +18,8 @@ export async function POST(request: NextRequest) {
 
   const username = String(body.username ?? "").trim();
   const password = String(body.password ?? "");
-  const portal = String(body.portal ?? "doctor");
-  const destination = portalLoginDestination(portal);
+  const portal = String(body.portal ?? "auto");
 
-  if (!destination) {
-    return NextResponse.json({ error: "بوابة الدخول غير معروفة" }, { status: 400 });
-  }
-
-  const authPortal = loginPortalToAuthPortalId(portal)!;
   const cookieStore = await cookies();
   const responseCookies: {
     name: string;
@@ -33,22 +27,50 @@ export async function POST(request: NextRequest) {
     options?: object;
   }[] = [];
 
-  const supabase = createServerAuthClient(
-    {
-      getAll: () => cookieStore.getAll(),
-      setAll: (cookiesToSet) => {
-        cookiesToSet.forEach((entry) => responseCookies.push(entry));
-        try {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
-        } catch {
-          /* ignore when cookie store is read-only */
-        }
-      },
+  const store = {
+    getAll: () => cookieStore.getAll(),
+    setAll: (cookiesToSet: { name: string; value: string; options?: object }[]) => {
+      cookiesToSet.forEach((entry) => responseCookies.push(entry));
+      try {
+        cookiesToSet.forEach(({ name, value, options }) =>
+          cookieStore.set(name, value, options)
+        );
+      } catch {
+        /* ignore when cookie store is read-only */
+      }
     },
-    authPortal
-  );
+  };
+
+  if (portal === "auto" || portal === "unified") {
+    const result = await performUnifiedLogin(store, { username, password });
+
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+
+    const response = NextResponse.json({
+      ok: true,
+      role: result.role,
+      redirect: result.redirect,
+      portal: result.portalId,
+    });
+
+    responseCookies.forEach(({ name, value, options }) => {
+      response.cookies.set(name, value, options);
+    });
+
+    return response;
+  }
+
+  const destination = portalLoginDestination(portal);
+
+  if (!destination) {
+    return NextResponse.json({ error: "بوابة الدخول غير معروفة" }, { status: 400 });
+  }
+
+  const authPortal = loginPortalToAuthPortalId(portal)!;
+
+  const supabase = createServerAuthClient(store, authPortal);
 
   const result = await performPortalLogin(supabase, {
     username,

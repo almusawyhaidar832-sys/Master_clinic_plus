@@ -17,7 +17,13 @@ const translations = {
     // ── App ──
     appName:            "ماستر كلينك بلس",
     appTagline:         "نظام إدارة العيادات الذكي",
-    offlineModeHint:    "لا يوجد اتصال — الواجهة للعرض فقط، لا يمكن الحفظ أو الإرسال حتى يعود النت",
+    offlineModeHint:    "لا يوجد اتصال — يمكنك إدخال بيانات المراجع وسيتم رفعها تلقائياً عند عودة النت",
+    offlineSavedPending: "تم الحفظ محلياً — بانتظار رفع البيانات عند عودة النت",
+    offlineSyncing:     "جاري رفع البيانات المحفوظة إلى السيرفر…",
+    offlinePendingCount:"{n} عملية بانتظار المزامنة",
+    offlineSyncNow:     "رفع الآن",
+    offlineSyncDone:    "تم رفع {n} عملية بنجاح",
+    offlineSyncPartialFail: "تعذر رفع بعض العمليات — سيتم إعادة المحاولة تلقائياً",
 
     // ── Navigation ──
     dashboard:          "لوحة التحكم",
@@ -64,6 +70,7 @@ const translations = {
     username:           "اسم المستخدم",
     password:           "كلمة المرور",
     loginButton:        "دخول",
+    unifiedLoginHint:   "أدخل اسم المستخدم وكلمة المرور — يوجّهك النظام تلقائياً حسب دورك (طبيب، محاسب، إدارة، مساعد)",
     loginLoading:       "جارٍ الدخول...",
 
     // ── Queue ──
@@ -695,7 +702,13 @@ const translations = {
     // ── App ──
     appName:            "Master Clinic Plus",
     appTagline:         "Smart Clinic Management System",
-    offlineModeHint:    "No connection — view only; save and send are disabled until you're back online",
+    offlineModeHint:    "No connection — you can enter visit data; it will upload automatically when you're back online",
+    offlineSavedPending: "Saved locally — waiting to upload when online",
+    offlineSyncing:     "Uploading saved data to the server…",
+    offlinePendingCount:"{n} item(s) waiting to sync",
+    offlineSyncNow:     "Upload now",
+    offlineSyncDone:    "Successfully uploaded {n} item(s)",
+    offlineSyncPartialFail: "Some items failed to upload — will retry automatically",
 
     // ── Navigation ──
     dashboard:          "Dashboard",
@@ -742,6 +755,7 @@ const translations = {
     username:           "Username",
     password:           "Password",
     loginButton:        "Sign In",
+    unifiedLoginHint:   "Enter username and password — you will be routed automatically by your role (doctor, accountant, admin, assistant)",
     loginLoading:       "Signing in...",
 
     // ── Queue ──

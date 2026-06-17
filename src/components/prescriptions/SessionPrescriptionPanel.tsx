@@ -1,22 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FilePen, Plus, RefreshCw, Save, Printer, Trash2, Send } from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { PrescriptionPrintModal } from "@/components/prescriptions/PrescriptionPrintModal";
-import {
-  fetchPrescriptionByOperation,
-  savePrescription,
-} from "@/lib/prescriptions/client";
+import { fetchPrescriptionByOperation } from "@/lib/prescriptions/client";
+import { savePrescriptionWithOfflineFallback } from "@/lib/offline/prescription/save-with-offline";
 import { PRESCRIPTION_TEMPLATES } from "@/lib/prescriptions/templates";
 import type {
   PatientPrescription,
   PrescriptionMedication,
 } from "@/lib/prescriptions/types";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
+import {
+  hasPrescriptionDraftContent,
+  prescriptionDraftKey,
+  type PrescriptionFormDraft,
+} from "@/lib/forms/portal-form-drafts";
+import { useSessionFormDraft } from "@/hooks/useSessionFormDraft";
 import { cn } from "@/lib/utils";
 
 const emptyLine = (): PrescriptionMedication => ({ drug_name_ar: "" });
@@ -75,6 +79,39 @@ export function SessionPrescriptionPanel({
   const notesRef = useRef(notes);
   const saveInFlightRef = useRef(false);
   const pendingSilentSaveRef = useRef(false);
+  const skipServerHydrateRef = useRef(false);
+
+  const draftStorageKey = prescriptionDraftKey(portal, operationId);
+
+  const applyPrescriptionDraft = useCallback((draft: PrescriptionFormDraft) => {
+    skipServerHydrateRef.current = true;
+    setDiagnosis(draft.diagnosis);
+    setNotes(draft.notes);
+    setLines(
+      draft.lines.length > 0 ? draft.lines : [emptyLine()]
+    );
+    setTemplateId(draft.templateId);
+  }, []);
+
+  const prescriptionDraftSnapshot = useMemo(
+    () => ({
+      diagnosis,
+      notes,
+      lines,
+      templateId,
+    }),
+    [diagnosis, notes, lines, templateId]
+  );
+
+  const { draftRestored, dismissDraftNotice, clearDraft } = useSessionFormDraft(
+    draftStorageKey,
+    prescriptionDraftSnapshot,
+    applyPrescriptionDraft,
+    {
+      enabled: !isReadOnlyView,
+      hasContent: hasPrescriptionDraftContent,
+    }
+  );
 
   useEffect(() => {
     linesRef.current = lines;
@@ -106,15 +143,17 @@ export function SessionPrescriptionPanel({
         queueEntryId
       );
       if (existing) {
-        setPrescription(existing);
-        setDiagnosis(existing.diagnosis_ar ?? "");
-        setNotes(existing.notes_ar ?? "");
-        setLines(
-          existing.medications.length > 0
-            ? existing.medications
-            : [emptyLine()]
-        );
-      } else if (!isReadOnlyView) {
+        if (!skipServerHydrateRef.current) {
+          setPrescription(existing);
+          setDiagnosis(existing.diagnosis_ar ?? "");
+          setNotes(existing.notes_ar ?? "");
+          setLines(
+            existing.medications.length > 0
+              ? existing.medications
+              : [emptyLine()]
+          );
+        }
+      } else if (!isReadOnlyView && !skipServerHydrateRef.current) {
         setPrescription(null);
         setDiagnosis("");
         setNotes("");
@@ -129,6 +168,7 @@ export function SessionPrescriptionPanel({
 
   useEffect(() => {
     autoSaveReady.current = false;
+    skipServerHydrateRef.current = false;
   }, [operationId]);
 
   useEffect(() => {
@@ -183,7 +223,7 @@ export function SessionPrescriptionPanel({
       setSuccess(null);
     }
     try {
-      const saved = await savePrescription(
+      const saved = await savePrescriptionWithOfflineFallback(
         {
           operationId,
           patientId,
@@ -195,7 +235,21 @@ export function SessionPrescriptionPanel({
         },
         portal
       );
-      setPrescription(saved);
+      if (!saved.ok) {
+        if (!silent) {
+          setError(saved.error ?? "تعذر حفظ الوصفة");
+        }
+        return;
+      }
+      clearDraft();
+      skipServerHydrateRef.current = false;
+      if (saved.offline) {
+        if (!silent) {
+          setSuccess(saved.message);
+        }
+        return;
+      }
+      setPrescription(saved.prescription);
       // الحفظ الصامت: لا نلمس الحقول — يمنع مسح ما يكتبه الطبيب أثناء الكتابة
       if (!silent) {
         setLines(withTrailingEmptyLine(meds));
@@ -331,6 +385,18 @@ export function SessionPrescriptionPanel({
       )}
 
       {error && <Alert variant="error">{error}</Alert>}
+      {draftRestored && (
+        <Alert variant="info">
+          تم استعادة مسودة الوصفة قبل الخروج.
+          <button
+            type="button"
+            className="mr-2 underline"
+            onClick={dismissDraftNotice}
+          >
+            إخفاء
+          </button>
+        </Alert>
+      )}
       {success && <Alert variant="success">{success}</Alert>}
 
       {!loading && isReadOnlyView && !prescription && (

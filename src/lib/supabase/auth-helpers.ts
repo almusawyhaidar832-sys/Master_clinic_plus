@@ -103,6 +103,20 @@ export function getAuthAdmin(supabase: SupabaseClient) {
   ).admin;
 }
 
+export async function refreshAuthSession(
+  supabase: SupabaseClient
+): Promise<boolean> {
+  try {
+    const auth = supabase.auth as {
+      refreshSession: () => Promise<{ error: { message: string } | null }>;
+    };
+    const { error } = await auth.refreshSession();
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 export function onAuthStateChange(
   supabase: SupabaseClient,
   callback: (event: string, session: unknown) => void

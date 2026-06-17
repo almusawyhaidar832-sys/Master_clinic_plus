@@ -127,6 +127,25 @@ export function loginPortalToAuthPortalId(
   return null;
 }
 
+/** بطاقة الدخول / بوابة الجلسة حسب دور المستخدم */
+export function loginPortalIdForRole(
+  role: string | null | undefined
+): string | null {
+  const normalized = normalizeRole(role);
+  switch (normalized) {
+    case "doctor":
+      return "doctor";
+    case "accountant":
+      return "accountant";
+    case "super_admin":
+      return "admin";
+    case "assistant":
+      return "assistant";
+    default:
+      return null;
+  }
+}
+
 /** Default landing path after login per role */
 export function defaultPathForRole(
   role: string | null | undefined

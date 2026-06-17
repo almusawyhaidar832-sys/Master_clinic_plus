@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +16,12 @@ import {
   insertDoctorRowClient,
 } from "@/lib/services/doctor-row-write";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import {
+  hasNewDoctorDraftContent,
+  newDoctorDraftKey,
+  type NewDoctorFormDraft,
+} from "@/lib/forms/portal-form-drafts";
+import { useSessionFormDraft } from "@/hooks/useSessionFormDraft";
 import { ArrowRight, CheckCircle2, Building2, Eye, EyeOff, KeyRound } from "lucide-react";
 
 export default function NewDoctorPage() {
@@ -35,6 +41,50 @@ export default function NewDoctorPage() {
   const [saving,         setSaving]         = useState(false);
   const [error,          setError]          = useState("");
   const [createdUsername, setCreatedUsername] = useState<string | null>(null);
+
+  const applyDoctorDraft = useCallback((draft: NewDoctorFormDraft) => {
+    setFullName(draft.fullName);
+    setSpecialty(draft.specialty);
+    setPhone(draft.phone);
+    setPercentage(draft.percentage);
+    setMaterialsShare(draft.materialsShare);
+    setPaymentType(draft.paymentType as DoctorPaymentType);
+    setSalaryAmount(draft.salaryAmount);
+    setUsername(draft.username);
+  }, []);
+
+  const doctorDraftSnapshot = useMemo(
+    () => ({
+      fullName,
+      specialty,
+      phone,
+      percentage,
+      materialsShare,
+      paymentType,
+      salaryAmount,
+      username,
+    }),
+    [
+      fullName,
+      specialty,
+      phone,
+      percentage,
+      materialsShare,
+      paymentType,
+      salaryAmount,
+      username,
+    ]
+  );
+
+  const { draftRestored, dismissDraftNotice, clearDraft } = useSessionFormDraft(
+    clinicId ? newDoctorDraftKey(clinicId) : "mcp:new-doctor:pending",
+    doctorDraftSnapshot,
+    applyDoctorDraft,
+    {
+      enabled: !!clinicId,
+      hasContent: hasNewDoctorDraftContent,
+    }
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -101,6 +151,7 @@ export default function NewDoctorPage() {
       }
 
       setCreatedUsername(json.username ?? cleanUsername);
+      clearDraft();
       setTimeout(() => {
         router.push("/dashboard/doctors");
         router.refresh();
@@ -139,6 +190,7 @@ export default function NewDoctorPage() {
     }
 
     setCreatedUsername(null);
+    clearDraft();
     setTimeout(() => {
       router.push("/dashboard/doctors");
       router.refresh();
@@ -194,6 +246,18 @@ export default function NewDoctorPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {draftRestored && (
+              <Alert variant="info">
+                تم استعادة بيانات الطبيب التي كتبتها (كلمة المرور لا تُحفظ لأسباب أمنية).
+                <button
+                  type="button"
+                  className="mr-2 underline"
+                  onClick={dismissDraftNotice}
+                >
+                  إخفاء
+                </button>
+              </Alert>
+            )}
             {error && <Alert variant="error">{error}</Alert>}
 
             <Input

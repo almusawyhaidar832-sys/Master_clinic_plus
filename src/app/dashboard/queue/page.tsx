@@ -9,6 +9,8 @@ import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { broadcastPatientSentToDoctor, broadcastQueueScreenCall } from "@/lib/queue/broadcast";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
+import { tryEnqueueQueueAddOffline } from "@/lib/offline/queue-add/enqueue";
+import { cacheOfflineDoctors } from "@/lib/offline/reference-cache";
 import { useQueueListRefresh } from "@/hooks/useQueueListRefresh";
 import { announcePatientCall } from "@/lib/queue/realtime-client";
 import {
@@ -277,6 +279,7 @@ export default function QueuePage() {
   });
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [pageSuccess, setPageSuccess] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [filterDoctor, setFilterDoctor] = useState<string>("all");
@@ -295,7 +298,11 @@ export default function QueuePage() {
       setClinicId(data.clinicId);
       const rows = data.queue ?? [];
       setQueue(rows);
-      setDoctors(data.doctors ?? []);
+      const doctorRows = data.doctors ?? [];
+      setDoctors(doctorRows);
+      if (data.clinicId && doctorRows.length > 0) {
+        cacheOfflineDoctors(data.clinicId, doctorRows);
+      }
 
       setStats({
         waiting:     rows.filter((r) => r.status === "waiting").length,
@@ -614,6 +621,26 @@ export default function QueuePage() {
     patient_id?: string | null;
     send_to_doctor: boolean;
   }) => {
+    setPageSuccess(null);
+    const offlineAttempt = await tryEnqueueQueueAddOffline({
+      clinicId,
+      doctorId: data.doctor_id,
+      patientName: data.patient_name,
+      patientPhone: data.patient_phone,
+      patientId: data.patient_id,
+      sendToDoctor: data.send_to_doctor !== false,
+    });
+    if (offlineAttempt.handled) {
+      if (offlineAttempt.ok) {
+        setPageSuccess(offlineAttempt.message);
+        setShowAdd(false);
+        setPageError(null);
+      } else {
+        setPageError(offlineAttempt.message);
+      }
+      return;
+    }
+
     try {
       const result = await apiJson<{ id: string; doctor_id?: string }>("/api/queue", lang, t, {
         method: "POST",
@@ -671,6 +698,9 @@ export default function QueuePage() {
 
       {pageError && (
         <Alert variant="error">{pageError}</Alert>
+      )}
+      {pageSuccess && (
+        <Alert variant="success">{pageSuccess}</Alert>
       )}
 
       <TodayAppointmentsPanel compact onApprovedToQueue={fetchQueue} />

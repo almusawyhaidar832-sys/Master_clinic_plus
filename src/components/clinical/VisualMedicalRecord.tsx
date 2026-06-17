@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Scan } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
@@ -12,14 +12,20 @@ import {
 } from "@/lib/clinical/constants";
 import {
   fetchOperationClinicalRecord,
-  saveSessionClinicalRecords,
 } from "@/lib/clinical/session-records";
+import { saveClinicalWithOfflineFallback } from "@/lib/offline/clinical/save-with-offline";
 import {
   hasClinicalData,
   teethArrayToMap,
   type OperationClinicalData,
 } from "@/lib/clinical/types";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
+import {
+  clinicalDraftKey,
+  hasClinicalDraftContent,
+  type ClinicalFormDraft,
+} from "@/lib/forms/portal-form-drafts";
+import { useSessionFormDraft } from "@/hooks/useSessionFormDraft";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -84,11 +90,41 @@ export function VisualMedicalRecord({
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const skipClinicalHydrateRef = useRef(false);
 
   const isDraftMode = externalDraft !== undefined && onDraftChange !== undefined;
   const reviewOnly = readOnly;
   const draftValue = isDraftMode ? externalDraft : addDraft;
   const setDraft = isDraftMode ? onDraftChange : setAddDraft;
+
+  const clinicalDraftStorageKey = operationId
+    ? clinicalDraftKey(portal, operationId)
+    : "";
+
+  const applyClinicalDraft = useCallback((draft: ClinicalFormDraft) => {
+    skipClinicalHydrateRef.current = true;
+    setAddDraft({ xrayFiles: [], teeth: draft.teeth ?? {} });
+  }, []);
+
+  const clinicalDraftSnapshot = useMemo(
+    () => ({ teeth: draftValue.teeth }),
+    [draftValue.teeth]
+  );
+
+  const { draftRestored, dismissDraftNotice, clearDraft } = useSessionFormDraft(
+    clinicalDraftStorageKey,
+    clinicalDraftSnapshot,
+    applyClinicalDraft,
+    {
+      enabled:
+        !isDraftMode && !!operationId && !readOnly && !!clinicalDraftStorageKey,
+      hasContent: hasClinicalDraftContent,
+    }
+  );
+
+  useEffect(() => {
+    skipClinicalHydrateRef.current = false;
+  }, [operationIdProp, operationId]);
 
   useEffect(() => {
     setOperationId(operationIdProp ?? null);
@@ -136,6 +172,7 @@ export function VisualMedicalRecord({
   useEffect(() => {
     if (!examMode || !operationId || !existing) return;
     setAddDraft((prev) => {
+      if (skipClinicalHydrateRef.current) return prev;
       if (Object.keys(prev.teeth).length > 0) return prev;
       if (!hasClinicalData(existing)) return prev;
       return {
@@ -175,14 +212,25 @@ export function VisualMedicalRecord({
     }
     setSaving(true);
     setMessage(null);
-    const res = await saveSessionClinicalRecords(operationId, addDraft, portal);
+    const res = await saveClinicalWithOfflineFallback(
+      operationId,
+      addDraft,
+      portal
+    );
     setSaving(false);
     if (!res.ok) {
       setMessage({ type: "error", text: res.error ?? "تعذر الحفظ" });
       return;
     }
-    setMessage({ type: "success", text: "✓ تم حفظ السجل البصري لهذه الجلسة" });
+    setMessage({
+      type: "success",
+      text: res.offline
+        ? "تم حفظ السجل محلياً — سيُرفع عند عودة النت"
+        : "✓ تم حفظ السجل البصري لهذه الجلسة",
+    });
     setAddDraft(EMPTY_CLINICAL_DRAFT);
+    clearDraft();
+    skipClinicalHydrateRef.current = false;
     await loadExisting();
     onSaved?.();
   }
@@ -279,6 +327,19 @@ export function VisualMedicalRecord({
             {saving ? "جاري الحفظ..." : "حفظ على هذه الجلسة"}
           </Button>
         </div>
+      )}
+
+      {draftRestored && (
+        <Alert variant="info">
+          تم استعادة مخطط الأسنان — صور الأشعة تحتاج إعادة اختيار إن وُجدت.
+          <button
+            type="button"
+            className="mr-2 underline"
+            onClick={dismissDraftNotice}
+          >
+            إخفاء
+          </button>
+        </Alert>
       )}
 
       {examMode && message && (

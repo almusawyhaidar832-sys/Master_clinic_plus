@@ -4,10 +4,9 @@ import { useCallback, useRef } from "react";
 import { Upload, X, Smile } from "lucide-react";
 import { InteractiveDentalChart } from "@/components/clinical/InteractiveDentalChart";
 import type { SessionClinicalDraft } from "@/lib/clinical/constants";
-import { saveSessionClinicalRecords } from "@/lib/clinical/session-records";
+import { saveClinicalWithOfflineFallback } from "@/lib/offline/clinical/save-with-offline";
 import type { ClinicalXrayImage } from "@/lib/clinical/types";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
-import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { cn } from "@/lib/utils";
 
 export interface SessionClinicalRecordProps {
@@ -53,18 +52,13 @@ function XrayUploadSection({
   async function uploadFiles(files: File[]) {
     if (!operationId) return;
     for (const file of files) {
-      const form = new FormData();
-      form.append("operation_id", operationId);
-      form.append("file", file);
-      const res = await fetch("/api/clinical/xray-upload", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: authPortalHeaders(portal),
-        body: form,
-      });
-      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      const res = await saveClinicalWithOfflineFallback(
+        operationId,
+        { teeth: value.teeth, xrayFiles: [file] },
+        portal
+      );
       if (!res.ok) {
-        onAutoSaveError?.(json.error ?? "تعذر رفع صورة الأشعة");
+        onAutoSaveError?.(res.error ?? "تعذر رفع صورة الأشعة");
         return;
       }
     }
@@ -164,7 +158,7 @@ export function SessionClinicalRecord({
   const persistTeeth = useCallback(
     async (teeth: SessionClinicalDraft["teeth"]) => {
       if (!autoSave || !operationId || Object.keys(teeth).length === 0) return;
-      const res = await saveSessionClinicalRecords(
+      const res = await saveClinicalWithOfflineFallback(
         operationId,
         { teeth, xrayFiles: [] },
         portal

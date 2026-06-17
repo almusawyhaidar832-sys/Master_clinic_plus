@@ -12,103 +12,14 @@ import { Eye, EyeOff, Languages } from "lucide-react";
 import { DeveloperCredit } from "@/components/layout/DeveloperCredit";
 import { DeveloperFooterLink } from "@/components/layout/DeveloperFooterLink";
 import { useLanguage } from "@/contexts/LanguageContext";
-import type { TranslationKey } from "@/i18n/translations";
 
-type Portal = {
-  id: string;
-  titleKey: TranslationKey;
-  subtitleKey: TranslationKey;
-  emoji: string;
-  color: string;
-  btnColor: string;
-  destination: string;
-};
-
-const PORTALS: Portal[] = [
-  {
-    id: "admin",
-    titleKey: "portalAdminTitle",
-    subtitleKey: "portalAdminSubtitle",
-    emoji: "🏥",
-    color: "border-primary/30 bg-primary/5",
-    btnColor: "bg-primary hover:bg-primary/90",
-    destination: "/admin",
-  },
-  {
-    id: "accountant",
-    titleKey: "portalAccountantTitle",
-    subtitleKey: "portalAccountantSubtitle",
-    emoji: "💼",
-    color: "border-violet-200 bg-violet-50/50",
-    btnColor: "bg-violet-600 hover:bg-violet-700",
-    destination: "/dashboard",
-  },
-  {
-    id: "doctor",
-    titleKey: "portalDoctorTitle",
-    subtitleKey: "portalDoctorSubtitle",
-    emoji: "👨‍⚕️",
-    color: "border-blue-200 bg-blue-50/50",
-    btnColor: "bg-blue-600 hover:bg-blue-700",
-    destination: "/doctor",
-  },
-  {
-    id: "assistant",
-    titleKey: "portalAssistantTitle",
-    subtitleKey: "portalAssistantSubtitle",
-    emoji: "🧑‍💼",
-    color: "border-teal-200 bg-teal-50/50",
-    btnColor: "bg-teal-600 hover:bg-teal-700",
-    destination: "/assistant/dashboard",
-  },
-  {
-    id: "booking",
-    titleKey: "portalBookingTitle",
-    subtitleKey: "portalBookingSubtitle",
-    emoji: "📅",
-    color: "border-teal-200 bg-teal-50/50",
-    btnColor: "bg-teal-600 hover:bg-teal-700",
-    destination: "/booking",
-  },
-];
-
-function PortalCard({
-  portal,
-  highlighted,
-}: {
-  portal: Portal;
-  highlighted?: boolean;
-}) {
+function UnifiedLoginForm() {
   const { t } = useLanguage();
-  const title = t(portal.titleKey);
-
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  if (portal.id === "booking") {
-    return (
-      <div
-        className={`flex flex-col rounded-2xl border-2 p-5 transition-shadow hover:shadow-md ${portal.color}`}
-      >
-        <div className="mb-4 flex items-center gap-3">
-          <span className="text-3xl">{portal.emoji}</span>
-          <div>
-            <h3 className="font-bold text-slate-800">{title}</h3>
-            <p className="text-xs text-slate-500">{t(portal.subtitleKey)}</p>
-          </div>
-        </div>
-        <a
-          href="/booking"
-          className={`touch-target mt-auto flex w-full items-center justify-center rounded-xl py-3 text-base font-bold text-white transition-colors ${portal.btnColor}`}
-        >
-          {t("openBookingPortal")}
-        </a>
-      </div>
-    );
-  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -138,12 +49,12 @@ function PortalCard({
         body: JSON.stringify({
           username: trimmedUser,
           password,
-          portal: portal.id,
+          portal: "auto",
         }),
       });
 
       const payload = (await res.json().catch(() => null)) as
-        | { ok?: boolean; redirect?: string; error?: string }
+        | { ok?: boolean; redirect?: string; portal?: string; error?: string }
         | null;
 
       if (!res.ok || !payload?.ok) {
@@ -152,8 +63,15 @@ function PortalCard({
         return;
       }
 
+      const portalId = payload.portal;
+      if (!portalId) {
+        setError(t("loginConnectionError"));
+        setLoading(false);
+        return;
+      }
+
       const synced = await syncPortalSessionClient(
-        portal.id,
+        portalId,
         trimmedUser,
         password
       );
@@ -163,7 +81,7 @@ function PortalCard({
         return;
       }
 
-      window.location.assign(payload.redirect ?? portal.destination);
+      window.location.assign(payload.redirect ?? "/");
     } catch {
       setError(t("loginConnectionError"));
     } finally {
@@ -172,18 +90,12 @@ function PortalCard({
   }
 
   return (
-    <div
-      className={`flex flex-col rounded-2xl border-2 p-5 transition-shadow hover:shadow-md ${portal.color} ${highlighted ? "ring-2 ring-teal-500 ring-offset-2" : ""}`}
-    >
-      <div className="mb-4 flex items-center gap-3">
-        <span className="text-3xl">{portal.emoji}</span>
-        <div>
-          <h3 className="font-bold text-slate-800">{title}</h3>
-          <p className="text-xs text-slate-500">{t(portal.subtitleKey)}</p>
-        </div>
-      </div>
+    <div className="mx-auto w-full max-w-md rounded-2xl border-2 border-primary/30 bg-white/80 p-6 shadow-sm backdrop-blur sm:p-8">
+      <p className="mb-6 text-center text-sm leading-relaxed text-slate-600">
+        {t("unifiedLoginHint")}
+      </p>
 
-      <form onSubmit={handleLogin} className="flex flex-col gap-3">
+      <form onSubmit={handleLogin} className="flex flex-col gap-4">
         {error && (
           <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-center text-xs text-red-600">
             {error}
@@ -203,7 +115,7 @@ function PortalCard({
           autoCorrect="off"
           spellCheck={false}
           inputMode="email"
-          className="touch-input w-full rounded-xl border border-white bg-white/80 px-4 py-3 text-base text-left placeholder:text-slate-400 focus:border-slate-300 focus:outline-none disabled:opacity-60"
+          className="touch-input w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-left placeholder:text-slate-400 focus:border-primary/40 focus:outline-none disabled:opacity-60"
         />
 
         <div className="relative">
@@ -219,7 +131,7 @@ function PortalCard({
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
-            className="touch-input w-full rounded-xl border border-white bg-white/80 px-4 py-3 pr-12 text-base text-left placeholder:text-slate-400 focus:border-slate-300 focus:outline-none disabled:opacity-60"
+            className="touch-input w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-12 text-base text-left placeholder:text-slate-400 focus:border-primary/40 focus:outline-none disabled:opacity-60"
           />
           <button
             type="button"
@@ -227,9 +139,9 @@ function PortalCard({
             className="touch-target absolute left-1 top-1/2 -translate-y-1/2 text-slate-400"
           >
             {showPass ? (
-              <EyeOff className="h-3.5 w-3.5" />
+              <EyeOff className="h-4 w-4" />
             ) : (
-              <Eye className="h-3.5 w-3.5" />
+              <Eye className="h-4 w-4" />
             )}
           </button>
         </div>
@@ -237,10 +149,10 @@ function PortalCard({
         <button
           type="submit"
           disabled={loading}
-          className={`touch-target flex w-full items-center justify-center rounded-xl py-3 text-base font-bold text-white transition-colors disabled:opacity-60 ${portal.btnColor}`}
+          className="touch-target flex w-full items-center justify-center rounded-xl bg-primary py-3.5 text-base font-bold text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
         >
           {loading ? (
-            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+            <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
               <circle
                 className="opacity-25"
                 cx="12"
@@ -287,7 +199,7 @@ function LoginPageContent() {
       <div className="pointer-events-none absolute right-[-10%] top-[-10%] h-[500px] w-[500px] rounded-full bg-teal-500/5 blur-3xl" />
       <div className="pointer-events-none absolute bottom-[-10%] left-[-10%] h-[400px] w-[400px] rounded-full bg-cyan-500/5 blur-3xl" />
 
-      <div className="z-10 w-full max-w-4xl">
+      <div className="z-10 w-full max-w-lg">
         <div className="mb-8 flex flex-col items-center gap-2">
           <div className="text-primary drop-shadow-sm">
             <FaTooth size={60} className="animate-pulse" />
@@ -318,11 +230,7 @@ function LoginPageContent() {
           </p>
         )}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          {PORTALS.map((p) => (
-            <PortalCard key={p.id} portal={p} highlighted={portalHint === p.id} />
-          ))}
-        </div>
+        <UnifiedLoginForm />
 
         <div className="mt-8 flex flex-col items-center gap-3">
           <DeveloperCredit variant="login" />

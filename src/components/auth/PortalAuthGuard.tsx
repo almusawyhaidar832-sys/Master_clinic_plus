@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile } from "@/lib/clinic-context";
-import { onAuthStateChange, signOutUser } from "@/lib/supabase/auth-helpers";
+import { onAuthStateChange, refreshAuthSession, signOutUser } from "@/lib/supabase/auth-helpers";
 import {
   getAuthPortalForPath,
   isRoleAllowedForPath,
@@ -54,8 +54,14 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
         setReady(false);
       }
 
-      const profile = await getAuthProfile(supabase);
+      let profile = await getAuthProfile(supabase);
       if (cancelled) return;
+
+      if (!profile && !isBrowserOffline()) {
+        await refreshAuthSession(supabase);
+        profile = await getAuthProfile(supabase);
+        if (cancelled) return;
+      }
 
       if (!profile) {
         try {
@@ -97,18 +103,45 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = onAuthStateChange(supabase, () => {
+    } = onAuthStateChange(supabase, (event) => {
       if (isBrowserOffline() && sessionOkRef.current) {
         setReady(true);
         return;
       }
-      sessionOkRef.current = false;
-      void enforce(true);
+      if (event === "SIGNED_OUT") {
+        sessionOkRef.current = false;
+        portalIdRef.current = null;
+        void enforce(true);
+        return;
+      }
+      if (
+        event === "SIGNED_IN" ||
+        event === "TOKEN_REFRESHED" ||
+        event === "INITIAL_SESSION"
+      ) {
+        if (!sessionOkRef.current) {
+          void enforce(false);
+        }
+      }
     });
+
+    const onAppResume = () => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      void refreshAuthSession(supabase).then(() => {
+        if (!cancelled && !sessionOkRef.current) {
+          void enforce(false);
+        }
+      });
+    };
+
+    document.addEventListener("visibilitychange", onAppResume);
+    window.addEventListener("pageshow", onAppResume);
 
     return () => {
       cancelled = true;
       subscription.unsubscribe();
+      document.removeEventListener("visibilitychange", onAppResume);
+      window.removeEventListener("pageshow", onAppResume);
     };
   }, [pathname, router]);
 

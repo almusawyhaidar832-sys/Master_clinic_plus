@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/Button";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Select } from "@/components/ui/Select";
@@ -77,6 +77,14 @@ import { PrescriptionPrintModal } from "@/components/prescriptions/PrescriptionP
 import { fetchVisitSessionByQueue } from "@/lib/clinical/visit-session-client";
 import { fetchPrescriptionByOperation } from "@/lib/prescriptions/client";
 import { prescriptionHasContent } from "@/lib/prescriptions/content";
+import {
+  quickEntryDraftKey,
+  hasQuickEntryDraftContent,
+  type QuickEntryFormDraft,
+} from "@/lib/forms/quick-entry-draft";
+import { useSessionFormDraft } from "@/hooks/useSessionFormDraft";
+import { tryEnqueueQuickEntryOffline } from "@/lib/offline/quick-entry/enqueue";
+import { doctorToShareInput } from "@/lib/offline/quick-entry/doctor-share";
 import {
   buildSessionInvoiceData,
   type SessionInvoiceData,
@@ -364,6 +372,87 @@ export function QuickEntryForm({
   useEffect(() => {
     setShowVisualRecordReview(Boolean(visitQueueEntryId));
   }, [visitQueueEntryId]);
+
+  const draftStorageKey = useMemo(
+    () =>
+      quickEntryDraftKey({
+        visitQueueEntryId,
+        defaultPatientId: defaultPatientId ?? selectedPatientId,
+      }),
+    [visitQueueEntryId, defaultPatientId, selectedPatientId]
+  );
+
+  const applyQuickEntryDraft = useCallback((draft: QuickEntryFormDraft) => {
+    setPatientQuery(draft.patientQuery);
+    setPatientPhone(draft.patientPhone);
+    setSelectedPatientId(draft.selectedPatientId);
+    if (!lockDoctorId && draft.doctorId) setDoctorId(draft.doctorId);
+    setOperationName(draft.operationName);
+    setTotalAmount(draft.totalAmount);
+    setPaidAmount(draft.paidAmount);
+    setDiscountAmount(draft.discountAmount);
+    setAdditionalDiscountAmount(draft.additionalDiscountAmount);
+    setMaterialsCost(draft.materialsCost);
+    setLabNotes(draft.labNotes);
+    setNotes(draft.notes);
+    setIsReviewStatement(draft.isReviewStatement);
+    setReviewFeeEnabled(draft.reviewFeeEnabled);
+    setSelectedCaseId(draft.selectedCaseId);
+    setForceNewPlan(draft.forceNewPlan);
+    setClinical({ xrayFiles: [], teeth: draft.clinicalTeeth ?? {} });
+    setClinicalResetKey((k) => k + 1);
+    setShowVisualRecordReview(draft.showVisualRecordReview);
+  }, [lockDoctorId]);
+
+  const draftSnapshot = useMemo(
+    () => ({
+      patientQuery,
+      patientPhone,
+      selectedPatientId,
+      doctorId,
+      operationName,
+      totalAmount,
+      paidAmount,
+      discountAmount,
+      additionalDiscountAmount,
+      materialsCost,
+      labNotes,
+      notes,
+      isReviewStatement,
+      reviewFeeEnabled,
+      selectedCaseId,
+      forceNewPlan,
+      clinicalTeeth: clinical.teeth,
+      showVisualRecordReview,
+    }),
+    [
+      patientQuery,
+      patientPhone,
+      selectedPatientId,
+      doctorId,
+      operationName,
+      totalAmount,
+      paidAmount,
+      discountAmount,
+      additionalDiscountAmount,
+      materialsCost,
+      labNotes,
+      notes,
+      isReviewStatement,
+      reviewFeeEnabled,
+      selectedCaseId,
+      forceNewPlan,
+      clinical.teeth,
+      showVisualRecordReview,
+    ]
+  );
+
+  const { draftRestored, dismissDraftNotice, clearDraft } = useSessionFormDraft(
+    draftStorageKey,
+    draftSnapshot,
+    applyQuickEntryDraft,
+    { hasContent: hasQuickEntryDraftContent }
+  );
 
   const handleCaseDoctorTransferred = useCallback(
     async (caseId: string, doc: PatientPrimaryDoctor) => {
@@ -839,6 +928,58 @@ export function QuickEntryForm({
     setLoading(true);
 
     try {
+    const offlineCaseRow =
+      selectedCaseId != null
+        ? treatmentCases.find((c) => c.id === selectedCaseId)
+        : undefined;
+    const offlineAttempt = await tryEnqueueQuickEntryOffline({
+      clinicId: activeClinicId,
+      showCasePicker,
+      selectedPatientId,
+      patientQuery,
+      patientPhone,
+      doctorId,
+      sessionDoctorId: assignedDoctor?.id ?? doctorId,
+      doctorShareInput: doctorToShareInput(selectedDoctor),
+      forceNewPlan,
+      selectedCaseId,
+      operationName,
+      operationLabel:
+        offlineCaseRow?.treatment_name_ar?.trim() || operationName.trim(),
+      totalAmount,
+      paidAmount,
+      discountAmount,
+      additionalDiscountAmount,
+      materialsCost,
+      notes,
+      labNotes,
+      isReviewStatement,
+      reviewFeeEnabled,
+      reviewFeeLive,
+      financialPlan: financialPlan,
+      visitQueueEntryId: visitQueueEntryId ?? null,
+      clinicalTeeth: clinical.teeth,
+      treatmentCaseId:
+        resolvePersistedCaseId(treatmentCases, selectedCaseId) ?? null,
+    });
+    if (offlineAttempt.handled) {
+      if (offlineAttempt.ok) {
+        setMessage({ type: "success", text: offlineAttempt.message });
+        clearDraft();
+        resetClinical();
+        setPaidAmount("");
+        setTotalAmount("");
+        setDiscountAmount("");
+        setAdditionalDiscountAmount("");
+        setMaterialsCost("");
+        setLabNotes("");
+        setNotes("");
+      } else {
+        setMessage({ type: "error", text: offlineAttempt.message });
+      }
+      return;
+    }
+
     const supabase = createClient();
     const activeClinic = await getActiveClinicId(supabase);
     if (!activeClinic) {
@@ -1443,6 +1584,7 @@ export function QuickEntryForm({
     setLabNotes("");
     setNotes("");
     resetClinical();
+    clearDraft();
     notifySessionMutation({
       clinicId: activeClinic.clinicId,
       doctorId,
@@ -1740,6 +1882,22 @@ export function QuickEntryForm({
           <p className="sm:col-span-2 text-sm text-slate-muted">
             جاري جلب بيانات المريض والذمة المتبقية...
           </p>
+        )}
+
+        {draftRestored && (
+          <div className="sm:col-span-2">
+            <Alert variant="info">
+              تم استعادة ما كتبته قبل الخروج — أكمل ثم احفظ. صور الأشعة تحتاج
+              إعادة اختيار إن وُجدت.
+              <button
+                type="button"
+                className="mr-2 underline"
+                onClick={dismissDraftNotice}
+              >
+                إخفاء
+              </button>
+            </Alert>
+          </div>
         )}
 
         {message && (

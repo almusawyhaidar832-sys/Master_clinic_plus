@@ -15,13 +15,16 @@ type CookieStore = {
   ) => void;
 };
 
+/** مدة بقاء جلسة الدخول — سنة (حتى يسجّل الخروج يدوياً) */
+export const AUTH_COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 365;
+
 function authCookieOptions(storageKey: string) {
   return {
     name: storageKey,
     path: "/",
     sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: AUTH_COOKIE_MAX_AGE_SEC,
   };
 }
 

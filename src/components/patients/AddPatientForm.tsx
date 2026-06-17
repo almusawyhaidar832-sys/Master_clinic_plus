@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -12,6 +12,14 @@ import {
   validatePatientPhone,
 } from "@/lib/phone";
 import { suggestSpeechName } from "@/lib/queue/arabic-name-pronunciation";
+import {
+  ADD_PATIENT_DRAFT_KEY,
+  hasAddPatientDraftContent,
+  type AddPatientFormDraft,
+} from "@/lib/forms/portal-form-drafts";
+import { useSessionFormDraft } from "@/hooks/useSessionFormDraft";
+import { tryEnqueueAddPatientOffline } from "@/lib/offline/add-patient/enqueue";
+import { getCachedOfflineReference } from "@/lib/offline/reference-cache";
 import { UserPlus } from "lucide-react";
 
 export function AddPatientForm() {
@@ -21,10 +29,30 @@ export function AddPatientForm() {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const applyDraft = useCallback((draft: AddPatientFormDraft) => {
+    setName(draft.name);
+    setPhone(draft.phone);
+    setNotes(draft.notes);
+  }, []);
+
+  const draftSnapshot = useMemo(
+    () => ({ name, phone, notes }),
+    [name, phone, notes]
+  );
+
+  const { draftRestored, dismissDraftNotice, clearDraft } = useSessionFormDraft(
+    ADD_PATIENT_DRAFT_KEY,
+    draftSnapshot,
+    applyDraft,
+    { hasContent: hasAddPatientDraftContent }
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
 
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -39,6 +67,27 @@ export function AddPatientForm() {
     }
 
     setLoading(true);
+
+    const offlineAttempt = await tryEnqueueAddPatientOffline({
+      clinicId: getCachedOfflineReference()?.clinicId ?? null,
+      name: trimmedName,
+      phone,
+      notes,
+    });
+    if (offlineAttempt.handled) {
+      setLoading(false);
+      if (offlineAttempt.ok) {
+        setSuccess(offlineAttempt.message);
+        clearDraft();
+        setName("");
+        setPhone("");
+        setNotes("");
+      } else {
+        setError(offlineAttempt.message);
+      }
+      return;
+    }
+
     const supabase = createClient();
     const activeClinic = await getActiveClinicId(supabase);
     if (!activeClinic) {
@@ -82,6 +131,7 @@ export function AddPatientForm() {
           setError(retry.error?.message ?? "تعذر حفظ المراجع");
           return;
         }
+        clearDraft();
         router.push(`/dashboard/patients/${retry.data.id}`);
         return;
       } else {
@@ -90,6 +140,7 @@ export function AddPatientForm() {
       return;
     }
 
+    clearDraft();
     router.push(`/dashboard/patients/${data.id}`);
   }
 
@@ -100,9 +151,28 @@ export function AddPatientForm() {
         إضافة مراجع جديد
       </h3>
       <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
+        {draftRestored && (
+          <div className="sm:col-span-2">
+            <Alert variant="info">
+              تم استعادة بيانات المراجع التي كتبتها.
+              <button
+                type="button"
+                className="mr-2 underline"
+                onClick={dismissDraftNotice}
+              >
+                إخفاء
+              </button>
+            </Alert>
+          </div>
+        )}
         {error && (
           <div className="sm:col-span-2">
             <Alert variant="error">{error}</Alert>
+          </div>
+        )}
+        {success && (
+          <div className="sm:col-span-2">
+            <Alert variant="success">{success}</Alert>
           </div>
         )}
         <div className="sm:col-span-2">

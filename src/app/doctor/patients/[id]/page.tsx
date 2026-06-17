@@ -33,6 +33,12 @@ import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { ArrowRight, FileText, Plus, X } from "lucide-react";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  doctorPatientLogDraftKey,
+  hasDoctorPatientLogDraftContent,
+  type DoctorPatientLogDraft,
+} from "@/lib/forms/portal-form-drafts";
+import { useSessionFormDraft } from "@/hooks/useSessionFormDraft";
 
 export default function DoctorPatientDetailPage() {
   const { t, formatMoney, dateLocale } = useLanguage();
@@ -49,6 +55,19 @@ export default function DoctorPatientDetailPage() {
   const [showClinicalPanel, setShowClinicalPanel] = useState(false);
   const [clinicalByOp, setClinicalByOp] = useState<ClinicalByOperationId>({});
   const [accessDenied, setAccessDenied] = useState(false);
+
+  const applyLogDraft = useCallback((draft: DoctorPatientLogDraft) => {
+    setNewLog(draft.newLog);
+  }, []);
+
+  const logDraftSnapshot = useMemo(() => ({ newLog }), [newLog]);
+
+  const { draftRestored, dismissDraftNotice, clearDraft } = useSessionFormDraft(
+    doctorPatientLogDraftKey(id),
+    logDraftSnapshot,
+    applyLogDraft,
+    { hasContent: hasDoctorPatientLogDraftContent }
+  );
 
   const doctorCases = useMemo(
     () => filterTreatmentCasesForDoctor(treatmentCases, operations),
@@ -176,6 +195,7 @@ export default function DoctorPatientDetailPage() {
     if (data) {
       setLogs((prev) => [data as MedicalLog, ...prev]);
       setNewLog("");
+      clearDraft();
     }
   }
 
@@ -329,6 +349,18 @@ export default function DoctorPatientDetailPage() {
           <CardTitle className="text-base">{t("docAddMedicalNote")}</CardTitle>
         </CardHeader>
         <div className="px-4 pb-4">
+          {draftRestored && (
+            <Alert variant="info" className="mb-2">
+              تم استعادة الملاحظة التي كتبتها.
+              <button
+                type="button"
+                className="mr-2 underline"
+                onClick={dismissDraftNotice}
+              >
+                إخفاء
+              </button>
+            </Alert>
+          )}
           <textarea
             className="mb-2 w-full rounded-lg border border-slate-border p-3 text-sm"
             rows={3}
