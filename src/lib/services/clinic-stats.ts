@@ -164,7 +164,7 @@ export async function fetchClinicProfitStatsForPeriod(
     totalSalariesPaid,
     breakdown: [
       { label: "صافي المحصّل (بعد المرتجعات)", amount: cashInflow },
-      { label: "مصروفات عامة", amount: -generalExpenses },
+      { label: "صرفيات العيادة", amount: -generalExpenses },
       {
         label: "حصة العيادة من صرفيات الأطباء",
         amount: -clinicExpenseShare,
@@ -255,7 +255,7 @@ export async function fetchClinicProfitStats(
     totalSalariesPaid,
     breakdown: [
       { label: "صافي المحصّل (بعد المرتجعات)", amount: cashInflow },
-      { label: "مصروفات عامة", amount: -generalExpenses },
+      { label: "صرفيات العيادة", amount: -generalExpenses },
       {
         label: "حصة العيادة من صرفيات الأطباء",
         amount: -clinicExpenseShare,

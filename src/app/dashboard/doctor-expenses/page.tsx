@@ -85,7 +85,7 @@ const TAB_ITEMS: {
   },
   {
     id: "general_expenses",
-    label: "مصروفات عامة",
+    label: "صرفيات العيادة",
     icon: Wallet,
     accent: "mc-tab-accent-general",
   },
@@ -283,7 +283,7 @@ export default function DoctorExpensesPage() {
             صرفيات عامة
           </h1>
           <p className="mc-page-subtitle">
-            السجل التاريخي · فواتير وصرفيات الأطباء · رواتب الأطباء · مصروفات عامة
+            السجل التاريخي · فواتير وصرفيات الأطباء · رواتب الأطباء · صرفيات العيادة
           </p>
         </div>
         {activeTab === "clinic_expenses" && (

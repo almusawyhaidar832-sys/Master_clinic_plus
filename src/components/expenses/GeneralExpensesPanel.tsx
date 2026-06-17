@@ -51,28 +51,38 @@ export function GeneralExpensesPanel({
   const supabase = createClient();
 
   const loadCategories = useCallback(async () => {
+    if (!clinicId) {
+      setCategories([]);
+      return;
+    }
     const { data } = await supabase
       .from("expense_categories")
       .select("id, name_ar, color, icon")
+      .eq("clinic_id", clinicId)
       .eq("is_active", true)
       .order("sort_order");
     setCategories((data as ExpenseCategory[]) ?? []);
-  }, [supabase]);
+  }, [supabase, clinicId]);
 
   const loadExpenses = useCallback(async () => {
+    if (!clinicId) {
+      setExpenses([]);
+      return;
+    }
     const { data } = await supabase
       .from("expenses")
       .select("*, category:expense_categories(id, name_ar, color, icon)")
+      .eq("clinic_id", clinicId)
       .or("expense_kind.eq.general,expense_kind.is.null")
       .order("expense_date", { ascending: false })
       .limit(100);
     setExpenses((data as ExpenseWithCategory[]) ?? []);
-  }, [supabase]);
+  }, [supabase, clinicId]);
 
   useEffect(() => {
     void loadCategories();
     void loadExpenses();
-  }, [loadCategories, loadExpenses]);
+  }, [loadCategories, loadExpenses, clinicId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -209,7 +219,7 @@ export function GeneralExpensesPanel({
 
       <Card>
         <CardHeader>
-          <CardTitle>تسجيل مصروف عام</CardTitle>
+          <CardTitle>تسجيل صرفية عيادة</CardTitle>
         </CardHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {message && (

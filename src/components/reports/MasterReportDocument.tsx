@@ -39,7 +39,7 @@ export function MasterReportDocument({
         <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
           <StatBox label="إجمالي الإيرادات (الشهر)" value={summary.totalRevenue} />
           <StatBox label="المرتجعات (مطروحة)" value={summary.totalRefunds} negative />
-          <StatBox label="مصروفات عامة" value={summary.generalExpenses} negative />
+          <StatBox label="صرفيات العيادة" value={summary.generalExpenses} negative />
           <StatBox label="رواتب الموظفين" value={summary.staffSalaries} negative />
           <StatBox label="محصّل الفترة" value={summary.cashInflow} />
           <StatBox label="حصة العيادة" value={summary.totalClinicShare} />

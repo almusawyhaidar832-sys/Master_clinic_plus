@@ -280,7 +280,7 @@ const translations = {
     qlWithdrawalsTitle:           "طلبات السحب",
     qlWithdrawalsDesc:            "إشعارات الأطباء الفورية",
     qlExpensesTitle:              "صرفيات عامة",
-    qlExpensesDesc:               "فواتير وصرفيات الأطباء + رواتب الأطباء + مصروفات",
+    qlExpensesDesc:               "فواتير وصرفيات الأطباء + رواتب الأطباء + صرفيات العيادة",
     qlDoctorsTitle:               "إدارة الأطباء",
     qlDoctorsDesc:                "المحافظ والحصص واتفاقيات مالية",
     qlReportsTitle:               "تقرير للمالك",
@@ -340,7 +340,7 @@ const translations = {
     // ── Executive dashboard extras ──
     execClinicShareOps:           "حصة العيادة من العمليات",
     execReviewFeesProfit:         "كشفيات مراجع (ربح العيادة)",
-    execGeneralExpenses:          "المصروفات العامة",
+    execGeneralExpenses:          "صرفيات العيادة",
     execSalariesDeduct:           "رواتب/مساعدين (خصم الربح)",
     execTotalRevenueRef:          "إجمالي الإيرادات (مرجع)",
     execDoctorSharesRef:          "حصص الأطباء (محافظ — مرجع)",
@@ -1025,7 +1025,7 @@ const translations = {
     // ── Executive dashboard extras ──
     execClinicShareOps:           "Clinic share from sessions",
     execReviewFeesProfit:         "Review visits (clinic profit)",
-    execGeneralExpenses:          "General expenses",
+    execGeneralExpenses:          "Clinic expenditures",
     execSalariesDeduct:           "Salaries/assistants (profit deduction)",
     execTotalRevenueRef:          "Total revenue (reference)",
     execDoctorSharesRef:          "Doctor shares (wallets — reference)",
