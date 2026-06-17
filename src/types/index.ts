@@ -1,29 +1,10 @@
 export type UserRole = "super_admin" | "accountant" | "doctor" | "assistant";
 
-export type DoctorPercentage =
-  | "10"
-  | "20"
-  | "30"
-  | "40"
-  | "50"
-  | "60"
-  | "70"
-  | "80"
-  | "90"
-  | "100";
+/** نسبة مخزّنة كنص في DB — رقم صحيح من 0 إلى 100 */
+export type DoctorPercentage = string;
 
-export type MaterialsCostShare =
-  | "0"
-  | "10"
-  | "20"
-  | "30"
-  | "40"
-  | "50"
-  | "60"
-  | "70"
-  | "80"
-  | "90"
-  | "100";
+/** نسبة تحمّل المختبر — رقم صحيح من 0 إلى 100 */
+export type MaterialsCostShare = string;
 
 /** الاتفاق المالي مع الطبيب — مخزّن في DB كـ payment_type */
 export type DoctorPaymentType = "percentage" | "salary";

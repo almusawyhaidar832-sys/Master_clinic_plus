@@ -10,6 +10,7 @@ import {
 } from "@/lib/admin/profile-write";
 import { getAuthAdmin } from "@/lib/supabase/auth-helpers";
 import {
+  formatDoctorEnumDbError,
   parseDoctorPercentageStrict,
   parseMaterialsShareStrict,
 } from "@/lib/constants";
@@ -367,7 +368,7 @@ export async function PATCH(
       );
       if (doctorErrMsg) {
         return NextResponse.json(
-          { error: `تعذر تحديث بيانات الطبيب: ${doctorErrMsg}` },
+          { error: `تعذر تحديث بيانات الطبيب: ${formatDoctorEnumDbError(doctorErrMsg)}` },
           { status: 500 }
         );
       }

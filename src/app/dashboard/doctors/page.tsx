@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
-import { Select } from "@/components/ui/Select";
+import { Input } from "@/components/ui/Input";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import {
-  DOCTOR_PERCENTAGE_OPTIONS,
-  MATERIALS_SHARE_OPTIONS,
+  formatPercentageLabel,
   normalizeDoctorPercentage,
   normalizeMaterialsShare,
 } from "@/lib/constants";
@@ -21,13 +20,6 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { Plus, RefreshCw, PencilLine, Check, X, Settings2 } from "lucide-react";
-
-function labelFor(
-  options: readonly { value: string; label: string }[],
-  value: string
-) {
-  return options.find((o) => o.value === value)?.label ?? value;
-}
 
 interface EditState {
   id: string;
@@ -225,16 +217,25 @@ export default function DoctorsPage() {
                     {isEditing ? (
                       <>
                         <div className="flex items-center gap-2">
-                          <Select
-                            label=""
+                          <Input
+                            aria-label="نسبة الطبيب"
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={1}
+                            className="w-20"
                             value={editing.percentage}
                             onChange={(e) =>
                               setEditing({ ...editing, percentage: e.target.value })
                             }
-                            options={[...DOCTOR_PERCENTAGE_OPTIONS]}
                           />
-                          <Select
-                            label=""
+                          <Input
+                            aria-label="نسبة المختبر"
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={1}
+                            className="w-20"
                             value={editing.materials_share}
                             onChange={(e) =>
                               setEditing({
@@ -242,7 +243,6 @@ export default function DoctorsPage() {
                                 materials_share: e.target.value,
                               })
                             }
-                            options={[...MATERIALS_SHARE_OPTIONS]}
                           />
                         </div>
                         <Button
@@ -264,11 +264,11 @@ export default function DoctorsPage() {
                       <>
                         <div className="text-right text-sm">
                           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                            {labelFor(DOCTOR_PERCENTAGE_OPTIONS, doc.percentage)}
+                            {formatPercentageLabel(doc.percentage)}
                           </span>
                           <span className="mr-1 text-xs text-slate-muted">
                             مواد:{" "}
-                            {labelFor(MATERIALS_SHARE_OPTIONS, doc.materials_share)}
+                            {formatPercentageLabel(doc.materials_share)}
                           </span>
                         </div>
                         <Link href={`/dashboard/doctors/${doc.id}`}>

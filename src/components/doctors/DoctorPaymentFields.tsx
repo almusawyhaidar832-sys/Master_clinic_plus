@@ -1,11 +1,9 @@
 "use client";
 
 import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
 import {
   DOCTOR_PAYMENT_TYPE_OPTIONS,
-  DOCTOR_PERCENTAGE_OPTIONS,
-  MATERIALS_SHARE_OPTIONS,
+  materialsShareHint,
 } from "@/lib/constants";
 import type { DoctorPaymentType } from "@/types";
 
@@ -31,6 +29,7 @@ export function DoctorPaymentFields({
   onMaterialsShareChange,
 }: DoctorPaymentFieldsProps) {
   const isSalary = paymentType === "salary";
+  const labHint = materialsShareHint(materialsShare);
 
   return (
     <div className="space-y-4 rounded-xl border border-slate-border bg-surface/40 p-4">
@@ -78,24 +77,37 @@ export function DoctorPaymentFields({
           required
         />
       ) : (
-        <>
-          <Select
-            label="نسبة الطبيب من كل عملية"
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label="نسبة الطبيب من كل عملية (%)"
             name="percentage"
+            type="number"
+            min={0}
+            max={100}
+            step={1}
             value={percentage}
             onChange={(e) => onPercentageChange(e.target.value)}
-            options={[...DOCTOR_PERCENTAGE_OPTIONS]}
+            placeholder="0 – 100"
             required
           />
-          <Select
-            label="نسبة تحمل الطبيب لتكلفة المختبر"
-            name="materials_share"
-            value={materialsShare}
-            onChange={(e) => onMaterialsShareChange(e.target.value)}
-            options={[...MATERIALS_SHARE_OPTIONS]}
-            required
-          />
-        </>
+          <div>
+            <Input
+              label="نسبة تحمّل الطبيب لتكلفة المختبر (%)"
+              name="materials_share"
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              value={materialsShare}
+              onChange={(e) => onMaterialsShareChange(e.target.value)}
+              placeholder="0 – 100"
+              required
+            />
+            {labHint ? (
+              <p className="mt-1 text-xs text-slate-500">{labHint}</p>
+            ) : null}
+          </div>
+        </div>
       )}
     </div>
   );

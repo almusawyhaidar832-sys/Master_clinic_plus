@@ -4,6 +4,7 @@ import { usernameToAuthEmail } from "@/lib/auth/credentials";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAuthAdmin } from "@/lib/supabase/auth-helpers";
 import {
+  formatDoctorEnumDbError,
   parseDoctorPercentageStrict,
   parseMaterialsShareStrict,
 } from "@/lib/constants";
@@ -309,7 +310,7 @@ export async function POST(req: NextRequest) {
         await getAuthAdmin(admin).deleteUser(authData.user.id);
         await admin.from("profiles").delete().eq("id", authData.user.id);
         return NextResponse.json(
-          { error: `تعذر حفظ بيانات الطبيب: ${doctorErrMsg}` },
+          { error: `تعذر حفظ بيانات الطبيب: ${formatDoctorEnumDbError(doctorErrMsg)}` },
           { status: 500 }
         );
       }
