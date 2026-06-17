@@ -28,6 +28,11 @@ export interface SessionInvoiceData {
   notes?: string | null;
   labNotes?: string | null;
   materialsCost?: number;
+  /** نسبة تحمّل الطبيب لتكلفة المختبر (materials_share) */
+  materialsSharePct?: number;
+  /** تحمّل الطبيب والعيادة من تكلفة المختبر */
+  labDoctorShare?: number;
+  labClinicShare?: number;
   /** حصة الطبيب والعيادة على السعر النهائي للحالة (للمراجعة الداخلية) */
   doctorShareTotal?: number;
   clinicShareTotal?: number;
@@ -58,6 +63,9 @@ export function buildSessionInvoiceData(input: {
   notes?: string | null;
   labNotes?: string | null;
   materialsCost?: number;
+  materialsSharePct?: number;
+  labDoctorShare?: number;
+  labClinicShare?: number;
   doctorShareTotal?: number;
   clinicShareTotal?: number;
 }): SessionInvoiceData {
@@ -86,6 +94,9 @@ export function buildSessionInvoiceData(input: {
     materialsCost:
       (input.materialsCost ??
         Number(input.operation.materials_cost ?? 0)) || undefined,
+    materialsSharePct: input.materialsSharePct,
+    labDoctorShare: input.labDoctorShare,
+    labClinicShare: input.labClinicShare,
     doctorShareTotal: input.doctorShareTotal,
     clinicShareTotal: input.clinicShareTotal,
   };

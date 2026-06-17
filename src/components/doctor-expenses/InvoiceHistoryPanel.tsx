@@ -10,6 +10,7 @@ import type { InvoiceHistoryRow } from "@/lib/services/invoice-archive";
 import {
   hasLabDetails,
   labDetailsFromSnapshot,
+  labSplitFromHistoryRow,
   truncateLabNotes,
 } from "@/lib/invoices/lab-session-details";
 import { History, RefreshCw } from "lucide-react";
@@ -150,10 +151,56 @@ export function InvoiceHistoryPanel({
       header: "تكلفة المختبر",
       render: (row) => {
         const lab = historyLabDetails(row);
-        if (!lab.materialsCost) return <span className="text-slate-400">—</span>;
+        const split = labSplitFromHistoryRow(row);
+        const cost = split?.materialsCost ?? lab.materialsCost;
+        if (!cost) return <span className="text-slate-400">—</span>;
         return (
           <span className="tabular-nums text-amber-800">
-            {formatCurrency(lab.materialsCost)}
+            {formatCurrency(cost)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "lab_doctor_share",
+      header: "تحمّل الطبيب",
+      render: (row) => {
+        const split = labSplitFromHistoryRow(row);
+        if (!split?.doctorShare) {
+          return <span className="text-slate-400">—</span>;
+        }
+        return (
+          <span
+            className="tabular-nums font-semibold text-red-600"
+            title={
+              split.materialsSharePct > 0
+                ? `${split.materialsSharePct}% من تكلفة المختبر`
+                : undefined
+            }
+          >
+            {formatCurrency(split.doctorShare)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "lab_clinic_share",
+      header: "تحمّل العيادة",
+      render: (row) => {
+        const split = labSplitFromHistoryRow(row);
+        if (!split?.clinicShare) {
+          return <span className="text-slate-400">—</span>;
+        }
+        return (
+          <span
+            className="tabular-nums font-semibold text-slate-800"
+            title={
+              split.materialsSharePct > 0
+                ? `${100 - split.materialsSharePct}% من تكلفة المختبر`
+                : undefined
+            }
+          >
+            {formatCurrency(split.clinicShare)}
           </span>
         );
       },
@@ -178,7 +225,7 @@ export function InvoiceHistoryPanel({
     },
     {
       key: "paid",
-      header: "المبلغ",
+      header: "المبلغ المدفوع",
       render: (row) => (
         <span className="font-bold text-primary tabular-nums">
           {formatCurrency(row.paid_amount)}
@@ -187,12 +234,47 @@ export function InvoiceHistoryPanel({
     },
     {
       key: "doctor_share",
-      header: "حصة الطبيب",
-      render: (row) => (
-        <span className="tabular-nums text-red-600">
-          {formatCurrency(row.doctor_share)}
-        </span>
-      ),
+      header: "حصة الطبيب (جلسة)",
+      render: (row) => {
+        if (row.record_kind === "doctor_expense") {
+          return <span className="text-slate-400">—</span>;
+        }
+        const snap = row.snapshot_json as {
+          doctorShareTotal?: number;
+        } | null;
+        const share =
+          row.doctor_share > 0
+            ? row.doctor_share
+            : Number(snap?.doctorShareTotal ?? 0);
+        if (!share) return <span className="text-slate-400">—</span>;
+        return (
+          <span className="tabular-nums text-emerald-700">
+            {formatCurrency(share)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "clinic_share",
+      header: "حصة العيادة (جلسة)",
+      render: (row) => {
+        if (row.record_kind === "doctor_expense") {
+          return <span className="text-slate-400">—</span>;
+        }
+        const snap = row.snapshot_json as {
+          clinicShareTotal?: number;
+        } | null;
+        const share =
+          row.clinic_share > 0
+            ? row.clinic_share
+            : Number(snap?.clinicShareTotal ?? 0);
+        if (!share) return <span className="text-slate-400">—</span>;
+        return (
+          <span className="tabular-nums text-slate-700">
+            {formatCurrency(share)}
+          </span>
+        );
+      },
     },
   ];
 

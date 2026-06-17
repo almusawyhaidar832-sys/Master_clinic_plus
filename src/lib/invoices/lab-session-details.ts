@@ -82,3 +82,103 @@ export function sumMaterialsCosts(
   const total = items.reduce((sum, item) => sum + item.materialsCost, 0);
   return Math.round(total * 100) / 100;
 }
+
+export interface LabCostSplit {
+  materialsCost: number;
+  doctorShare: number;
+  clinicShare: number;
+  materialsSharePct: number;
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** تقسيم تكلفة المختبر حسب نسبة تحمّل الطبيب (materials_share) */
+export function computeLabCostSplit(
+  materialsCost: number,
+  materialsSharePct: number
+): LabCostSplit | null {
+  const cost = parseMaterialsCost(materialsCost);
+  if (cost <= 0) return null;
+
+  const pct = Math.min(100, Math.max(0, Number(materialsSharePct) || 0));
+  const doctorShare = roundMoney((cost * pct) / 100);
+  const clinicShare = roundMoney(cost - doctorShare);
+
+  return {
+    materialsCost: cost,
+    doctorShare,
+    clinicShare,
+    materialsSharePct: pct,
+  };
+}
+
+/** من لقطة الفاتورة أو حساب من التكلفة + النسبة المحفوظة */
+export function labSplitFromSnapshot(snapshot: unknown): LabCostSplit | null {
+  if (!snapshot || typeof snapshot !== "object") return null;
+  const row = snapshot as Record<string, unknown>;
+
+  const materialsCost = parseMaterialsCost(
+    row.materialsCost ?? row.materials_cost
+  );
+  if (materialsCost <= 0) return null;
+
+  const storedDoctor = parseMaterialsCost(
+    row.labDoctorShare ?? row.lab_doctor_share
+  );
+  const storedClinic = parseMaterialsCost(
+    row.labClinicShare ?? row.lab_clinic_share
+  );
+  const storedPct = Number(row.materialsSharePct ?? row.materials_share_pct);
+
+  if (storedDoctor > 0 || storedClinic > 0) {
+    return {
+      materialsCost,
+      doctorShare: storedDoctor,
+      clinicShare:
+        storedClinic > 0 ? storedClinic : roundMoney(materialsCost - storedDoctor),
+      materialsSharePct: Number.isFinite(storedPct) ? storedPct : 0,
+    };
+  }
+
+  if (Number.isFinite(storedPct) && storedPct >= 0) {
+    return computeLabCostSplit(materialsCost, storedPct);
+  }
+
+  return null;
+}
+
+/** صرفية طبيب أو جلسة — استنتاج تقسيم المختبر من صف السجل */
+export function labSplitFromHistoryRow(row: {
+  record_kind?: string;
+  paid_amount?: number;
+  doctor_share?: number;
+  clinic_share?: number;
+  snapshot_json?: unknown;
+}): LabCostSplit | null {
+  const fromSnapshot = labSplitFromSnapshot(row.snapshot_json);
+  if (fromSnapshot) return fromSnapshot;
+
+  if (row.record_kind === "doctor_expense") {
+    const materialsCost = parseMaterialsCost(row.paid_amount);
+    if (materialsCost <= 0) return null;
+    const doctorShare = parseMaterialsCost(row.doctor_share);
+    const clinicShare = parseMaterialsCost(row.clinic_share);
+    if (doctorShare > 0 || clinicShare > 0) {
+      const pct =
+        materialsCost > 0
+          ? Math.round((doctorShare / materialsCost) * 100)
+          : 0;
+      return {
+        materialsCost,
+        doctorShare,
+        clinicShare:
+          clinicShare > 0 ? clinicShare : roundMoney(materialsCost - doctorShare),
+        materialsSharePct: pct,
+      };
+    }
+  }
+
+  return null;
+}

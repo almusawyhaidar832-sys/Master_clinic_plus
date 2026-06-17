@@ -3,6 +3,10 @@ import {
   buildInvoiceNumber,
   type SessionInvoiceData,
 } from "@/lib/invoices/session-invoice";
+import {
+  computeLabCostSplit,
+  parseMaterialsCost,
+} from "@/lib/invoices/lab-session-details";
 import { doctorShareFromExpense } from "@/lib/services/assistant-payroll";
 import { opName } from "@/types";
 
@@ -121,6 +125,36 @@ async function loadDoctorNameAr(
     .eq("id", doctorId)
     .maybeSingle();
   return String(data?.full_name_ar ?? "").trim();
+}
+
+async function enrichSnapshotWithLabSplit(
+  admin: SupabaseClient,
+  snapshot: SessionInvoiceData,
+  doctorId: string | null
+): Promise<SessionInvoiceData> {
+  const materialsCost = parseMaterialsCost(snapshot.materialsCost);
+  if (materialsCost <= 0 || !doctorId) return snapshot;
+
+  let materialsSharePct = Number(snapshot.materialsSharePct ?? NaN);
+  if (!Number.isFinite(materialsSharePct)) {
+    const { data: doctor } = await admin
+      .from("doctors")
+      .select("materials_share")
+      .eq("id", doctorId)
+      .maybeSingle();
+    materialsSharePct = Number(doctor?.materials_share ?? 50);
+  }
+
+  const labSplit = computeLabCostSplit(materialsCost, materialsSharePct);
+  if (!labSplit) return snapshot;
+
+  return {
+    ...snapshot,
+    materialsCost: labSplit.materialsCost,
+    materialsSharePct: labSplit.materialsSharePct,
+    labDoctorShare: labSplit.doctorShare,
+    labClinicShare: labSplit.clinicShare,
+  };
 }
 
 async function resolveDoctorShareForArchive(
@@ -439,6 +473,12 @@ export async function finalizeInvoiceToHistory(
     String(input.snapshot.doctorName ?? "").trim() ||
     (await loadDoctorNameAr(admin, doctorId));
 
+  const snapshotForHistory = await enrichSnapshotWithLabSplit(
+    admin,
+    { ...input.snapshot, doctorId: doctorId ?? undefined, paidThisSession: paid },
+    doctorId
+  );
+
   const historyResult = await insertSessionHistoryRow(admin, {
     clinic_id: input.clinicId,
     doctor_id: doctorId,
@@ -458,7 +498,7 @@ export async function finalizeInvoiceToHistory(
     invoice_date: invoiceDate,
     finalized_at: new Date().toISOString(),
     finalized_by: input.finalizedBy,
-    snapshot_json: { ...input.snapshot, doctorId, paidThisSession: paid },
+    snapshot_json: snapshotForHistory,
   });
 
   if ("error" in historyResult) {

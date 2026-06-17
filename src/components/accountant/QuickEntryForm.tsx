@@ -89,6 +89,7 @@ import {
   buildSessionInvoiceData,
   type SessionInvoiceData,
 } from "@/lib/invoices/session-invoice";
+import { computeLabCostSplit } from "@/lib/invoices/lab-session-details";
 import { Scan, X } from "lucide-react";
 
 /** Common dental procedure suggestions — user can also type freely */
@@ -1542,6 +1543,13 @@ export function QuickEntryForm({
       "—";
     const invoiceNotes = notes.trim() || null;
     const invoiceLabNotes = labNotes.trim() || null;
+    const labCostSplit =
+      materials > 0 && selectedDoctor
+        ? computeLabCostSplit(
+            materials,
+            Number(selectedDoctor.materials_share ?? 50)
+          )
+        : null;
     const shareSplit = resolveCaseFinancialSplit(snap, selectedDoctor, {
       materialsCost: materials,
     });
@@ -1616,6 +1624,9 @@ export function QuickEntryForm({
           notes: invoiceNotes,
           labNotes: invoiceLabNotes,
           materialsCost: materials > 0 ? materials : undefined,
+          materialsSharePct: labCostSplit?.materialsSharePct,
+          labDoctorShare: labCostSplit?.doctorShare,
+          labClinicShare: labCostSplit?.clinicShare,
           doctorShareTotal:
             shareSplit?.doctorShare ??
             lockedSplit?.doctorShare ??
