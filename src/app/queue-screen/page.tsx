@@ -295,13 +295,19 @@ function QueueScreenContent() {
   }, []);
 
   const handleQueueScreenCall = useCallback(
-    (name?: string, doctorName?: string, gender?: PatientGender | null) => {
+    (
+      name?: string,
+      doctorName?: string,
+      gender?: PatientGender | null,
+      options?: { entryId?: string; recall?: boolean }
+    ) => {
       if (!name?.trim() || !doctorName?.trim()) return;
       speakQueueScreenAnnouncement(
         name.trim(),
         doctorName.trim(),
         voiceEnabledRef.current,
-        gender
+        gender,
+        options
       );
     },
     []
@@ -349,20 +355,7 @@ function QueueScreenContent() {
 
       if (queueReadyRef.current) {
         for (const entry of calledRows) {
-          const prevAt = prevCalledAtRef.current.get(entry.id);
           const at = entry.called_at ?? "";
-          const isFirstCall =
-            !prevCalledRef.current.has(entry.id) && entry.status === "called";
-          const isRecall = Boolean(at && prevAt && at !== prevAt);
-
-          if (isFirstCall || isRecall) {
-            handleQueueScreenCall(
-              resolvePatientName(entry),
-              resolveDoctorName(entry),
-              resolvePatientGender(entry)
-            );
-          }
-
           if (at) prevCalledAtRef.current.set(entry.id, at);
         }
         if (newlyWaiting.length > 0) {
@@ -411,10 +404,8 @@ function QueueScreenContent() {
         recall?: boolean;
       };
       if (p.name && p.doctorName) {
-        const now = new Date().toISOString();
         if (p.entryId) {
           prevCalledRef.current.add(p.entryId);
-          prevCalledAtRef.current.set(p.entryId, now);
         }
         setLiveCall({
           name: p.name,
@@ -425,7 +416,10 @@ function QueueScreenContent() {
           recall: p.recall === true,
         });
         setLiveCallTick((t) => t + 1);
-        handleQueueScreenCall(p.name, p.doctorName, p.gender ?? null);
+        handleQueueScreenCall(p.name, p.doctorName, p.gender ?? null, {
+          entryId: p.entryId,
+          recall: p.recall === true,
+        });
         void fetchQueue();
       }
     };

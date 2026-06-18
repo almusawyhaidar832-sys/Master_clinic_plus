@@ -7,7 +7,7 @@ import { translateDbError } from "@/lib/db-errors";
 import { cn } from "@/lib/utils";
 import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import { broadcastPatientSentToDoctor, broadcastQueueScreenCall } from "@/lib/queue/broadcast";
+import { broadcastPatientSentToDoctor } from "@/lib/queue/broadcast";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { tryEnqueueQueueAddOffline } from "@/lib/offline/queue-add/enqueue";
 import { cacheOfflineDoctors } from "@/lib/offline/reference-cache";
@@ -367,17 +367,9 @@ export default function QueuePage() {
         body: JSON.stringify({ action: "advance" }),
       });
 
-      const name = resolvePatientSpeechName(entry);
-      const doctorName = resolveDoctorSpeechName(entry.doctor);
-      if (data.status === "called") {
-        if (clinicId) {
-          void broadcastQueueScreenCall(supabase, clinicId, {
-            name,
-            doctorName,
-            entryId: entry.id,
-          });
-        }
-      } else if (data.status === "in_progress") {
+      if (data.status === "in_progress") {
+        const name = resolvePatientSpeechName(entry);
+        const doctorName = resolveDoctorSpeechName(entry.doctor);
         announcePatientCall(name, doctorName, "enter");
         if (clinicId) {
           notifyQueueRefresh({ scope: "clinic", clinicId });
@@ -467,7 +459,6 @@ export default function QueuePage() {
   const recallPatient = async (entry: QueueEntry) => {
     setUpdating(entry.id);
     const name = resolvePatientSpeechName(entry);
-    const doctorName = resolveDoctorSpeechName(entry.doctor);
 
     try {
       if (entry.status === "called" || entry.status === "in_progress") {
@@ -475,14 +466,6 @@ export default function QueuePage() {
           method: "POST",
           body: JSON.stringify({ entry_id: entry.id }),
         });
-        if (clinicId) {
-          void broadcastQueueScreenCall(supabase, clinicId, {
-            name,
-            doctorName,
-            entryId: entry.id,
-            recall: true,
-          });
-        }
         return;
       }
 

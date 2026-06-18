@@ -224,15 +224,9 @@ function DoctorQueuePageContent() {
         body: JSON.stringify({ action: "admit", queue_entry_id: entry.id }),
       });
       const name = resolvePatientSpeechName(entry);
-      const doctorName = resolveDoctorSpeechName(entry.doctor);
       if (clinicId) {
         void broadcastAdmitRequest(supabase, clinicId, {
           name,
-          entryId: entry.id,
-        });
-        void broadcastQueueScreenCall(supabase, clinicId, {
-          name,
-          doctorName,
           entryId: entry.id,
         });
         notifyQueueRefresh({ scope: "clinic", clinicId });

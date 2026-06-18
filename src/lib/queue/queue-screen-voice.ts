@@ -16,10 +16,39 @@ type AnnouncementJob = {
   patientName: string;
   doctorName: string;
   gender?: import("@/lib/queue/patient-gender").PatientGender | null;
+  entryId?: string;
+  recall?: boolean;
 };
 
 const pendingJobs: AnnouncementJob[] = [];
 let speaking = false;
+
+/** منع تكرار نفس النداء عند وصول بثّين أو استطلاع متزامن */
+let lastAnnouncedKey = "";
+let lastAnnouncedAt = 0;
+const CALL_DEDUP_MS = 8_000;
+const RECALL_DEDUP_MS = 2_500;
+
+function announcementDedupeKey(job: AnnouncementJob): string {
+  const base =
+    job.entryId?.trim() || `${job.patientName.trim()}\0${job.doctorName.trim()}`;
+  if (job.recall) {
+    return `${base}:recall:${Math.floor(Date.now() / RECALL_DEDUP_MS)}`;
+  }
+  return `${base}:call`;
+}
+
+function shouldSkipDuplicateAnnouncement(job: AnnouncementJob): boolean {
+  const key = announcementDedupeKey(job);
+  const now = Date.now();
+  const windowMs = job.recall ? RECALL_DEDUP_MS : CALL_DEDUP_MS;
+  if (key === lastAnnouncedKey && now - lastAnnouncedAt < windowMs) {
+    return true;
+  }
+  lastAnnouncedKey = key;
+  lastAnnouncedAt = now;
+  return false;
+}
 
 async function drainQueue() {
   if (speaking || pendingJobs.length === 0) return;
@@ -43,6 +72,7 @@ async function drainQueue() {
 }
 
 function enqueue(job: AnnouncementJob) {
+  if (shouldSkipDuplicateAnnouncement(job)) return;
   pendingJobs.push(job);
   void drainQueue();
 }
@@ -55,11 +85,18 @@ export function speakQueueScreenAnnouncement(
   patientName: string,
   doctorName: string,
   enabled = true,
-  gender?: AnnouncementJob["gender"]
+  gender?: AnnouncementJob["gender"],
+  options?: { entryId?: string; recall?: boolean }
 ): void {
   if (!enabled) return;
   if (typeof window === "undefined") return;
-  enqueue({ patientName, doctorName, gender });
+  enqueue({
+    patientName,
+    doctorName,
+    gender,
+    entryId: options?.entryId,
+    recall: options?.recall,
+  });
 }
 
 export function repeatQueueScreenAnnouncement(
@@ -72,6 +109,8 @@ export function repeatQueueScreenAnnouncement(
   stopAllSpeech();
   pendingJobs.length = 0;
   speaking = false;
+  lastAnnouncedKey = "";
+  lastAnnouncedAt = 0;
   const parts = splitPatientCallSpeech(
     patientName,
     doctorName,
@@ -87,6 +126,8 @@ export function repeatQueueScreenAnnouncement(
 export function stopQueueScreenSpeech(): void {
   pendingJobs.length = 0;
   speaking = false;
+  lastAnnouncedKey = "";
+  lastAnnouncedAt = 0;
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     window.speechSynthesis.cancel();
   }
