@@ -15,6 +15,21 @@ interface ScreenQrInfo {
   unreachableOnMobile?: boolean;
 }
 
+function manualScreenUrlParts(screenUrl: string): {
+  hostPath: string;
+  clinicCode: string;
+} {
+  try {
+    const url = new URL(screenUrl);
+    return {
+      hostPath: `${url.host}${url.pathname}`,
+      clinicCode: url.searchParams.get("clinic") ?? "",
+    };
+  } catch {
+    return { hostPath: screenUrl, clinicCode: "" };
+  }
+}
+
 interface QueueScreenSetupModalProps {
   open: boolean;
   onClose: () => void;
@@ -83,8 +98,8 @@ export function QueueScreenSetupModal({ open, onClose }: QueueScreenSetupModalPr
 
         <div className="space-y-4 p-5">
           <p className="text-sm leading-relaxed text-slate-600">
-            لا تحتاج تكتب الرابط الطويل حرفاً حرفاً. امسح الباركود من متصفح التلفاز
-            أو انسخ الرابط القصير.
+            إن كان التلفاز <strong>بدون كاميرا</strong> — استخدم كابل HDMI (الأسهل) أو
+            انسخ الرابط وافتحه من جوالك. الباركود اختياري فقط.
           </p>
 
           <ol className="list-decimal space-y-1 pr-5 text-sm text-slate-600">
@@ -160,15 +175,49 @@ export function QueueScreenSetupModal({ open, onClose }: QueueScreenSetupModalPr
                 }}
               >
                 <Download className="ml-2 h-4 w-4" />
-                تحميل الباركود (للطباعة ولصقه عند التلفاز)
+                تحميل الباركود (اختياري — للطباعة)
               </Button>
+
+              {(() => {
+                const parts = manualScreenUrlParts(info.screenUrl);
+                return (
+                  <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                    <p className="mb-2 font-bold">تلفاز بدون باركود — 3 طرق</p>
+                    <ol className="list-decimal space-y-2 pr-5 text-xs leading-relaxed">
+                      <li>
+                        <strong>HDMI (مُفضّل):</strong> من غرفة الانتظار اضغط «شاشة
+                        المرضى» على حاسبة المحاسب → وصّل التلفاز بكابل HDMI → اختر
+                        مدخل HDMI. لا كتابة ولا باركود.
+                      </li>
+                      <li>
+                        <strong>واتساب للجوال:</strong> اضغط «نسخ الرابط» → أرسله لنفسك
+                        على واتساب → افتحه من جوالك → اعرض الشاشة على التلفاز
+                        (Miracast / Chromecast) إن وُجد.
+                      </li>
+                      <li>
+                        <strong>كتابة يدوية</strong> (تلفاز فيه متصفح فقط): اكتب على
+                        لوحة التلفاز:
+                        <span
+                          className="mt-1 block rounded bg-white px-2 py-1 font-mono text-[11px] text-slate-800"
+                          dir="ltr"
+                        >
+                          https://{parts.hostPath}?clinic={parts.clinicCode}
+                        </span>
+                        أو على مرحلتين: العنوان ثم{" "}
+                        <span className="font-mono">?clinic={parts.clinicCode}</span>
+                      </li>
+                    </ol>
+                  </div>
+                );
+              })()}
             </div>
           ) : null}
 
           <Alert variant="info">
             <p className="text-xs leading-relaxed">
-              <strong>بديل سريع:</strong> من حاسبة المحاسب اضغط «شاشة المرضى» ثم وصّل
-              التلفاز بكابل HDMI، أو اعرض نفس التبويب عبر Chromecast.
+              <strong>ملاحظة:</strong> الشاشة العادية (بدون إنترنت) تحتاج لابتوب أو
+              حاسبة موصولة بـ HDMI. التلفاز الذكي يحتاج فقط متصفح Chrome مفتوح على
+              الرابط.
             </p>
           </Alert>
 
