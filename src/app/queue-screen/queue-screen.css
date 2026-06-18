@@ -1,25 +1,25 @@
+/* ─── Master Clinic Plus — شاشة الانتظار (ثيم فاتح احترافي) ─── */
+
 @keyframes qs-glow-pulse {
   0%, 100% {
     box-shadow:
-      0 0 40px rgba(34, 211, 238, 0.25),
-      0 0 80px rgba(20, 184, 166, 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      0 8px 40px rgba(8, 145, 178, 0.18),
+      0 0 0 1px rgba(8, 145, 178, 0.12);
   }
   50% {
     box-shadow:
-      0 0 60px rgba(34, 211, 238, 0.45),
-      0 0 120px rgba(20, 184, 166, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      0 12px 56px rgba(8, 145, 178, 0.28),
+      0 0 0 3px rgba(8, 145, 178, 0.2);
   }
 }
 
 @keyframes qs-ring-expand {
   0% {
-    transform: scale(0.92);
-    opacity: 0.6;
+    transform: scale(0.96);
+    opacity: 0.5;
   }
   100% {
-    transform: scale(1.15);
+    transform: scale(1.08);
     opacity: 0;
   }
 }
@@ -53,27 +53,33 @@
   }
 }
 
+/* خلفية ساطعة — سماء طبية */
 .qs-bg-mesh {
-  background-color: #060a12;
+  background-color: #f0f9ff;
   background-image:
-    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(34, 211, 238, 0.18), transparent 55%),
-    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(20, 184, 166, 0.14), transparent 50%),
-    radial-gradient(ellipse 50% 60% at 50% 100%, rgba(59, 130, 246, 0.08), transparent 55%),
-    linear-gradient(180deg, #060a12 0%, #0c1525 45%, #081018 100%);
+    radial-gradient(ellipse 70% 55% at 10% 0%, rgba(56, 189, 248, 0.35), transparent 55%),
+    radial-gradient(ellipse 55% 45% at 95% 5%, rgba(45, 212, 191, 0.28), transparent 50%),
+    radial-gradient(ellipse 50% 50% at 50% 100%, rgba(99, 102, 241, 0.08), transparent 55%),
+    linear-gradient(165deg, #f0f9ff 0%, #ecfeff 35%, #f0fdfa 70%, #e0f2fe 100%);
+  color: #0f172a;
 }
 
 .qs-grid-overlay {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(8, 145, 178, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(8, 145, 178, 0.06) 1px, transparent 1px);
   background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse at center, black 30%, transparent 85%);
+  mask-image: radial-gradient(ellipse at center, black 20%, transparent 90%);
 }
 
+/* بطاقات بيضاء ناعمة */
 .qs-glass {
-  background: rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(8, 145, 178, 0.12);
+  box-shadow:
+    0 4px 24px rgba(8, 145, 178, 0.08),
+    0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .qs-call-active {
@@ -85,7 +91,7 @@
   position: absolute;
   inset: -4px;
   border-radius: inherit;
-  border: 2px solid rgba(34, 211, 238, 0.35);
+  border: 3px solid rgba(8, 145, 178, 0.35);
   animation: qs-ring-expand 2s ease-out infinite;
   pointer-events: none;
 }
@@ -93,11 +99,11 @@
 .qs-title-shimmer {
   background: linear-gradient(
     90deg,
-    #ffffff 0%,
-    #a5f3fc 30%,
-    #ffffff 50%,
-    #5eead4 70%,
-    #ffffff 100%
+    #0e7490 0%,
+    #0891b2 30%,
+    #0d9488 50%,
+    #0891b2 70%,
+    #0e7490 100%
   );
   background-size: 200% auto;
   -webkit-background-clip: text;
@@ -106,40 +112,38 @@
   animation: qs-shimmer 8s linear infinite;
 }
 
-/* اسم العيادة — واضح من بعيد على التلفاز */
+/* بانر العيادة — تدرج فيروزي مميز */
+.qs-clinic-banner {
+  background: linear-gradient(
+    135deg,
+    #0e7490 0%,
+    #0891b2 35%,
+    #0d9488 65%,
+    #14b8a6 100%
+  );
+  border-bottom: none;
+  box-shadow:
+    0 8px 32px rgba(8, 145, 178, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
 .qs-clinic-hero {
   font-size: clamp(1.75rem, 4.5vw, 3.75rem);
   font-weight: 900;
   line-height: 1.15;
   letter-spacing: -0.02em;
   color: #ffffff;
-  text-shadow:
-    0 2px 24px rgba(34, 211, 238, 0.35),
-    0 4px 40px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.15);
 }
 
-.qs-clinic-banner {
-  background: linear-gradient(
-    90deg,
-    rgba(34, 211, 238, 0.12) 0%,
-    rgba(15, 23, 42, 0.7) 30%,
-    rgba(15, 23, 42, 0.7) 70%,
-    rgba(20, 184, 166, 0.12) 100%
-  );
-  border-bottom: 2px solid rgba(34, 211, 238, 0.25);
-}
-
-/* اسم المراجع عند النداء — الأهم على الشاشة */
+/* اسم المراجع — داكن وواضح على خلفية فاتحة */
 .qs-patient-hero {
   font-size: clamp(2.5rem, 7vw, 5.5rem);
   font-weight: 900;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  color: #ffffff;
+  color: #0c4a6e;
   word-break: break-word;
-  text-shadow:
-    0 0 40px rgba(255, 255, 255, 0.15),
-    0 4px 30px rgba(0, 0, 0, 0.45);
 }
 
 .qs-ticket-hero {
@@ -152,25 +156,47 @@
 .qs-doctor-name {
   font-size: clamp(1.25rem, 2.8vw, 2.25rem);
   font-weight: 700;
-  color: #e2e8f0;
+  color: #334155;
 }
 
 .qs-waiting-name {
   font-size: clamp(1rem, 1.8vw, 1.35rem);
   font-weight: 700;
   line-height: 1.3;
+  color: #334155;
 }
 
 .qs-waiting-name-next {
   font-size: clamp(1.15rem, 2.2vw, 1.6rem);
   font-weight: 800;
-  color: #fff;
+  color: #0c4a6e;
 }
 
 .qs-ticket-glow {
-  text-shadow:
-    0 0 30px rgba(34, 211, 238, 0.5),
-    0 0 60px rgba(20, 184, 166, 0.25);
+  text-shadow: none;
+}
+
+/* بطاقة النداء */
+.qs-call-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f0fdfa 100%);
+  box-shadow:
+    0 12px 48px rgba(8, 145, 178, 0.14),
+    0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.qs-call-card-live {
+  border-color: #0891b2 !important;
+  background: linear-gradient(180deg, #ecfeff 0%, #ffffff 55%, #f0fdfa 100%);
+}
+
+.qs-call-card-recall {
+  border-color: #f59e0b !important;
+  background: linear-gradient(180deg, #fffbeb 0%, #ffffff 55%, #fff7ed 100%);
+}
+
+.qs-call-card-progress {
+  border-color: #10b981 !important;
+  background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 55%, #f0fdf4 100%);
 }
 
 .qs-enter {
@@ -179,4 +205,24 @@
 
 .qs-icon-float {
   animation: qs-float 3s ease-in-out infinite;
+}
+
+/* شاشة إدخال الرمز */
+.qs-setup-card {
+  background: #ffffff;
+  border: 1px solid rgba(8, 145, 178, 0.15);
+  box-shadow:
+    0 20px 60px rgba(8, 145, 178, 0.15),
+    0 4px 16px rgba(15, 23, 42, 0.06);
+}
+
+.qs-setup-input {
+  background: #f8fafc;
+  border: 2px solid #bae6fd;
+  color: #0c4a6e;
+}
+
+.qs-setup-input:focus {
+  border-color: #0891b2;
+  box-shadow: 0 0 0 4px rgba(8, 145, 178, 0.15);
 }

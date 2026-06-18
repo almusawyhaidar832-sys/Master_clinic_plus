@@ -70,17 +70,17 @@ function ClinicCodeTvSetup({
   return (
     <div className="qs-bg-mesh relative flex min-h-screen flex-col items-center justify-center px-6 py-10">
       <div className="qs-grid-overlay pointer-events-none absolute inset-0 opacity-50" />
-      <div className="qs-glass relative z-10 w-full max-w-lg rounded-3xl p-8 text-center text-white shadow-2xl shadow-cyan-500/10">
-        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 shadow-lg shadow-cyan-500/25">
+      <div className="qs-setup-card relative z-10 w-full max-w-lg rounded-3xl p-8 text-center">
+        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 shadow-lg shadow-cyan-500/30">
           <Monitor className="h-10 w-10 text-white" />
         </div>
         <h1 className="qs-title-shimmer text-3xl font-black">شاشة انتظار المرضى</h1>
-        <p className="mt-3 text-sm leading-relaxed text-white/60">
-          اكتب <strong className="text-cyan-200">رمز عيادتك</strong> مرة واحدة — تُحفظ
+        <p className="mt-3 text-sm leading-relaxed text-slate-600">
+          اكتب <strong className="text-teal-700">رمز عيادتك</strong> مرة واحدة — تُحفظ
           على هذا التلفاز وتفتح تلقائياً كل يوم.
         </p>
-        <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-white/40">
-          <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+        <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-slate-500">
+          <Sparkles className="h-3.5 w-3.5 text-cyan-600" />
           رمز خاص بعيادتك — لا تختلط مع عيادة أخرى
         </p>
 
@@ -92,7 +92,7 @@ function ClinicCodeTvSetup({
             if (trimmed) onSubmit(trimmed);
           }}
         >
-          <label className="block text-right text-sm text-white/70">
+          <label className="block text-right text-sm font-medium text-slate-700">
             رمز العيادة (من المحاسب — «ربط التلفاز»)
           </label>
           <input
@@ -102,40 +102,40 @@ function ClinicCodeTvSetup({
             placeholder="مثال: ABC12"
             dir="ltr"
             autoComplete="off"
-            className="w-full rounded-2xl border-2 border-cyan-400/25 bg-white/5 px-6 py-5 text-center text-3xl font-black tracking-[0.2em] text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/20"
+            className="qs-setup-input w-full rounded-2xl px-6 py-5 text-center text-3xl font-black tracking-[0.2em] placeholder:text-slate-300 focus:outline-none"
           />
           {siteHost && (
-            <p className="text-xs text-white/40" dir="ltr">
+            <p className="text-xs text-slate-500" dir="ltr">
               أو افتح: {siteHost}/queue-screen?clinic=
-              <span className="text-white/70">{code.trim() || "رمزك"}</span>
+              <span className="font-semibold text-teal-700">{code.trim() || "رمزك"}</span>
             </p>
           )}
           <button
             type="submit"
             disabled={!code.trim()}
-            className="w-full rounded-2xl bg-gradient-to-l from-cyan-500 to-teal-600 py-4 text-lg font-bold text-white shadow-lg shadow-cyan-500/25 hover:opacity-95 disabled:opacity-40"
+            className="w-full rounded-2xl bg-gradient-to-l from-cyan-600 to-teal-600 py-4 text-lg font-bold text-white shadow-lg shadow-cyan-500/25 hover:opacity-95 disabled:opacity-40"
           >
             فتح شاشة هذه العيادة
           </button>
         </form>
 
-        <p className="text-xs leading-relaxed text-white/45">
-          تُكتب <strong className="text-white/70">مرة واحدة فقط</strong> — يُحفظ
+        <p className="text-xs leading-relaxed text-slate-500">
+          تُكتب <strong className="text-slate-700">مرة واحدة فقط</strong> — يُحفظ
           الرمز على هذا التلفاز ويفتح تلقائياً كل يوم. يُفضّل تثبيت الشاشة كتطبيق
           من قائمة Chrome.
         </p>
 
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-right text-xs text-white/55">
-          <p className="mb-2 font-medium text-white/80">تثبيت كتطبيق على التلفاز</p>
+        <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-right text-xs text-slate-600">
+          <p className="mb-2 font-bold text-slate-800">تثبيت كتطبيق على التلفاز</p>
           <p className="mb-3 leading-relaxed">
             Android TV / شاشة ذكية: من Chrome اختر القائمة ⋮ →{" "}
-            <strong className="text-white/90">إضافة إلى الشاشة الرئيسية</strong> أو{" "}
-            <strong className="text-white/90">تثبيت التطبيق</strong>.
+            <strong className="text-teal-800">إضافة إلى الشاشة الرئيسية</strong> أو{" "}
+            <strong className="text-teal-800">تثبيت التطبيق</strong>.
           </p>
           <PwaInstallButton
             label="تثبيت شاشة الانتظار"
             installingLabel="جاري التثبيت..."
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-l from-cyan-500 to-teal-600 px-4 py-2 text-sm font-bold text-white"
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-l from-cyan-600 to-teal-600 px-4 py-2 text-sm font-bold text-white"
           />
         </div>
       </div>
@@ -172,10 +172,10 @@ function SetupScreen({ onClinicResolved }: { onClinicResolved: (id: string) => v
 
   if (loading) {
     return (
-      <div className="qs-bg-mesh flex min-h-screen items-center justify-center text-white">
+      <div className="qs-bg-mesh flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
-          <p className="text-lg text-white/70">جارٍ تحميل شاشة الانتظار...</p>
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent" />
+          <p className="text-lg font-medium text-slate-600">جارٍ تحميل شاشة الانتظار...</p>
         </div>
       </div>
     );
@@ -479,10 +479,10 @@ function QueueScreenContent() {
 
   if (bootstrapping) {
     return (
-      <div className="qs-bg-mesh flex min-h-screen items-center justify-center text-white">
+      <div className="qs-bg-mesh flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
-          <p className="text-lg text-white/70">جارٍ فتح شاشة العيادة...</p>
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent" />
+          <p className="text-lg font-medium text-slate-600">جارٍ فتح شاشة العيادة...</p>
         </div>
       </div>
     );
@@ -552,8 +552,8 @@ export default function QueueScreenPage() {
   return (
     <Suspense
       fallback={
-        <div className="qs-bg-mesh flex min-h-screen items-center justify-center text-white">
-          <p className="text-lg text-white/70">جارٍ تحميل شاشة الانتظار...</p>
+        <div className="qs-bg-mesh flex min-h-screen items-center justify-center">
+          <p className="text-lg font-medium text-slate-600">جارٍ تحميل شاشة الانتظار...</p>
         </div>
       }
     >
