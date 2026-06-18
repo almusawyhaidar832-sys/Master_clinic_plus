@@ -14,6 +14,33 @@ export const SALARY_ENTRY_TYPE_LABELS: Record<SalaryEntryType, string> = {
   daily_wage: "أجر يومي",
 };
 
+/** أنواع الحركات في نموذج رواتب الموظفين (راتب شهري) */
+export const EMPLOYEE_PAYROLL_ENTRY_TYPES: SalaryEntryType[] = [
+  "advance",
+  "deduction",
+  "absence",
+  "bonus",
+];
+
+/** أنواع الحركات لمساعد بأجر يومي */
+export const DAILY_ASSISTANT_PAYROLL_ENTRY_TYPES: SalaryEntryType[] = [
+  "daily_wage",
+  ...EMPLOYEE_PAYROLL_ENTRY_TYPES,
+];
+
+export function formatPayrollEntryTypesList(
+  types: readonly SalaryEntryType[]
+): string {
+  return types.map((t) => SALARY_ENTRY_TYPE_LABELS[t]).join(" · ");
+}
+
+/** عنوان فرعي يوضّح كل خيارات النموذج */
+export function payrollEntryFormSubtitle(
+  types: readonly SalaryEntryType[]
+): string {
+  return `الخيارات المتاحة: ${formatPayrollEntryTypesList(types)}`;
+}
+
 export const SALARY_PERSON_CATEGORY_LABELS = {
   staff: "موظف خدمات",
   accountant: "محاسب",

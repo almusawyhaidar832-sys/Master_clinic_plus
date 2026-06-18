@@ -9,6 +9,10 @@ import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import { isDailyWageAssistant } from "@/lib/services/assistant-compensation";
 import type { PayrollPerson } from "@/lib/services/payroll-persons";
 import { formatCurrency } from "@/lib/utils";
+import {
+  EMPLOYEE_PAYROLL_ENTRY_TYPES,
+  formatPayrollEntryTypesList,
+} from "@/lib/services/salary-entry-display";
 
 interface EmployeePayrollProfileCardProps {
   options: { value: string; label: string }[];
@@ -137,8 +141,9 @@ export function EmployeePayrollProfileCard({
             الراتب الشهري: {formatCurrency(person.base_salary)}
           </p>
           <p className="mt-1 text-xs text-amber-900">
-            سجّل سلفة أو خصماً أو مكافأة من النموذج أدناه — الصرف من مصاريف
-            العيادة.
+            سجّل حركات الراتب (
+            {formatPayrollEntryTypesList(EMPLOYEE_PAYROLL_ENTRY_TYPES)}) من النموذج
+            أدناه — الصرف من مصاريف العيادة.
           </p>
         </div>
       ) : person.category === "assistant" ? (

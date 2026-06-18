@@ -58,6 +58,12 @@ import {
   summarizeSalaryEntries,
 } from "@/lib/services/salary-entry-math";
 import { isDailyWageAssistant } from "@/lib/services/assistant-compensation";
+import {
+  DAILY_ASSISTANT_PAYROLL_ENTRY_TYPES,
+  EMPLOYEE_PAYROLL_ENTRY_TYPES,
+  formatPayrollEntryTypesList,
+  payrollEntryFormSubtitle,
+} from "@/lib/services/salary-entry-display";
 
 interface DoctorOption {
   id: string;
@@ -304,6 +310,9 @@ export default function SalaryPage() {
   const activeEmployeeEntryTypes = isDailyAssistantSelected
     ? dailyAssistantEntryTypes
     : employeeEntryTypes;
+  const payrollEntryTypes = isDailyAssistantSelected
+    ? DAILY_ASSISTANT_PAYROLL_ENTRY_TYPES
+    : EMPLOYEE_PAYROLL_ENTRY_TYPES;
   const slipPaid = isAssistantSelected
     ? selectedAssistantRecord?.status === "paid"
     : staffSlipThisMonth?.status === "paid";
@@ -1787,14 +1796,15 @@ export default function SalaryPage() {
         <Card>
           <CardHeader>
             <CardTitle>
-              {isDailyAssistantSelected
-                ? `تسجيل أجر يومي — ${formatMonthYearAr(workMonth)}`
-                : `تسجيل سلفة أو خصم — ${formatMonthYearAr(workMonth)}`}
+              تسجيل حركات الراتب — {formatMonthYearAr(workMonth)}
             </CardTitle>
+            <p className="text-xs text-slate-600">
+              {payrollEntryFormSubtitle(payrollEntryTypes)}
+            </p>
             {isDailyAssistantSelected && (
               <p className="text-xs text-teal-800">
-                كل يوم اشتغل فيه المساعد: اختر «أجر يومي»، اكتب المبلغ (مثلاً 15,000 أو
-                10,000)، وحدّد تاريخ ذلك اليوم.
+                لكل يوم عمل: اختر «أجر يومي»، اكتب المبلغ (مثلاً 15,000 أو 10,000)،
+                وحدّد تاريخ ذلك اليوم.
               </p>
             )}
           </CardHeader>
@@ -2130,8 +2140,10 @@ export default function SalaryPage() {
           <p className="text-center text-sm text-slate-muted">
             لا حركات لـ {formatMonthYearAr(workMonth)} —{" "}
             {isDoctorSalarySelected
-              ? "سجّل سلفة أو خصماً أو مكافأة من النموذج أعلاه."
-              : "سجّل سلفة أو خصماً، أو أنشئ قسيمة بالراتب الأساسي فقط."}
+              ? `سجّل حركات الراتب (${formatPayrollEntryTypesList(EMPLOYEE_PAYROLL_ENTRY_TYPES)}) من النموذج أعلاه.`
+              : isDailyAssistantSelected
+                ? `سجّل حركات الراتب (${formatPayrollEntryTypesList(DAILY_ASSISTANT_PAYROLL_ENTRY_TYPES)}) من النموذج أعلاه.`
+                : `سجّل حركات الراتب (${formatPayrollEntryTypesList(EMPLOYEE_PAYROLL_ENTRY_TYPES)})، أو أنشئ قسيمة بالراتب الأساسي فقط.`}
           </p>
         )}
 
