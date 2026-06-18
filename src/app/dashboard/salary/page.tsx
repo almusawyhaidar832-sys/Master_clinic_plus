@@ -1787,8 +1787,16 @@ export default function SalaryPage() {
         <Card>
           <CardHeader>
             <CardTitle>
-              تسجيل سلفة أو خصم — {formatMonthYearAr(workMonth)}
+              {isDailyAssistantSelected
+                ? `تسجيل أجر يومي — ${formatMonthYearAr(workMonth)}`
+                : `تسجيل سلفة أو خصم — ${formatMonthYearAr(workMonth)}`}
             </CardTitle>
+            {isDailyAssistantSelected && (
+              <p className="text-xs text-teal-800">
+                كل يوم اشتغل فيه المساعد: اختر «أجر يومي»، اكتب المبلغ (مثلاً 15,000 أو
+                10,000)، وحدّد تاريخ ذلك اليوم.
+              </p>
+            )}
           </CardHeader>
           {isDoctorSalarySelected ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
@@ -1825,6 +1833,14 @@ export default function SalaryPage() {
                 </p>
               )}
 
+              {isAssistantSelected && !isDailyAssistantSelected && (
+                <Alert variant="info">
+                  هذا المساعد على <strong>راتب شهري ثابت</strong> — خيار «أجر يومي»
+                  لا يظهر إلا بعد التحويل. اضغط <strong>تعديل الراتب</strong> أعلاه
+                  واختر <strong>أجر يومي متغير</strong>، ثم ارجع وسجّل كل يوم من هنا.
+                </Alert>
+              )}
+
               <Select
                 label="نوع الحركة"
                 value={entryType}
@@ -1833,10 +1849,14 @@ export default function SalaryPage() {
               />
 
               <CurrencyInput
-                label="المبلغ"
+                label={
+                  entryType === "daily_wage" ? "أجر هذا اليوم" : "المبلغ"
+                }
                 value={amount}
                 onChange={setAmount}
-                placeholder="500,000"
+                placeholder={
+                  entryType === "daily_wage" ? "15,000" : "500,000"
+                }
               />
 
               <Input
@@ -1890,6 +1910,10 @@ export default function SalaryPage() {
               ) : !selectedPerson || (!staffId && !assistantId) ? (
                 <p className="text-center text-xs text-amber-800">
                   اختر موظفاً أو مساعداً من القائمة أعلاه أولاً
+                </p>
+              ) : isDailyAssistantSelected && entryType === "daily_wage" ? (
+                <p className="text-center text-xs text-teal-800">
+                  مثال: اليوم 15,000 — غداً 10,000 (سجّل كل يوم بحركة منفصلة)
                 </p>
               ) : (
                 <p className="text-center text-xs text-slate-muted">

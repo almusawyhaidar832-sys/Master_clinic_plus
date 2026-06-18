@@ -180,6 +180,7 @@ export function EmployeePayrollProfileCard({
           {!isDailyAssistant && (
             <p className="mt-2 text-xs text-teal-800">
               يُقسّم الراتب عند «توليد رواتب الشهر» — يُخصم من حساب الطبيب المرتبط.
+              لتسجيل أجر يومي: اضغط «تعديل الراتب» واختر «أجر يومي متغير».
             </p>
           )}
         </div>

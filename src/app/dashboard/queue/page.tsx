@@ -107,7 +107,7 @@ function AddToQueueModal({
     patient_phone: string;
     patient_id?: string | null;
     send_to_doctor: boolean;
-  }) => void;
+  }) => Promise<boolean>;
 }) {
   const { t } = useLanguage();
   const [doctorId, setDoctorId] = useState(doctors[0]?.id ?? "");
@@ -115,12 +115,40 @@ function AddToQueueModal({
   const [phone, setPhone] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [sendNow, setSendNow] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const handlePatientSelect = (patient: PatientSearchResult) => {
     setSelectedPatientId(patient.id);
     setName(patient.full_name_ar);
     setPhone(getPatientDisplayPhone(patient) ?? "");
   };
+
+  async function handleSubmit() {
+    if (!doctorId || submitting) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setFormError(t("queuePatientNameRequired"));
+      return;
+    }
+
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      const ok = await onAdd({
+        doctor_id: doctorId,
+        patient_name: trimmedName,
+        patient_phone: phone.trim(),
+        patient_id: selectedPatientId,
+        send_to_doctor: sendNow,
+      });
+      if (ok) {
+        onClose();
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
@@ -181,29 +209,33 @@ function AddToQueueModal({
             />
             {t("queueNotifyDoctor")}
           </label>
+          {formError && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {formError}
+            </p>
+          )}
         </div>
 
         <div className="mt-6 flex gap-3">
           <button
+            type="button"
             onClick={onClose}
-            className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            disabled={submitting}
+            className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
           >
             {t("cancel")}
           </button>
           <button
-            onClick={() => {
-              if (!doctorId) return;
-              onAdd({
-                doctor_id: doctorId,
-                patient_name: name,
-                patient_phone: phone,
-                patient_id: selectedPatientId,
-                send_to_doctor: sendNow,
-              });
-            }}
-            className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-bold text-white hover:bg-primary/90"
+            type="button"
+            disabled={submitting || !doctorId}
+            onClick={() => void handleSubmit()}
+            className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-60"
           >
-            {sendNow ? t("queueAddAndSend") : t("queueAddOnly")}
+            {submitting
+              ? t("queueAddingPatient")
+              : sendNow
+                ? t("queueAddAndSend")
+                : t("queueAddOnly")}
           </button>
         </div>
       </div>
@@ -620,7 +652,7 @@ export default function QueuePage() {
     patient_phone: string;
     patient_id?: string | null;
     send_to_doctor: boolean;
-  }) => {
+  }): Promise<boolean> => {
     setPageSuccess(null);
     const offlineAttempt = await tryEnqueueQueueAddOffline({
       clinicId,
@@ -635,10 +667,10 @@ export default function QueuePage() {
         setPageSuccess(offlineAttempt.message);
         setShowAdd(false);
         setPageError(null);
-      } else {
-        setPageError(offlineAttempt.message);
+        return true;
       }
-      return;
+      setPageError(offlineAttempt.message);
+      return false;
     }
 
     try {
@@ -652,6 +684,14 @@ export default function QueuePage() {
           send_to_doctor: data.send_to_doctor !== false,
         }),
       });
+      setShowAdd(false);
+      setPageError(null);
+      setPageSuccess(
+        bi(
+          `✓ تمت إضافة «${data.patient_name.trim()}» للطابور`,
+          `✓ Added "${data.patient_name.trim()}" to the queue`
+        )
+      );
       const targetDoctorId = result.doctor_id ?? data.doctor_id;
       const name = data.patient_name.trim() || t("queueDefaultPatient");
       void broadcastPatientSentToDoctor(supabase, targetDoctorId, {
@@ -660,10 +700,11 @@ export default function QueuePage() {
       });
       notifyQueueRefresh({ scope: "doctor", doctorId: targetDoctorId });
       notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
-      setShowAdd(false);
-      await fetchQueue();
+      void fetchQueue();
+      return true;
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errAddQueue"));
+      return false;
     }
   };
 

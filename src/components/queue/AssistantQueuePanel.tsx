@@ -124,19 +124,47 @@ function AddToQueueModal({
     patient_phone: string;
     patient_id?: string | null;
     send_to_doctor: boolean;
-  }) => void;
+  }) => Promise<boolean>;
 }) {
   const { t } = useLanguage();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [sendNow, setSendNow] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const handlePatientSelect = (patient: PatientSearchResult) => {
     setSelectedPatientId(patient.id);
     setName(patient.full_name_ar);
     setPhone(getPatientDisplayPhone(patient) ?? "");
   };
+
+  async function handleSubmit() {
+    if (submitting) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setFormError(t("queuePatientNameRequired"));
+      return;
+    }
+
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      const ok = await onAdd({
+        doctor_id: doctorId,
+        patient_name: trimmedName,
+        patient_phone: phone.trim(),
+        patient_id: selectedPatientId,
+        send_to_doctor: sendNow,
+      });
+      if (ok) {
+        onClose();
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
@@ -186,28 +214,29 @@ function AddToQueueModal({
             />
             {t("queueNotifyDoctor")}
           </label>
+          {formError && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {formError}
+            </p>
+          )}
         </div>
 
         <div className="mt-6 flex gap-3">
           <button
+            type="button"
             onClick={onClose}
-            className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            disabled={submitting}
+            className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
           >
             {t("cancel")}
           </button>
           <button
-            onClick={() => {
-              onAdd({
-                doctor_id: doctorId,
-                patient_name: name,
-                patient_phone: phone,
-                patient_id: selectedPatientId,
-                send_to_doctor: sendNow,
-              });
-            }}
-            className="flex-1 rounded-xl bg-teal-600 py-2.5 text-sm font-bold text-white hover:bg-teal-700"
+            type="button"
+            disabled={submitting}
+            onClick={() => void handleSubmit()}
+            className="flex-1 rounded-xl bg-teal-600 py-2.5 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60"
           >
-            {t("queueAddPatientBtn")}
+            {submitting ? t("queueAddingPatient") : t("queueAddPatientBtn")}
           </button>
         </div>
       </div>
@@ -419,7 +448,7 @@ export function AssistantQueuePanel() {
     patient_phone: string;
     patient_id?: string | null;
     send_to_doctor: boolean;
-  }) => {
+  }): Promise<boolean> => {
     try {
       const result = await apiJson<{ id: string; doctor_id?: string }>(
         "/api/queue",
@@ -436,6 +465,8 @@ export function AssistantQueuePanel() {
           }),
         }
       );
+      setShowAdd(false);
+      setPageError(null);
       const targetDoctorId = result.doctor_id ?? data.doctor_id;
       const name = data.patient_name.trim() || t("queueDefaultPatient");
       void broadcastPatientSentToDoctor(supabase, targetDoctorId, {
@@ -444,10 +475,11 @@ export function AssistantQueuePanel() {
       });
       notifyQueueRefresh({ scope: "doctor", doctorId: targetDoctorId });
       notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
-      setShowAdd(false);
-      await fetchQueue();
+      void fetchQueue();
+      return true;
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errAddQueue"));
+      return false;
     }
   };
 
