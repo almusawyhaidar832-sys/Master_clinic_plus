@@ -667,6 +667,30 @@ export async function confirmPayrollViaApi(
   return { ok: true };
 }
 
+/** إلغاء تأكيد صرف — إرجاع الحالة وعكس الحركة المالية */
+export async function unconfirmPayrollViaApi(
+  kind: "slip" | "assistant",
+  id: string
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch("/api/payroll/unconfirm", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...authPortalHeaders("accountant"),
+    },
+    body: JSON.stringify({ kind, id }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: (json as { error?: string }).error ?? "تعذر إلغاء الصرف",
+    };
+  }
+  return { ok: true };
+}
+
 export async function fetchPayrollMonthViaApi(monthYear: string): Promise<{
   records: PayrollRecord[];
   slips: SalarySlip[];

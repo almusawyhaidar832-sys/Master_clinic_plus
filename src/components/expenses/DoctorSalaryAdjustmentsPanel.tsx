@@ -11,7 +11,7 @@ import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { translateDbError } from "@/lib/db-errors";
-import { confirmPayrollViaApi } from "@/lib/services/assistant-payroll-records";
+import { confirmPayrollViaApi, unconfirmPayrollViaApi } from "@/lib/services/assistant-payroll-records";
 import { doctorPaymentLabel } from "@/lib/services/doctor-payment";
 import { computeStaffNetPay } from "@/lib/services/salary-entry-math";
 import {
@@ -284,6 +284,35 @@ export function DoctorSalaryAdjustmentsPanel({
     onUpdated?.();
   }
 
+  async function handleUnconfirmPayout() {
+    if (!slip || slip.status !== "paid") return;
+    if (
+      !window.confirm(
+        "إلغاء تأكيد صرف الراتب؟\n\nسُتعاد القسيمة إلى مسودة ويُعاد احتساب الربح."
+      )
+    ) {
+      return;
+    }
+    setConfirming(true);
+    setFeedback(null);
+    const result = await unconfirmPayrollViaApi("slip", slip.id);
+    setConfirming(false);
+    if (!result.ok) {
+      setFeedback({
+        ok: false,
+        text: translateDbError(result.error ?? "تعذر إلغاء الصرف"),
+      });
+      return;
+    }
+    notifyClinicProfitRefresh(clinicId ?? undefined);
+    setFeedback({
+      ok: true,
+      text: "تم إلغاء الصرف — يمكنك التعديل وتأكيد الصرف مجدداً",
+    });
+    await loadMonthData();
+    onUpdated?.();
+  }
+
   if (salaryDoctors.length === 0) {
     return (
       <Card className="border-amber-200">
@@ -453,6 +482,17 @@ export function DoctorSalaryAdjustmentsPanel({
               {confirming
                 ? "جاري التأكيد..."
                 : `تأكيد صرف الراتب (${formatCurrency(slip.net_payout)})`}
+            </Button>
+          )}
+          {slip?.status === "paid" && slip && (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4 w-full border-amber-300 text-amber-800 hover:bg-amber-50"
+              disabled={confirming}
+              onClick={() => void handleUnconfirmPayout()}
+            >
+              {confirming ? "جاري الإلغاء..." : "إلغاء تأكيد الصرف"}
             </Button>
           )}
         </div>

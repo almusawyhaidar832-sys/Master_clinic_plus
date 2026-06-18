@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  deleteFinancialTransactionsByReference,
   recordFinancialTransaction,
   type RecordTransactionInput,
 } from "@/lib/services/clinic-profit";
@@ -129,4 +130,37 @@ export async function recordAssistantPayrollPaidTransaction(
     referenceType: "payroll_record_paid",
     referenceId: record.id,
   });
+}
+
+/** إلغاء تأكيد صرف قسيمة موظف/طبيب */
+export async function reverseStaffSlipPaidTransaction(
+  admin: SupabaseClient,
+  clinicId: string,
+  slip: Pick<SalarySlip, "id" | "doctor_id">
+): Promise<{ ok: boolean; error?: string }> {
+  const referenceType = slip.doctor_id
+    ? "salary_slip_doctor_paid"
+    : "salary_slip_paid";
+  const res = await deleteFinancialTransactionsByReference(
+    admin,
+    clinicId,
+    referenceType,
+    slip.id
+  );
+  return res.ok ? { ok: true } : { ok: false, error: res.error };
+}
+
+/** إلغاء تأكيد صرف راتب مساعد — إرجاع خصم الطبيب */
+export async function reverseAssistantPayrollPaidTransaction(
+  admin: SupabaseClient,
+  clinicId: string,
+  record: Pick<PayrollRecord, "id">
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await deleteFinancialTransactionsByReference(
+    admin,
+    clinicId,
+    "payroll_record_paid",
+    record.id
+  );
+  return res.ok ? { ok: true } : { ok: false, error: res.error };
 }

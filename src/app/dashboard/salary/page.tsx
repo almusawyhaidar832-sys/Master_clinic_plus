@@ -33,6 +33,7 @@ import {
   fetchPayrollRecordsForMonth,
   generateMonthlyPayrollViaApi,
   confirmPayrollViaApi,
+  unconfirmPayrollViaApi,
 } from "@/lib/services/assistant-payroll-records";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
@@ -1171,6 +1172,25 @@ export default function SalaryPage() {
     loadPayrollMonth();
   }
 
+  async function unmarkSlipPaid(slipId: string) {
+    if (
+      !window.confirm(
+        "إلغاء تأكيد الصرف؟\n\nسُتعاد القسيمة إلى «مسودة» ويُحذف خصم الربح — يمكنك التعديل ثم التأكيد مجدداً."
+      )
+    ) {
+      return;
+    }
+    const result = await unconfirmPayrollViaApi("slip", slipId);
+    if (!result.ok) {
+      showMessage(`تعذر إلغاء الصرف: ${result.error}`, false);
+      return;
+    }
+    notifyClinicProfitRefresh();
+    showMessage("تم إلغاء الصرف — يمكنك تعديل الحركات وتأكيد الصرف مرة أخرى", true);
+    loadPayrollMonth();
+    loadEntries();
+  }
+
   async function markAssistantPayrollPaid(recordId: string) {
     const result = await confirmPayrollViaApi("assistant", recordId);
     if (!result.ok) {
@@ -1182,6 +1202,24 @@ export default function SalaryPage() {
       "تم تأكيد الصرف — خُصمت حصة الطبيب من رصيده وسُجِّلت حركة مالية",
       true
     );
+    loadPayrollMonth();
+  }
+
+  async function unmarkAssistantPayrollPaid(recordId: string) {
+    if (
+      !window.confirm(
+        "إلغاء تأكيد صرف المساعد؟\n\nيُعاد السجل إلى «مُولَّد» ويُلغى خصم حصة الطبيب — يمكنك التأكيد مجدداً لاحقاً."
+      )
+    ) {
+      return;
+    }
+    const result = await unconfirmPayrollViaApi("assistant", recordId);
+    if (!result.ok) {
+      showMessage(`تعذر إلغاء الصرف: ${result.error}`, false);
+      return;
+    }
+    notifyClinicProfitRefresh();
+    showMessage("تم إلغاء صرف المساعد — يمكن تأكيد الصرف مرة أخرى", true);
     loadPayrollMonth();
   }
 
@@ -1657,25 +1695,62 @@ export default function SalaryPage() {
                                 <span>
                                   {record.status === "paid" ? "مدفوع" : "مُولَّد"}
                                 </span>
-                                {record.status !== "paid" && !boardLocked && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() =>
-                                      markAssistantPayrollPaid(record.id)
-                                    }
-                                  >
-                                    تأكيد الصرف
-                                  </Button>
+                                {!boardLocked && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={record.status === "paid"}
+                                      onClick={() =>
+                                        markAssistantPayrollPaid(record.id)
+                                      }
+                                    >
+                                      تأكيد الصرف
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                                      disabled={record.status !== "paid"}
+                                      onClick={() =>
+                                        unmarkAssistantPayrollPaid(record.id)
+                                      }
+                                    >
+                                      إلغاء الصرف
+                                    </Button>
+                                  </>
                                 )}
                               </div>
                             ) : (
                               <span className="text-amber-700">لم يُولَّد</span>
                             )
                           ) : slip ? (
-                            <span>
-                              {slip.status === "paid" ? "مدفوع" : "مسودة"}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span>
+                                {slip.status === "paid" ? "مدفوع" : "مسودة"}
+                              </span>
+                              {!boardLocked && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={slip.status === "paid"}
+                                    onClick={() => markSlipPaid(slip.id)}
+                                  >
+                                    تأكيد الصرف
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                                    disabled={slip.status !== "paid"}
+                                    onClick={() => unmarkSlipPaid(slip.id)}
+                                  >
+                                    إلغاء الصرف
+                                  </Button>
+                                </>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-amber-700">لم يُولَّد</span>
                           )}
@@ -2134,16 +2209,30 @@ export default function SalaryPage() {
                     الحالة:{" "}
                     {selectedAssistantRecord.status === "paid" ? "مدفوع" : "مُولَّد"}
                   </p>
-                  {selectedAssistantRecord.status !== "paid" && !boardLocked && (
-                    <Button
-                      type="button"
-                      className="w-full"
-                      onClick={() =>
-                        markAssistantPayrollPaid(selectedAssistantRecord.id)
-                      }
-                    >
-                      تأكيد الصرف — خصم حصة الطبيب
-                    </Button>
+                  {!boardLocked && (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        className="flex-1 min-w-[10rem]"
+                        disabled={selectedAssistantRecord.status === "paid"}
+                        onClick={() =>
+                          markAssistantPayrollPaid(selectedAssistantRecord.id)
+                        }
+                      >
+                        تأكيد الصرف — خصم حصة الطبيب
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1 min-w-[10rem] border-amber-300 text-amber-800 hover:bg-amber-50"
+                        disabled={selectedAssistantRecord.status !== "paid"}
+                        onClick={() =>
+                          unmarkAssistantPayrollPaid(selectedAssistantRecord.id)
+                        }
+                      >
+                        إلغاء الصرف
+                      </Button>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -2173,7 +2262,7 @@ export default function SalaryPage() {
                 <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
                   ✓ قسيمة{" "}
                   {selectedStaff?.full_name_ar ?? selectedPerson?.full_name_ar}{" "}
-                  لهذا الشهر <strong>مدفوعة</strong> — لا حاجة لإعادة الصرف.
+                  لهذا الشهر <strong>مدفوعة</strong>.
                 </p>
               )}
               <div className="space-y-3 rounded-lg bg-surface p-4 text-sm">
@@ -2207,7 +2296,7 @@ export default function SalaryPage() {
                   <span>{formatCurrency(netPreview)}</span>
                 </div>
               </div>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 flex flex-wrap gap-2">
                 <Button
                   onClick={generateSlip}
                   disabled={
@@ -2225,6 +2314,27 @@ export default function SalaryPage() {
                         ? "جاري الإنشاء..."
                         : "إنشاء / تحديث قسيمة"}
                 </Button>
+                {staffSlipThisMonth && !boardLocked && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={staffSlipThisMonth.status === "paid"}
+                      onClick={() => markSlipPaid(staffSlipThisMonth.id)}
+                    >
+                      تأكيد الصرف
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                      disabled={staffSlipThisMonth.status !== "paid"}
+                      onClick={() => unmarkSlipPaid(staffSlipThisMonth.id)}
+                    >
+                      إلغاء الصرف
+                    </Button>
+                  </>
+                )}
               </div>
             </>
           )}
@@ -2305,11 +2415,24 @@ export default function SalaryPage() {
                     {slip.status === "paid" ? "مدفوع ✓" : "مسودة — لم يُخصم من الربح بعد"}
                   </p>
                 </div>
-                {slip.status === "draft" && !boardLocked && (
-                  <Button size="sm" onClick={() => markSlipPaid(slip.id)}>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    disabled={slip.status === "paid" || boardLocked}
+                    onClick={() => markSlipPaid(slip.id)}
+                  >
                     تأكيد الصرف
                   </Button>
-                )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                    disabled={slip.status !== "paid" || boardLocked}
+                    onClick={() => unmarkSlipPaid(slip.id)}
+                  >
+                    إلغاء الصرف
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>

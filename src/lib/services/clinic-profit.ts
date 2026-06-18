@@ -90,3 +90,34 @@ export async function recordFinancialTransaction(
 
   return { ok: true };
 }
+
+/** حذف حركات مالية مرتبطة بمرجع (مثل إلغاء تأكيد الصرف) */
+export async function deleteFinancialTransactionsByReference(
+  admin: SupabaseClient,
+  clinicId: string,
+  referenceType: string,
+  referenceId: string
+): Promise<{ ok: boolean; deleted: number; error?: string }> {
+  const { data: rows, error: fetchErr } = await admin
+    .from("transactions")
+    .select("id")
+    .eq("clinic_id", clinicId)
+    .eq("reference_type", referenceType)
+    .eq("reference_id", referenceId);
+
+  if (fetchErr) {
+    return { ok: false, deleted: 0, error: fetchErr.message };
+  }
+
+  const ids = (rows ?? []).map((r) => r.id as string);
+  if (ids.length === 0) {
+    return { ok: true, deleted: 0 };
+  }
+
+  const { error: delErr } = await admin.from("transactions").delete().in("id", ids);
+  if (delErr) {
+    return { ok: false, deleted: 0, error: delErr.message };
+  }
+
+  return { ok: true, deleted: ids.length };
+}
