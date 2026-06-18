@@ -20,3 +20,9 @@ export const ASSISTANT_COMPENSATION_LABELS: Record<
   monthly_fixed: "راتب شهري ثابت",
   daily_wage: "أجر يومي متغير",
 };
+
+/** اسم موحّد لنظام التعويض (مساعدون + موظفو العيادة) */
+export type CompensationMode = AssistantCompensationMode;
+export const normalizeCompensationMode = normalizeAssistantCompensationMode;
+export const isDailyWage = isDailyWageAssistant;
+export const COMPENSATION_MODE_LABELS = ASSISTANT_COMPENSATION_LABELS;

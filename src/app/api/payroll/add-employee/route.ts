@@ -62,6 +62,17 @@ export async function POST(req: NextRequest) {
     const admin = getAdminClient();
 
     if (employee_type === "general") {
+      const mode =
+        compensation_mode === "daily_wage" ? "daily_wage" : "monthly_fixed";
+      const staffSalary = mode === "daily_wage" ? 0 : salary;
+
+      if (mode === "monthly_fixed" && staffSalary <= 0) {
+        return NextResponse.json(
+          { error: "أدخل الراتب الشهري للموظف" },
+          { status: 400 }
+        );
+      }
+
       const { data: slotRows } = await admin
         .from("staff_members")
         .select("slot_number")
@@ -79,7 +90,8 @@ export async function POST(req: NextRequest) {
           clinic_id: clinicId,
           full_name_ar: full_name_ar.trim(),
           job_title_ar: (job_title_ar || "موظف خدمات").trim(),
-          base_salary: salary,
+          base_salary: staffSalary,
+          compensation_mode: mode,
           slot_number: nextSlot,
           is_active: true,
         })
@@ -91,14 +103,17 @@ export async function POST(req: NextRequest) {
       }
 
       const job = (job_title_ar || "موظف خدمات").trim();
+      const role =
+        mode === "daily_wage" ? `موظف يومي — ${job}` : job;
       const person: PayrollPerson = {
         id: inserted.id,
         name: full_name_ar.trim(),
-        role: job,
+        role,
         category: "general",
         full_name_ar: full_name_ar.trim(),
         job_title_ar: job,
-        base_salary: salary,
+        base_salary: staffSalary,
+        compensation_mode: mode,
         is_active: true,
       };
 

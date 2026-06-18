@@ -2,7 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensureAccountantStaffRows } from "@/lib/services/accountant-payroll-sync";
 import {
   isDailyWageAssistant,
+  isDailyWage,
   normalizeAssistantCompensationMode,
+  normalizeCompensationMode,
   type AssistantCompensationMode,
 } from "@/lib/services/assistant-compensation";
 import type { PayrollPerson } from "@/lib/services/payroll-persons";
@@ -17,24 +19,36 @@ function assistantRoleLabel(
   return doctorName ? `${prefix} — ${doctorName}` : `${prefix} طبيب`;
 }
 
+function staffRoleLabel(
+  job: string,
+  compensationMode: AssistantCompensationMode
+): string {
+  return isDailyWage(compensationMode) ? `موظف يومي — ${job}` : job;
+}
+
 function mapStaffRow(s: {
   id: string;
   full_name_ar: string;
   job_title_ar: string | null;
   base_salary: number | null;
   profile_id?: string | null;
+  compensation_mode?: string | null;
 }): PayrollPerson {
   const isAccountant = Boolean(s.profile_id);
+  const compensationMode = normalizeCompensationMode(s.compensation_mode);
   const job = (s.job_title_ar as string) || (isAccountant ? "محاسب" : "موظف خدمات");
   return {
     id: s.id as string,
     name: s.full_name_ar as string,
-    role: job,
+    role: staffRoleLabel(job, compensationMode),
     category: isAccountant ? "accountant" : "general",
     full_name_ar: s.full_name_ar as string,
     job_title_ar: job,
-    base_salary: Number(s.base_salary ?? 0),
+    base_salary: isDailyWage(compensationMode)
+      ? 0
+      : Number(s.base_salary ?? 0),
     profile_id: s.profile_id ?? null,
+    compensation_mode: compensationMode,
     is_active: true,
   };
 }
@@ -50,7 +64,7 @@ export async function fetchActivePayrollPersonsAdmin(
     admin
       .from("staff_members")
       .select(
-        "id, full_name_ar, job_title_ar, base_salary, is_active, profile_id"
+        "id, full_name_ar, job_title_ar, base_salary, is_active, profile_id, compensation_mode"
       )
       .eq("clinic_id", clinicId)
       .eq("is_active", true)

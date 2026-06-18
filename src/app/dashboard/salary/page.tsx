@@ -56,9 +56,10 @@ import {
 } from "@/lib/services/salary-entry-reason";
 import {
   computeAssistantNetPay,
+  computeStaffNetPay,
   summarizeSalaryEntries,
 } from "@/lib/services/salary-entry-math";
-import { isDailyWageAssistant } from "@/lib/services/assistant-compensation";
+import { isDailyWageAssistant, isDailyWage } from "@/lib/services/assistant-compensation";
 import {
   DAILY_ASSISTANT_PAYROLL_ENTRY_TYPES,
   EMPLOYEE_PAYROLL_ENTRY_TYPES,
@@ -254,6 +255,9 @@ export default function SalaryPage() {
   const [assistantCompMode, setAssistantCompMode] = useState<
     "monthly_fixed" | "daily_wage"
   >("monthly_fixed");
+  const [generalCompMode, setGeneralCompMode] = useState<
+    "monthly_fixed" | "daily_wage"
+  >("monthly_fixed");
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
   const [addingStaff, setAddingStaff] = useState(false);
 
@@ -307,11 +311,14 @@ export default function SalaryPage() {
   const isDailyAssistantSelected =
     isAssistantSelected &&
     isDailyWageAssistant(selectedPerson?.compensation_mode);
+  const isDailyStaffSelected =
+    isStaffSelected && isDailyWage(selectedPerson?.compensation_mode);
+  const isDailyWageSelected = isDailyAssistantSelected || isDailyStaffSelected;
 
-  const activeEmployeeEntryTypes = isDailyAssistantSelected
+  const activeEmployeeEntryTypes = isDailyWageSelected
     ? dailyAssistantEntryTypes
     : employeeEntryTypes;
-  const payrollEntryTypes = isDailyAssistantSelected
+  const payrollEntryTypes = isDailyWageSelected
     ? DAILY_ASSISTANT_PAYROLL_ENTRY_TYPES
     : EMPLOYEE_PAYROLL_ENTRY_TYPES;
   const slipPaid = isAssistantSelected
@@ -354,7 +361,7 @@ export default function SalaryPage() {
       if (!doctorEntryTypes.some((t) => t.value === entryType)) {
         setEntryType("advance");
       }
-    } else if (isDailyAssistantSelected) {
+    } else if (isDailyWageSelected) {
       if (!dailyAssistantEntryTypes.some((t) => t.value === entryType)) {
         setEntryType("daily_wage");
       }
@@ -368,7 +375,7 @@ export default function SalaryPage() {
     isDoctorSalarySelected,
     isStaffSelected,
     isAssistantSelected,
-    isDailyAssistantSelected,
+    isDailyWageSelected,
     entryType,
   ]);
 
@@ -607,6 +614,21 @@ export default function SalaryPage() {
         Math.round((nextDaily + nextBon - nextAdv - nextDed) * 100) / 100
       );
     }
+    if (
+      (person.category === "general" || person.category === "accountant") &&
+      isDailyWage(person.compensation_mode)
+    ) {
+      const nextDaily = daily + (type === "daily_wage" ? pending : 0);
+      const nextAdv = adv + (type === "advance" ? pending : 0);
+      const nextDed =
+        ded +
+        (type === "deduction" || type === "absence" ? pending : 0);
+      const nextBon = bon + (type === "bonus" ? pending : 0);
+      return Math.max(
+        0,
+        Math.round((nextDaily + nextBon - nextAdv - nextDed) * 100) / 100
+      );
+    }
     return calculateSalaryNet(
       person.base_salary,
       adv + (type === "advance" ? pending : 0),
@@ -624,12 +646,18 @@ export default function SalaryPage() {
           bonuses
         )
       : selectedPerson && (isStaffSelected || isAssistantSelected)
-        ? isDailyAssistantSelected
-          ? computeAssistantNetPay(
-              selectedPerson.compensation_mode,
-              0,
-              entries
-            ).netPayout
+        ? isDailyWageSelected
+          ? isDailyAssistantSelected
+            ? computeAssistantNetPay(
+                selectedPerson.compensation_mode,
+                0,
+                entries
+              ).netPayout
+            : computeStaffNetPay(
+                0,
+                entries,
+                selectedPerson.compensation_mode
+              ).netPayout
           : calculateSalaryNet(
               selectedPerson.base_salary,
               advances,
@@ -946,6 +974,8 @@ export default function SalaryPage() {
     let salary: number;
     if (employeeType === "assistant" && assistantCompMode === "daily_wage") {
       salary = 0;
+    } else if (employeeType === "general" && generalCompMode === "daily_wage") {
+      salary = 0;
     } else {
       const parsed = parsePositiveAmount(newSalary);
       if (parsed == null) {
@@ -987,7 +1017,11 @@ export default function SalaryPage() {
           doctor_share_percentage:
             employeeType === "assistant" ? Number(doctorSharePct) : undefined,
           compensation_mode:
-            employeeType === "assistant" ? assistantCompMode : undefined,
+            employeeType === "assistant"
+              ? assistantCompMode
+              : employeeType === "general"
+                ? generalCompMode
+                : undefined,
         }),
       });
 
@@ -1716,24 +1750,63 @@ export default function SalaryPage() {
               />
               <CurrencyInput
                 label={
-                  employeeType === "assistant" && assistantCompMode === "daily_wage"
+                  (employeeType === "assistant" &&
+                    assistantCompMode === "daily_wage") ||
+                  (employeeType === "general" && generalCompMode === "daily_wage")
                     ? "الراتب الشهري (غير مطلوب)"
                     : "الراتب الشهري"
                 }
                 value={newSalary}
                 onChange={setNewSalary}
                 placeholder={
-                  employeeType === "assistant" && assistantCompMode === "daily_wage"
+                  (employeeType === "assistant" &&
+                    assistantCompMode === "daily_wage") ||
+                  (employeeType === "general" && generalCompMode === "daily_wage")
                     ? "—"
                     : "600,000"
                 }
                 required={
-                  !(employeeType === "assistant" && assistantCompMode === "daily_wage")
+                  !(
+                    (employeeType === "assistant" &&
+                      assistantCompMode === "daily_wage") ||
+                    (employeeType === "general" && generalCompMode === "daily_wage")
+                  )
                 }
                 disabled={
-                  employeeType === "assistant" && assistantCompMode === "daily_wage"
+                  (employeeType === "assistant" &&
+                    assistantCompMode === "daily_wage") ||
+                  (employeeType === "general" && generalCompMode === "daily_wage")
                 }
               />
+              {employeeType === "general" && (
+                <div className="sm:col-span-2">
+                  <p className="mb-2 text-sm font-medium text-slate-text">
+                    نظام التعويض
+                  </p>
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="generalCompMode"
+                        checked={generalCompMode === "monthly_fixed"}
+                        onChange={() => setGeneralCompMode("monthly_fixed")}
+                        className="text-primary"
+                      />
+                      راتب شهري ثابت
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="generalCompMode"
+                        checked={generalCompMode === "daily_wage"}
+                        onChange={() => setGeneralCompMode("daily_wage")}
+                        className="text-primary"
+                      />
+                      أجر يومي متغير
+                    </label>
+                  </div>
+                </div>
+              )}
               {employeeType === "assistant" && (
                 <div className="sm:col-span-2">
                   <p className="mb-2 text-sm font-medium text-slate-text">
@@ -1798,7 +1871,9 @@ export default function SalaryPage() {
 
             <p className="text-xs text-slate-muted">
               {employeeType === "general"
-                ? "الراتب كاملاً من مصاريف تشغيل العيادة — لا يُخصم من أي طبيب."
+                ? generalCompMode === "daily_wage"
+                  ? "موظف بأجر يومي — سجّل كل يوم من النموذج، ثم «توليد رواتب الشهر» و«تأكيد الصرف»."
+                  : "الراتب كاملاً من مصاريف تشغيل العيادة — لا يُخصم من أي طبيب."
                 : assistantCompMode === "daily_wage"
                   ? "مساعد بأجر يومي — سجّل كل يوم من النموذج، يُجمع الشهر ثم يُخصم عند التوليد والتأكيد."
                   : "يُقسّم الراتب بين الطبيب والعيادة حسب النسبة عند توليد الرواتب."}
@@ -1821,10 +1896,11 @@ export default function SalaryPage() {
             <p className="text-xs text-slate-600">
               {payrollEntryFormSubtitle(payrollEntryTypes)}
             </p>
-            {isDailyAssistantSelected && (
+            {isDailyWageSelected && (
               <p className="text-xs text-teal-800">
-                لكل يوم عمل: اختر «أجر يومي»، اكتب المبلغ (مثلاً 15,000 أو 10,000)،
-                وحدّد تاريخ ذلك اليوم.
+                {isDailyStaffSelected
+                  ? "لكل يوم عمل: اختر «أجر يومي»، اكتب المبلغ، وحدّد تاريخ ذلك اليوم. ثم «توليد رواتب الشهر» و«تأكيد الصرف»."
+                  : "لكل يوم عمل: اختر «أجر يومي»، اكتب المبلغ (مثلاً 15,000 أو 10,000)، وحدّد تاريخ ذلك اليوم."}
               </p>
             )}
           </CardHeader>
@@ -1845,13 +1921,13 @@ export default function SalaryPage() {
                 <div className="rounded-lg border border-slate-border bg-slate-50 px-3 py-2 text-sm">
                   <span className="text-slate-muted">الموظف المختار: </span>
                   <strong>{selectedPerson.full_name_ar}</strong>
-                  {!isDailyAssistantSelected && (
+                  {!isDailyWageSelected && (
                     <>
                       <span className="mx-2 text-slate-muted">·</span>
                       <span>{formatCurrency(selectedPerson.base_salary)}</span>
                     </>
                   )}
-                  {isDailyAssistantSelected && (
+                  {isDailyWageSelected && (
                     <span className="mr-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800">
                       أجر يومي
                     </span>
@@ -1861,6 +1937,14 @@ export default function SalaryPage() {
                 <p className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                   اختر موظفاً من القائمة الشاملة أعلاه أولاً
                 </p>
+              )}
+
+              {isStaffSelected && !isDailyStaffSelected && (
+                <Alert variant="info">
+                  هذا الموظف على <strong>راتب شهري ثابت</strong> — خيار «أجر يومي»
+                  لا يظهر إلا بعد التحويل. اضغط <strong>تعديل الراتب</strong> أعلاه
+                  واختر <strong>أجر يومي متغير</strong>، ثم ارجع وسجّل كل يوم من هنا.
+                </Alert>
               )}
 
               {isAssistantSelected && !isDailyAssistantSelected && (
@@ -1938,7 +2022,7 @@ export default function SalaryPage() {
 
               {netAfterPending != null && (
                 <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
-                  {isDailyAssistantSelected && entryType === "daily_wage"
+                  {isDailyWageSelected && entryType === "daily_wage"
                     ? "مجموع أجر الشهر بعد هذه الحركة"
                     : "صافي الراتب بعد هذه الحركة"}
                   :{" "}
@@ -1973,7 +2057,7 @@ export default function SalaryPage() {
                 <p className="text-center text-xs text-amber-800">
                   اختر موظفاً أو مساعداً من القائمة أعلاه أولاً
                 </p>
-              ) : isDailyAssistantSelected && entryType === "daily_wage" ? (
+              ) : isDailyWageSelected && entryType === "daily_wage" ? (
                 <p className="text-center text-xs text-teal-800">
                   مثال: اليوم 15,000 — غداً 10,000 (سجّل كل يوم بحركة منفصلة)
                 </p>
@@ -2193,7 +2277,7 @@ export default function SalaryPage() {
             لا حركات لـ {formatMonthYearAr(workMonth)} —{" "}
             {isDoctorSalarySelected
               ? `سجّل حركات الراتب (${formatPayrollEntryTypesList(EMPLOYEE_PAYROLL_ENTRY_TYPES)}) من النموذج أعلاه.`
-              : isDailyAssistantSelected
+              : isDailyWageSelected
                 ? `سجّل حركات الراتب (${formatPayrollEntryTypesList(DAILY_ASSISTANT_PAYROLL_ENTRY_TYPES)}) من النموذج أعلاه.`
                 : `سجّل حركات الراتب (${formatPayrollEntryTypesList(EMPLOYEE_PAYROLL_ENTRY_TYPES)})، أو أنشئ قسيمة بالراتب الأساسي فقط.`}
           </p>

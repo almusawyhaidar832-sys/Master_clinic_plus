@@ -9,7 +9,9 @@ import {
 } from "@/lib/services/salary-entry-math";
 import {
   isDailyWageAssistant,
+  isDailyWage,
   normalizeAssistantCompensationMode,
+  normalizeCompensationMode,
 } from "@/lib/services/assistant-compensation";
 import { validateSalaryEntryReason } from "@/lib/services/salary-entry-reason";
 import { calculateSalaryNet, monthDateRange } from "@/lib/utils";
@@ -48,6 +50,12 @@ function mapInsertError(message: string): string {
     message.includes("salary_slips_staff_or_doctor_check")
   ) {
     return "قاعدة البيانات تحتاج تحديث — شغّل supabase/scripts/37-salary-entry-doctor.sql في Supabase";
+  }
+  if (
+    message.includes("compensation_mode") &&
+    message.includes("staff_members")
+  ) {
+    return "قاعدة البيانات تحتاج تحديث — شغّل supabase/scripts/32-staff-daily-wage.sql في Supabase";
   }
   return message;
 }
@@ -93,9 +101,26 @@ export async function syncStaffSalarySlipDraft(
   admin: SupabaseClient,
   clinicId: string,
   staffId: string,
-  monthYear: string,
-  baseSalary: number
+  monthYear: string
 ): Promise<{ slip: SalarySlip | null; error?: string }> {
+  const { data: staff, error: staffErr } = await admin
+    .from("staff_members")
+    .select("base_salary, compensation_mode")
+    .eq("id", staffId)
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+
+  if (staffErr || !staff) {
+    return { slip: null, error: staffErr?.message ?? "الموظف غير موجود" };
+  }
+
+  const compensationMode = normalizeCompensationMode(
+    staff.compensation_mode as string | undefined
+  );
+  const baseSalary = isDailyWage(compensationMode)
+    ? 0
+    : Number(staff.base_salary ?? 0);
+
   const { entries, error: listErr } = await listSalaryEntriesForPersonMonth(
     admin,
     clinicId,
@@ -108,7 +133,8 @@ export async function syncStaffSalarySlipDraft(
 
   const { advances, deductions, netPayout } = computeStaffNetPay(
     baseSalary,
-    entries
+    entries,
+    compensationMode
   );
 
   const { data: existing, error: fetchErr } = await admin
@@ -529,7 +555,7 @@ export async function refreshUnpaidStaffSalarySlips(
 ): Promise<{ updated: number; error?: string }> {
   const { data: staff, error: staffErr } = await admin
     .from("staff_members")
-    .select("base_salary")
+    .select("base_salary, compensation_mode")
     .eq("id", staffId)
     .eq("clinic_id", clinicId)
     .maybeSingle();
@@ -541,7 +567,7 @@ export async function refreshUnpaidStaffSalarySlips(
     return { updated: 0, error: "الموظف غير موجود" };
   }
 
-  const baseSalary = Number(staff.base_salary ?? 0);
+  void staff;
 
   const { data: rows, error } = await admin
     .from("salary_slips")
@@ -561,8 +587,7 @@ export async function refreshUnpaidStaffSalarySlips(
       admin,
       clinicId,
       staffId,
-      monthYear,
-      baseSalary
+      monthYear
     );
     if (syncErr && !slip) {
       return { updated, error: syncErr };
@@ -704,11 +729,14 @@ export async function createSalaryEntry(
   let assistantCompensationMode: ReturnType<
     typeof normalizeAssistantCompensationMode
   > | null = null;
+  let staffCompensationMode: ReturnType<
+    typeof normalizeCompensationMode
+  > | null = null;
 
   if (staffId) {
     const { data: staff, error: staffErr } = await admin
       .from("staff_members")
-      .select("id, base_salary")
+      .select("id, base_salary, compensation_mode")
       .eq("id", staffId)
       .eq("clinic_id", input.clinicId)
       .maybeSingle();
@@ -724,7 +752,40 @@ export async function createSalaryEntry(
       };
     }
 
-    baseSalary = Number(staff.base_salary ?? input.baseSalary);
+    const compensationMode = normalizeCompensationMode(
+      staff.compensation_mode as string | undefined
+    );
+
+    if (input.entryType === "daily_wage" && !isDailyWage(compensationMode)) {
+      return {
+        entry: null,
+        entries: [],
+        slip: null,
+        payrollRecord: null,
+        netPayout: 0,
+        error: "أجر اليومي مسموح فقط للموظفين على نظام الأجر اليومي",
+      };
+    }
+
+    if (
+      input.entryType !== "daily_wage" &&
+      isDailyWage(compensationMode) &&
+      !["advance", "deduction", "absence", "bonus"].includes(input.entryType)
+    ) {
+      return {
+        entry: null,
+        entries: [],
+        slip: null,
+        payrollRecord: null,
+        netPayout: 0,
+        error: "نوع الحركة غير مدعوم لهذا الموظف",
+      };
+    }
+
+    baseSalary = isDailyWage(compensationMode)
+      ? 0
+      : Number(staff.base_salary ?? input.baseSalary);
+    staffCompensationMode = compensationMode;
 
     const { data: paidSlip } = await admin
       .from("salary_slips")
@@ -923,15 +984,16 @@ export async function createSalaryEntry(
   const netPayout = assistantId && assistantCompensationMode
     ? computeAssistantNetPay(assistantCompensationMode, baseSalary, entries)
         .netPayout
-    : calculateSalaryNet(baseSalary, advances, deductions, bonuses);
+    : staffId && staffCompensationMode
+      ? computeStaffNetPay(baseSalary, entries, staffCompensationMode).netPayout
+      : calculateSalaryNet(baseSalary, advances, deductions, bonuses);
 
   if (staffId) {
     const { slip, error: slipErr } = await syncStaffSalarySlipDraft(
       admin,
       input.clinicId,
       staffId,
-      input.monthYear,
-      baseSalary
+      input.monthYear
     );
     if (entry) {
       void import("@/lib/notifications/server")

@@ -213,6 +213,7 @@ export interface StaffMember {
   slot_number: number | null;
   profile_id?: string | null;
   is_active: boolean;
+  compensation_mode?: AssistantCompensationMode;
 }
 
 export interface SalaryEntry {

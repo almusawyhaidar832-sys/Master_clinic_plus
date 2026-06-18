@@ -7,6 +7,7 @@ import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import {
   ASSISTANT_COMPENSATION_LABELS,
   isDailyWageAssistant,
+  isDailyWage,
   type AssistantCompensationMode,
 } from "@/lib/services/assistant-compensation";
 import {
@@ -39,7 +40,11 @@ export function EditEmployeeSalaryModal({
     useState<AssistantCompensationMode>(
       person.compensation_mode ?? "monthly_fixed"
     );
-  const isDaily = isDailyWageAssistant(compensationMode);
+  const isStaffLike =
+    person.category === "general" || person.category === "accountant";
+  const supportsCompensationMode =
+    person.category === "assistant" || isStaffLike;
+  const isDaily = isDailyWage(compensationMode);
 
   const assistantPreview = useMemo(() => {
     if (person.category !== "assistant" || isDaily) return null;
@@ -82,8 +87,9 @@ export function EditEmployeeSalaryModal({
         job_title_ar: jobTitle.trim() || undefined,
         doctor_share_percentage:
           person.category === "assistant" ? Number(doctorSharePct) : undefined,
-        compensation_mode:
-          person.category === "assistant" ? compensationMode : undefined,
+        compensation_mode: supportsCompensationMode
+          ? compensationMode
+          : undefined,
       }),
     });
 
@@ -138,7 +144,7 @@ export function EditEmployeeSalaryModal({
             </div>
           )}
 
-          {person.category === "assistant" && (
+          {supportsCompensationMode && (
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-600">
                 نظام التعويض
@@ -161,14 +167,14 @@ export function EditEmployeeSalaryModal({
               </select>
               {isDaily && (
                 <p className="mt-1 text-xs text-teal-800">
-                  يُسجَّل أجر كل يوم من صفحة الرواتب — يُجمع الشهر ثم يُخصم عند
-                  التوليد والتأكيد.
+                  يُسجَّل أجر كل يوم من صفحة الرواتب — يُجمع الشهر ثم يُخصم من
+                  مصاريف العيادة عند التأكيد.
                 </p>
               )}
             </div>
           )}
 
-          {!(person.category === "assistant" && isDaily) && (
+          {!(supportsCompensationMode && isDaily) && (
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-600">
               {person.category === "assistant"
@@ -180,7 +186,7 @@ export function EditEmployeeSalaryModal({
             <input
               type="number"
               min={0}
-              step="1000"
+              step={1}
               value={baseSalary}
               onChange={(e) => setBaseSalary(e.target.value)}
               required
@@ -245,7 +251,9 @@ export function EditEmployeeSalaryModal({
               ? "يُحدَّث تلقائياً في سجلات الرواتب غير المُصرفة لهذا المساعد (من أي صفحة تعدّل منها)."
               : person.category === "doctor_salary"
                 ? "يُحدَّث تلقائياً في قسائم الراتب غير المُصرفة — يظهر أيضاً عند تعديل الطبيب من صفحة الأطباء."
-                : "يُحدَّث تلقائياً في قسائم الراتب غير المُسلَّمة لموظفي العيادة."}
+                : isStaffLike && isDaily
+                  ? "يُحدَّث تلقائياً في قسائم الراتب غير المُسلَّمة — صافي الشهر = مجموع أيام العمل."
+                  : "يُحدَّث تلقائياً في قسائم الراتب غير المُسلَّمة لموظفي العيادة."}
           </p>
 
           {error && (

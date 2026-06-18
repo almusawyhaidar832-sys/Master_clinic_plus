@@ -151,6 +151,17 @@ export async function PATCH(req: NextRequest) {
     }
 
     if (category === "general" || category === "accountant") {
+      const mode =
+        compensation_mode === "daily_wage" ? "daily_wage" : "monthly_fixed";
+      const staffSalary = mode === "daily_wage" ? 0 : salary;
+
+      if (mode === "monthly_fixed" && staffSalary <= 0) {
+        return NextResponse.json(
+          { error: "أدخل الراتب الشهري للموظف" },
+          { status: 400 }
+        );
+      }
+
       const { data: staff } = await admin
         .from("staff_members")
         .select("id, profile_id")
@@ -168,8 +179,9 @@ export async function PATCH(req: NextRequest) {
       const { error: staffErr } = await admin
         .from("staff_members")
         .update({
-          base_salary: salary,
+          base_salary: staffSalary,
           job_title_ar: job,
+          compensation_mode: mode,
         })
         .eq("id", id);
 
@@ -181,7 +193,7 @@ export async function PATCH(req: NextRequest) {
         const { error: profileErr } = await admin
           .from("profiles")
           .update({
-            base_salary: salary,
+            base_salary: staffSalary,
             job_title: job,
           })
           .eq("id", staff.profile_id)

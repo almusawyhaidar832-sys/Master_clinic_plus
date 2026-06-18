@@ -1,7 +1,7 @@
 import { calculateSalaryNet } from "@/lib/utils";
 import type { SalaryEntry } from "@/types";
-import type { AssistantCompensationMode } from "@/lib/services/assistant-compensation";
-import { isDailyWageAssistant } from "@/lib/services/assistant-compensation";
+import type { CompensationMode } from "@/lib/services/assistant-compensation";
+import { isDailyWage } from "@/lib/services/assistant-compensation";
 export function summarizeSalaryEntries(
   entries: Pick<SalaryEntry, "entry_type" | "amount">[]
 ) {
@@ -20,13 +20,23 @@ export function summarizeSalaryEntries(
   return { advances, deductions, bonuses, dailyWages };
 }
 
-/** صافي شهر واحد — الراتب الأساسي ثابت + حركات هذا الشهر فقط */
+/** صافي شهر واحد — راتب ثابت أو مجموع أيام العمل */
 export function computeStaffNetPay(
   baseSalary: number,
-  entries: Pick<SalaryEntry, "entry_type" | "amount">[]
+  entries: Pick<SalaryEntry, "entry_type" | "amount">[],
+  compensationMode?: CompensationMode | string | null
 ) {
   const { advances, deductions, bonuses, dailyWages } =
     summarizeSalaryEntries(entries);
+
+  if (isDailyWage(compensationMode)) {
+    const netPayout = Math.max(
+      0,
+      Math.round((dailyWages + bonuses - advances - deductions) * 100) / 100
+    );
+    return { advances, deductions, bonuses, dailyWages, netPayout };
+  }
+
   const netPayout = calculateSalaryNet(
     baseSalary,
     advances,

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
-import { isDailyWageAssistant } from "@/lib/services/assistant-compensation";
+import { isDailyWageAssistant, isDailyWage } from "@/lib/services/assistant-compensation";
 import type { PayrollPerson } from "@/lib/services/payroll-persons";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -36,6 +36,9 @@ export function EmployeePayrollProfileCard({
   const isDailyAssistant =
     person?.category === "assistant" &&
     isDailyWageAssistant(person.compensation_mode);
+  const isDailyStaff =
+    (person?.category === "general" || person?.category === "accountant") &&
+    isDailyWage(person?.compensation_mode);
 
   const assistantBreakdown =
     person?.category === "assistant" && !isDailyAssistant
@@ -118,13 +121,19 @@ export function EmployeePayrollProfileCard({
         <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50/80 p-4 text-sm">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-violet-600 px-2.5 py-0.5 text-xs font-bold text-white">
-              محاسب
+              {isDailyStaff ? "محاسب — أجر يومي" : "محاسب"}
             </span>
             <span className="text-slate-600">{person.role}</span>
           </div>
-          <p className="font-medium text-primary">
-            مصروف عيادة كامل: {formatCurrency(person.base_salary)}
-          </p>
+          {isDailyStaff ? (
+            <p className="font-medium text-primary">
+              لا راتب شهري ثابت — سجّل أجر كل يوم من النموذج أدناه
+            </p>
+          ) : (
+            <p className="font-medium text-primary">
+              مصروف عيادة كامل: {formatCurrency(person.base_salary)}
+            </p>
+          )}
           <p className="mt-1 text-xs text-violet-800">
             راتب المحاسب يُعدّل من إدارة الرواتب — يظهر في صرف الرواتب الشهرية.
           </p>

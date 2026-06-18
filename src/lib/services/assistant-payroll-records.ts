@@ -7,7 +7,9 @@ import {
 } from "@/lib/services/salary-entry-math";
 import {
   isDailyWageAssistant,
+  isDailyWage,
   normalizeAssistantCompensationMode,
+  normalizeCompensationMode,
 } from "@/lib/services/assistant-compensation";
 import { monthDateRange } from "@/lib/utils";
 import type { PayrollRecord, SalaryEntry, SalarySlip } from "@/types";
@@ -298,7 +300,7 @@ export async function generateMonthlyGeneralStaffPayroll(
 ): Promise<GeneratePayrollResult> {
   const { data: staff, error: staffErr } = await supabase
     .from("staff_members")
-    .select("id, full_name_ar, base_salary")
+    .select("id, full_name_ar, base_salary, compensation_mode")
     .eq("clinic_id", clinicId)
     .eq("is_active", true);
 
@@ -332,7 +334,12 @@ export async function generateMonthlyGeneralStaffPayroll(
 
   for (const member of staff) {
     const staffId = member.id as string;
-    const baseSalary = Number(member.base_salary ?? 0);
+    const compensationMode = normalizeCompensationMode(
+      member.compensation_mode as string | undefined
+    );
+    const baseSalary = isDailyWage(compensationMode)
+      ? 0
+      : Number(member.base_salary ?? 0);
     const entries = await listStaffSalaryEntriesForMonth(
       supabase,
       clinicId,
@@ -341,7 +348,8 @@ export async function generateMonthlyGeneralStaffPayroll(
     );
     const { advances, deductions, netPayout } = computeStaffNetPay(
       baseSalary,
-      entries
+      entries,
+      compensationMode
     );
 
     const existing = slipByStaff.get(staffId);

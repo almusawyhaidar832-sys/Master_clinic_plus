@@ -3,7 +3,9 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import type { AssistantCompensationMode } from "@/types";
 import {
   isDailyWageAssistant,
+  isDailyWage,
   normalizeAssistantCompensationMode,
+  normalizeCompensationMode,
 } from "@/lib/services/assistant-compensation";
 
 function assistantRoleLabel(
@@ -14,6 +16,13 @@ function assistantRoleLabel(
     ? "مساعد يومي"
     : "مساعد";
   return doctorName ? `${prefix} — ${doctorName}` : `${prefix} طبيب`;
+}
+
+function staffRoleLabel(
+  job: string,
+  compensationMode: AssistantCompensationMode
+): string {
+  return isDailyWage(compensationMode) ? `موظف يومي — ${job}` : job;
 }
 
 export type PayrollEmployeeCategory =
@@ -86,25 +95,33 @@ export async function fetchPayrollPersonByKey(
   if (parsed.category === "general" || parsed.category === "accountant") {
     const { data } = await supabase
       .from("staff_members")
-      .select("id, full_name_ar, job_title_ar, base_salary, is_active, profile_id")
+      .select(
+        "id, full_name_ar, job_title_ar, base_salary, is_active, profile_id, compensation_mode"
+      )
       .eq("clinic_id", clinicId)
       .eq("id", parsed.id)
       .eq("is_active", true)
       .maybeSingle();
     if (!data) return null;
     const isAccountant = Boolean(data.profile_id);
+    const compensationMode = normalizeCompensationMode(
+      data.compensation_mode as string | undefined
+    );
     const job =
       (data.job_title_ar as string) ||
       (isAccountant ? "محاسب" : "موظف خدمات");
     return {
       id: data.id as string,
       name: data.full_name_ar as string,
-      role: job,
+      role: staffRoleLabel(job, compensationMode),
       category: isAccountant ? "accountant" : "general",
       full_name_ar: data.full_name_ar as string,
       job_title_ar: job,
-      base_salary: Number(data.base_salary ?? 0),
+      base_salary: isDailyWage(compensationMode)
+        ? 0
+        : Number(data.base_salary ?? 0),
       profile_id: (data.profile_id as string) ?? null,
+      compensation_mode: compensationMode,
       is_active: true,
     };
   }
@@ -215,7 +232,9 @@ export async function fetchActivePayrollPersons(
   const [staffRes, asstRes, docSalaryRes] = await Promise.all([
     supabase
       .from("staff_members")
-      .select("id, full_name_ar, job_title_ar, base_salary, is_active, profile_id")
+      .select(
+        "id, full_name_ar, job_title_ar, base_salary, is_active, profile_id, compensation_mode"
+      )
       .eq("clinic_id", clinicId)
       .eq("is_active", true)
       .order("full_name_ar"),
@@ -249,18 +268,24 @@ export async function fetchActivePayrollPersons(
 
   const staffPersons: PayrollPerson[] = (staffRes.data ?? []).map((s) => {
     const isAccountant = Boolean(s.profile_id);
+    const compensationMode = normalizeCompensationMode(
+      s.compensation_mode as string | undefined
+    );
     const job =
       (s.job_title_ar as string) ||
       (isAccountant ? "محاسب" : "موظف خدمات");
     return {
       id: s.id as string,
       name: s.full_name_ar as string,
-      role: job,
+      role: staffRoleLabel(job, compensationMode),
       category: isAccountant ? ("accountant" as const) : ("general" as const),
       full_name_ar: s.full_name_ar as string,
       job_title_ar: job,
-      base_salary: Number(s.base_salary ?? 0),
+      base_salary: isDailyWage(compensationMode)
+        ? 0
+        : Number(s.base_salary ?? 0),
       profile_id: (s.profile_id as string) ?? null,
+      compensation_mode: compensationMode,
       is_active: true as const,
     };
   });
