@@ -31,6 +31,7 @@ import {
   RefreshCw, Monitor, Phone, X, ChevronRight, Send, RotateCcw, Receipt, LogOut,
   ArrowRightLeft,
 } from "lucide-react";
+import { QueueScreenSetupButton } from "@/components/queue/QueueScreenSetupModal";
 
 type QueueStatus =
   | "waiting"
@@ -753,7 +754,11 @@ export default function QueuePage() {
             {new Date().toLocaleDateString(dateLocale, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <QueueScreenSetupButton
+            className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-medium text-primary shadow-sm hover:bg-primary/10"
+            label="ربط التلفاز"
+          />
           <a
             href={clinicId ? `/queue-screen?clinic=${clinicId}` : "/queue-screen"}
             target="_blank"

@@ -25,6 +25,7 @@ import {
   type PatientGender,
 } from "@/lib/queue/patient-gender";
 import { cn } from "@/lib/utils";
+import { isUuid } from "@/lib/booking/urls";
 import { Volume2, Clock, CheckCircle2, Monitor, Copy, RotateCcw } from "lucide-react";
 
 interface QueueEntry {
@@ -104,9 +105,12 @@ function SetupScreen({ onClinicResolved }: { onClinicResolved: (id: string) => v
 function QueueScreenContent() {
   const params = useSearchParams();
   const router = useRouter();
-  const clinicIdParam = params.get("clinic");
+  const clinicRefParam = params.get("clinic");
 
-  const [clinicId, setClinicId] = useState<string | null>(clinicIdParam);
+  const [clinicRef, setClinicRef] = useState<string | null>(clinicRefParam);
+  const [resolvedClinicId, setResolvedClinicId] = useState<string | null>(
+    clinicRefParam && isUuid(clinicRefParam) ? clinicRefParam : null
+  );
   const [called, setCalled] = useState<QueueEntry[]>([]);
   const [waiting, setWaiting] = useState<QueueEntry[]>([]);
   const [clinicName, setClinicName] = useState("العيادة");
@@ -133,14 +137,19 @@ function QueueScreenContent() {
   }, []);
 
   useEffect(() => {
-    if (clinicIdParam) setClinicId(clinicIdParam);
-  }, [clinicIdParam]);
+    if (clinicRefParam) {
+      setClinicRef(clinicRefParam);
+      if (isUuid(clinicRefParam)) {
+        setResolvedClinicId(clinicRefParam);
+      }
+    }
+  }, [clinicRefParam]);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && clinicId) {
-      setScreenUrl(`${window.location.origin}/queue-screen?clinic=${clinicId}`);
+    if (typeof window !== "undefined" && clinicRef) {
+      setScreenUrl(`${window.location.origin}/queue-screen?clinic=${encodeURIComponent(clinicRef)}`);
     }
-  }, [clinicId]);
+  }, [clinicRef]);
 
   useEffect(() => {
     const tick = () => {
@@ -171,19 +180,29 @@ function QueueScreenContent() {
   );
 
   const fetchQueue = useCallback(async () => {
-    if (!clinicId) return;
+    if (!clinicRef) return;
 
     try {
       const res = await fetch(
-        `/api/queue/screen?clinic=${encodeURIComponent(clinicId)}`,
+        `/api/queue/screen?clinic=${encodeURIComponent(clinicRef)}`,
         { cache: "no-store" }
       );
       if (!res.ok) return;
 
       const data = (await res.json()) as {
+        clinicId?: string;
+        clinicRef?: string;
         clinicName: string;
         queue: QueueEntry[];
       };
+
+      if (data.clinicId) setResolvedClinicId(data.clinicId);
+      if (data.clinicRef) setClinicRef(data.clinicRef);
+      if (typeof window !== "undefined" && data.clinicRef) {
+        setScreenUrl(
+          `${window.location.origin}/queue-screen?clinic=${encodeURIComponent(data.clinicRef)}`
+        );
+      }
 
       setClinicName(data.clinicName || "العيادة");
       const rows = data.queue ?? [];
@@ -229,14 +248,14 @@ function QueueScreenContent() {
     } catch {
       // retry on next poll
     }
-  }, [clinicId, handleQueueScreenCall]);
+  }, [clinicRef, handleQueueScreenCall]);
 
   useEffect(() => {
-    if (!clinicId) return;
+    if (!clinicRef) return;
     void fetchQueue();
     const poll = setInterval(fetchQueue, 1500);
     return () => clearInterval(poll);
-  }, [fetchQueue, clinicId]);
+  }, [fetchQueue, clinicRef]);
 
   useEffect(() => {
     if (!liveCall?.entryId) return;
@@ -246,10 +265,10 @@ function QueueScreenContent() {
   }, [called, liveCall]);
 
   useEffect(() => {
-    if (!clinicId) return;
+    if (!resolvedClinicId) return;
 
     const supabase = createClient();
-    const screenChannel = clinicQueueScreenChannelName(clinicId);
+    const screenChannel = clinicQueueScreenChannelName(resolvedClinicId);
 
     const onScreenCall = ({ payload }: { payload: Record<string, unknown> }) => {
       const p = payload as {
@@ -287,14 +306,14 @@ function QueueScreenContent() {
       .subscribe();
 
     const dataChannel = supabase
-      .channel(`${clinicQueueChannelName(clinicId)}-screen-sync`)
+      .channel(`${clinicQueueChannelName(resolvedClinicId)}-screen-sync`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "patient_queue",
-          filter: `clinic_id=eq.${clinicId}`,
+          filter: `clinic_id=eq.${resolvedClinicId}`,
         },
         () => {
           void fetchQueue();
@@ -306,7 +325,7 @@ function QueueScreenContent() {
           event: "UPDATE",
           schema: "public",
           table: "appointments",
-          filter: `clinic_id=eq.${clinicId}`,
+          filter: `clinic_id=eq.${resolvedClinicId}`,
         },
         () => {
           void fetchQueue();
@@ -318,14 +337,15 @@ function QueueScreenContent() {
       void supabase.removeChannel(screenChannelRef);
       void supabase.removeChannel(dataChannel);
     };
-  }, [clinicId, fetchQueue, handleQueueScreenCall]);
+  }, [resolvedClinicId, fetchQueue, handleQueueScreenCall]);
 
   function handleClinicResolved(id: string) {
-    setClinicId(id);
+    setClinicRef(id);
+    setResolvedClinicId(id);
     router.replace(`/queue-screen?clinic=${id}`);
   }
 
-  if (!clinicId) {
+  if (!clinicRef) {
     return <SetupScreen onClinicResolved={handleClinicResolved} />;
   }
 

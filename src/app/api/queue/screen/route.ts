@@ -1,31 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminClient } from "@/lib/supabase/admin";
 import { fetchClinicQueue } from "@/lib/queue/server";
+import { resolveActiveClinicByRef } from "@/lib/queue/clinic-ref";
 
 /**
- * GET /api/queue/screen?clinic=<uuid>
- * Public waiting-room display — no login (clinic id in URL acts as key).
+ * GET /api/queue/screen?clinic=<uuid|booking_code>
+ * Public waiting-room display — no login (clinic ref in URL acts as key).
  */
 export async function GET(req: NextRequest) {
   try {
-    const clinicId = req.nextUrl.searchParams.get("clinic")?.trim();
-    if (!clinicId) {
+    const clinicRef = req.nextUrl.searchParams.get("clinic")?.trim();
+    if (!clinicRef) {
       return NextResponse.json({ error: "معرّف العيادة مطلوب" }, { status: 400 });
     }
 
-    const admin = getAdminClient();
-
-    const { data: clinic } = await admin
-      .from("clinics")
-      .select("id, name_ar, name")
-      .eq("id", clinicId)
-      .maybeSingle();
-
+    const clinic = await resolveActiveClinicByRef(clinicRef);
     if (!clinic) {
       return NextResponse.json({ error: "العيادة غير موجودة" }, { status: 404 });
     }
 
-    const queue = await fetchClinicQueue(clinicId, {
+    const queue = await fetchClinicQueue(clinic.id, {
       includeDone: false,
       excludeCancellationPending: true,
     });
@@ -38,8 +31,9 @@ export async function GET(req: NextRequest) {
     const active = queue.filter((e) => !hiddenOnScreen.has(e.status));
 
     return NextResponse.json({
-      clinicId,
-      clinicName: clinic.name_ar || clinic.name || "العيادة",
+      clinicId: clinic.id,
+      clinicRef: clinic.bookingCode ?? clinic.id,
+      clinicName: clinic.name,
       queue: active,
     });
   } catch (err) {
