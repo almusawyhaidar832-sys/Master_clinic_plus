@@ -17,6 +17,7 @@ import {
   monthDateRange,
   listRecentMonthYears,
   formatMonthYearAr,
+  cn,
 } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
@@ -67,6 +68,7 @@ import {
   formatPayrollEntryTypesList,
   payrollEntryFormSubtitle,
 } from "@/lib/services/salary-entry-display";
+import { ChevronDown } from "lucide-react";
 
 interface DoctorOption {
   id: string;
@@ -261,6 +263,9 @@ export default function SalaryPage() {
   >("monthly_fixed");
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
   const [addingStaff, setAddingStaff] = useState(false);
+  const [showActiveStaff, setShowActiveStaff] = useState(false);
+  const [showMonthlyPayroll, setShowMonthlyPayroll] = useState(false);
+  const [showAddEmployee, setShowAddEmployee] = useState(false);
 
   const isCurrentMonth = workMonth === calendarMonth;
   const isActivePayrollMonth = workMonth === activePayrollMonth;
@@ -1580,43 +1585,86 @@ export default function SalaryPage() {
 
       {staff.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>
-              موظفو الخدمات النشطون ({staff.length})
-            </CardTitle>
-            <p className="text-xs text-slate-muted">
-              تعديل الراتب أو إيقاف الموظف من الأزرار أدناه
-            </p>
-          </CardHeader>
-          <ul className="divide-y divide-slate-border/40">
-            {staff.map((s) => (
-              <StaffRow
-                key={s.id}
-                staff={s}
-                onEdit={() => setEditingPerson(staffMemberToPerson(s))}
-                onDeactivate={() => setDeactivatingPerson(staffMemberToPerson(s))}
+          <CardHeader className="mb-0">
+            <button
+              type="button"
+              onClick={() => setShowActiveStaff((v) => !v)}
+              className="flex w-full items-start gap-2 text-right hover:opacity-90"
+              aria-expanded={showActiveStaff}
+            >
+              <ChevronDown
+                className={cn(
+                  "mt-1 h-5 w-5 shrink-0 text-slate-muted transition-transform",
+                  showActiveStaff && "rotate-180"
+                )}
               />
-            ))}
-          </ul>
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-right">
+                  موظفو الخدمات النشطون ({staff.length})
+                </CardTitle>
+                <p className="text-xs text-slate-muted">
+                  {showActiveStaff
+                    ? "تعديل الراتب أو إيقاف الموظف من الأزرار أدناه"
+                    : "اضغط لعرض قائمة الموظفين"}
+                </p>
+              </div>
+            </button>
+          </CardHeader>
+          {showActiveStaff && (
+            <ul className="mt-4 divide-y divide-slate-border/40 border-t border-slate-border/40 pt-4">
+              {staff.map((s) => (
+                <StaffRow
+                  key={s.id}
+                  staff={s}
+                  onEdit={() => setEditingPerson(staffMemberToPerson(s))}
+                  onDeactivate={() => setDeactivatingPerson(staffMemberToPerson(s))}
+                />
+              ))}
+            </ul>
+          )}
         </Card>
       )}
 
       <Card>
-        <CardHeader className="flex-row flex-wrap items-center justify-between gap-3">
-          <CardTitle>
-            رواتب الشهر — {formatMonthYearAr(workMonth)}
-          </CardTitle>
-          {isActivePayrollMonth && !monthClosed && (
-            <Button
-              type="button"
-              size="sm"
-              disabled={generatingPayroll || !clinicId || boardLocked}
-              onClick={handleGenerateMonthlyPayroll}
-            >
-              {generatingPayroll ? "جاري التوليد..." : "توليد رواتب الشهر"}
-            </Button>
-          )}
+        <CardHeader className="mb-0">
+          <button
+            type="button"
+            onClick={() => setShowMonthlyPayroll((v) => !v)}
+            className="flex w-full items-start gap-2 text-right hover:opacity-90"
+            aria-expanded={showMonthlyPayroll}
+          >
+            <ChevronDown
+              className={cn(
+                "mt-1 h-5 w-5 shrink-0 text-slate-muted transition-transform",
+                showMonthlyPayroll && "rotate-180"
+              )}
+            />
+            <div className="min-w-0 flex-1">
+              <CardTitle className="text-right">
+                رواتب الشهر — {formatMonthYearAr(workMonth)}
+              </CardTitle>
+              <p className="text-xs text-slate-muted">
+                {showMonthlyPayroll
+                  ? "جدول التوليد والصرف لجميع العاملين"
+                  : "اضغط لعرض جدول رواتب الشهر وتوليد الرواتب"}
+              </p>
+            </div>
+          </button>
         </CardHeader>
+        {showMonthlyPayroll && (
+          <>
+            {isActivePayrollMonth && !monthClosed && (
+              <div className="mb-3 flex justify-end border-t border-slate-border/40 pt-4">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={generatingPayroll || !clinicId || boardLocked}
+                  onClick={handleGenerateMonthlyPayroll}
+                >
+                  {generatingPayroll ? "جاري التوليد..." : "توليد رواتب الشهر"}
+                </Button>
+              </div>
+            )}
         <p className="mb-3 px-1 text-xs text-slate-muted">
           <strong>مساعد طبيب:</strong> يُقسّم بين الطبيب والعيادة ·{" "}
           <strong>موظف عيادة:</strong> راتبه كامل من مصاريف العيادة ·{" "}
@@ -1782,14 +1830,39 @@ export default function SalaryPage() {
             </div>
           </>
         )}
+          </>
+        )}
       </Card>
 
       {isActivePayrollMonth && !monthClosed && (
         <Card>
-          <CardHeader>
-            <CardTitle>إضافة موظف ({activePayrollCount} نشط)</CardTitle>
+          <CardHeader className="mb-0">
+            <button
+              type="button"
+              onClick={() => setShowAddEmployee((v) => !v)}
+              className="flex w-full items-start gap-2 text-right hover:opacity-90"
+              aria-expanded={showAddEmployee}
+            >
+              <ChevronDown
+                className={cn(
+                  "mt-1 h-5 w-5 shrink-0 text-slate-muted transition-transform",
+                  showAddEmployee && "rotate-180"
+                )}
+              />
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-right">
+                  إضافة موظف ({activePayrollCount} نشط)
+                </CardTitle>
+                <p className="text-xs text-slate-muted">
+                  {showAddEmployee
+                    ? "نموذج إضافة موظف جديد"
+                    : "اضغط لعرض نموذج إضافة موظف"}
+                </p>
+              </div>
+            </button>
           </CardHeader>
-          <form onSubmit={addStaff} className="space-y-4">
+          {showAddEmployee && (
+          <form onSubmit={addStaff} className="mt-4 space-y-4 border-t border-slate-border/40 pt-4">
             <div>
               <p className="mb-2 text-sm font-medium text-slate-text">نوع الموظف</p>
               <div className="flex flex-wrap gap-4">
@@ -1958,6 +2031,7 @@ export default function SalaryPage() {
               {addingStaff ? "جاري الإضافة..." : "إضافة موظف"}
             </Button>
           </form>
+          )}
         </Card>
       )}
 
