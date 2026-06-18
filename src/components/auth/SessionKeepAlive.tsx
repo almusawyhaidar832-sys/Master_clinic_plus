@@ -38,6 +38,8 @@ export function SessionKeepAlive() {
       }
     }
 
+    void keepAlive();
+
     const onResume = () => {
       if (document.visibilityState === "visible") {
         void keepAlive();
