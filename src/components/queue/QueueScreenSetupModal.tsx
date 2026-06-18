@@ -15,21 +15,6 @@ interface ScreenQrInfo {
   unreachableOnMobile?: boolean;
 }
 
-function manualScreenUrlParts(screenUrl: string): {
-  hostPath: string;
-  clinicCode: string;
-} {
-  try {
-    const url = new URL(screenUrl);
-    return {
-      hostPath: `${url.host}${url.pathname}`,
-      clinicCode: url.searchParams.get("clinic") ?? "",
-    };
-  } catch {
-    return { hostPath: screenUrl, clinicCode: "" };
-  }
-}
-
 interface QueueScreenSetupModalProps {
   open: boolean;
   onClose: () => void;
@@ -98,8 +83,8 @@ export function QueueScreenSetupModal({ open, onClose }: QueueScreenSetupModalPr
 
         <div className="space-y-4 p-5">
           <p className="text-sm leading-relaxed text-slate-600">
-            إن كان التلفاز <strong>بدون كاميرا</strong> — استخدم كابل HDMI (الأسهل) أو
-            انسخ الرابط وافتحه من جوالك. الباركود اختياري فقط.
+            <strong>الباركود للجوال فقط</strong> — التلفاز ما يحتاج كاميرا. على شاشة
+            العيادة: افتح Chrome واكتب رمز العيادة (أو استخدم HDMI).
           </p>
 
           <ol className="list-decimal space-y-1 pr-5 text-sm text-slate-600">
@@ -126,11 +111,18 @@ export function QueueScreenSetupModal({ open, onClose }: QueueScreenSetupModalPr
               />
 
               <div className="w-full rounded-lg bg-slate-50 p-3 text-center">
-                <p className="text-xs text-slate-muted">رمز العيادة (رابط قصير)</p>
-                <p className="font-mono text-lg font-bold tracking-widest text-primary">
+                <p className="text-xs text-slate-muted">رمز عيادتك — اكتبه على تلفاز Chrome</p>
+                <p className="font-mono text-2xl font-bold tracking-[0.15em] text-primary">
                   {info.clinicCode}
                 </p>
-                <p className="mt-2 break-all text-xs text-slate-600" dir="ltr">
+                <p className="mt-2 text-xs text-slate-muted">
+                  على التلفاز: افتح{" "}
+                  <span className="font-mono text-slate-700" dir="ltr">
+                    /queue-screen
+                  </span>{" "}
+                  ثم أدخل هذا الرمز
+                </p>
+                <p className="mt-2 break-all text-xs text-slate-500" dir="ltr">
                   {info.screenUrl}
                 </p>
               </div>
@@ -178,38 +170,26 @@ export function QueueScreenSetupModal({ open, onClose }: QueueScreenSetupModalPr
                 تحميل الباركود (اختياري — للطباعة)
               </Button>
 
-              {(() => {
-                const parts = manualScreenUrlParts(info.screenUrl);
-                return (
-                  <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-                    <p className="mb-2 font-bold">تلفاز بدون باركود — 3 طرق</p>
+              <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                    <p className="mb-2 font-bold">تلفاز Chrome بدون كاميرا</p>
                     <ol className="list-decimal space-y-2 pr-5 text-xs leading-relaxed">
                       <li>
-                        <strong>HDMI (مُفضّل):</strong> من غرفة الانتظار اضغط «شاشة
-                        المرضى» على حاسبة المحاسب → وصّل التلفاز بكابل HDMI → اختر
-                        مدخل HDMI. لا كتابة ولا باركود.
+                        <strong>من Chrome على التلفاز (بدون كاميرا):</strong> اكتب عنوان
+                        الموقع ثم <span className="font-mono">/queue-screen</span> — تظهر
+                        صفحة تطلب <strong>رمز العيادة</strong> أعلاه (
+                        <span className="font-mono">{info.clinicCode}</span>) — تفتح شاشة
+                        <strong> عيادتك فقط</strong>.
                       </li>
                       <li>
-                        <strong>واتساب للجوال:</strong> اضغط «نسخ الرابط» → أرسله لنفسك
-                        على واتساب → افتحه من جوالك → اعرض الشاشة على التلفاز
-                        (Miracast / Chromecast) إن وُجد.
+                        <strong>HDMI:</strong> من المحاسب اضغط «شاشة المرضى» → وصّل
+                        التلفاز بكابل HDMI.
                       </li>
                       <li>
-                        <strong>كتابة يدوية</strong> (تلفاز فيه متصفح فقط): اكتب على
-                        لوحة التلفاز:
-                        <span
-                          className="mt-1 block rounded bg-white px-2 py-1 font-mono text-[11px] text-slate-800"
-                          dir="ltr"
-                        >
-                          https://{parts.hostPath}?clinic={parts.clinicCode}
-                        </span>
-                        أو على مرحلتين: العنوان ثم{" "}
-                        <span className="font-mono">?clinic={parts.clinicCode}</span>
+                        <strong>باركود (اختياري):</strong> يُمسح من <strong>جوال</strong> مو
+                        من التلفاز — ثم يفتح الرابط على الجوال أو التلفاز.
                       </li>
                     </ol>
                   </div>
-                );
-              })()}
             </div>
           ) : null}
 

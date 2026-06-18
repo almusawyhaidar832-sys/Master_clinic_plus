@@ -46,9 +46,80 @@ function resolveDoctorName(entry: QueueEntry): string {
   return resolveDoctorSpeechName(entry.doctor);
 }
 
+function ClinicCodeTvSetup({
+  onSubmit,
+}: {
+  onSubmit: (code: string) => void;
+}) {
+  const [code, setCode] = useState("");
+  const [siteHost, setSiteHost] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setSiteHost(window.location.host);
+    }
+  }, []);
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-slate-900 px-6 py-10 text-center text-white">
+      <Monitor className="h-20 w-20 text-primary" />
+      <div className="w-full max-w-lg space-y-4">
+        <h1 className="text-3xl font-bold">شاشة انتظار المرضى</h1>
+        <p className="text-base leading-relaxed text-white/75">
+          اكتب <strong className="text-white">رمز عيادتك</strong> فقط — تظهر شاشة
+          انتظار <strong className="text-white">هذه العيادة</strong> وليس غيرها.
+        </p>
+        <p className="text-sm text-white/50">
+          الباركود من حاسبة المحاسب يُمسح من <strong>الجوال</strong> — التلفاز ما
+          يحتاج كاميرا.
+        </p>
+
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const trimmed = code.trim();
+            if (trimmed) onSubmit(trimmed);
+          }}
+        >
+          <label className="block text-right text-sm text-white/70">
+            رمز العيادة (من المحاسب — «ربط التلفاز»)
+          </label>
+          <input
+            type="text"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            placeholder="مثال: ABC12"
+            dir="ltr"
+            autoComplete="off"
+            className="w-full rounded-2xl border-2 border-white/20 bg-white/10 px-6 py-5 text-center text-3xl font-bold tracking-[0.2em] text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
+          />
+          {siteHost && (
+            <p className="text-xs text-white/40" dir="ltr">
+              أو افتح: {siteHost}/queue-screen?clinic=
+              <span className="text-white/70">{code.trim() || "رمزك"}</span>
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={!code.trim()}
+            className="w-full rounded-2xl bg-primary py-4 text-lg font-bold text-white hover:bg-primary/90 disabled:opacity-40"
+          >
+            فتح شاشة هذه العيادة
+          </button>
+        </form>
+
+        <p className="text-xs leading-relaxed text-white/45">
+          الرمز خاص بعيادتك — كل عيادة لها رمز مختلف. احصل عليه من المحاسب مرة
+          واحدة واحفظه على التلفاز.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function SetupScreen({ onClinicResolved }: { onClinicResolved: (id: string) => void }) {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function resolveClinic() {
@@ -65,9 +136,8 @@ function SetupScreen({ onClinicResolved }: { onClinicResolved: (id: string) => v
             return;
           }
         }
-        setError(null);
       } catch {
-        setError("تعذر الاتصال");
+        /* تلفاز العيادة — لا جلسة محاسب */
       } finally {
         setLoading(false);
       }
@@ -84,21 +154,9 @@ function SetupScreen({ onClinicResolved }: { onClinicResolved: (id: string) => v
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-slate-900 px-6 text-center text-white">
-      <Monitor className="h-16 w-16 text-primary" />
-      <div className="max-w-md space-y-3">
-        <h1 className="text-2xl font-bold">شاشة انتظار المرضى</h1>
-        <p className="text-sm leading-relaxed text-white/70">
-          هذه الشاشة تُعرض على التلفاز في صالة الانتظار — تظهر أرقام الدور والمراجعين
-          المطلوب دخولهم مع نداء صوتي بالعربية.
-        </p>
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <p className="text-sm text-white/60">
-          افتحها من <strong className="text-white">غرفة الانتظار</strong> (زر «شاشة المرضى»)
-          أو أضف معرّف العيادة في الرابط.
-        </p>
-      </div>
-    </div>
+    <ClinicCodeTvSetup
+      onSubmit={(clinicCode) => onClinicResolved(clinicCode)}
+    />
   );
 }
 
