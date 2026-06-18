@@ -26,6 +26,13 @@ import {
 } from "@/lib/queue/patient-gender";
 import { cn } from "@/lib/utils";
 import { isUuid } from "@/lib/booking/urls";
+import {
+  clearQueueScreenClinicRef,
+  loadSavedQueueScreenClinicRef,
+  saveQueueScreenClinicRef,
+} from "@/lib/queue/queue-screen-storage";
+import { PwaInstallButton } from "@/components/pwa/PwaInstallButton";
+import { isStandalonePwa } from "@/lib/pwa/platform";
 import { Volume2, Clock, CheckCircle2, Monitor, Copy, RotateCcw } from "lucide-react";
 
 interface QueueEntry {
@@ -110,9 +117,24 @@ function ClinicCodeTvSetup({
         </form>
 
         <p className="text-xs leading-relaxed text-white/45">
-          الرمز خاص بعيادتك — كل عيادة لها رمز مختلف. احصل عليه من المحاسب مرة
-          واحدة واحفظه على التلفاز.
+          تُكتب <strong className="text-white/70">مرة واحدة فقط</strong> — يُحفظ
+          الرمز على هذا التلفاز ويفتح تلقائياً كل يوم. يُفضّل تثبيت الشاشة كتطبيق
+          من قائمة Chrome.
         </p>
+
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-right text-xs text-white/60">
+          <p className="mb-2 font-medium text-white/80">تثبيت كتطبيق على التلفاز</p>
+          <p className="mb-3 leading-relaxed">
+            Android TV / شاشة ذكية: من Chrome اختر القائمة ⋮ →{" "}
+            <strong className="text-white/90">إضافة إلى الشاشة الرئيسية</strong> أو{" "}
+            <strong className="text-white/90">تثبيت التطبيق</strong>.
+          </p>
+          <PwaInstallButton
+            label="تثبيت شاشة الانتظار"
+            installingLabel="جاري التثبيت..."
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white"
+          />
+        </div>
       </div>
     </div>
   );
@@ -183,6 +205,8 @@ function QueueScreenContent() {
     recall?: boolean;
   } | null>(null);
   const [liveCallTick, setLiveCallTick] = useState(0);
+  const [bootstrapping, setBootstrapping] = useState(!clinicRefParam);
+  const [installedApp, setInstalledApp] = useState(false);
 
   const voiceEnabledRef = useRef(true);
   const prevCalledRef = useRef<Set<string>>(new Set());
@@ -193,6 +217,36 @@ function QueueScreenContent() {
   useEffect(() => {
     return warmUpSpeechVoices();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setInstalledApp(isStandalonePwa());
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (clinicRefParam) {
+      saveQueueScreenClinicRef(clinicRefParam);
+      setBootstrapping(false);
+      return;
+    }
+
+    if (params.get("reset") === "1") {
+      clearQueueScreenClinicRef();
+      setBootstrapping(false);
+      router.replace("/queue-screen");
+      return;
+    }
+
+    const saved = loadSavedQueueScreenClinicRef();
+    if (saved) {
+      router.replace(`/queue-screen?clinic=${encodeURIComponent(saved)}`);
+      return;
+    }
+
+    setBootstrapping(false);
+  }, [clinicRefParam, params, router]);
 
   useEffect(() => {
     if (clinicRefParam) {
@@ -255,7 +309,10 @@ function QueueScreenContent() {
       };
 
       if (data.clinicId) setResolvedClinicId(data.clinicId);
-      if (data.clinicRef) setClinicRef(data.clinicRef);
+      if (data.clinicRef) {
+        setClinicRef(data.clinicRef);
+        saveQueueScreenClinicRef(data.clinicRef);
+      }
       if (typeof window !== "undefined" && data.clinicRef) {
         setScreenUrl(
           `${window.location.origin}/queue-screen?clinic=${encodeURIComponent(data.clinicRef)}`
@@ -398,9 +455,18 @@ function QueueScreenContent() {
   }, [resolvedClinicId, fetchQueue, handleQueueScreenCall]);
 
   function handleClinicResolved(id: string) {
+    saveQueueScreenClinicRef(id);
     setClinicRef(id);
-    setResolvedClinicId(id);
-    router.replace(`/queue-screen?clinic=${id}`);
+    setResolvedClinicId(isUuid(id) ? id : null);
+    router.replace(`/queue-screen?clinic=${encodeURIComponent(id)}`);
+  }
+
+  if (bootstrapping) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-900 text-white">
+        <p className="text-lg">جارٍ فتح شاشة العيادة...</p>
+      </div>
+    );
   }
 
   if (!clinicRef) {
@@ -623,8 +689,15 @@ function QueueScreenContent() {
         </div>
       </div>
 
-      <footer className="border-t border-white/10 px-8 py-3 text-center text-xs text-white/20">
-        Master Clinic Plus — نظام إدارة العيادات الذكي
+      <footer className="border-t border-white/10 px-8 py-3 text-center text-xs text-white/30">
+        <p>Master Clinic Plus — شاشة انتظار {clinicName}</p>
+        {installedApp ? (
+          <p className="mt-1 text-white/40">مثبّتة على هذا الجهاز — يفتح تلقائياً</p>
+        ) : (
+          <p className="mt-1 text-white/40">
+            من Chrome: تثبيت التطبيق → إضافة للشاشة الرئيسية
+          </p>
+        )}
       </footer>
     </div>
   );

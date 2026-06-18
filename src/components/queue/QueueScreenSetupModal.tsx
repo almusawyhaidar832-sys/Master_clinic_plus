@@ -88,9 +88,12 @@ export function QueueScreenSetupModal({ open, onClose }: QueueScreenSetupModalPr
           </p>
 
           <ol className="list-decimal space-y-1 pr-5 text-sm text-slate-600">
-            <li>افتح <strong>Chrome</strong> على تلفاز العيادة أو جهاز مربوط به</li>
-            <li>امسح الباركود أدناه (أو انسخ الرابط)</li>
-            <li>اترك الصفحة مفتوحة — النداء يظهر تلقائياً</li>
+            <li>افتح <strong>Chrome</strong> على تلفاز العيادة</li>
+            <li>اكتب <span className="font-mono">/queue-screen</span> وادخل رمز العيادة</li>
+            <li>
+              <strong>مرة واحدة فقط</strong> — يُحفظ الرمز ويفتح تلقائياً كل يوم
+            </li>
+            <li>من Chrome: <strong>تثبيت التطبيق</strong> → إضافة للشاشة الرئيسية</li>
           </ol>
 
           {error && <Alert variant="error">{error}</Alert>}
