@@ -1,0 +1,121 @@
+@keyframes qs-glow-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 40px rgba(34, 211, 238, 0.25),
+      0 0 80px rgba(20, 184, 166, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  50% {
+    box-shadow:
+      0 0 60px rgba(34, 211, 238, 0.45),
+      0 0 120px rgba(20, 184, 166, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+}
+
+@keyframes qs-ring-expand {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+
+@keyframes qs-shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+@keyframes qs-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes qs-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.qs-bg-mesh {
+  background-color: #060a12;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(34, 211, 238, 0.18), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(20, 184, 166, 0.14), transparent 50%),
+    radial-gradient(ellipse 50% 60% at 50% 100%, rgba(59, 130, 246, 0.08), transparent 55%),
+    linear-gradient(180deg, #060a12 0%, #0c1525 45%, #081018 100%);
+}
+
+.qs-grid-overlay {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 85%);
+}
+
+.qs-glass {
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.qs-call-active {
+  animation: qs-glow-pulse 2.5s ease-in-out infinite;
+}
+
+.qs-call-ring::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 2px solid rgba(34, 211, 238, 0.35);
+  animation: qs-ring-expand 2s ease-out infinite;
+  pointer-events: none;
+}
+
+.qs-title-shimmer {
+  background: linear-gradient(
+    90deg,
+    #e2e8f0 0%,
+    #22d3ee 25%,
+    #ffffff 50%,
+    #14b8a6 75%,
+    #e2e8f0 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: qs-shimmer 6s linear infinite;
+}
+
+.qs-ticket-glow {
+  text-shadow:
+    0 0 30px rgba(34, 211, 238, 0.5),
+    0 0 60px rgba(20, 184, 166, 0.25);
+}
+
+.qs-enter {
+  animation: qs-fade-up 0.45s ease-out both;
+}
+
+.qs-icon-float {
+  animation: qs-float 3s ease-in-out infinite;
+}

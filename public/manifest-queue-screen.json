@@ -7,8 +7,8 @@
   "scope": "/queue-screen",
   "display": "standalone",
   "orientation": "landscape",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "background_color": "#060a12",
+  "theme_color": "#060a12",
   "lang": "ar",
   "dir": "rtl",
   "icons": [

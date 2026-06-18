@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { QueueScreenPwaBootstrap } from "@/components/pwa/QueueScreenPwaBootstrap";
+import "./queue-screen.css";
 
 export const metadata: Metadata = {
   title: "شاشة انتظار المرضى",
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f172a",
+  themeColor: "#060a12",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

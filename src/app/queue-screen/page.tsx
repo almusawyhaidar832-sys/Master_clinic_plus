@@ -15,6 +15,7 @@ import {
   speakQueueScreenAnnouncement,
   warmUpSpeechVoices,
 } from "@/lib/queue/queue-screen-voice";
+import { isStandalonePwa } from "@/lib/pwa/platform";
 import { playAttentionBeep } from "@/lib/queue/web-speech";
 import {
   resolveDoctorSpeechName,
@@ -24,7 +25,6 @@ import {
   resolvePatientGender,
   type PatientGender,
 } from "@/lib/queue/patient-gender";
-import { cn } from "@/lib/utils";
 import { isUuid } from "@/lib/booking/urls";
 import {
   clearQueueScreenClinicRef,
@@ -32,8 +32,8 @@ import {
   saveQueueScreenClinicRef,
 } from "@/lib/queue/queue-screen-storage";
 import { PwaInstallButton } from "@/components/pwa/PwaInstallButton";
-import { isStandalonePwa } from "@/lib/pwa/platform";
-import { Volume2, Clock, CheckCircle2, Monitor, Copy, RotateCcw } from "lucide-react";
+import { QueueScreenDisplay } from "@/components/queue/QueueScreenDisplay";
+import { Monitor, Sparkles } from "lucide-react";
 
 interface QueueEntry {
   id: string;
@@ -68,21 +68,24 @@ function ClinicCodeTvSetup({
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-slate-900 px-6 py-10 text-center text-white">
-      <Monitor className="h-20 w-20 text-primary" />
-      <div className="w-full max-w-lg space-y-4">
-        <h1 className="text-3xl font-bold">شاشة انتظار المرضى</h1>
-        <p className="text-base leading-relaxed text-white/75">
-          اكتب <strong className="text-white">رمز عيادتك</strong> فقط — تظهر شاشة
-          انتظار <strong className="text-white">هذه العيادة</strong> وليس غيرها.
+    <div className="qs-bg-mesh relative flex min-h-screen flex-col items-center justify-center px-6 py-10">
+      <div className="qs-grid-overlay pointer-events-none absolute inset-0 opacity-50" />
+      <div className="qs-glass relative z-10 w-full max-w-lg rounded-3xl p-8 text-center text-white shadow-2xl shadow-cyan-500/10">
+        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-600 shadow-lg shadow-cyan-500/25">
+          <Monitor className="h-10 w-10 text-white" />
+        </div>
+        <h1 className="qs-title-shimmer text-3xl font-black">شاشة انتظار المرضى</h1>
+        <p className="mt-3 text-sm leading-relaxed text-white/60">
+          اكتب <strong className="text-cyan-200">رمز عيادتك</strong> مرة واحدة — تُحفظ
+          على هذا التلفاز وتفتح تلقائياً كل يوم.
         </p>
-        <p className="text-sm text-white/50">
-          الباركود من حاسبة المحاسب يُمسح من <strong>الجوال</strong> — التلفاز ما
-          يحتاج كاميرا.
+        <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-white/40">
+          <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
+          رمز خاص بعيادتك — لا تختلط مع عيادة أخرى
         </p>
 
         <form
-          className="space-y-4"
+          className="mt-6 space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
             const trimmed = code.trim();
@@ -99,7 +102,7 @@ function ClinicCodeTvSetup({
             placeholder="مثال: ABC12"
             dir="ltr"
             autoComplete="off"
-            className="w-full rounded-2xl border-2 border-white/20 bg-white/10 px-6 py-5 text-center text-3xl font-bold tracking-[0.2em] text-white placeholder:text-white/30 focus:border-primary focus:outline-none"
+            className="w-full rounded-2xl border-2 border-cyan-400/25 bg-white/5 px-6 py-5 text-center text-3xl font-black tracking-[0.2em] text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/20"
           />
           {siteHost && (
             <p className="text-xs text-white/40" dir="ltr">
@@ -110,7 +113,7 @@ function ClinicCodeTvSetup({
           <button
             type="submit"
             disabled={!code.trim()}
-            className="w-full rounded-2xl bg-primary py-4 text-lg font-bold text-white hover:bg-primary/90 disabled:opacity-40"
+            className="w-full rounded-2xl bg-gradient-to-l from-cyan-500 to-teal-600 py-4 text-lg font-bold text-white shadow-lg shadow-cyan-500/25 hover:opacity-95 disabled:opacity-40"
           >
             فتح شاشة هذه العيادة
           </button>
@@ -122,7 +125,7 @@ function ClinicCodeTvSetup({
           من قائمة Chrome.
         </p>
 
-        <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-right text-xs text-white/60">
+        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4 text-right text-xs text-white/55">
           <p className="mb-2 font-medium text-white/80">تثبيت كتطبيق على التلفاز</p>
           <p className="mb-3 leading-relaxed">
             Android TV / شاشة ذكية: من Chrome اختر القائمة ⋮ →{" "}
@@ -132,7 +135,7 @@ function ClinicCodeTvSetup({
           <PwaInstallButton
             label="تثبيت شاشة الانتظار"
             installingLabel="جاري التثبيت..."
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white"
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-l from-cyan-500 to-teal-600 px-4 py-2 text-sm font-bold text-white"
           />
         </div>
       </div>
@@ -169,8 +172,11 @@ function SetupScreen({ onClinicResolved }: { onClinicResolved: (id: string) => v
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-900 text-white">
-        <p className="text-lg">جارٍ تحميل شاشة الانتظار...</p>
+      <div className="qs-bg-mesh flex min-h-screen items-center justify-center text-white">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+          <p className="text-lg text-white/70">جارٍ تحميل شاشة الانتظار...</p>
+        </div>
       </div>
     );
   }
@@ -195,6 +201,7 @@ function QueueScreenContent() {
   const [waiting, setWaiting] = useState<QueueEntry[]>([]);
   const [clinicName, setClinicName] = useState("العيادة");
   const [currentTime, setCurrentTime] = useState("");
+  const [currentDate, setCurrentDate] = useState("");
   const [screenUrl, setScreenUrl] = useState("");
   const [liveCall, setLiveCall] = useState<{
     name: string;
@@ -265,11 +272,20 @@ function QueueScreenContent() {
 
   useEffect(() => {
     const tick = () => {
+      const now = new Date();
       setCurrentTime(
-        new Date().toLocaleTimeString("ar-IQ", {
+        now.toLocaleTimeString("ar-IQ", {
           hour: "2-digit",
           minute: "2-digit",
           hour12: true,
+        })
+      );
+      setCurrentDate(
+        now.toLocaleDateString("ar-IQ", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
         })
       );
     };
@@ -463,8 +479,11 @@ function QueueScreenContent() {
 
   if (bootstrapping) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-900 text-white">
-        <p className="text-lg">جارٍ فتح شاشة العيادة...</p>
+      <div className="qs-bg-mesh flex min-h-screen items-center justify-center text-white">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+          <p className="text-lg text-white/70">جارٍ فتح شاشة العيادة...</p>
+        </div>
       </div>
     );
   }
@@ -494,212 +513,38 @@ function QueueScreenContent() {
       : called;
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
-      <header className="flex items-center justify-between border-b border-white/10 px-8 py-4">
-        <div>
-          <h1 className="text-2xl font-black tracking-wide">{clinicName}</h1>
-          <p className="text-sm text-white/50">شاشة انتظار المرضى — نداء صوتي تلقائي</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => {
-              if (displayCalled[0]) {
-                repeatQueueScreenAnnouncement(
-                  resolvePatientName(displayCalled[0]),
-                  resolveDoctorName(displayCalled[0]),
-                  true,
-                  resolvePatientGender(displayCalled[0])
-                );
-              }
-            }}
-            className="flex items-center gap-2 rounded-xl border border-white/20 bg-white/5 px-3 py-2.5 text-xs font-bold text-white/70 hover:bg-white/10"
-          >
-            اختبار الصوت
-          </button>
-          <div className="flex items-center gap-2 rounded-xl border border-primary/50 bg-primary/20 px-4 py-2.5 text-sm font-bold text-primary">
-            <Volume2 className="h-5 w-5" />
-            <span>الصوت مفعّل</span>
-          </div>
-          <div className="text-left">
-            <p className="text-3xl font-black tabular-nums">{currentTime}</p>
-            <p className="text-sm text-white/50">
-              {new Date().toLocaleDateString("ar-IQ", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <div className="flex flex-1 gap-6 p-8">
-        <div className="flex flex-1 flex-col gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20">
-              <Volume2 className="h-5 w-5 text-primary" />
-            </div>
-            <h2 className="text-xl font-bold text-white/90">ادخل الآن</h2>
-          </div>
-
-          {displayCalled.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
-              <p className="text-white/30">لا يوجد نداء حالياً</p>
-            </div>
-          ) : (
-            <div className="grid gap-4">
-              {displayCalled.map((entry) => {
-                const name = resolvePatientName(entry);
-                const gender = resolvePatientGender(entry);
-                const isInProgress = entry.status === "in_progress";
-                return (
-                  <div
-                    key={`${entry.id}-${entry.id === liveCall?.entryId ? liveCallTick : 0}`}
-                    className={cn(
-                      "rounded-2xl border-2 p-6 transition-all",
-                      isInProgress
-                        ? "border-emerald-400/60 bg-emerald-500/20"
-                        : liveCall?.entryId === entry.id && liveCall.recall
-                          ? "border-amber-400/80 bg-amber-500/25 animate-pulse"
-                          : "border-primary/60 bg-primary/20 animate-pulse"
-                    )}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={cn(
-                          "flex h-16 w-16 items-center justify-center rounded-2xl text-3xl font-black",
-                          isInProgress
-                            ? "bg-emerald-500/30 text-emerald-300"
-                            : "bg-primary/30 text-primary"
-                        )}
-                      >
-                        {entry.ticket_number}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-2xl font-bold">{name}</p>
-                        <p
-                          className={cn(
-                            "text-sm",
-                            isInProgress ? "text-emerald-300" : "text-primary"
-                          )}
-                        >
-                          {isInProgress ? "داخل الكشف —" : "تفضل —"}{" "}
-                          {entry.doctor?.full_name_ar}
-                        </p>
-                      </div>
-                      {isInProgress ? (
-                        <CheckCircle2 className="h-8 w-8 text-emerald-400" />
-                      ) : (
-                        <Volume2 className="h-8 w-8 animate-bounce text-primary" />
-                      )}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          repeatQueueScreenAnnouncement(
-                            name,
-                            resolveDoctorName(entry),
-                            true,
-                            gender
-                          )
-                        }
-                        className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white/80 hover:bg-white/20"
-                        title="إعادة النداء"
-                      >
-                        <RotateCcw className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="flex w-80 flex-col gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20">
-              <Clock className="h-5 w-5 text-amber-400" />
-            </div>
-            <h2 className="text-xl font-bold text-white/90">
-              في الانتظار
-              {waiting.length > 0 && (
-                <span className="mr-2 rounded-full bg-amber-500/20 px-2 py-0.5 text-sm text-amber-400">
-                  {waiting.length}
-                </span>
-              )}
-            </h2>
-          </div>
-
-          <div className="flex flex-col gap-2 overflow-y-auto">
-            {waiting.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-white/30">
-                لا يوجد في الانتظار
-              </div>
-            ) : (
-              waiting.slice(0, 10).map((entry, idx) => {
-                const name = resolvePatientName(entry);
-                return (
-                  <div
-                    key={entry.id}
-                    className={cn(
-                      "flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3",
-                      idx === 0 && "border-amber-400/30 bg-amber-400/10"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold",
-                        idx === 0
-                          ? "bg-amber-400/20 text-amber-300"
-                          : "bg-white/10 text-white/50"
-                      )}
-                    >
-                      {entry.ticket_number}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-white/80">{name}</p>
-                      <p className="truncate text-xs text-white/40">
-                        {entry.doctor?.full_name_ar}
-                      </p>
-                    </div>
-                    {idx === 0 && <span className="text-xs text-amber-400">التالي</span>}
-                  </div>
-                );
-              })
-            )}
-            {waiting.length > 10 && (
-              <p className="text-center text-xs text-white/30">
-                +{waiting.length - 10} آخرون في الانتظار
-              </p>
-            )}
-          </div>
-
-          {screenUrl && (
-            <button
-              type="button"
-              onClick={() => void navigator.clipboard?.writeText(screenUrl)}
-              className="mt-auto flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-2 text-xs text-white/50 hover:bg-white/10"
-            >
-              <Copy className="h-3.5 w-3.5" />
-              نسخ رابط الشاشة للتلفاز
-            </button>
-          )}
-        </div>
-      </div>
-
-      <footer className="border-t border-white/10 px-8 py-3 text-center text-xs text-white/30">
-        <p>Master Clinic Plus — شاشة انتظار {clinicName}</p>
-        {installedApp ? (
-          <p className="mt-1 text-white/40">مثبّتة على هذا الجهاز — يفتح تلقائياً</p>
-        ) : (
-          <p className="mt-1 text-white/40">
-            من Chrome: تثبيت التطبيق → إضافة للشاشة الرئيسية
-          </p>
-        )}
-      </footer>
-    </div>
+    <QueueScreenDisplay
+      clinicName={clinicName}
+      currentTime={currentTime}
+      currentDate={currentDate}
+      called={displayCalled}
+      waiting={waiting}
+      liveCallEntryId={liveCall?.entryId}
+      liveCallTick={liveCallTick}
+      liveCallRecall={liveCall?.recall}
+      installedApp={installedApp}
+      screenUrl={screenUrl}
+      resolvePatientName={resolvePatientName}
+      resolveDoctorName={resolveDoctorName}
+      onRepeatCall={(entry) =>
+        repeatQueueScreenAnnouncement(
+          resolvePatientName(entry),
+          resolveDoctorName(entry),
+          true,
+          resolvePatientGender(entry)
+        )
+      }
+      onTestSound={() => {
+        if (displayCalled[0]) {
+          repeatQueueScreenAnnouncement(
+            resolvePatientName(displayCalled[0]),
+            resolveDoctorName(displayCalled[0]),
+            true,
+            resolvePatientGender(displayCalled[0])
+          );
+        }
+      }}
+    />
   );
 }
 
@@ -707,8 +552,8 @@ export default function QueueScreenPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-slate-900 text-white">
-          جارٍ تحميل شاشة الانتظار...
+        <div className="qs-bg-mesh flex min-h-screen items-center justify-center text-white">
+          <p className="text-lg text-white/70">جارٍ تحميل شاشة الانتظار...</p>
         </div>
       }
     >
