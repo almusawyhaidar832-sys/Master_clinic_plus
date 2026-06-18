@@ -34,6 +34,7 @@ import {
   generateMonthlyPayrollViaApi,
   confirmPayrollViaApi,
 } from "@/lib/services/assistant-payroll-records";
+import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
 import {
   fetchActivePayrollPersons,
@@ -637,6 +638,25 @@ export default function SalaryPage() {
             )
         : 0;
   const pendingAmount = parsePositiveAmount(amount) ?? 0;
+  const dailyWageEntryPreview = useMemo(() => {
+    if (
+      !isDailyAssistantSelected ||
+      entryType !== "daily_wage" ||
+      pendingAmount <= 0 ||
+      !selectedPerson
+    ) {
+      return null;
+    }
+    return breakdownAssistantSalary({
+      total_salary: pendingAmount,
+      doctor_share_percentage: selectedPerson.doctor_share_percentage ?? 0,
+    });
+  }, [
+    isDailyAssistantSelected,
+    entryType,
+    pendingAmount,
+    selectedPerson,
+  ]);
   const netAfterPending =
     pendingAmount > 0 && selectedPerson
       ? isDoctorSalarySelected
@@ -1869,6 +1889,28 @@ export default function SalaryPage() {
                 }
               />
 
+              {dailyWageEntryPreview && (
+                <div className="space-y-1 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2.5 text-xs text-teal-900">
+                  <p className="font-medium">
+                    تقسيم أجر اليوم ({formatCurrency(dailyWageEntryPreview.totalSalary)})
+                    {selectedPerson?.doctor_name_ar
+                      ? ` — د. ${selectedPerson.doctor_name_ar}`
+                      : ""}
+                  </p>
+                  <p>
+                    الطبيب يتحمل {dailyWageEntryPreview.doctorSharePercentage}% ={" "}
+                    <strong>{formatCurrency(dailyWageEntryPreview.doctorShare)}</strong>
+                  </p>
+                  <p>
+                    العيادة تتحمل {100 - dailyWageEntryPreview.doctorSharePercentage}% ={" "}
+                    <strong>{formatCurrency(dailyWageEntryPreview.clinicShare)}</strong>
+                  </p>
+                  <p className="text-teal-700">
+                    يُجمع مع أيام الشهر ثم يُخصم عند توليد الرواتب وتأكيد الصرف.
+                  </p>
+                </div>
+              )}
+
               <Input
                 label="التاريخ (ضمن الشهر المختار)"
                 type="date"
@@ -1896,10 +1938,20 @@ export default function SalaryPage() {
 
               {netAfterPending != null && (
                 <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
-                  صافي الراتب بعد هذه الحركة:{" "}
+                  {isDailyAssistantSelected && entryType === "daily_wage"
+                    ? "مجموع أجر الشهر بعد هذه الحركة"
+                    : "صافي الراتب بعد هذه الحركة"}
+                  :{" "}
                   <strong className="text-primary">
                     {formatCurrency(netAfterPending)}
                   </strong>
+                  {dailyWageEntryPreview && (
+                    <span className="mt-1 block text-xs text-slate-600">
+                      (شامل هذا اليوم — الطبيب{" "}
+                      {formatCurrency(dailyWageEntryPreview.doctorShare)} · العيادة{" "}
+                      {formatCurrency(dailyWageEntryPreview.clinicShare)})
+                    </span>
+                  )}
                 </p>
               )}
 
