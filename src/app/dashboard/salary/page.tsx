@@ -53,6 +53,11 @@ import {
   salaryReasonPlaceholder,
   validateSalaryEntryReason,
 } from "@/lib/services/salary-entry-reason";
+import {
+  computeAssistantNetPay,
+  summarizeSalaryEntries,
+} from "@/lib/services/salary-entry-math";
+import { isDailyWageAssistant } from "@/lib/services/assistant-compensation";
 
 interface DoctorOption {
   id: string;
@@ -109,6 +114,14 @@ const employeeEntryTypes = [
   { value: "bonus", label: "مكافأة" },
 ];
 
+const dailyAssistantEntryTypes = [
+  { value: "daily_wage", label: "أجر يومي" },
+  { value: "advance", label: "سلفة" },
+  { value: "deduction", label: "خصم" },
+  { value: "absence", label: "خصم غياب" },
+  { value: "bonus", label: "مكافأة" },
+];
+
 const doctorEntryTypes = [
   { value: "advance", label: "سلفة (يُخصم من الراتب)" },
   { value: "deduction", label: "خصم" },
@@ -116,13 +129,18 @@ const doctorEntryTypes = [
   { value: "bonus", label: "مكافأة (يُضاف للراتب)" },
 ];
 
-const entryTypeLabels = [...employeeEntryTypes, ...doctorEntryTypes];
+const entryTypeLabels = [
+  ...employeeEntryTypes,
+  { value: "daily_wage", label: "أجر يومي" },
+  ...doctorEntryTypes,
+];
 
 const entryTypeShortLabel: Record<string, string> = {
   advance: "سلفة",
   deduction: "خصم",
   absence: "غياب",
   bonus: "مكافأة",
+  daily_wage: "أجر يومي",
 };
 
 function slipDisplayName(slip: SalarySlip, persons: PayrollPerson[]): string {
@@ -159,6 +177,8 @@ function entrySubmitLabel(type: string): string {
       return "تسجيل خصم الغياب";
     case "bonus":
       return "تسجيل المكافأة وإضافتها للراتب";
+    case "daily_wage":
+      return "تسجيل أجر اليوم";
     default:
       return "حفظ الحركة";
   }
@@ -224,6 +244,9 @@ export default function SalaryPage() {
   const [newJob, setNewJob] = useState("موظف خدمات");
   const [doctorId, setDoctorId] = useState("");
   const [doctorSharePct, setDoctorSharePct] = useState("50");
+  const [assistantCompMode, setAssistantCompMode] = useState<
+    "monthly_fixed" | "daily_wage"
+  >("monthly_fixed");
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
   const [addingStaff, setAddingStaff] = useState(false);
 
@@ -274,6 +297,13 @@ export default function SalaryPage() {
       ? s.doctor_id === doctorSalaryId
       : s.staff_id === staffId
   );
+  const isDailyAssistantSelected =
+    isAssistantSelected &&
+    isDailyWageAssistant(selectedPerson?.compensation_mode);
+
+  const activeEmployeeEntryTypes = isDailyAssistantSelected
+    ? dailyAssistantEntryTypes
+    : employeeEntryTypes;
   const slipPaid = isAssistantSelected
     ? selectedAssistantRecord?.status === "paid"
     : staffSlipThisMonth?.status === "paid";
@@ -314,12 +344,23 @@ export default function SalaryPage() {
       if (!doctorEntryTypes.some((t) => t.value === entryType)) {
         setEntryType("advance");
       }
+    } else if (isDailyAssistantSelected) {
+      if (!dailyAssistantEntryTypes.some((t) => t.value === entryType)) {
+        setEntryType("daily_wage");
+      }
     } else if (isStaffSelected || isAssistantSelected) {
       if (!employeeEntryTypes.some((t) => t.value === entryType)) {
         setEntryType("advance");
       }
     }
-  }, [selectedKey, isDoctorSalarySelected, isStaffSelected, isAssistantSelected, entryType]);
+  }, [
+    selectedKey,
+    isDoctorSalarySelected,
+    isStaffSelected,
+    isAssistantSelected,
+    isDailyAssistantSelected,
+    entryType,
+  ]);
 
   useEffect(() => {
     if (!clinicId) return;
@@ -532,47 +573,64 @@ export default function SalaryPage() {
     loadEntries();
   }, [loadEntries]);
 
-  const advances = entries
-    .filter((e) => e.entry_type === "advance")
-    .reduce((s, e) => s + e.amount, 0);
-  const deductions = entries
-    .filter((e) => e.entry_type === "deduction" || e.entry_type === "absence")
-    .reduce((s, e) => s + e.amount, 0);
-  const bonuses = entries
-    .filter((e) => e.entry_type === "bonus")
-    .reduce((s, e) => s + e.amount, 0);
-  const netPreview = isDoctorSalarySelected
-    ? selectedPerson
+  const { advances, deductions, bonuses, dailyWages } =
+    summarizeSalaryEntries(entries);
+
+  function netAfterEntry(
+    person: PayrollPerson,
+    adv: number,
+    ded: number,
+    bon: number,
+    daily: number,
+    type: string,
+    pending: number
+  ): number {
+    if (person.category === "assistant" && isDailyWageAssistant(person.compensation_mode)) {
+      const nextDaily = daily + (type === "daily_wage" ? pending : 0);
+      const nextAdv = adv + (type === "advance" ? pending : 0);
+      const nextDed =
+        ded +
+        (type === "deduction" || type === "absence" ? pending : 0);
+      const nextBon = bon + (type === "bonus" ? pending : 0);
+      return Math.max(
+        0,
+        Math.round((nextDaily + nextBon - nextAdv - nextDed) * 100) / 100
+      );
+    }
+    return calculateSalaryNet(
+      person.base_salary,
+      adv + (type === "advance" ? pending : 0),
+      ded + (type === "deduction" || type === "absence" ? pending : 0),
+      bon + (type === "bonus" ? pending : 0)
+    );
+  }
+
+  const netPreview =
+    isDoctorSalarySelected && selectedPerson
       ? calculateSalaryNet(
           selectedPerson.base_salary,
           advances,
           deductions,
           bonuses
         )
-      : 0
-    : selectedPerson && (isStaffSelected || isAssistantSelected)
-      ? calculateSalaryNet(
-          selectedPerson.base_salary,
-          advances,
-          deductions,
-          bonuses
-        )
-      : 0;
+      : selectedPerson && (isStaffSelected || isAssistantSelected)
+        ? isDailyAssistantSelected
+          ? computeAssistantNetPay(
+              selectedPerson.compensation_mode,
+              0,
+              entries
+            ).netPayout
+          : calculateSalaryNet(
+              selectedPerson.base_salary,
+              advances,
+              deductions,
+              bonuses
+            )
+        : 0;
   const pendingAmount = parsePositiveAmount(amount) ?? 0;
   const netAfterPending =
-    isDoctorSalarySelected && selectedPerson && pendingAmount > 0
-      ? calculateSalaryNet(
-          selectedPerson.base_salary,
-          advances + (entryType === "advance" ? pendingAmount : 0),
-          deductions +
-            (entryType === "deduction" || entryType === "absence"
-              ? pendingAmount
-              : 0),
-          bonuses + (entryType === "bonus" ? pendingAmount : 0)
-        )
-      : (isStaffSelected || isAssistantSelected) &&
-          selectedPerson &&
-          pendingAmount > 0
+    pendingAmount > 0 && selectedPerson
+      ? isDoctorSalarySelected
         ? calculateSalaryNet(
             selectedPerson.base_salary,
             advances + (entryType === "advance" ? pendingAmount : 0),
@@ -582,7 +640,18 @@ export default function SalaryPage() {
                 : 0),
             bonuses + (entryType === "bonus" ? pendingAmount : 0)
           )
-        : null;
+        : isStaffSelected || isAssistantSelected
+          ? netAfterEntry(
+              selectedPerson,
+              advances,
+              deductions,
+              bonuses,
+              dailyWages,
+              entryType,
+              pendingAmount
+            )
+          : null
+      : null;
   const employeeEntryBlockReason =
     (isStaffSelected || isAssistantSelected) && !isDoctorSalarySelected
       ? entryDisabledReason({
@@ -705,7 +774,7 @@ export default function SalaryPage() {
       }
 
       const typeLabel =
-        employeeEntryTypes.find((t) => t.value === entryType)?.label ??
+        activeEmployeeEntryTypes.find((t) => t.value === entryType)?.label ??
         "الحركة";
       const netText =
         json.net_payout != null
@@ -845,10 +914,16 @@ export default function SalaryPage() {
       showMessage("أدخل اسم الموظف", false);
       return;
     }
-    const salary = parsePositiveAmount(newSalary);
-    if (salary == null) {
-      showMessage("أدخل راتباً صحيحاً", false);
-      return;
+    let salary: number;
+    if (employeeType === "assistant" && assistantCompMode === "daily_wage") {
+      salary = 0;
+    } else {
+      const parsed = parsePositiveAmount(newSalary);
+      if (parsed == null) {
+        showMessage("أدخل راتباً صحيحاً", false);
+        return;
+      }
+      salary = parsed;
     }
 
     if (employeeType === "assistant") {
@@ -882,6 +957,8 @@ export default function SalaryPage() {
           doctor_id: employeeType === "assistant" ? doctorId : undefined,
           doctor_share_percentage:
             employeeType === "assistant" ? Number(doctorSharePct) : undefined,
+          compensation_mode:
+            employeeType === "assistant" ? assistantCompMode : undefined,
         }),
       });
 
@@ -1609,12 +1686,54 @@ export default function SalaryPage() {
                 required
               />
               <CurrencyInput
-                label="الراتب الشهري"
+                label={
+                  employeeType === "assistant" && assistantCompMode === "daily_wage"
+                    ? "الراتب الشهري (غير مطلوب)"
+                    : "الراتب الشهري"
+                }
                 value={newSalary}
                 onChange={setNewSalary}
-                placeholder="600,000"
-                required
+                placeholder={
+                  employeeType === "assistant" && assistantCompMode === "daily_wage"
+                    ? "—"
+                    : "600,000"
+                }
+                required={
+                  !(employeeType === "assistant" && assistantCompMode === "daily_wage")
+                }
+                disabled={
+                  employeeType === "assistant" && assistantCompMode === "daily_wage"
+                }
               />
+              {employeeType === "assistant" && (
+                <div className="sm:col-span-2">
+                  <p className="mb-2 text-sm font-medium text-slate-text">
+                    نظام التعويض
+                  </p>
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="assistantCompMode"
+                        checked={assistantCompMode === "monthly_fixed"}
+                        onChange={() => setAssistantCompMode("monthly_fixed")}
+                        className="text-primary"
+                      />
+                      راتب شهري ثابت
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="assistantCompMode"
+                        checked={assistantCompMode === "daily_wage"}
+                        onChange={() => setAssistantCompMode("daily_wage")}
+                        className="text-primary"
+                      />
+                      أجر يومي متغير
+                    </label>
+                  </div>
+                </div>
+              )}
               {employeeType === "general" ? (
                 <Input
                   label="الوظيفة"
@@ -1651,7 +1770,9 @@ export default function SalaryPage() {
             <p className="text-xs text-slate-muted">
               {employeeType === "general"
                 ? "الراتب كاملاً من مصاريف تشغيل العيادة — لا يُخصم من أي طبيب."
-                : "يُقسّم الراتب بين الطبيب والعيادة حسب النسبة عند توليد الرواتب."}
+                : assistantCompMode === "daily_wage"
+                  ? "مساعد بأجر يومي — سجّل كل يوم من النموذج، يُجمع الشهر ثم يُخصم عند التوليد والتأكيد."
+                  : "يُقسّم الراتب بين الطبيب والعيادة حسب النسبة عند توليد الرواتب."}
             </p>
 
             <Button type="submit" size="sm" disabled={addingStaff}>
@@ -1686,8 +1807,17 @@ export default function SalaryPage() {
                 <div className="rounded-lg border border-slate-border bg-slate-50 px-3 py-2 text-sm">
                   <span className="text-slate-muted">الموظف المختار: </span>
                   <strong>{selectedPerson.full_name_ar}</strong>
-                  <span className="mx-2 text-slate-muted">·</span>
-                  <span>{formatCurrency(selectedPerson.base_salary)}</span>
+                  {!isDailyAssistantSelected && (
+                    <>
+                      <span className="mx-2 text-slate-muted">·</span>
+                      <span>{formatCurrency(selectedPerson.base_salary)}</span>
+                    </>
+                  )}
+                  {isDailyAssistantSelected && (
+                    <span className="mr-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800">
+                      أجر يومي
+                    </span>
+                  )}
                 </div>
               ) : (
                 <p className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -1699,7 +1829,7 @@ export default function SalaryPage() {
                 label="نوع الحركة"
                 value={entryType}
                 onChange={(e) => setEntryType(e.target.value)}
-                options={employeeEntryTypes}
+                options={activeEmployeeEntryTypes}
               />
 
               <CurrencyInput
@@ -1782,10 +1912,18 @@ export default function SalaryPage() {
             <>
               {selectedAssistantRecord ? (
                 <div className="space-y-3 rounded-lg bg-surface p-4 text-sm">
-                  <div className="flex justify-between">
-                    <span>الراتب الأساسي</span>
-                    <span>{formatCurrency(selectedPerson?.base_salary ?? 0)}</span>
-                  </div>
+                  {!isDailyAssistantSelected && (
+                    <div className="flex justify-between">
+                      <span>الراتب الأساسي</span>
+                      <span>{formatCurrency(selectedPerson?.base_salary ?? 0)}</span>
+                    </div>
+                  )}
+                  {dailyWages > 0 && (
+                    <div className="flex justify-between text-teal-800">
+                      <span>+ أيام العمل</span>
+                      <span>{formatCurrency(dailyWages)}</span>
+                    </div>
+                  )}
                   {advances > 0 && (
                     <div className="flex justify-between text-debt-text">
                       <span>− سلف</span>

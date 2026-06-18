@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import Link from "next/link";
 import { cacheDoctorBalance, getCachedDoctorBalance } from "@/lib/offline-cache";
@@ -15,7 +15,8 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/Button";
 import { DoctorPrivateBalance } from "@/components/doctor/DoctorPrivateBalance";
-import { ArrowDownToLine } from "lucide-react";
+import { ArrowDownToLine, ScrollText, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function DoctorWalletPage() {
   const { t, formatMoney } = useLanguage();
@@ -24,6 +25,7 @@ export default function DoctorWalletPage() {
   const [doctorId, setDoctorId] = useState<string | null>(null);
   const [salaryDoctor, setSalaryDoctor] = useState(false);
   const [zeroHint, setZeroHint] = useState(false);
+  const [lifetimeOpen, setLifetimeOpen] = useState(false);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -98,24 +100,55 @@ export default function DoctorWalletPage() {
     enabled: !!doctorId,
   });
 
-  const rows = [
-    { label: t("docDoctorExpenses"), value: stats?.expenseDeductions, highlight: true },
-    {
-      label: salaryDoctor ? t("docSalaryPaidOut") : t("docWithdrawnPaid"),
-      value: stats?.totalWithdrawn,
-      highlight: false,
-    },
-    ...(salaryDoctor
-      ? []
-      : [
-          { label: t("docPendingRequests"), value: stats?.pendingAmount, highlight: true },
-          {
-            label: t("docApprovedUnpaid"),
-            value: stats?.approvedAmount,
-            highlight: true,
-          },
-        ]),
-  ];
+  const hasActiveRequests =
+    !salaryDoctor &&
+    ((stats?.pendingAmount ?? 0) > 0 || (stats?.approvedAmount ?? 0) > 0);
+
+  const activeRows = useMemo(
+    () =>
+      !salaryDoctor
+        ? [
+            {
+              label: t("docPendingRequests"),
+              value: stats?.pendingAmount ?? 0,
+              highlight: true,
+            },
+            {
+              label: t("docApprovedUnpaid"),
+              value: stats?.approvedAmount ?? 0,
+              highlight: true,
+            },
+          ].filter((r) => r.value > 0)
+        : [],
+    [salaryDoctor, stats?.pendingAmount, stats?.approvedAmount, t]
+  );
+
+  const lifetimeRows = useMemo(
+    () =>
+      [
+        {
+          label: t("docTotalEarningsLabel"),
+          value: stats?.totalEarnings ?? 0,
+          show: (stats?.totalEarnings ?? 0) > 0,
+        },
+        {
+          label: t("docDoctorExpenses"),
+          value: stats?.expenseDeductions ?? 0,
+          show: (stats?.expenseDeductions ?? 0) > 0,
+        },
+        {
+          label: t("docAssistantDeductions").replace(/:$/, ""),
+          value: stats?.payrollDeductions ?? 0,
+          show: (stats?.payrollDeductions ?? 0) > 0,
+        },
+        {
+          label: salaryDoctor ? t("docSalaryPaidOut") : t("docWithdrawnPaid"),
+          value: stats?.totalWithdrawn ?? 0,
+          show: (stats?.totalWithdrawn ?? 0) > 0,
+        },
+      ].filter((r) => r.show),
+    [salaryDoctor, stats, t]
+  );
 
   return (
     <div className="space-y-4">
@@ -139,6 +172,7 @@ export default function DoctorWalletPage() {
           {t("docSalaryFixedNote")}
         </p>
       )}
+
       <div
         className={`rounded-2xl p-8 text-white shadow-premium ${
           stats?.isDebtor
@@ -159,24 +193,75 @@ export default function DoctorWalletPage() {
           isDebtor={stats?.isDebtor === true}
           showDebtLabel
         />
+        {!salaryDoctor && stats != null && stats.withdrawableLimit >= 0 && (
+          <p className="mt-3 text-xs opacity-90">
+            {t("docWithdrawableLabel")}{" "}
+            {formatMoney(Math.max(0, stats.withdrawableLimit))}
+          </p>
+        )}
       </div>
 
-      <div className="space-y-2 rounded-xl border border-slate-border bg-surface-card p-4">
-        {rows.map(({ label, value, highlight }) => (
-          <div key={label} className="flex justify-between text-sm">
-            <span className="text-slate-muted">{label}</span>
-            <span
-              className={
-                highlight && (value ?? 0) > 0
-                  ? "font-semibold text-amber-600"
-                  : "font-medium text-slate-text"
-              }
-            >
-              {stats !== null ? formatMoney(value ?? 0) : "…"}
-            </span>
-          </div>
-        ))}
-      </div>
+      {hasActiveRequests && activeRows.length > 0 && (
+        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/80 p-4">
+          <p className="text-sm font-semibold text-amber-900">
+            {t("docWalletActiveTitle")}
+          </p>
+          {activeRows.map(({ label, value, highlight }) => (
+            <div key={label} className="flex justify-between text-sm">
+              <span className="text-amber-900/80">{label}</span>
+              <span
+                className={cn(
+                  "font-semibold tabular-nums",
+                  highlight ? "text-amber-800" : "text-slate-text"
+                )}
+              >
+                {formatMoney(value)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {lifetimeRows.length > 0 && (
+        <div className="rounded-xl border border-slate-border bg-surface-card overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setLifetimeOpen((o) => !o)}
+            className="flex w-full items-center justify-between gap-2 px-4 py-3 text-sm font-medium text-slate-text hover:bg-slate-50"
+          >
+            <span>{t("docWalletLifetimeSummary")}</span>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 shrink-0 text-slate-muted transition-transform",
+                lifetimeOpen && "rotate-180"
+              )}
+            />
+          </button>
+          {lifetimeOpen && (
+            <div className="space-y-2 border-t border-slate-border px-4 py-3">
+              <p className="text-xs text-slate-muted leading-relaxed">
+                {t("docWalletLifetimeHint")}
+              </p>
+              {lifetimeRows.map(({ label, value }) => (
+                <div key={label} className="flex justify-between text-sm">
+                  <span className="text-slate-muted">{label}</span>
+                  <span className="font-medium tabular-nums text-slate-text">
+                    {formatMoney(value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <Link
+        href="/doctor/financial-ledger?tab=operations"
+        className="flex items-center justify-center gap-2 rounded-xl border border-slate-border bg-surface-card px-4 py-3 text-sm font-medium text-primary hover:bg-slate-50"
+      >
+        <ScrollText className="h-4 w-4" />
+        {t("docWalletViewLedger")}
+      </Link>
 
       {!salaryDoctor && (
         <Link href="/doctor/withdraw">

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
+import { isDailyWageAssistant } from "@/lib/services/assistant-compensation";
 import type { PayrollPerson } from "@/lib/services/payroll-persons";
 import { formatCurrency } from "@/lib/utils";
 
@@ -28,8 +29,12 @@ export function EmployeePayrollProfileCard({
   onEditSalary,
   onDeactivate,
 }: EmployeePayrollProfileCardProps) {
+  const isDailyAssistant =
+    person?.category === "assistant" &&
+    isDailyWageAssistant(person.compensation_mode);
+
   const assistantBreakdown =
-    person?.category === "assistant"
+    person?.category === "assistant" && !isDailyAssistant
       ? breakdownAssistantSalary({
           total_salary: person.base_salary,
           doctor_share_percentage: person.doctor_share_percentage ?? 0,
@@ -87,7 +92,7 @@ export function EmployeePayrollProfileCard({
             className="bg-slate-50"
           />
           <CurrencyInput
-            label="الراتب الأساسي"
+            label={isDailyAssistant ? "الأجر اليومي (يُسجَّل يومياً)" : "الراتب الأساسي"}
             value={person != null ? String(person.base_salary) : ""}
             onChange={() => {}}
             readOnly
@@ -140,29 +145,43 @@ export function EmployeePayrollProfileCard({
         <div className="mt-4 rounded-lg border border-teal-200 bg-teal-50/80 p-4 text-sm">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-teal-600 px-2.5 py-0.5 text-xs font-bold text-white">
-              مساعد طبيب
+              {isDailyAssistant ? "مساعد — أجر يومي" : "مساعد طبيب"}
             </span>
             <span className="text-slate-600">{person.role}</span>
           </div>
-          {assistantBreakdown && (
-            <div className="grid gap-1 text-slate-700 sm:grid-cols-3">
-              <span>
-                الراتب الكلي:{" "}
-                <strong>{formatCurrency(assistantBreakdown.totalSalary)}</strong>
-              </span>
-              <span className="text-primary">
-                حصة العيادة:{" "}
-                <strong>{formatCurrency(assistantBreakdown.clinicShare)}</strong>
-              </span>
-              <span className="text-amber-800">
-                حصة الطبيب ({assistantBreakdown.doctorSharePercentage}%):{" "}
-                <strong>{formatCurrency(assistantBreakdown.doctorShare)}</strong>
-              </span>
-            </div>
+          {isDailyAssistant ? (
+            <>
+              <p className="font-medium text-primary">
+                لا راتب شهري ثابت — سجّل أجر كل يوم من النموذج أدناه
+              </p>
+              <p className="mt-1 text-xs text-teal-800">
+                نسبة الطبيب {person.doctor_share_percentage ?? 0}% — يُجمع الشهر
+                ثم يُخصم من محفظة الطبيب ورصيد العيادة عند التوليد والتأكيد.
+              </p>
+            </>
+          ) : (
+            assistantBreakdown && (
+              <div className="grid gap-1 text-slate-700 sm:grid-cols-3">
+                <span>
+                  الراتب الكلي:{" "}
+                  <strong>{formatCurrency(assistantBreakdown.totalSalary)}</strong>
+                </span>
+                <span className="text-primary">
+                  حصة العيادة:{" "}
+                  <strong>{formatCurrency(assistantBreakdown.clinicShare)}</strong>
+                </span>
+                <span className="text-amber-800">
+                  حصة الطبيب ({assistantBreakdown.doctorSharePercentage}%):{" "}
+                  <strong>{formatCurrency(assistantBreakdown.doctorShare)}</strong>
+                </span>
+              </div>
+            )
           )}
-          <p className="mt-2 text-xs text-teal-800">
-            يُقسّم الراتب عند «توليد رواتب الشهر» — يُخصم من حساب الطبيب المرتبط.
-          </p>
+          {!isDailyAssistant && (
+            <p className="mt-2 text-xs text-teal-800">
+              يُقسّم الراتب عند «توليد رواتب الشهر» — يُخصم من حساب الطبيب المرتبط.
+            </p>
+          )}
         </div>
       ) : (
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">

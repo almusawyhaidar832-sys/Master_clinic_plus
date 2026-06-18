@@ -5,6 +5,11 @@ import { X, RefreshCw } from "lucide-react";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import {
+  ASSISTANT_COMPENSATION_LABELS,
+  isDailyWageAssistant,
+  type AssistantCompensationMode,
+} from "@/lib/services/assistant-compensation";
+import {
   payrollCategoryLabel,
   type PayrollEmployeeCategory,
   type PayrollPerson,
@@ -30,20 +35,26 @@ export function EditEmployeeSalaryModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const [compensationMode, setCompensationMode] =
+    useState<AssistantCompensationMode>(
+      person.compensation_mode ?? "monthly_fixed"
+    );
+  const isDaily = isDailyWageAssistant(compensationMode);
+
   const assistantPreview = useMemo(() => {
-    if (person.category !== "assistant") return null;
+    if (person.category !== "assistant" || isDaily) return null;
     return breakdownAssistantSalary({
       total_salary: Number(baseSalary) || 0,
       doctor_share_percentage: Number(doctorSharePct) || 0,
     });
-  }, [person.category, baseSalary, doctorSharePct]);
+  }, [person.category, baseSalary, doctorSharePct, isDaily]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
-    const salary = Number(baseSalary);
-    if (!Number.isFinite(salary) || salary < 0) {
+    const salary = isDaily ? 0 : Number(baseSalary);
+    if (!isDaily && (!Number.isFinite(salary) || salary < 0)) {
       setError("أدخل الراتب بشكل صحيح");
       return;
     }
@@ -71,6 +82,8 @@ export function EditEmployeeSalaryModal({
         job_title_ar: jobTitle.trim() || undefined,
         doctor_share_percentage:
           person.category === "assistant" ? Number(doctorSharePct) : undefined,
+        compensation_mode:
+          person.category === "assistant" ? compensationMode : undefined,
       }),
     });
 
@@ -125,6 +138,37 @@ export function EditEmployeeSalaryModal({
             </div>
           )}
 
+          {person.category === "assistant" && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-600">
+                نظام التعويض
+              </label>
+              <select
+                value={compensationMode}
+                onChange={(e) =>
+                  setCompensationMode(
+                    e.target.value === "daily_wage" ? "daily_wage" : "monthly_fixed"
+                  )
+                }
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              >
+                <option value="monthly_fixed">
+                  {ASSISTANT_COMPENSATION_LABELS.monthly_fixed}
+                </option>
+                <option value="daily_wage">
+                  {ASSISTANT_COMPENSATION_LABELS.daily_wage}
+                </option>
+              </select>
+              {isDaily && (
+                <p className="mt-1 text-xs text-teal-800">
+                  يُسجَّل أجر كل يوم من صفحة الرواتب — يُجمع الشهر ثم يُخصم عند
+                  التوليد والتأكيد.
+                </p>
+              )}
+            </div>
+          )}
+
+          {!(person.category === "assistant" && isDaily) && (
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-600">
               {person.category === "assistant"
@@ -144,6 +188,7 @@ export function EditEmployeeSalaryModal({
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
             />
           </div>
+          )}
 
           {person.category === "assistant" && (
             <div>

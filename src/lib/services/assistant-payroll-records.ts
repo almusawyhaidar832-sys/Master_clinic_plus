@@ -1,7 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
-import { computeStaffNetPay } from "@/lib/services/salary-entry-math";
+import {
+  computeAssistantNetPay,
+  computeStaffNetPay,
+} from "@/lib/services/salary-entry-math";
+import {
+  isDailyWageAssistant,
+  normalizeAssistantCompensationMode,
+} from "@/lib/services/assistant-compensation";
 import { monthDateRange } from "@/lib/utils";
 import type { PayrollRecord, SalaryEntry, SalarySlip } from "@/types";
 
@@ -141,7 +148,7 @@ export async function generateMonthlyAssistantPayroll(
   const { data: assistants, error: asstErr } = await supabase
     .from("assistants")
     .select(
-      `id, doctor_id, full_name_ar, total_salary, doctor_share_percentage,
+      `id, doctor_id, full_name_ar, total_salary, doctor_share_percentage, compensation_mode,
        doctor:doctors ( full_name_ar )`
     )
     .eq("clinic_id", clinicId)
@@ -199,8 +206,15 @@ export async function generateMonthlyAssistantPayroll(
       assistantId,
       monthYear
     );
-    const { netPayout } = computeStaffNetPay(
-      Number(a.total_salary ?? 0),
+    const compensationMode = normalizeAssistantCompensationMode(
+      a.compensation_mode as string | undefined
+    );
+    const baseSalary = isDailyWageAssistant(compensationMode)
+      ? 0
+      : Number(a.total_salary ?? 0);
+    const { netPayout } = computeAssistantNetPay(
+      compensationMode,
+      baseSalary,
       entries
     );
     const breakdown = breakdownAssistantSalary({

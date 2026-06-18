@@ -101,6 +101,7 @@ export interface Database {
           is_active: boolean;
           total_salary: number;
           doctor_share_percentage: number;
+          compensation_mode?: "monthly_fixed" | "daily_wage";
           created_at: string;
           updated_at: string;
         };
@@ -358,7 +359,7 @@ export interface Database {
           clinic_id: string;
           staff_id: string | null;
           assistant_id?: string | null;
-          entry_type: "advance" | "deduction" | "absence" | "bonus";
+          entry_type: "advance" | "deduction" | "absence" | "bonus" | "daily_wage";
           amount: number;
           entry_date: string;
           notes_ar: string | null;

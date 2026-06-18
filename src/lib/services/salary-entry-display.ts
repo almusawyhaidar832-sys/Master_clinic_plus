@@ -11,6 +11,7 @@ export const SALARY_ENTRY_TYPE_LABELS: Record<SalaryEntryType, string> = {
   deduction: "خصم",
   absence: "خصم غياب",
   bonus: "مكافأة",
+  daily_wage: "أجر يومي",
 };
 
 export const SALARY_PERSON_CATEGORY_LABELS = {

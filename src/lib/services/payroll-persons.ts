@@ -1,5 +1,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import type { AssistantCompensationMode } from "@/types";
+import {
+  isDailyWageAssistant,
+  normalizeAssistantCompensationMode,
+} from "@/lib/services/assistant-compensation";
+
+function assistantRoleLabel(
+  doctorName: string | null | undefined,
+  compensationMode: AssistantCompensationMode
+): string {
+  const prefix = isDailyWageAssistant(compensationMode)
+    ? "مساعد يومي"
+    : "مساعد";
+  return doctorName ? `${prefix} — ${doctorName}` : `${prefix} طبيب`;
+}
 
 export type PayrollEmployeeCategory =
   | "assistant"
@@ -19,6 +34,7 @@ export interface PayrollPerson {
   doctor_id?: string | null;
   doctor_name_ar?: string | null;
   doctor_share_percentage?: number;
+  compensation_mode?: AssistantCompensationMode;
   profile_id?: string | null;
   is_active: true;
 }
@@ -98,7 +114,7 @@ export async function fetchPayrollPersonByKey(
   const { data } = await supabase
     .from("assistants")
     .select(
-      `id, doctor_id, full_name_ar, total_salary, doctor_share_percentage, is_active,
+      `id, doctor_id, full_name_ar, total_salary, doctor_share_percentage, compensation_mode, is_active,
        doctor:doctors ( full_name_ar )`
     )
     .eq("clinic_id", clinicId)
@@ -110,7 +126,10 @@ export async function fetchPayrollPersonByKey(
   const doctorName = Array.isArray(data.doctor)
     ? data.doctor[0]?.full_name_ar
     : (data.doctor as { full_name_ar: string } | null)?.full_name_ar;
-  const role = doctorName ? `مساعد — ${doctorName}` : "مساعد طبيب";
+  const compensationMode = normalizeAssistantCompensationMode(
+    data.compensation_mode as string | undefined
+  );
+  const role = assistantRoleLabel(doctorName, compensationMode);
   const name = data.full_name_ar as string;
   return {
     id: data.id as string,
@@ -119,10 +138,13 @@ export async function fetchPayrollPersonByKey(
     category: "assistant",
     full_name_ar: name,
     job_title_ar: role,
-    base_salary: Number(data.total_salary ?? 0),
+    base_salary: isDailyWageAssistant(compensationMode)
+      ? 0
+      : Number(data.total_salary ?? 0),
     doctor_id: data.doctor_id as string,
     doctor_name_ar: doctorName ?? null,
     doctor_share_percentage: Number(data.doctor_share_percentage ?? 0),
+    compensation_mode: compensationMode,
     is_active: true,
   };
 }
@@ -200,7 +222,7 @@ export async function fetchActivePayrollPersons(
     supabase
       .from("assistants")
       .select(
-        `id, doctor_id, full_name_ar, total_salary, doctor_share_percentage, is_active,
+        `id, doctor_id, full_name_ar, total_salary, doctor_share_percentage, compensation_mode, is_active,
          doctor:doctors ( full_name_ar )`
       )
       .eq("clinic_id", clinicId)
@@ -247,7 +269,10 @@ export async function fetchActivePayrollPersons(
     const doctorName = Array.isArray(a.doctor)
       ? a.doctor[0]?.full_name_ar
       : (a.doctor as { full_name_ar: string } | null)?.full_name_ar;
-    const role = doctorName ? `مساعد — ${doctorName}` : "مساعد طبيب";
+    const compensationMode = normalizeAssistantCompensationMode(
+      a.compensation_mode as string | undefined
+    );
+    const role = assistantRoleLabel(doctorName, compensationMode);
     const name = a.full_name_ar as string;
     return {
       id: a.id as string,
@@ -256,10 +281,13 @@ export async function fetchActivePayrollPersons(
       category: "assistant" as const,
       full_name_ar: name,
       job_title_ar: role,
-      base_salary: Number(a.total_salary ?? 0),
+      base_salary: isDailyWageAssistant(compensationMode)
+        ? 0
+        : Number(a.total_salary ?? 0),
       doctor_id: a.doctor_id as string,
       doctor_name_ar: doctorName ?? null,
       doctor_share_percentage: Number(a.doctor_share_percentage ?? 0),
+      compensation_mode: compensationMode,
       is_active: true as const,
     };
   });

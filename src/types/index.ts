@@ -52,7 +52,14 @@ export interface Invoice {
   invoice_number?: string | null;
 }
 export type TreatmentStatus = "active" | "completed" | "cancelled";
-export type SalaryEntryType = "advance" | "deduction" | "absence" | "bonus";
+export type SalaryEntryType =
+  | "advance"
+  | "deduction"
+  | "absence"
+  | "bonus"
+  | "daily_wage";
+
+export type AssistantCompensationMode = "monthly_fixed" | "daily_wage";
 export type SalarySlipStatus = "draft" | "paid";
 
 export interface Profile {
@@ -244,6 +251,7 @@ export interface Assistant {
   is_active: boolean;
   total_salary: number;
   doctor_share_percentage: number;
+  compensation_mode?: AssistantCompensationMode;
   created_at?: string;
   updated_at?: string;
 }

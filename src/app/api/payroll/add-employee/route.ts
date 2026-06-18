@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       job_title_ar = "موظف خدمات",
       doctor_id = null,
       doctor_share_percentage = 0,
+      compensation_mode = "monthly_fixed",
     } = body as {
       employee_type: "general" | "assistant";
       full_name_ar: string;
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
       job_title_ar?: string;
       doctor_id?: string | null;
       doctor_share_percentage?: number;
+      compensation_mode?: "monthly_fixed" | "daily_wage";
     };
 
     if (!full_name_ar?.trim()) {
@@ -115,6 +117,10 @@ export async function POST(req: NextRequest) {
       }
 
       const share = Math.min(100, Math.max(0, Number(doctor_share_percentage) || 0));
+      const mode =
+        compensation_mode === "daily_wage" ? "daily_wage" : "monthly_fixed";
+      const assistantSalary =
+        mode === "daily_wage" ? 0 : salary;
 
       const { data: doctor } = await admin
         .from("doctors")
@@ -132,8 +138,9 @@ export async function POST(req: NextRequest) {
           clinic_id: clinicId,
           doctor_id,
           full_name_ar: full_name_ar.trim(),
-          total_salary: salary,
+          total_salary: assistantSalary,
           doctor_share_percentage: share,
+          compensation_mode: mode,
           is_active: true,
         })
         .select("id")
@@ -150,7 +157,8 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       const doctorName = doctorRow?.full_name_ar as string | undefined;
-      const role = doctorName ? `مساعد — ${doctorName}` : "مساعد طبيب";
+      const rolePrefix = mode === "daily_wage" ? "مساعد يومي" : "مساعد";
+      const role = doctorName ? `${rolePrefix} — ${doctorName}` : `${rolePrefix} طبيب`;
       const person: PayrollPerson = {
         id: inserted.id,
         name: full_name_ar.trim(),
@@ -158,10 +166,11 @@ export async function POST(req: NextRequest) {
         category: "assistant",
         full_name_ar: full_name_ar.trim(),
         job_title_ar: role,
-        base_salary: salary,
+        base_salary: assistantSalary,
         doctor_id,
         doctor_name_ar: doctorName ?? null,
         doctor_share_percentage: share,
+        compensation_mode: mode,
         is_active: true,
       };
 

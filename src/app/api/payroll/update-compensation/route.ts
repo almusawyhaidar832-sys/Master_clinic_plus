@@ -35,12 +35,14 @@ export async function PATCH(req: NextRequest) {
       base_salary,
       job_title_ar,
       doctor_share_percentage,
+      compensation_mode,
     } = body as {
       category: PayrollEmployeeCategory;
       id: string;
       base_salary: number;
       job_title_ar?: string;
       doctor_share_percentage?: number;
+      compensation_mode?: "monthly_fixed" | "daily_wage";
     };
 
     if (!id || !category) {
@@ -59,6 +61,17 @@ export async function PATCH(req: NextRequest) {
         100,
         Math.max(0, Number(doctor_share_percentage) || 0)
       );
+      const mode =
+        compensation_mode === "daily_wage" ? "daily_wage" : "monthly_fixed";
+      const assistantSalary =
+        mode === "daily_wage" ? 0 : salary;
+
+      if (mode === "monthly_fixed" && assistantSalary <= 0) {
+        return NextResponse.json(
+          { error: "أدخل الراتب الشهري للمساعد" },
+          { status: 400 }
+        );
+      }
 
       const { data: row } = await admin
         .from("assistants")
@@ -74,8 +87,9 @@ export async function PATCH(req: NextRequest) {
       const { error } = await admin
         .from("assistants")
         .update({
-          total_salary: salary,
+          total_salary: assistantSalary,
           doctor_share_percentage: share,
+          compensation_mode: mode,
         })
         .eq("id", id);
 

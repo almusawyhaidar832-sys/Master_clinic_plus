@@ -336,7 +336,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (role === "assistant") {
-      const assistantTotalSalary = Math.max(0, Number(total_salary) || 0);
+      const compensationMode =
+        body.compensation_mode === "daily_wage" ? "daily_wage" : "monthly_fixed";
+      const assistantTotalSalary =
+        compensationMode === "daily_wage"
+          ? 0
+          : Math.max(0, Number(total_salary) || 0);
       const assistantDoctorShare = Math.min(
         100,
         Math.max(0, Number(doctor_share_percentage) || 0)
@@ -351,6 +356,7 @@ export async function POST(req: NextRequest) {
         is_active: true,
         total_salary: assistantTotalSalary,
         doctor_share_percentage: assistantDoctorShare,
+        compensation_mode: compensationMode,
       });
 
       if (assistantErr) {

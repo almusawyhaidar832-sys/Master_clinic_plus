@@ -97,19 +97,23 @@ export function DoctorHomeDashboard() {
           </div>
           <Wallet className="h-8 w-8 shrink-0 opacity-80" />
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 text-center text-[10px]">
-          <div className="rounded-lg bg-white/10 p-2">
-            <p className="opacity-80">{t("withdrawnShort")}</p>
-            <p className="font-semibold">
-              {wallet ? formatMoney(wallet.totalWithdrawn) : "—"}
-            </p>
-          </div>
-          <div className="rounded-lg bg-white/10 p-2">
-            <p className="opacity-80">{t("pendingShort")}</p>
-            <p className="font-semibold">
-              {wallet ? formatMoney(wallet.pendingAmount) : "—"}
-            </p>
-          </div>
+        <div className="mt-4 grid gap-2 text-center text-[10px]">
+          {(wallet?.pendingAmount ?? 0) > 0 && (
+            <div className="rounded-lg bg-white/10 p-2">
+              <p className="opacity-80">{t("pendingShort")}</p>
+              <p className="font-semibold">
+                {formatMoney(wallet?.pendingAmount ?? 0)}
+              </p>
+            </div>
+          )}
+          {(wallet?.approvedAmount ?? 0) > 0 && (
+            <div className="rounded-lg bg-white/10 p-2">
+              <p className="opacity-80">{t("docApprovedUnpaid")}</p>
+              <p className="font-semibold">
+                {formatMoney(wallet?.approvedAmount ?? 0)}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

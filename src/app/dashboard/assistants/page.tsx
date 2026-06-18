@@ -5,6 +5,12 @@ import { createClient } from "@/lib/supabase/client";
 import { getActiveClinicId } from "@/lib/clinic-context";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
+import {
+  ASSISTANT_COMPENSATION_LABELS,
+  isDailyWageAssistant,
+  normalizeAssistantCompensationMode,
+  type AssistantCompensationMode,
+} from "@/lib/services/assistant-compensation";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { EditEmployeeSalaryModal } from "@/components/payroll/EditEmployeeSalaryModal";
@@ -30,13 +36,23 @@ interface AssistantRow {
   is_active: boolean;
   total_salary?: number | null;
   doctor_share_percentage?: number | null;
+  compensation_mode?: string | null;
   doctor?: { full_name_ar: string } | null;
   profile?: { username: string | null; is_active: boolean } | null;
 }
 
 function assistantRowToPayrollPerson(a: AssistantRow): PayrollPerson {
   const doctorName = a.doctor?.full_name_ar;
-  const role = doctorName ? `مساعد — ${doctorName}` : "مساعد طبيب";
+  const compensationMode = normalizeAssistantCompensationMode(
+    a.compensation_mode ?? undefined
+  );
+  const role = isDailyWageAssistant(compensationMode)
+    ? doctorName
+      ? `مساعد يومي — ${doctorName}`
+      : "مساعد يومي"
+    : doctorName
+      ? `مساعد — ${doctorName}`
+      : "مساعد طبيب";
   return {
     id: a.id,
     name: a.full_name_ar,
@@ -44,10 +60,13 @@ function assistantRowToPayrollPerson(a: AssistantRow): PayrollPerson {
     category: "assistant",
     full_name_ar: a.full_name_ar,
     job_title_ar: role,
-    base_salary: Number(a.total_salary ?? 0),
+    base_salary: isDailyWageAssistant(compensationMode)
+      ? 0
+      : Number(a.total_salary ?? 0),
     doctor_id: a.doctor_id,
     doctor_name_ar: doctorName ?? null,
     doctor_share_percentage: Number(a.doctor_share_percentage ?? 0),
+    compensation_mode: compensationMode,
     is_active: true,
   };
 }
@@ -70,19 +89,24 @@ export default function AssistantsPage() {
   const [doctorId, setDoctorId] = useState("");
   const [totalSalary, setTotalSalary] = useState("");
   const [doctorSharePct, setDoctorSharePct] = useState("50");
+  const [compensationMode, setCompensationMode] =
+    useState<AssistantCompensationMode>("monthly_fixed");
   const [showPass, setShowPass] = useState(false);
   const [listFilter, setListFilter] = useState<"all" | "active" | "archived">("all");
   const [editingPerson, setEditingPerson] = useState<PayrollPerson | null>(null);
   const [archivingAssistant, setArchivingAssistant] = useState<AssistantRow | null>(null);
 
+  const isDailyMode = isDailyWageAssistant(compensationMode);
+
   const previewBreakdown = useMemo(() => {
+    if (isDailyMode) return null;
     const salary = Number(totalSalary) || 0;
     const pct = Number(doctorSharePct) || 0;
     return breakdownAssistantSalary({
       total_salary: salary,
       doctor_share_percentage: pct,
     });
-  }, [totalSalary, doctorSharePct]);
+  }, [totalSalary, doctorSharePct, isDailyMode]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -135,9 +159,9 @@ export default function AssistantsPage() {
       return;
     }
 
-    const salary = Number(totalSalary);
+    const salary = isDailyMode ? 0 : Number(totalSalary);
     const sharePct = Number(doctorSharePct);
-    if (!Number.isFinite(salary) || salary < 0) {
+    if (!isDailyMode && (!Number.isFinite(salary) || salary < 0)) {
       setMsg({ ok: false, text: "أدخل الراتب الكلي للمساعد" });
       return;
     }
@@ -165,6 +189,7 @@ export default function AssistantsPage() {
         doctor_id: doctorId,
         total_salary: salary,
         doctor_share_percentage: sharePct,
+        compensation_mode: compensationMode,
       }),
     });
 
@@ -176,14 +201,21 @@ export default function AssistantsPage() {
       return;
     }
 
-    const b = breakdownAssistantSalary({
-      total_salary: salary,
-      doctor_share_percentage: sharePct,
-    });
-    setMsg({
-      ok: true,
-      text: `${json.message} — راتب ${formatCurrency(b.totalSalary)} (طبيب ${b.doctorSharePercentage}% · عيادة ${formatCurrency(b.clinicShare)})`,
-    });
+    if (isDailyMode) {
+      setMsg({
+        ok: true,
+        text: `${json.message} — مساعد بأجر يومي (نسبة الطبيب ${sharePct}%)`,
+      });
+    } else {
+      const b = breakdownAssistantSalary({
+        total_salary: salary,
+        doctor_share_percentage: sharePct,
+      });
+      setMsg({
+        ok: true,
+        text: `${json.message} — راتب ${formatCurrency(b.totalSalary)} (طبيب ${b.doctorSharePercentage}% · عيادة ${formatCurrency(b.clinicShare)})`,
+      });
+    }
 
     setFullName("");
     setUsername("");
@@ -191,6 +223,7 @@ export default function AssistantsPage() {
     setPhone("");
     setTotalSalary("");
     setDoctorSharePct("50");
+    setCompensationMode("monthly_fixed");
     setShowForm(false);
     load();
   }
@@ -302,6 +335,38 @@ export default function AssistantsPage() {
                   ))}
                 </select>
               </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-slate-600">
+                  نظام التعويض
+                </label>
+                <div className="flex flex-wrap gap-4">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="compensationMode"
+                      checked={compensationMode === "monthly_fixed"}
+                      onChange={() => setCompensationMode("monthly_fixed")}
+                    />
+                    {ASSISTANT_COMPENSATION_LABELS.monthly_fixed}
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="compensationMode"
+                      checked={compensationMode === "daily_wage"}
+                      onChange={() => setCompensationMode("daily_wage")}
+                    />
+                    {ASSISTANT_COMPENSATION_LABELS.daily_wage}
+                  </label>
+                </div>
+                {isDailyMode && (
+                  <p className="mt-1 text-xs text-teal-700">
+                    سجّل أجر كل يوم من صفحة الرواتب — يُجمع الشهر ثم يُخصم عند
+                    التوليد والتأكيد.
+                  </p>
+                )}
+              </div>
+              {!isDailyMode && (
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-600">
                   الراتب الكلي للمساعد
@@ -317,6 +382,7 @@ export default function AssistantsPage() {
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
                 />
               </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-600">
                   نسبة تحمّل الطبيب (%)
@@ -332,8 +398,14 @@ export default function AssistantsPage() {
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
                 />
                 <p className="mt-1 text-xs text-slate-400">
-                  الطبيب {formatCurrency(previewBreakdown.doctorShare)} · العيادة{" "}
-                  {formatCurrency(previewBreakdown.clinicShare)}
+                  {previewBreakdown ? (
+                    <>
+                      الطبيب {formatCurrency(previewBreakdown.doctorShare)} · العيادة{" "}
+                      {formatCurrency(previewBreakdown.clinicShare)}
+                    </>
+                  ) : (
+                    <>نسبة تحمّل الطبيب من الأجر اليومي المُجمع</>
+                  )}
                 </p>
               </div>
               <div>
@@ -423,10 +495,16 @@ export default function AssistantsPage() {
       ) : (
         <div className="space-y-2">
           {filteredAssistants.map((a) => {
-            const b = breakdownAssistantSalary({
-              total_salary: Number(a.total_salary ?? 0),
-              doctor_share_percentage: Number(a.doctor_share_percentage ?? 0),
-            });
+            const mode = normalizeAssistantCompensationMode(
+              a.compensation_mode ?? undefined
+            );
+            const daily = isDailyWageAssistant(mode);
+            const b = daily
+              ? null
+              : breakdownAssistantSalary({
+                  total_salary: Number(a.total_salary ?? 0),
+                  doctor_share_percentage: Number(a.doctor_share_percentage ?? 0),
+                });
             const active = a.is_active && a.profile?.is_active !== false;
             return (
               <div
@@ -447,6 +525,11 @@ export default function AssistantsPage() {
                         مؤرشف
                       </span>
                     )}
+                    {daily && (
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800">
+                        أجر يومي
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs text-slate-500">
                     <span className="flex items-center gap-1">
@@ -458,15 +541,23 @@ export default function AssistantsPage() {
                         @{a.profile.username}
                       </span>
                     )}
-                    <span className="rounded-full bg-teal-50 px-2 py-0.5 text-teal-700">
-                      كلي {formatCurrency(b.totalSalary)}
-                    </span>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5">
-                      عيادة {formatCurrency(b.clinicShare)}
-                    </span>
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">
-                      طبيب {formatCurrency(b.doctorShare)} ({b.doctorSharePercentage}%)
-                    </span>
+                    {daily ? (
+                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-800">
+                        أجر يومي متغير
+                      </span>
+                    ) : b ? (
+                      <>
+                        <span className="rounded-full bg-teal-50 px-2 py-0.5 text-teal-700">
+                          كلي {formatCurrency(b.totalSalary)}
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5">
+                          عيادة {formatCurrency(b.clinicShare)}
+                        </span>
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">
+                          طبيب {formatCurrency(b.doctorShare)} ({b.doctorSharePercentage}%)
+                        </span>
+                      </>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">

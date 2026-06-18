@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Input } from "@/components/ui/Input";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, currentMonthYear, monthDateRange } from "@/lib/utils";
 import type {
   DoctorLedgerOperationKind,
   DoctorLedgerOperationRow,
@@ -56,8 +56,9 @@ export function DoctorLedgerOperationsTab({
   refreshKey = 0,
 }: DoctorLedgerOperationsTabProps) {
   const { t, formatMoney, dateLocale } = useLanguage();
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const defaultRange = monthDateRange(currentMonthYear());
+  const [dateFrom, setDateFrom] = useState(defaultRange.from);
+  const [dateTo, setDateTo] = useState(defaultRange.to);
   const [rows, setRows] = useState<DoctorLedgerOperationRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -69,7 +70,7 @@ export function DoctorLedgerOperationsTab({
 
     const params = new URLSearchParams({
       section: "operations",
-      limit: "100",
+      limit: "50",
     });
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
@@ -110,6 +111,9 @@ export function DoctorLedgerOperationsTab({
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-muted">{t("docLedgerOpsIntro")}</p>
+      <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-muted">
+        {t("docLedgerDefaultMonthNote")}
+      </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Input

@@ -3,9 +3,14 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import {
+  computeAssistantNetPay,
   computeStaffNetPay,
   summarizeSalaryEntries as summarizeEntriesMath,
 } from "@/lib/services/salary-entry-math";
+import {
+  isDailyWageAssistant,
+  normalizeAssistantCompensationMode,
+} from "@/lib/services/assistant-compensation";
 import { validateSalaryEntryReason } from "@/lib/services/salary-entry-reason";
 import { calculateSalaryNet, monthDateRange } from "@/lib/utils";
 import type { PayrollRecord, SalaryEntry, SalaryEntryType, SalarySlip } from "@/types";
@@ -15,6 +20,7 @@ const ENTRY_TYPES: SalaryEntryType[] = [
   "deduction",
   "absence",
   "bonus",
+  "daily_wage",
 ];
 
 export function isSalaryEntryType(value: string): value is SalaryEntryType {
@@ -28,7 +34,7 @@ function mapInsertError(message: string): string {
     message.includes("salary_entry_type") ||
     message.toLowerCase().includes("invalid input value for enum")
   ) {
-    return "نوع الحركة غير مدعوم — شغّل supabase/scripts/35-salary-entry-bonus.sql في Supabase";
+    return "نوع الحركة غير مدعوم — شغّل supabase/scripts/30-assistant-daily-wage.sql في Supabase";
   }
   if (
     message.includes("assistant_id") ||
@@ -232,25 +238,43 @@ async function loadAssistantPayrollBase(
 ): Promise<{
   baseSalary: number;
   doctorSharePercentage: number;
+  compensationMode: ReturnType<typeof normalizeAssistantCompensationMode>;
   error?: string;
 }> {
   const { data, error } = await admin
     .from("assistants")
-    .select("total_salary, doctor_share_percentage")
+    .select("total_salary, doctor_share_percentage, compensation_mode")
     .eq("id", assistantId)
     .eq("clinic_id", clinicId)
     .maybeSingle();
 
   if (error) {
-    return { baseSalary: 0, doctorSharePercentage: 0, error: error.message };
+    return {
+      baseSalary: 0,
+      doctorSharePercentage: 0,
+      compensationMode: "monthly_fixed",
+      error: error.message,
+    };
   }
   if (!data) {
-    return { baseSalary: 0, doctorSharePercentage: 0, error: "المساعد غير موجود" };
+    return {
+      baseSalary: 0,
+      doctorSharePercentage: 0,
+      compensationMode: "monthly_fixed",
+      error: "المساعد غير موجود",
+    };
   }
 
+  const compensationMode = normalizeAssistantCompensationMode(
+    data.compensation_mode as string | undefined
+  );
+
   return {
-    baseSalary: Number(data.total_salary ?? 0),
+    baseSalary: isDailyWageAssistant(compensationMode)
+      ? 0
+      : Number(data.total_salary ?? 0),
     doctorSharePercentage: Number(data.doctor_share_percentage ?? 0),
+    compensationMode,
   };
 }
 
@@ -281,11 +305,10 @@ export async function recomputeAssistantPayrollRecord(
   }
 
   const { advances, deductions, bonuses } = summarizeSalaryEntries(entries);
-  const netTotal = calculateSalaryNet(
+  const { netPayout } = computeAssistantNetPay(
+    base.compensationMode,
     base.baseSalary,
-    advances,
-    deductions,
-    bonuses
+    entries
   );
 
   const { data: existing, error: fetchErr } = await admin
@@ -297,30 +320,30 @@ export async function recomputeAssistantPayrollRecord(
     .maybeSingle();
 
   if (fetchErr) {
-    return { record: null, netTotal, error: fetchErr.message };
+    return { record: null, netTotal: netPayout, error: fetchErr.message };
   }
 
   if (!existing) {
     return {
       record: null,
-      netTotal,
+      netTotal: netPayout,
       error: "لا يوجد راتب مُولَّد لهذا المساعد — اضغط «توليد رواتب الشهر» أولاً",
     };
   }
 
   if (existing.status === "paid") {
-    return { record: existing as PayrollRecord, netTotal };
+    return { record: existing as PayrollRecord, netTotal: netPayout };
   }
 
   const breakdown = breakdownAssistantSalary({
-    total_salary: netTotal,
+    total_salary: netPayout,
     doctor_share_percentage: base.doctorSharePercentage,
   });
 
   const { data, error } = await admin
     .from("payroll_records")
     .update({
-      total_salary: netTotal,
+      total_salary: netPayout,
       doctor_share_percentage: breakdown.doctorSharePercentage,
       doctor_share_amount: breakdown.doctorShare,
       clinic_share_amount: breakdown.clinicShare,
@@ -330,10 +353,10 @@ export async function recomputeAssistantPayrollRecord(
     .single();
 
   if (error) {
-    return { record: null, netTotal, error: error.message };
+    return { record: null, netTotal: netPayout, error: error.message };
   }
 
-  return { record: data as PayrollRecord, netTotal };
+  return { record: data as PayrollRecord, netTotal: netPayout };
 }
 
 function assistantDoctorName(
@@ -366,7 +389,7 @@ export async function ensureAssistantPayrollRecordDraft(
   const { data: assistant, error: asstErr } = await admin
     .from("assistants")
     .select(
-      `id, doctor_id, full_name_ar, total_salary, doctor_share_percentage,
+      `id, doctor_id, full_name_ar, total_salary, doctor_share_percentage, compensation_mode,
        doctor:doctors ( full_name_ar )`
     )
     .eq("id", assistantId)
@@ -380,6 +403,13 @@ export async function ensureAssistantPayrollRecordDraft(
     };
   }
 
+  const compensationMode = normalizeAssistantCompensationMode(
+    assistant.compensation_mode as string | undefined
+  );
+  const baseSalary = isDailyWageAssistant(compensationMode)
+    ? 0
+    : Number(assistant.total_salary ?? 0);
+
   const { entries, error: listErr } = await listSalaryEntriesForPersonMonth(
     admin,
     clinicId,
@@ -390,13 +420,10 @@ export async function ensureAssistantPayrollRecordDraft(
     return { record: null, error: listErr };
   }
 
-  const baseSalary = Number(assistant.total_salary ?? 0);
-  const { advances, deductions, bonuses } = summarizeSalaryEntries(entries);
-  const netPayout = calculateSalaryNet(
+  const { netPayout } = computeAssistantNetPay(
+    compensationMode,
     baseSalary,
-    advances,
-    deductions,
-    bonuses
+    entries
   );
   const breakdown = breakdownAssistantSalary({
     total_salary: netPayout,
@@ -674,6 +701,9 @@ export async function createSalaryEntry(
   }
 
   let baseSalary = input.baseSalary;
+  let assistantCompensationMode: ReturnType<
+    typeof normalizeAssistantCompensationMode
+  > | null = null;
 
   if (staffId) {
     const { data: staff, error: staffErr } = await admin
@@ -768,7 +798,7 @@ export async function createSalaryEntry(
   } else {
     const { data: assistant, error: asstErr } = await admin
       .from("assistants")
-      .select("id, total_salary")
+      .select("id, total_salary, compensation_mode")
       .eq("id", assistantId)
       .eq("clinic_id", input.clinicId)
       .maybeSingle();
@@ -784,7 +814,43 @@ export async function createSalaryEntry(
       };
     }
 
-    baseSalary = Number(assistant.total_salary ?? input.baseSalary);
+    const compensationMode = normalizeAssistantCompensationMode(
+      assistant.compensation_mode as string | undefined
+    );
+
+    if (
+      input.entryType === "daily_wage" &&
+      !isDailyWageAssistant(compensationMode)
+    ) {
+      return {
+        entry: null,
+        entries: [],
+        slip: null,
+        payrollRecord: null,
+        netPayout: 0,
+        error: "أجر اليومي مسموح فقط للمساعدين على نظام الأجر اليومي",
+      };
+    }
+
+    if (
+      input.entryType !== "daily_wage" &&
+      isDailyWageAssistant(compensationMode) &&
+      !["advance", "deduction", "absence", "bonus"].includes(input.entryType)
+    ) {
+      return {
+        entry: null,
+        entries: [],
+        slip: null,
+        payrollRecord: null,
+        netPayout: 0,
+        error: "نوع الحركة غير مدعوم لهذا المساعد",
+      };
+    }
+
+    baseSalary = isDailyWageAssistant(compensationMode)
+      ? 0
+      : Number(assistant.total_salary ?? input.baseSalary);
+    assistantCompensationMode = compensationMode;
 
     const { data: paidRecord } = await admin
       .from("payroll_records")
@@ -854,7 +920,10 @@ export async function createSalaryEntry(
   }
 
   const { advances, deductions, bonuses } = summarizeSalaryEntries(entries);
-  const netPayout = calculateSalaryNet(baseSalary, advances, deductions, bonuses);
+  const netPayout = assistantId && assistantCompensationMode
+    ? computeAssistantNetPay(assistantCompensationMode, baseSalary, entries)
+        .netPayout
+    : calculateSalaryNet(baseSalary, advances, deductions, bonuses);
 
   if (staffId) {
     const { slip, error: slipErr } = await syncStaffSalarySlipDraft(
