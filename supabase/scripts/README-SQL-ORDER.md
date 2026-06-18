@@ -1,5 +1,7 @@
 # Supabase — شنو تشغّل وبالترتيب؟
 
+> **طوارئ / استرجاع بعد مشكلة:** [`docs/DISASTER-RECOVERY.md`](../../docs/DISASTER-RECOVERY.md) — دليل بالعربي (توثيق فقط، ما يشغّل SQL تلقائياً).
+
 **ما تحتاج تسأل «أشغّل RLS لوحده؟»** — ملف **APPLY_MULTI_TENANT_COMPLETE.sql** **هو** RLS + عزل العيادات + الدوال. ملف واحد.
 
 ---
