@@ -14,6 +14,10 @@ import {
 import { monthDateRange } from "@/lib/utils";
 import type { PayrollRecord, SalaryEntry, SalarySlip } from "@/types";
 
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 function relationName(
   rel: { full_name_ar: string } | { full_name_ar: string }[] | null | undefined
 ): string | null {
@@ -166,7 +170,9 @@ export async function generateMonthlyAssistantPayroll(
 
   const { data: existing, error: existErr } = await supabase
     .from("payroll_records")
-    .select("id, assistant_id, status")
+    .select(
+      "id, assistant_id, status, paid_total_salary, paid_doctor_share_amount, paid_clinic_share_amount"
+    )
     .eq("clinic_id", clinicId)
     .eq("month_year", monthYear);
 
@@ -183,10 +189,7 @@ export async function generateMonthlyAssistantPayroll(
   }
 
   const existingByAssistant = new Map(
-    (existing ?? []).map((r) => [
-      r.assistant_id as string,
-      { id: r.id as string, status: r.status as string },
-    ])
+    (existing ?? []).map((r) => [r.assistant_id as string, r])
   );
 
   let created = 0;
@@ -196,8 +199,12 @@ export async function generateMonthlyAssistantPayroll(
   for (const a of assistants) {
     const assistantId = a.id as string;
     const existingRecord = existingByAssistant.get(assistantId);
+    const compensationMode = normalizeAssistantCompensationMode(
+      a.compensation_mode as string | undefined
+    );
+    const dailyWage = isDailyWageAssistant(compensationMode);
 
-    if (existingRecord?.status === "paid") {
+    if (existingRecord?.status === "paid" && !dailyWage) {
       skipped += 1;
       continue;
     }
@@ -208,19 +215,18 @@ export async function generateMonthlyAssistantPayroll(
       assistantId,
       monthYear
     );
-    const compensationMode = normalizeAssistantCompensationMode(
-      a.compensation_mode as string | undefined
-    );
-    const baseSalary = isDailyWageAssistant(compensationMode)
-      ? 0
-      : Number(a.total_salary ?? 0);
-    const { netPayout } = computeAssistantNetPay(
+    const baseSalary = dailyWage ? 0 : Number(a.total_salary ?? 0);
+    const { netPayout: fullNet } = computeAssistantNetPay(
       compensationMode,
       baseSalary,
       entries
     );
+    const paidTotal = roundMoney(Number(existingRecord?.paid_total_salary ?? 0));
+    const pendingNet = dailyWage
+      ? roundMoney(Math.max(0, fullNet - paidTotal))
+      : fullNet;
     const breakdown = breakdownAssistantSalary({
-      total_salary: netPayout,
+      total_salary: pendingNet,
       doctor_share_percentage: Number(a.doctor_share_percentage ?? 0),
     });
 
@@ -233,11 +239,14 @@ export async function generateMonthlyAssistantPayroll(
       doctor_name_ar: relationName(
         a.doctor as { full_name_ar: string } | { full_name_ar: string }[] | null
       ),
-      total_salary: netPayout,
+      total_salary: pendingNet,
       doctor_share_percentage: breakdown.doctorSharePercentage,
       doctor_share_amount: breakdown.doctorShare,
       clinic_share_amount: breakdown.clinicShare,
-      status: "generated" as const,
+      status:
+        dailyWage && pendingNet <= 0 && paidTotal > 0
+          ? ("paid" as const)
+          : ("generated" as const),
     };
 
     if (existingRecord) {
@@ -250,9 +259,9 @@ export async function generateMonthlyAssistantPayroll(
           doctor_share_percentage: payload.doctor_share_percentage,
           doctor_share_amount: payload.doctor_share_amount,
           clinic_share_amount: payload.clinic_share_amount,
-          status: "generated",
+          status: payload.status,
         })
-        .eq("id", existingRecord.id);
+        .eq("id", existingRecord.id as string);
 
       if (updateErr) {
         return {
@@ -314,7 +323,7 @@ export async function generateMonthlyGeneralStaffPayroll(
 
   const { data: existingSlips, error: existErr } = await supabase
     .from("salary_slips")
-    .select("id, staff_id, status")
+    .select("id, staff_id, status, paid_net_payout")
     .eq("clinic_id", clinicId)
     .eq("month_year", monthYear);
 
@@ -346,17 +355,25 @@ export async function generateMonthlyGeneralStaffPayroll(
       staffId,
       monthYear
     );
-    const { advances, deductions, netPayout } = computeStaffNetPay(
+    const { advances, deductions, netPayout: fullNet } = computeStaffNetPay(
       baseSalary,
       entries,
       compensationMode
     );
 
     const existing = slipByStaff.get(staffId);
-    if (existing?.status === "paid") {
+    const dailyWage = isDailyWage(compensationMode);
+    if (existing?.status === "paid" && !dailyWage) {
       skipped += 1;
       continue;
     }
+
+    const paidNet = roundMoney(Number(existing?.paid_net_payout ?? 0));
+    const storedNet = dailyWage
+      ? roundMoney(Math.max(0, fullNet - paidNet))
+      : fullNet;
+    const status =
+      storedNet <= 0 && paidNet > 0 ? ("paid" as const) : ("draft" as const);
 
     const payload = {
       clinic_id: clinicId,
@@ -365,8 +382,8 @@ export async function generateMonthlyGeneralStaffPayroll(
       base_salary: baseSalary,
       total_advances: advances,
       total_deductions: deductions,
-      net_payout: netPayout,
-      status: "draft" as const,
+      net_payout: storedNet,
+      status,
     };
 
     if (existing) {
@@ -377,7 +394,7 @@ export async function generateMonthlyGeneralStaffPayroll(
           total_advances: payload.total_advances,
           total_deductions: payload.total_deductions,
           net_payout: payload.net_payout,
-          status: "draft",
+          status: payload.status,
         })
         .eq("id", existing.id);
 
@@ -652,7 +669,11 @@ export async function confirmPayrollViaApi(
   error?: string;
   doctor_id?: string | null;
   doctor_deducted?: number;
+  clinic_deducted?: number;
   total_salary?: number;
+  net_payout?: number;
+  confirmed_amount?: number;
+  paid_net_payout?: number;
 }> {
   const res = await fetch("/api/payroll/confirm", {
     method: "POST",
@@ -667,7 +688,11 @@ export async function confirmPayrollViaApi(
     error?: string;
     doctor_id?: string | null;
     doctor_deducted?: number;
+    clinic_deducted?: number;
     total_salary?: number;
+    net_payout?: number;
+    confirmed_amount?: number;
+    paid_net_payout?: number;
   };
   if (!res.ok) {
     return {
@@ -679,7 +704,11 @@ export async function confirmPayrollViaApi(
     ok: true,
     doctor_id: json.doctor_id,
     doctor_deducted: json.doctor_deducted,
+    clinic_deducted: json.clinic_deducted,
     total_salary: json.total_salary,
+    net_payout: json.net_payout,
+    confirmed_amount: json.confirmed_amount,
+    paid_net_payout: json.paid_net_payout,
   };
 }
 

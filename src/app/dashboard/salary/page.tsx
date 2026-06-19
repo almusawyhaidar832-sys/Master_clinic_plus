@@ -64,6 +64,19 @@ import {
 } from "@/lib/services/salary-entry-math";
 import { isDailyWageAssistant, isDailyWage } from "@/lib/services/assistant-compensation";
 import {
+  assistantIsFullyPaid,
+  assistantPaidClinicShare,
+  assistantPaidDoctorShare,
+  assistantPaidTotalSalary,
+  assistantPendingClinicShare,
+  assistantPendingDoctorShare,
+  assistantPendingTotalSalary,
+  dailyWagePendingFromAccrued,
+  slipIsFullyPaid,
+  slipPaidNet,
+  slipPendingNet,
+} from "@/lib/services/payroll-paid-portions";
+import {
   DAILY_ASSISTANT_PAYROLL_ENTRY_TYPES,
   EMPLOYEE_PAYROLL_ENTRY_TYPES,
   formatPayrollEntryTypesList,
@@ -201,7 +214,6 @@ function entryDisabledReason(opts: {
   slipPaid: boolean;
   selectedPerson: PayrollPerson | null;
   saving: boolean;
-  allowPaidSlip?: boolean;
 }): string | null {
   if (!opts.selectedPerson) {
     return "اختر موظفاً من القائمة أعلاه أولاً";
@@ -209,8 +221,8 @@ function entryDisabledReason(opts: {
   if (opts.boardLocked) {
     return "هذا الشهر مُغلق أو أرشيف — غيّر «شهر العمل» إلى الشهر النشط";
   }
-  if (opts.slipPaid && !opts.allowPaidSlip) {
-    return "راتب هذا الموظف مُصرف لهذا الشهر — لا يمكن إضافة حركات";
+  if (opts.slipPaid) {
+    return "راتب هذا الموظف مُصرف بالكامل لهذا الشهر — لا يمكن إضافة حركات";
   }
   if (opts.saving) return null;
   return null;
@@ -330,8 +342,40 @@ export default function SalaryPage() {
     ? DAILY_ASSISTANT_PAYROLL_ENTRY_TYPES
     : EMPLOYEE_PAYROLL_ENTRY_TYPES;
   const slipPaid = isAssistantSelected
-    ? selectedAssistantRecord?.status === "paid"
-    : staffSlipThisMonth?.status === "paid";
+    ? assistantIsFullyPaid(selectedAssistantRecord ?? null, {
+        dailyWage: isDailyAssistantSelected,
+      })
+    : slipIsFullyPaid(staffSlipThisMonth ?? null, {
+        dailyWage: isDailyStaffSelected,
+      });
+  const slipFullySettled = slipPaid;
+  const slipBlocksNewEntries = isDailyWageSelected ? false : slipFullySettled;
+  const slipPendingAmount = isAssistantSelected
+    ? assistantPendingTotalSalary(selectedAssistantRecord ?? null, {
+        dailyWage: isDailyAssistantSelected,
+      })
+    : slipPendingNet(staffSlipThisMonth ?? null, {
+        dailyWage: isDailyStaffSelected,
+      });
+  const slipConfirmedAmount = isAssistantSelected
+    ? assistantPaidTotalSalary(selectedAssistantRecord ?? null)
+    : slipPaidNet(staffSlipThisMonth ?? null);
+  const assistantPendingDoctor = assistantPendingDoctorShare(
+    selectedAssistantRecord ?? null,
+    { dailyWage: isDailyAssistantSelected }
+  );
+  const assistantPendingClinic = assistantPendingClinicShare(
+    selectedAssistantRecord ?? null,
+    { dailyWage: isDailyAssistantSelected }
+  );
+  const canConfirmPayroll =
+    slipPendingAmount > 0 ||
+    assistantPendingDoctor > 0 ||
+    assistantPendingClinic > 0;
+  const canUnconfirmPayroll =
+    slipConfirmedAmount > 0 ||
+    assistantPaidDoctorShare(selectedAssistantRecord ?? null) > 0 ||
+    assistantPaidClinicShare(selectedAssistantRecord ?? null) > 0;
 
   const payrollBaseSalary =
     selectedStaff?.base_salary ?? selectedPerson?.base_salary ?? 0;
@@ -608,7 +652,8 @@ export default function SalaryPage() {
     bon: number,
     daily: number,
     type: string,
-    pending: number
+    pending: number,
+    confirmedPaid: number
   ): number {
     if (person.category === "assistant" && isDailyWageAssistant(person.compensation_mode)) {
       const nextDaily = daily + (type === "daily_wage" ? pending : 0);
@@ -617,10 +662,11 @@ export default function SalaryPage() {
         ded +
         (type === "deduction" || type === "absence" ? pending : 0);
       const nextBon = bon + (type === "bonus" ? pending : 0);
-      return Math.max(
+      const accrued = Math.max(
         0,
         Math.round((nextDaily + nextBon - nextAdv - nextDed) * 100) / 100
       );
+      return dailyWagePendingFromAccrued(accrued, confirmedPaid);
     }
     if (
       (person.category === "general" || person.category === "accountant") &&
@@ -632,10 +678,11 @@ export default function SalaryPage() {
         ded +
         (type === "deduction" || type === "absence" ? pending : 0);
       const nextBon = bon + (type === "bonus" ? pending : 0);
-      return Math.max(
+      const accrued = Math.max(
         0,
         Math.round((nextDaily + nextBon - nextAdv - nextDed) * 100) / 100
       );
+      return dailyWagePendingFromAccrued(accrued, confirmedPaid);
     }
     return calculateSalaryNet(
       person.base_salary,
@@ -644,6 +691,21 @@ export default function SalaryPage() {
       bon + (type === "bonus" ? pending : 0)
     );
   }
+
+  const fullDailyNet =
+    selectedPerson && isDailyWageSelected
+      ? isDailyAssistantSelected
+        ? computeAssistantNetPay(
+            selectedPerson.compensation_mode,
+            0,
+            entries
+          ).netPayout
+        : computeStaffNetPay(
+            0,
+            entries,
+            selectedPerson.compensation_mode
+          ).netPayout
+      : 0;
 
   const netPreview =
     isDoctorSalarySelected && selectedPerson
@@ -655,17 +717,7 @@ export default function SalaryPage() {
         )
       : selectedPerson && (isStaffSelected || isAssistantSelected)
         ? isDailyWageSelected
-          ? isDailyAssistantSelected
-            ? computeAssistantNetPay(
-                selectedPerson.compensation_mode,
-                0,
-                entries
-              ).netPayout
-            : computeStaffNetPay(
-                0,
-                entries,
-                selectedPerson.compensation_mode
-              ).netPayout
+          ? dailyWagePendingFromAccrued(fullDailyNet, slipConfirmedAmount)
           : calculateSalaryNet(
               selectedPerson.base_salary,
               advances,
@@ -713,7 +765,8 @@ export default function SalaryPage() {
               bonuses,
               dailyWages,
               entryType,
-              pendingAmount
+              pendingAmount,
+              slipConfirmedAmount
             )
           : null
       : null;
@@ -721,24 +774,22 @@ export default function SalaryPage() {
     (isStaffSelected || isAssistantSelected) && !isDoctorSalarySelected
       ? entryDisabledReason({
           boardLocked,
-          slipPaid,
+          slipPaid: slipBlocksNewEntries,
           selectedPerson,
           saving,
-          allowPaidSlip: isDailyWageSelected,
         })
       : null;
   const doctorEntryBlockReason = isDoctorSalarySelected
     ? entryDisabledReason({
         boardLocked,
-        slipPaid,
+        slipPaid: slipFullySettled,
         selectedPerson,
         saving,
       })
     : null;
 
   const totalPaidThisMonth = slips
-    .filter((s) => s.status === "paid")
-    .reduce((sum, s) => sum + Number(s.net_payout ?? 0), 0);
+    .reduce((sum, s) => sum + slipPaidNet(s), 0);
 
   async function handleEmployeeEntry(e?: React.SyntheticEvent) {
     e?.preventDefault();
@@ -1108,7 +1159,7 @@ export default function SalaryPage() {
       showMessage("الشهر مُغلق — لا يمكن تعديل القسائم من الأرشيف", false);
       return;
     }
-    if (slipPaid) {
+    if (slipBlocksNewEntries) {
       showMessage("قسيمة هذا الشهر مُسلَّمة مسبقاً", false);
       return;
     }
@@ -1181,8 +1232,17 @@ export default function SalaryPage() {
       showMessage(`تعذر تأكيد الصرف: ${result.error}`, false);
       return;
     }
-    notifyClinicProfitRefresh();
-    showMessage("تم تأكيد الصرف — سُجِّلت حركة مالية وخصم من ربح العيادة", true);
+    notifyClinicProfitRefresh(clinicId ?? undefined);
+    const confirmed =
+      result.confirmed_amount ??
+      result.net_payout ??
+      slipPendingAmount;
+    showMessage(
+      confirmed > 0
+        ? `تم تأكيد الصرف — خُصم ${formatCurrency(confirmed)} من ربح العيادة (المبلغ المتبقي فقط)`
+        : "تم تأكيد الصرف",
+      true
+    );
     loadPayrollMonth();
   }
 
@@ -1219,9 +1279,10 @@ export default function SalaryPage() {
       });
     }
     const deducted = result.doctor_deducted ?? 0;
+    const clinicPart = result.clinic_deducted ?? 0;
     showMessage(
-      deducted > 0
-        ? `تم تأكيد الصرف — خُصم ${formatCurrency(deducted)} من محفظة الطبيب`
+      deducted > 0 || clinicPart > 0
+        ? `تم تأكيد الصرف — خُصم ${formatCurrency(deducted)} من الطبيب${clinicPart > 0 ? ` و${formatCurrency(clinicPart)} من ربح العيادة` : ""} (المبلغ المتبقي فقط)`
         : "تم تأكيد الصرف — لا حصة للطبيب (النسبة 0%)",
       true
     );
@@ -2224,10 +2285,11 @@ export default function SalaryPage() {
                 <p className="text-center text-xs text-amber-800">
                   اختر موظفاً أو مساعداً من القائمة أعلاه أولاً
                 </p>
-              ) : isDailyWageSelected && slipPaid ? (
-                <p className="text-center text-xs text-amber-800">
-                  القسيمة مُسلَّمة — عند إضافة يوم جديد يُلغى تأكيد الصرف تلقائياً
-                  ويُحدَّث المبلغ، ثم «تأكيد الصرف» بعد الانتهاء
+              ) : isDailyWageSelected && slipConfirmedAmount > 0 && slipPendingAmount > 0 ? (
+                <p className="text-center text-xs text-teal-800">
+                  مُؤكَّد {formatCurrency(slipConfirmedAmount)} — المتبقي{" "}
+                  {formatCurrency(slipPendingAmount)} يُجمَع في الجدول ويُخصم عند «تأكيد
+                  الصرف» فقط
                 </p>
               ) : isDailyWageSelected && entryType === "daily_wage" ? (
                 <p className="text-center text-xs text-teal-800">
@@ -2304,30 +2366,36 @@ export default function SalaryPage() {
                   <hr className="border-slate-border" />
                   <p className="text-xs text-slate-muted">
                     الحالة:{" "}
-                    {selectedAssistantRecord.status === "paid" ? "مدفوع" : "مُولَّد"}
+                    {slipFullySettled && slipPendingAmount <= 0
+                      ? "مُؤكَّد بالكامل"
+                      : slipConfirmedAmount > 0
+                        ? `مُؤكَّد ${formatCurrency(slipConfirmedAmount)} — متبقٍ ${formatCurrency(slipPendingAmount)}`
+                        : "مُولَّد"}
                   </p>
                   {!boardLocked && (
                     <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
                         className="flex-1 min-w-[10rem]"
-                        disabled={selectedAssistantRecord.status === "paid"}
+                        disabled={!canConfirmPayroll}
                         onClick={() =>
                           markAssistantPayrollPaid(selectedAssistantRecord.id)
                         }
                       >
-                        تأكيد الصرف — خصم حصة الطبيب
+                        {canConfirmPayroll
+                          ? `تأكيد الصرف — ${formatCurrency(slipPendingAmount)}`
+                          : "مُؤكَّد بالكامل"}
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
                         className="flex-1 min-w-[10rem] border-amber-300 text-amber-800 hover:bg-amber-50"
-                        disabled={selectedAssistantRecord.status !== "paid"}
+                        disabled={!canUnconfirmPayroll}
                         onClick={() =>
                           unmarkAssistantPayrollPaid(selectedAssistantRecord.id)
                         }
                       >
-                        إلغاء الصرف
+                        إلغاء آخر تأكيد
                       </Button>
                     </div>
                   )}
@@ -2355,11 +2423,17 @@ export default function SalaryPage() {
                   ? "طبيب راتب ثابت — الصرف من مصاريف العيادة. الجلسات لا تدخل محفظة الطبيب."
                   : "موظف خدمات — الراتب كامل من مصاريف تشغيل العيادة، بدون ربط بطبيب."}
               </p>
-              {staffSlipThisMonth?.status === "paid" && (
+              {staffSlipThisMonth && slipFullySettled && slipPendingAmount <= 0 && (
                 <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
                   ✓ قسيمة{" "}
                   {selectedStaff?.full_name_ar ?? selectedPerson?.full_name_ar}{" "}
-                  لهذا الشهر <strong>مدفوعة</strong>.
+                  لهذا الشهر <strong>مدفوعة بالكامل</strong>.
+                </p>
+              )}
+              {staffSlipThisMonth && slipConfirmedAmount > 0 && slipPendingAmount > 0 && (
+                <p className="mb-3 rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-800">
+                  مُؤكَّد {formatCurrency(slipConfirmedAmount)} — المتبقي{" "}
+                  {formatCurrency(slipPendingAmount)} يُخصم عند «تأكيد الصرف» فقط
                 </p>
               )}
               <div className="space-y-3 rounded-lg bg-surface p-4 text-sm">
@@ -2399,13 +2473,13 @@ export default function SalaryPage() {
                   disabled={
                     (!staffId && !doctorSalaryId) ||
                     saving ||
-                    slipPaid ||
+                    slipBlocksNewEntries ||
                     boardLocked
                   }
                 >
                   {boardLocked
                     ? "شهر مُغلق"
-                    : slipPaid
+                    : slipBlocksNewEntries
                       ? "مُسلَّمة"
                       : saving
                         ? "جاري الإنشاء..."
@@ -2416,19 +2490,21 @@ export default function SalaryPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={staffSlipThisMonth.status === "paid"}
+                      disabled={!canConfirmPayroll}
                       onClick={() => markSlipPaid(staffSlipThisMonth.id)}
                     >
-                      تأكيد الصرف
+                      {canConfirmPayroll
+                        ? `تأكيد الصرف — ${formatCurrency(slipPendingAmount)}`
+                        : "مُؤكَّد بالكامل"}
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       className="border-amber-300 text-amber-800 hover:bg-amber-50"
-                      disabled={staffSlipThisMonth.status !== "paid"}
+                      disabled={!canUnconfirmPayroll}
                       onClick={() => unmarkSlipPaid(staffSlipThisMonth.id)}
                     >
-                      إلغاء الصرف
+                      إلغاء آخر تأكيد
                     </Button>
                   </>
                 )}

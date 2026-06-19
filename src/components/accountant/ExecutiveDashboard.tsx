@@ -10,10 +10,11 @@ import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import {
-  fetchExecutiveDashboardSupplement,
   mergeExecutiveDashboardMetrics,
+  resolveExecutiveSalaryDeduction,
   type ExecutiveSnapshotCore,
 } from "@/lib/services/executive-snapshot";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Alert } from "@/components/ui/Alert";
@@ -365,7 +366,7 @@ export function ExecutiveDashboard() {
     const { from, to } = getRange();
 
     try {
-    const [snapRes, topRes, supplement] = await Promise.all([
+    const [snapRes, topRes, supplementRes] = await Promise.all([
       supabase.rpc("get_clinic_financial_snapshot", {
         p_clinic_id: clinicId, p_from: from, p_to: to,
       }),
@@ -374,18 +375,33 @@ export function ExecutiveDashboard() {
         p_from: from,
         p_to: to,
       }),
-      fetchExecutiveDashboardSupplement(supabase, clinicId, from, to),
+      fetch(`/api/executive/supplement?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
+        credentials: "include",
+        headers: authPortalHeaders("accountant"),
+      }),
     ]);
 
-    const {
-      salariesDisplay,
-      salariesPaidLegacy,
-      payrollAccruals,
-      visitorDebt,
-    } = supplement;
+    const supplementJson = supplementRes.ok
+      ? ((await supplementRes.json()) as {
+          salariesDisplay?: number;
+          salariesPaidLegacy?: number;
+          payrollAccruals?: number;
+          visitorDebt?: { debt: number; visitorCount: number };
+          error?: string;
+        })
+      : null;
 
-    const salariesDeducted =
-      payrollAccruals > 0 ? payrollAccruals : salariesPaidLegacy;
+    const {
+      salariesDisplay = 0,
+      salariesPaidLegacy = 0,
+      payrollAccruals = 0,
+      visitorDebt = { debt: 0, visitorCount: 0 },
+    } = supplementJson ?? {};
+
+    const salariesDeducted = resolveExecutiveSalaryDeduction(
+      payrollAccruals,
+      salariesPaidLegacy
+    );
 
     if (snapRes.error) {
       setFetchError(

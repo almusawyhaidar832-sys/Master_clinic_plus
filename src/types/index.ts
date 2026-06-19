@@ -236,6 +236,7 @@ export interface SalarySlip {
   total_advances: number;
   total_deductions: number;
   net_payout: number;
+  paid_net_payout?: number;
   status: SalarySlipStatus;
   paid_at: string | null;
   staff?: StaffMember;
@@ -269,6 +270,9 @@ export interface PayrollRecord {
   doctor_share_percentage: number;
   doctor_share_amount: number;
   clinic_share_amount: number;
+  paid_total_salary?: number;
+  paid_doctor_share_amount?: number;
+  paid_clinic_share_amount?: number;
   status: "generated" | "paid";
   generated_at: string;
   paid_at: string | null;
