@@ -59,7 +59,6 @@ function HighlightCard({
   metric,
   metricLabel,
   icon: Icon,
-  accent,
 }: {
   title: string;
   subtitle: string;
@@ -67,39 +66,33 @@ function HighlightCard({
   metric: string;
   metricLabel: string;
   icon: typeof Crown;
-  accent: string;
 }) {
   return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-2xl border p-4 shadow-sm",
-        accent
-      )}
-    >
+    <div className="rounded-xl border border-slate-border bg-surface-card p-4 shadow-card">
       <div className="mb-3 flex items-start justify-between gap-2">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide opacity-80">
-            {title}
-          </p>
-          <p className="text-[11px] opacity-70">{subtitle}</p>
+          <p className="text-xs font-semibold text-slate-muted">{title}</p>
+          <p className="text-[11px] text-slate-muted">{subtitle}</p>
         </div>
-        <div className="rounded-xl bg-white/70 p-2 shadow-sm">
+        <div className="rounded-xl bg-primary/10 p-2 text-primary">
           <Icon className="h-5 w-5" />
         </div>
       </div>
       {doctor ? (
         <>
-          <p className="truncate text-base font-black text-slate-900">
+          <p className="truncate text-base font-bold text-slate-text">
             {doctor.full_name_ar}
           </p>
-          <p className="mt-1 text-lg font-bold tabular-nums">{metric}</p>
-          <p className="text-xs opacity-75">{metricLabel}</p>
-          <p className="mt-2 text-[11px] opacity-70">
+          <p className="mt-1 text-lg font-bold tabular-nums text-primary">
+            {metric}
+          </p>
+          <p className="text-xs text-slate-muted">{metricLabel}</p>
+          <p className="mt-2 text-[11px] text-slate-muted">
             {doctor.op_count} عملية · إيراد {formatCurrency(doctor.revenue)}
           </p>
         </>
       ) : (
-        <p className="py-4 text-sm opacity-75">لا توجد بيانات في هذه الفترة</p>
+        <p className="py-4 text-sm text-slate-muted">لا توجد بيانات في هذه الفترة</p>
       )}
     </div>
   );
@@ -137,7 +130,7 @@ function RankingRow({
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-slate-100">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-400"
+          className="h-full rounded-full bg-gradient-to-r from-primary to-primary-700"
           style={{ width: `${width}%` }}
         />
       </div>
@@ -228,15 +221,15 @@ export function AdminDoctorPerformance() {
   if (!clinicId) return null;
 
   return (
-    <Card className="overflow-hidden p-0 ring-1 ring-slate-200/80">
-      <div className="border-b border-slate-100 bg-gradient-to-l from-primary/5 to-white px-4 py-4">
+    <Card className="overflow-hidden p-0">
+      <div className="border-b border-slate-border bg-surface-card px-4 py-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="rounded-xl bg-primary/10 p-2 text-primary">
               <Stethoscope className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 className="text-base font-bold text-slate-text">
                 أداء الأطباء
               </h3>
               <p className="text-xs text-slate-muted">
@@ -247,7 +240,7 @@ export function AdminDoctorPerformance() {
               </p>
             </div>
           </div>
-          <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1">
+          <div className="flex gap-1 rounded-xl border border-slate-border bg-surface p-1">
             {PERIODS.map((p) => (
               <button
                 key={p.key}
@@ -257,7 +250,7 @@ export function AdminDoctorPerformance() {
                   "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
                   period === p.key
                     ? "bg-primary text-white shadow-sm"
-                    : "text-slate-600 hover:bg-slate-50"
+                    : "text-slate-muted hover:bg-surface-card"
                 )}
               >
                 {p.label}
@@ -291,7 +284,6 @@ export function AdminDoctorPerformance() {
                 }
                 metricLabel="إيراد الفترة"
                 icon={Crown}
-                accent="border-amber-200/80 bg-gradient-to-br from-amber-50 to-orange-50 text-amber-900"
               />
               <HighlightCard
                 title="أفضل لربح العيادة"
@@ -304,7 +296,6 @@ export function AdminDoctorPerformance() {
                 }
                 metricLabel="حصة العيادة"
                 icon={TrendingUp}
-                accent="border-emerald-200/80 bg-gradient-to-br from-emerald-50 to-teal-50 text-emerald-900"
               />
               <HighlightCard
                 title="الأكثر نشاطاً"
@@ -317,7 +308,6 @@ export function AdminDoctorPerformance() {
                 }
                 metricLabel="عملية في الفترة"
                 icon={Zap}
-                accent="border-blue-200/80 bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-900"
               />
               <HighlightCard
                 title="الأقل نشاطاً"
@@ -336,15 +326,14 @@ export function AdminDoctorPerformance() {
                     : "لا يوجد طبيب نشط للمقارنة"
                 }
                 icon={Award}
-                accent="border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100 text-slate-800"
               />
             </div>
 
             {highlights.inactive.length > 0 && (
-              <div className="rounded-2xl border border-amber-200/70 bg-amber-50/60 p-4">
+              <div className="rounded-xl border border-slate-border bg-primary/5 p-4">
                 <div className="mb-2 flex items-center gap-2">
-                  <Moon className="h-4 w-4 text-amber-700" />
-                  <p className="text-sm font-bold text-amber-900">
+                  <Moon className="h-4 w-4 text-primary" />
+                  <p className="text-sm font-bold text-slate-text">
                     أطباء بدون عمليات في الفترة ({highlights.inactive.length})
                   </p>
                 </div>
@@ -352,7 +341,7 @@ export function AdminDoctorPerformance() {
                   {highlights.inactive.map((d) => (
                     <span
                       key={d.doctor_id ?? d.full_name_ar}
-                      className="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-medium text-amber-900"
+                      className="rounded-full border border-slate-border bg-surface-card px-3 py-1 text-xs font-medium text-slate-text"
                     >
                       {d.full_name_ar}
                     </span>
@@ -364,8 +353,8 @@ export function AdminDoctorPerformance() {
             {highlights.ranking.length > 0 ? (
               <div>
                 <div className="mb-3 flex items-center justify-between">
-                  <p className="flex items-center gap-1.5 text-sm font-bold text-slate-800">
-                    <Star className="h-4 w-4 text-amber-500" />
+                  <p className="flex items-center gap-1.5 text-sm font-bold text-slate-text">
+                    <Star className="h-4 w-4 text-primary" />
                     ترتيب الأطباء
                   </p>
                   <Link
@@ -398,7 +387,7 @@ export function AdminDoctorPerformance() {
 
         <Link
           href="/admin/doctors"
-          className="flex items-center justify-between rounded-xl border border-slate-200 bg-surface px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+          className="flex items-center justify-between rounded-xl border border-slate-border bg-surface-card px-4 py-3 text-sm font-medium text-slate-text transition-colors hover:bg-surface"
         >
           <span>عرض دفاتر الأطباء المالية التفصيلية</span>
           <ChevronLeft className="h-4 w-4 text-slate-muted" />

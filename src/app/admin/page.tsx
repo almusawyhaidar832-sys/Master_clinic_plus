@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile, getActiveClinicId } from "@/lib/clinic-context";
@@ -62,47 +62,53 @@ export default function AdminHomePage() {
       </div>
 
       {stats && (
-        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 ring-1 ring-primary/20">
-          <CardHeader>
-            <p className="text-sm text-slate-muted">صافي ربح العيادة</p>
-            <p className="text-3xl font-bold text-primary">
-              {formatCurrency(stats.netProfit)}
-            </p>
-            <p className="text-xs text-slate-muted">
-              تدفق نقدي: {formatCurrency(stats.cashInflow)}
-            </p>
-          </CardHeader>
-        </Card>
+        <div className="rounded-2xl bg-gradient-to-br from-primary to-primary-700 p-5 text-white shadow-premium">
+          <p className="text-xs opacity-90">صافي ربح العيادة</p>
+          <p className="mt-1 text-3xl font-bold tabular-nums">
+            {formatCurrency(stats.netProfit)}
+          </p>
+          <p className="mt-2 text-xs opacity-80">
+            تدفق نقدي: {formatCurrency(stats.cashInflow)}
+          </p>
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-3">
         <Link href="/admin/profits">
           <Card className="p-3 active:scale-[0.98]">
-            <TrendingUp className="mb-1 h-5 w-5 text-primary" />
-            <p className="text-xs font-semibold">الأرباح</p>
+            <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <TrendingUp className="h-5 w-5 text-primary" />
+            </div>
+            <p className="text-xs font-semibold text-slate-text">الأرباح</p>
             <p className="text-[10px] text-slate-muted">تفصيل كامل</p>
           </Card>
         </Link>
         <Link href="/admin/withdrawals">
           <Card className="p-3 active:scale-[0.98]">
-            <Wallet className="mb-1 h-5 w-5 text-amber-600" />
-            <p className="text-xs font-semibold">طلبات السحب</p>
-            <p className="text-[10px] text-amber-700">
+            <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <Wallet className="h-5 w-5 text-primary" />
+            </div>
+            <p className="text-xs font-semibold text-slate-text">طلبات السحب</p>
+            <p className="text-[10px] text-primary">
               {pendingCount} معلّق
             </p>
           </Card>
         </Link>
         <Link href="/admin/doctors">
           <Card className="p-3 active:scale-[0.98]">
-            <Stethoscope className="mb-1 h-5 w-5 text-blue-600" />
-            <p className="text-xs font-semibold">حسابات الأطباء</p>
+            <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <Stethoscope className="h-5 w-5 text-primary" />
+            </div>
+            <p className="text-xs font-semibold text-slate-text">حسابات الأطباء</p>
             <p className="text-[10px] text-slate-muted">{doctorCount} طبيب</p>
           </Card>
         </Link>
         <Link href="/admin/report">
-          <Card className="p-3 active:scale-[0.98] ring-1 ring-primary/30">
-            <FileText className="mb-1 h-5 w-5 text-primary" />
-            <p className="text-xs font-semibold">التقرير الشامل</p>
+          <Card className="p-3 active:scale-[0.98] ring-1 ring-primary/20">
+            <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <FileText className="h-5 w-5 text-primary" />
+            </div>
+            <p className="text-xs font-semibold text-slate-text">التقرير الشامل</p>
             <p className="text-[10px] text-primary">طباعة / مشاركة</p>
           </Card>
         </Link>
@@ -110,10 +116,12 @@ export default function AdminHomePage() {
 
       <AdminDoctorPerformance />
 
-      <Card className="p-4 ring-1 ring-amber-200/60">
+      <Card className="p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-amber-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <Activity className="h-5 w-5 text-primary" />
+            </div>
             <p className="text-sm font-bold text-slate-text">موجز العمليات</p>
           </div>
           <Link

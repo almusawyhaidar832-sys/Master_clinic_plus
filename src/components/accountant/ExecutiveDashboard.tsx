@@ -266,7 +266,7 @@ function SmartAlerts({ snap }: { snap: Snapshot }) {
 // Top Doctors
 // ─────────────────────────────────────────────
 function TopDoctorsCard({ doctors }: { doctors: TopPerformers["top_doctors"] }) {
-  const { t } = useLanguage();
+  const { t, formatMoney } = useLanguage();
   if (!doctors.length) return null;
   const max = doctors[0].revenue;
   return (
