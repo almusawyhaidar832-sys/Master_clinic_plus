@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { createClient } from "@/lib/supabase/client";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
 import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 import { currentMonthYear, formatCurrency, monthDateRange } from "@/lib/utils";

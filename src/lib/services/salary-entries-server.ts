@@ -116,6 +116,8 @@ export async function syncStaffSalarySlipDraft(
   isDailyWage?: boolean;
   error?: string;
 }> {
+  const { data: staff, error: staffErr } = await admin
+    .from("staff_members")
     .select("base_salary, compensation_mode")
     .eq("id", staffId)
     .eq("clinic_id", clinicId)
