@@ -38,6 +38,7 @@ import {
 } from "@/lib/services/assistant-payroll-records";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
+import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
 import {
   fetchActivePayrollPersons,
   fetchActivePayrollPersonsViaApi,
@@ -200,6 +201,7 @@ function entryDisabledReason(opts: {
   slipPaid: boolean;
   selectedPerson: PayrollPerson | null;
   saving: boolean;
+  allowPaidSlip?: boolean;
 }): string | null {
   if (!opts.selectedPerson) {
     return "اختر موظفاً من القائمة أعلاه أولاً";
@@ -207,7 +209,7 @@ function entryDisabledReason(opts: {
   if (opts.boardLocked) {
     return "هذا الشهر مُغلق أو أرشيف — غيّر «شهر العمل» إلى الشهر النشط";
   }
-  if (opts.slipPaid) {
+  if (opts.slipPaid && !opts.allowPaidSlip) {
     return "راتب هذا الموظف مُصرف لهذا الشهر — لا يمكن إضافة حركات";
   }
   if (opts.saving) return null;
@@ -722,6 +724,7 @@ export default function SalaryPage() {
           slipPaid,
           selectedPerson,
           saving,
+          allowPaidSlip: isDailyWageSelected,
         })
       : null;
   const doctorEntryBlockReason = isDoctorSalarySelected
@@ -835,6 +838,12 @@ export default function SalaryPage() {
       } else {
         await loadPayrollMonth();
       }
+
+      if (json.warning?.includes("إلغاء تأكيد الصرف")) {
+        await loadPayrollMonth();
+      }
+
+      notifyClinicProfitRefresh(clinicId ?? undefined);
 
       const typeLabel =
         activeEmployeeEntryTypes.find((t) => t.value === entryType)?.label ??
@@ -1202,9 +1211,18 @@ export default function SalaryPage() {
       showMessage(`تعذر تأكيد صرف المساعد: ${result.error}`, false);
       return;
     }
-    notifyClinicProfitRefresh();
+    notifyClinicProfitRefresh(clinicId ?? undefined);
+    if (result.doctor_id) {
+      notifyFinancialMutation({
+        clinicId: clinicId ?? "",
+        doctorId: result.doctor_id,
+      });
+    }
+    const deducted = result.doctor_deducted ?? 0;
     showMessage(
-      "تم تأكيد الصرف — خُصمت حصة الطبيب من رصيده وسُجِّلت حركة مالية",
+      deducted > 0
+        ? `تم تأكيد الصرف — خُصم ${formatCurrency(deducted)} من محفظة الطبيب`
+        : "تم تأكيد الصرف — لا حصة للطبيب (النسبة 0%)",
       true
     );
     loadPayrollMonth();
@@ -2205,6 +2223,11 @@ export default function SalaryPage() {
               ) : !selectedPerson || (!staffId && !assistantId) ? (
                 <p className="text-center text-xs text-amber-800">
                   اختر موظفاً أو مساعداً من القائمة أعلاه أولاً
+                </p>
+              ) : isDailyWageSelected && slipPaid ? (
+                <p className="text-center text-xs text-amber-800">
+                  القسيمة مُسلَّمة — عند إضافة يوم جديد يُلغى تأكيد الصرف تلقائياً
+                  ويُحدَّث المبلغ، ثم «تأكيد الصرف» بعد الانتهاء
                 </p>
               ) : isDailyWageSelected && entryType === "daily_wage" ? (
                 <p className="text-center text-xs text-teal-800">

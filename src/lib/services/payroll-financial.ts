@@ -132,6 +132,39 @@ export async function recordAssistantPayrollPaidTransaction(
   });
 }
 
+/** تحديث حركة استحقاق راتب موظف عند تغيّر قسيمة مسودة */
+export async function upsertStaffSlipAccrualTransaction(
+  admin: SupabaseClient,
+  clinicId: string,
+  slip: Pick<SalarySlip, "id" | "net_payout" | "month_year" | "status">
+): Promise<{ ok: boolean; error?: string }> {
+  await deleteFinancialTransactionsByReference(
+    admin,
+    clinicId,
+    "salary_slip_accrual",
+    slip.id
+  );
+
+  if (slip.status === "paid") {
+    return { ok: true };
+  }
+
+  const amt = -Number(slip.net_payout ?? 0);
+  if (amt >= 0) {
+    return { ok: true };
+  }
+
+  return recordFinancialTransaction(admin, {
+    clinicId,
+    amount: amt,
+    type: "staff_salary_accrual",
+    descriptionAr: `راتب موظف — ${slip.month_year}`,
+    transactionDate: new Date().toISOString().slice(0, 10),
+    referenceType: "salary_slip_accrual",
+    referenceId: slip.id,
+  });
+}
+
 /** إلغاء تأكيد صرف قسيمة موظف/طبيب */
 export async function reverseStaffSlipPaidTransaction(
   admin: SupabaseClient,

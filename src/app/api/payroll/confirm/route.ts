@@ -7,6 +7,7 @@ import {
   recordDoctorSalarySlipPaidTransaction,
   recordStaffSlipPaidTransaction,
 } from "@/lib/services/payroll-financial";
+import { recomputeAssistantPayrollRecord } from "@/lib/services/salary-entries-server";
 import type { PayrollRecord, SalarySlip } from "@/types";
 
 /**
@@ -119,6 +120,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, already_paid: true });
     }
 
+    const { record: freshRecord, error: recomputeErr } =
+      await recomputeAssistantPayrollRecord(
+        admin,
+        clinicId,
+        record.assistant_id as string,
+        record.month_year as string
+      );
+
+    if (recomputeErr && !freshRecord) {
+      return NextResponse.json({ error: recomputeErr }, { status: 400 });
+    }
+
+    const activeRecord = (freshRecord ?? record) as PayrollRecord;
+    const totalSalary = Number(activeRecord.total_salary ?? 0);
+    const doctorShare = Number(activeRecord.doctor_share_amount ?? 0);
+    const doctorPct = Number(activeRecord.doctor_share_percentage ?? 0);
+
+    if (totalSalary <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "لا يوجد راتب لصرفه — سجّل حركات «أجر يومي» للمساعد ثم «توليد رواتب الشهر» إن لزم",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (doctorPct > 0 && doctorShare <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "حصة الطبيب = 0 — تحقق من نسبة الطبيب على المساعد (يجب أن تكون أكبر من 0%)",
+        },
+        { status: 400 }
+      );
+    }
+
     const { error: updateErr } = await admin
       .from("payroll_records")
       .update({ status: "paid", paid_at: paidAt })
@@ -131,7 +169,7 @@ export async function POST(req: NextRequest) {
     const tx = await recordAssistantPayrollPaidTransaction(
       admin,
       clinicId,
-      record as PayrollRecord
+      activeRecord
     );
     if (!tx.ok) {
       return NextResponse.json(
@@ -147,12 +185,13 @@ export async function POST(req: NextRequest) {
       action: "update",
       changedBy: caller.id,
       actorName: caller.full_name ?? null,
-      financialAmount: -Math.abs(Number(record.total_salary ?? 0)),
+      financialAmount: -Math.abs(doctorShare > 0 ? doctorShare : totalSalary),
       after: {
         kind: "assistant",
         status: "paid",
-        doctor_id: record.doctor_id ?? null,
-        month_year: record.month_year ?? null,
+        doctor_id: activeRecord.doctor_id ?? null,
+        month_year: activeRecord.month_year ?? null,
+        doctor_share_amount: doctorShare,
       },
       note: "تأكيد صرف راتب مساعد",
     });
@@ -160,7 +199,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       kind: "assistant",
-      doctor_deducted: Number(record.doctor_share_amount ?? 0),
+      doctor_id: activeRecord.doctor_id ?? null,
+      doctor_deducted: doctorShare,
+      total_salary: totalSalary,
       profit_updated: true,
     });
   } catch (e) {

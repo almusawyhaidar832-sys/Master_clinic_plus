@@ -14,6 +14,12 @@ import {
   normalizeCompensationMode,
 } from "@/lib/services/assistant-compensation";
 import { validateSalaryEntryReason } from "@/lib/services/salary-entry-reason";
+import {
+  reverseAssistantPayrollPaidTransaction,
+  reverseStaffSlipPaidTransaction,
+  upsertStaffSlipAccrualTransaction,
+} from "@/lib/services/payroll-financial";
+import { isMonthClosed } from "@/lib/services/salary-payroll";
 import { calculateSalaryNet, monthDateRange } from "@/lib/utils";
 import type { PayrollRecord, SalaryEntry, SalaryEntryType, SalarySlip } from "@/types";
 
@@ -150,7 +156,43 @@ export async function syncStaffSalarySlipDraft(
   }
 
   if (existing?.status === "paid") {
-    return { slip: existing as SalarySlip };
+    if (!isDailyWage(compensationMode)) {
+      return { slip: existing as SalarySlip };
+    }
+
+    const tx = await reverseStaffSlipPaidTransaction(
+      admin,
+      clinicId,
+      existing as SalarySlip
+    );
+    if (!tx.ok) {
+      return { slip: null, error: tx.error ?? "تعذر إعادة فتح القسيمة" };
+    }
+
+    const { data: reopened, error: reopenErr } = await admin
+      .from("salary_slips")
+      .update({
+        status: "draft",
+        paid_at: null,
+        base_salary: baseSalary,
+        total_advances: advances,
+        total_deductions: deductions,
+        net_payout: netPayout,
+      })
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+
+    if (reopenErr || !reopened) {
+      return { slip: null, error: reopenErr?.message ?? "تعذر تحديث القسيمة" };
+    }
+
+    await upsertStaffSlipAccrualTransaction(
+      admin,
+      clinicId,
+      reopened as SalarySlip
+    );
+    return { slip: reopened as SalarySlip };
   }
 
   const payload = {
@@ -183,7 +225,9 @@ export async function syncStaffSalarySlipDraft(
     return { slip: null, error: error.message };
   }
 
-  return { slip: data as SalarySlip };
+  const slip = data as SalarySlip;
+  await upsertStaffSlipAccrualTransaction(admin, clinicId, slip);
+  return { slip };
 }
 
 export async function syncDoctorSalarySlipDraft(
@@ -358,7 +402,22 @@ export async function recomputeAssistantPayrollRecord(
   }
 
   if (existing.status === "paid") {
-    return { record: existing as PayrollRecord, netTotal: netPayout };
+    if (!isDailyWageAssistant(base.compensationMode)) {
+      return { record: existing as PayrollRecord, netTotal: netPayout };
+    }
+
+    const tx = await reverseAssistantPayrollPaidTransaction(
+      admin,
+      clinicId,
+      existing as PayrollRecord
+    );
+    if (!tx.ok) {
+      return {
+        record: null,
+        netTotal: netPayout,
+        error: tx.error ?? "تعذر إعادة فتح سجل الراتب",
+      };
+    }
   }
 
   const breakdown = breakdownAssistantSalary({
@@ -373,6 +432,8 @@ export async function recomputeAssistantPayrollRecord(
       doctor_share_percentage: breakdown.doctorSharePercentage,
       doctor_share_amount: breakdown.doctorShare,
       clinic_share_amount: breakdown.clinicShare,
+      status: "generated",
+      paid_at: null,
     })
     .eq("id", existing.id)
     .select("*")
@@ -672,7 +733,9 @@ export async function createSalaryEntry(
   payrollRecord: PayrollRecord | null;
   netPayout: number;
   error?: string;
+  notice?: string;
 }> {
+  let notice: string | undefined;
   const staffId = input.staffId?.trim() ?? "";
   const assistantId = input.assistantId?.trim() ?? "";
   const doctorId = input.doctorId?.trim() ?? "";
@@ -797,14 +860,58 @@ export async function createSalaryEntry(
       .maybeSingle();
 
     if (paidSlip) {
-      return {
-        entry: null,
-        entries: [],
-        slip: null,
-        payrollRecord: null,
-        netPayout: 0,
-        error: "قسيمة هذا الموظف مُسلَّمة — لا يمكن إضافة حركات لنفس الشهر",
-      };
+      if (isDailyWage(compensationMode)) {
+        if (await isMonthClosed(admin, input.clinicId, input.monthYear)) {
+          return {
+            entry: null,
+            entries: [],
+            slip: null,
+            payrollRecord: null,
+            netPayout: 0,
+            error: "الشهر مُغلق — لا يمكن إضافة حركات لنفس الشهر",
+          };
+        }
+        const tx = await reverseStaffSlipPaidTransaction(
+          admin,
+          input.clinicId,
+          paidSlip as SalarySlip
+        );
+        if (!tx.ok) {
+          return {
+            entry: null,
+            entries: [],
+            slip: null,
+            payrollRecord: null,
+            netPayout: 0,
+            error: tx.error ?? "تعذر إلغاء تأكيد الصرف",
+          };
+        }
+        const { error: reopenErr } = await admin
+          .from("salary_slips")
+          .update({ status: "draft", paid_at: null })
+          .eq("id", paidSlip.id);
+        if (reopenErr) {
+          return {
+            entry: null,
+            entries: [],
+            slip: null,
+            payrollRecord: null,
+            netPayout: 0,
+            error: reopenErr.message,
+          };
+        }
+        notice =
+          "تم إلغاء تأكيد الصرف تلقائياً — أضف كل أيام العمل ثم «تأكيد الصرف» عند الانتهاء";
+      } else {
+        return {
+          entry: null,
+          entries: [],
+          slip: null,
+          payrollRecord: null,
+          netPayout: 0,
+          error: "قسيمة هذا الموظف مُسلَّمة — لا يمكن إضافة حركات لنفس الشهر",
+        };
+      }
     }
   } else if (doctorId) {
     const { data: doctor, error: doctorErr } = await admin
@@ -923,14 +1030,58 @@ export async function createSalaryEntry(
       .maybeSingle();
 
     if (paidRecord) {
-      return {
-        entry: null,
-        entries: [],
-        slip: null,
-        payrollRecord: null,
-        netPayout: 0,
-        error: "راتب هذا المساعد مُصرف — لا يمكن إضافة حركات لنفس الشهر",
-      };
+      if (isDailyWageAssistant(compensationMode)) {
+        if (await isMonthClosed(admin, input.clinicId, input.monthYear)) {
+          return {
+            entry: null,
+            entries: [],
+            slip: null,
+            payrollRecord: null,
+            netPayout: 0,
+            error: "الشهر مُغلق — لا يمكن إضافة حركات لنفس الشهر",
+          };
+        }
+        const tx = await reverseAssistantPayrollPaidTransaction(
+          admin,
+          input.clinicId,
+          paidRecord as PayrollRecord
+        );
+        if (!tx.ok) {
+          return {
+            entry: null,
+            entries: [],
+            slip: null,
+            payrollRecord: null,
+            netPayout: 0,
+            error: tx.error ?? "تعذر إلغاء تأكيد الصرف",
+          };
+        }
+        const { error: reopenErr } = await admin
+          .from("payroll_records")
+          .update({ status: "generated", paid_at: null })
+          .eq("id", paidRecord.id);
+        if (reopenErr) {
+          return {
+            entry: null,
+            entries: [],
+            slip: null,
+            payrollRecord: null,
+            netPayout: 0,
+            error: reopenErr.message,
+          };
+        }
+        notice =
+          "تم إلغاء تأكيد الصرف تلقائياً — أضف كل أيام العمل ثم «تأكيد الصرف» عند الانتهاء";
+      } else {
+        return {
+          entry: null,
+          entries: [],
+          slip: null,
+          payrollRecord: null,
+          netPayout: 0,
+          error: "راتب هذا المساعد مُصرف — لا يمكن إضافة حركات لنفس الشهر",
+        };
+      }
     }
   }
 
@@ -1019,6 +1170,7 @@ export async function createSalaryEntry(
       payrollRecord: null,
       netPayout,
       error: slipErr,
+      notice,
     };
   }
 
@@ -1054,6 +1206,7 @@ export async function createSalaryEntry(
       payrollRecord: null,
       netPayout,
       error: slipErr,
+      notice,
     };
   }
 
@@ -1090,5 +1243,6 @@ export async function createSalaryEntry(
     payrollRecord: record,
     netPayout,
     error: recordErr,
+    notice,
   };
 }

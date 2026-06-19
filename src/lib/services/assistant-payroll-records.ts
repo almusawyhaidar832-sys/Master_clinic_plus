@@ -647,7 +647,13 @@ export async function generateMonthlyPayrollViaApi(
 export async function confirmPayrollViaApi(
   kind: "slip" | "assistant",
   id: string
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{
+  ok: boolean;
+  error?: string;
+  doctor_id?: string | null;
+  doctor_deducted?: number;
+  total_salary?: number;
+}> {
   const res = await fetch("/api/payroll/confirm", {
     method: "POST",
     credentials: "include",
@@ -657,14 +663,24 @@ export async function confirmPayrollViaApi(
     },
     body: JSON.stringify({ kind, id }),
   });
-  const json = await res.json().catch(() => ({}));
+  const json = (await res.json()) as {
+    error?: string;
+    doctor_id?: string | null;
+    doctor_deducted?: number;
+    total_salary?: number;
+  };
   if (!res.ok) {
     return {
       ok: false,
-      error: (json as { error?: string }).error ?? "تعذر تأكيد الصرف",
+      error: json.error ?? "تعذر تأكيد الصرف",
     };
   }
-  return { ok: true };
+  return {
+    ok: true,
+    doctor_id: json.doctor_id,
+    doctor_deducted: json.doctor_deducted,
+    total_salary: json.total_salary,
+  };
 }
 
 /** إلغاء تأكيد صرف — إرجاع الحالة وعكس الحركة المالية */

@@ -124,7 +124,10 @@ export async function POST(req: NextRequest) {
       slip: result.slip,
       payroll_record: result.payrollRecord,
       net_payout: result.netPayout,
-      warning: result.error && result.entry ? result.error : undefined,
+      warning:
+        result.notice ??
+        (result.error && result.entry ? result.error : undefined),
+      profit_updated: Boolean(result.entry),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";

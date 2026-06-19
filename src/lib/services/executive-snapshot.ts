@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchClosedPayrollMonths } from "@/lib/services/salary-payroll";
 import {
+  computeStaffNetPay,
+} from "@/lib/services/salary-entry-math";
+import {
   computeOutstandingDebtFromOperations,
 } from "@/lib/services/patient-treatment-cases";
 import { fetchPatientFinancialPlansBatch } from "@/lib/services/patient-financial-plan";
@@ -283,6 +286,7 @@ export function monthYearsInRange(from: string, to: string): string[] {
 
 /**
  * رواتب مُولَّدة (مساعدون + قسائم) — تُخصم من الربح فور التوليد.
+ * موظفو الأجر اليومي: يُحسب من الحركات مباشرة لضمان تحديث الربح فور تسجيل كل يوم.
  */
 export async function fetchPayrollAccrualsForProfitDeduction(
   supabase: SupabaseClient,
@@ -293,7 +297,7 @@ export async function fetchPayrollAccrualsForProfitDeduction(
   const months = monthYearsInRange(from, to);
   if (!months.length) return 0;
 
-  const [recordsRes, slipsRes] = await Promise.all([
+  const [recordsRes, slipsRes, dailyStaffRes, entriesRes] = await Promise.all([
     supabase
       .from("payroll_records")
       .select("clinic_share_amount, month_year")
@@ -301,17 +305,56 @@ export async function fetchPayrollAccrualsForProfitDeduction(
       .in("month_year", months),
     supabase
       .from("salary_slips")
-      .select("net_payout, month_year")
+      .select("net_payout, month_year, staff_id")
       .eq("clinic_id", clinicId)
       .in("month_year", months),
+    supabase
+      .from("staff_members")
+      .select("id")
+      .eq("clinic_id", clinicId)
+      .eq("compensation_mode", "daily_wage"),
+    supabase
+      .from("salary_entries")
+      .select("staff_id, entry_type, amount, entry_date")
+      .eq("clinic_id", clinicId)
+      .gte("entry_date", from)
+      .lte("entry_date", to)
+      .not("staff_id", "is", null),
   ]);
+
+  const dailyStaffIds = new Set(
+    (dailyStaffRes.data ?? []).map((row) => row.id as string)
+  );
+
+  const dailyStaffEntriesByMonth = new Map<
+    string,
+    { entry_type: string; amount: number | null }[]
+  >();
+  for (const row of entriesRes.data ?? []) {
+    const staffId = row.staff_id as string | null;
+    if (!staffId || !dailyStaffIds.has(staffId)) continue;
+    const monthYear = String(row.entry_date ?? "").slice(0, 7);
+    if (!months.includes(monthYear)) continue;
+    const key = `${staffId}:${monthYear}`;
+    const list = dailyStaffEntriesByMonth.get(key) ?? [];
+    list.push({
+      entry_type: row.entry_type as string,
+      amount: row.amount as number | null,
+    });
+    dailyStaffEntriesByMonth.set(key, list);
+  }
 
   let total = 0;
   for (const row of recordsRes.data ?? []) {
     total += Number(row.clinic_share_amount ?? 0);
   }
   for (const row of slipsRes.data ?? []) {
+    const staffId = row.staff_id as string | null;
+    if (staffId && dailyStaffIds.has(staffId)) continue;
     total += Number(row.net_payout ?? 0);
+  }
+  for (const entries of dailyStaffEntriesByMonth.values()) {
+    total += computeStaffNetPay(0, entries, "daily_wage").netPayout;
   }
 
   return total;
