@@ -65,8 +65,7 @@ async function listPayrollConfirmTransactions(
     .from("transactions")
     .select("id, amount, reference_id, transaction_date")
     .eq("clinic_id", clinicId)
-    .eq("reference_type", referenceType)
-    .like("reference_id", `${parentId}:%`);
+    .eq("reference_type", referenceType);
 
   if (error) {
     return {
@@ -80,17 +79,11 @@ async function listPayrollConfirmTransactions(
     };
   }
 
-  const legacy = await admin
-    .from("transactions")
-    .select("id, amount, reference_id, transaction_date")
-    .eq("clinic_id", clinicId)
-    .eq("reference_type", referenceType)
-    .eq("reference_id", parentId);
-
-  const rows = [
-    ...(data ?? []),
-    ...(legacy.data ?? []).filter((r) => !String(r.reference_id).includes(":")),
-  ];
+  const prefix = `${parentId}:`;
+  const rows = (data ?? []).filter((r) => {
+    const ref = String(r.reference_id ?? "");
+    return ref === parentId || ref.startsWith(prefix);
+  });
   rows.sort((a, b) =>
     String(a.reference_id).localeCompare(String(b.reference_id))
   );
