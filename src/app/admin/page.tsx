@@ -6,12 +6,10 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile, getActiveClinicId } from "@/lib/clinic-context";
-import {
-  fetchClinicProfitStats,
-  type ClinicProfitStats,
-} from "@/lib/services/clinic-stats";
 import { fetchDoctorLedgers } from "@/lib/services/clinic-reports";
-import { formatCurrency } from "@/lib/utils";
+import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
+import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
+import { currentMonthYear, formatCurrency, monthDateRange } from "@/lib/utils";
 import {
   FileText,
   Stethoscope,
@@ -37,7 +35,10 @@ export default function AdminHomePage() {
       const active = await getActiveClinicId(supabase);
       const clinicId = active?.clinicId;
       const [profit, doctors, pending] = await Promise.all([
-        fetchClinicProfitStats(supabase),
+        (async () => {
+          const { from, to } = monthDateRange(currentMonthYear());
+          return fetchClinicProfitStatsForPeriodViaApi(from, to, "admin");
+        })(),
         fetchDoctorLedgers(supabase),
         clinicId
           ? supabase
@@ -63,7 +64,7 @@ export default function AdminHomePage() {
 
       {stats && (
         <div className="rounded-2xl bg-gradient-to-br from-primary to-primary-700 p-5 text-white shadow-premium">
-          <p className="text-xs opacity-90">صافي ربح العيادة</p>
+          <p className="text-xs opacity-90">صافي ربح العيادة (هذا الشهر)</p>
           <p className="mt-1 text-3xl font-bold tabular-nums">
             {formatCurrency(stats.netProfit)}
           </p>

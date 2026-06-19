@@ -18,12 +18,6 @@ import {
   slipIsFullyPaid,
   slipPendingNet,
 } from "@/lib/services/payroll-paid-portions";
-import {
-  isDailyWage,
-  isDailyWageAssistant,
-  normalizeCompensationMode,
-  normalizeAssistantCompensationMode,
-} from "@/lib/services/assistant-compensation";
 import type { PayrollRecord, SalarySlip } from "@/types";
 
 function roundMoney(n: number): number {
@@ -77,19 +71,8 @@ export async function POST(req: NextRequest) {
       }
 
       let isDailyStaff = false;
-      if (!slip.doctor_id && slip.staff_id) {
-        const { data: staffRow } = await admin
-          .from("staff_members")
-          .select("compensation_mode")
-          .eq("id", slip.staff_id)
-          .eq("clinic_id", clinicId)
-          .maybeSingle();
-        isDailyStaff = isDailyWage(
-          normalizeCompensationMode(staffRow?.compensation_mode as string | undefined)
-        );
-      }
-
       let activeSlip = slip as SalarySlip;
+
       if (!slip.doctor_id && slip.staff_id) {
         const synced = await syncStaffSalarySlipDraft(
           admin,
@@ -103,6 +86,7 @@ export async function POST(req: NextRequest) {
         if (synced.slip) {
           activeSlip = synced.slip;
         }
+        isDailyStaff = synced.isDailyWage ?? false;
       }
 
       if (slipIsFullyPaid(activeSlip, { dailyWage: isDailyStaff })) {
@@ -152,17 +136,21 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: paidUpdateErr.message }, { status: 500 });
       }
 
-      let finalSlip = activeSlip;
-      if (isDailyStaff && activeSlip.staff_id) {
-        const resynced = await syncStaffSalarySlipDraft(
-          admin,
-          clinicId,
-          activeSlip.staff_id as string,
-          activeSlip.month_year as string
-        );
-        if (resynced.slip) {
-          finalSlip = resynced.slip;
+      let finalSlip = {
+        ...activeSlip,
+        paid_net_payout: newPaidNet,
+      } as SalarySlip;
+
+      if (isDailyStaff) {
+        const fullyPaid = slipIsFullyPaid(finalSlip, { dailyWage: true });
+        const { error: statusErr } = await admin
+          .from("salary_slips")
+          .update({ status: fullyPaid ? "paid" : "draft" })
+          .eq("id", id);
+        if (statusErr) {
+          return NextResponse.json({ error: statusErr.message }, { status: 500 });
         }
+        finalSlip = { ...finalSlip, status: fullyPaid ? "paid" : "draft" };
       } else {
         const fullNet = roundMoney(Number(activeSlip.net_payout ?? 0));
         const fullyPaid = newPaidNet >= fullNet;
@@ -225,19 +213,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "سجل الراتب غير موجود" }, { status: 404 });
     }
 
-    const { data: assistantRow } = await admin
-      .from("assistants")
-      .select("compensation_mode")
-      .eq("id", record.assistant_id)
-      .eq("clinic_id", clinicId)
-      .maybeSingle();
-    const dailyWage = isDailyWageAssistant(
-      normalizeAssistantCompensationMode(
-        assistantRow?.compensation_mode as string | undefined
-      )
-    );
-
-    const { record: freshRecord, error: recomputeErr } =
+    const { record: freshRecord, error: recomputeErr, dailyWage } =
       await recomputeAssistantPayrollRecord(
         admin,
         clinicId,
@@ -250,13 +226,18 @@ export async function POST(req: NextRequest) {
     }
 
     const activeRecord = (freshRecord ?? record) as PayrollRecord;
+    const dailyWageResolved = dailyWage ?? false;
 
-    if (assistantIsFullyPaid(activeRecord, { dailyWage })) {
+    if (assistantIsFullyPaid(activeRecord, { dailyWage: dailyWageResolved })) {
       return NextResponse.json({ success: true, already_paid: true });
     }
 
-    const pendingDoctor = assistantPendingDoctorShare(activeRecord, { dailyWage });
-    const pendingClinic = assistantPendingClinicShare(activeRecord, { dailyWage });
+    const pendingDoctor = assistantPendingDoctorShare(activeRecord, {
+      dailyWage: dailyWageResolved,
+    });
+    const pendingClinic = assistantPendingClinicShare(activeRecord, {
+      dailyWage: dailyWageResolved,
+    });
 
     if (pendingDoctor <= 0 && pendingClinic <= 0) {
       return NextResponse.json({ success: true, already_paid: true });
@@ -285,7 +266,7 @@ export async function POST(req: NextRequest) {
     );
     const newPaidTotal = roundMoney(
       Number(activeRecord.paid_total_salary ?? 0) +
-        (dailyWage
+        (dailyWageResolved
           ? Number(activeRecord.total_salary ?? 0)
           : (tx.doctorAmount ?? 0) + (tx.clinicAmount ?? 0))
     );
@@ -304,24 +285,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: paidUpdateErr.message }, { status: 500 });
     }
 
-    const { record: finalRecord, error: finalRecomputeErr } =
-      await recomputeAssistantPayrollRecord(
-        admin,
-        clinicId,
-        record.assistant_id as string,
-        record.month_year as string
-      );
-    if (finalRecomputeErr && !finalRecord) {
-      return NextResponse.json({ error: finalRecomputeErr }, { status: 500 });
-    }
-
-    const resolvedRecord = (finalRecord ?? {
+    const resolvedRecord = {
       ...activeRecord,
       paid_doctor_share_amount: newPaidDoctor,
       paid_clinic_share_amount: newPaidClinic,
       paid_total_salary: newPaidTotal,
-    }) as PayrollRecord;
-    const fullyPaid = assistantIsFullyPaid(resolvedRecord, { dailyWage });
+    } as PayrollRecord;
+    const fullyPaid = assistantIsFullyPaid(resolvedRecord, {
+      dailyWage: dailyWageResolved,
+    });
+
+    const { error: statusErr } = await admin
+      .from("payroll_records")
+      .update({ status: fullyPaid ? "paid" : "generated" })
+      .eq("id", id);
+
+    if (statusErr) {
+      return NextResponse.json({ error: statusErr.message }, { status: 500 });
+    }
 
     await writeAuditLog(admin, {
       clinicId,

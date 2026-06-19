@@ -241,6 +241,7 @@ export default function SalaryPage() {
   const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
   const [activeAssistantsCount, setActiveAssistantsCount] = useState(0);
   const [generatingPayroll, setGeneratingPayroll] = useState(false);
+  const [confirmingPayrollId, setConfirmingPayrollId] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<PayrollPerson | null>(null);
   const [editingPerson, setEditingPerson] = useState<PayrollPerson | null>(null);
@@ -1227,23 +1228,29 @@ export default function SalaryPage() {
   }
 
   async function markSlipPaid(slipId: string) {
-    const result = await confirmPayrollViaApi("slip", slipId);
-    if (!result.ok) {
-      showMessage(`تعذر تأكيد الصرف: ${result.error}`, false);
-      return;
+    if (confirmingPayrollId) return;
+    setConfirmingPayrollId(slipId);
+    try {
+      const result = await confirmPayrollViaApi("slip", slipId);
+      if (!result.ok) {
+        showMessage(`تعذر تأكيد الصرف: ${result.error}`, false);
+        return;
+      }
+      notifyClinicProfitRefresh(clinicId ?? undefined);
+      const confirmed =
+        result.confirmed_amount ??
+        result.net_payout ??
+        slipPendingAmount;
+      showMessage(
+        confirmed > 0
+          ? `تم تأكيد الصرف — خُصم ${formatCurrency(confirmed)} من ربح العيادة (المبلغ المتبقي فقط)`
+          : "تم تأكيد الصرف",
+        true
+      );
+      void loadPayrollMonth();
+    } finally {
+      setConfirmingPayrollId(null);
     }
-    notifyClinicProfitRefresh(clinicId ?? undefined);
-    const confirmed =
-      result.confirmed_amount ??
-      result.net_payout ??
-      slipPendingAmount;
-    showMessage(
-      confirmed > 0
-        ? `تم تأكيد الصرف — خُصم ${formatCurrency(confirmed)} من ربح العيادة (المبلغ المتبقي فقط)`
-        : "تم تأكيد الصرف",
-      true
-    );
-    loadPayrollMonth();
   }
 
   async function unmarkSlipPaid(slipId: string) {
@@ -1266,27 +1273,33 @@ export default function SalaryPage() {
   }
 
   async function markAssistantPayrollPaid(recordId: string) {
-    const result = await confirmPayrollViaApi("assistant", recordId);
-    if (!result.ok) {
-      showMessage(`تعذر تأكيد صرف المساعد: ${result.error}`, false);
-      return;
+    if (confirmingPayrollId) return;
+    setConfirmingPayrollId(recordId);
+    try {
+      const result = await confirmPayrollViaApi("assistant", recordId);
+      if (!result.ok) {
+        showMessage(`تعذر تأكيد صرف المساعد: ${result.error}`, false);
+        return;
+      }
+      notifyClinicProfitRefresh(clinicId ?? undefined);
+      if (result.doctor_id) {
+        notifyFinancialMutation({
+          clinicId: clinicId ?? "",
+          doctorId: result.doctor_id,
+        });
+      }
+      const deducted = result.doctor_deducted ?? 0;
+      const clinicPart = result.clinic_deducted ?? 0;
+      showMessage(
+        deducted > 0 || clinicPart > 0
+          ? `تم تأكيد الصرف — خُصم ${formatCurrency(deducted)} من الطبيب${clinicPart > 0 ? ` و${formatCurrency(clinicPart)} من ربح العيادة` : ""} (المبلغ المتبقي فقط)`
+          : "تم تأكيد الصرف — لا حصة للطبيب (النسبة 0%)",
+        true
+      );
+      void loadPayrollMonth();
+    } finally {
+      setConfirmingPayrollId(null);
     }
-    notifyClinicProfitRefresh(clinicId ?? undefined);
-    if (result.doctor_id) {
-      notifyFinancialMutation({
-        clinicId: clinicId ?? "",
-        doctorId: result.doctor_id,
-      });
-    }
-    const deducted = result.doctor_deducted ?? 0;
-    const clinicPart = result.clinic_deducted ?? 0;
-    showMessage(
-      deducted > 0 || clinicPart > 0
-        ? `تم تأكيد الصرف — خُصم ${formatCurrency(deducted)} من الطبيب${clinicPart > 0 ? ` و${formatCurrency(clinicPart)} من ربح العيادة` : ""} (المبلغ المتبقي فقط)`
-        : "تم تأكيد الصرف — لا حصة للطبيب (النسبة 0%)",
-      true
-    );
-    loadPayrollMonth();
   }
 
   async function unmarkAssistantPayrollPaid(recordId: string) {
@@ -1827,12 +1840,17 @@ export default function SalaryPage() {
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      disabled={record.status === "paid"}
+                                      disabled={
+                                        record.status === "paid" ||
+                                        Boolean(confirmingPayrollId)
+                                      }
                                       onClick={() =>
                                         markAssistantPayrollPaid(record.id)
                                       }
                                     >
-                                      تأكيد الصرف
+                                      {confirmingPayrollId === record.id
+                                        ? "جاري التأكيد..."
+                                        : "تأكيد الصرف"}
                                     </Button>
                                     <Button
                                       size="sm"
@@ -1861,10 +1879,15 @@ export default function SalaryPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    disabled={slip.status === "paid"}
+                                    disabled={
+                                      slip.status === "paid" ||
+                                      Boolean(confirmingPayrollId)
+                                    }
                                     onClick={() => markSlipPaid(slip.id)}
                                   >
-                                    تأكيد الصرف
+                                    {confirmingPayrollId === slip.id
+                                      ? "جاري التأكيد..."
+                                      : "تأكيد الصرف"}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -2377,14 +2400,18 @@ export default function SalaryPage() {
                       <Button
                         type="button"
                         className="flex-1 min-w-[10rem]"
-                        disabled={!canConfirmPayroll}
+                        disabled={
+                          !canConfirmPayroll || Boolean(confirmingPayrollId)
+                        }
                         onClick={() =>
                           markAssistantPayrollPaid(selectedAssistantRecord.id)
                         }
                       >
-                        {canConfirmPayroll
-                          ? `تأكيد الصرف — ${formatCurrency(slipPendingAmount)}`
-                          : "مُؤكَّد بالكامل"}
+                        {confirmingPayrollId === selectedAssistantRecord.id
+                          ? "جاري التأكيد..."
+                          : canConfirmPayroll
+                            ? `تأكيد الصرف — ${formatCurrency(slipPendingAmount)}`
+                            : "مُؤكَّد بالكامل"}
                       </Button>
                       <Button
                         type="button"
@@ -2490,12 +2517,16 @@ export default function SalaryPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={!canConfirmPayroll}
+                      disabled={
+                        !canConfirmPayroll || Boolean(confirmingPayrollId)
+                      }
                       onClick={() => markSlipPaid(staffSlipThisMonth.id)}
                     >
-                      {canConfirmPayroll
-                        ? `تأكيد الصرف — ${formatCurrency(slipPendingAmount)}`
-                        : "مُؤكَّد بالكامل"}
+                      {confirmingPayrollId === staffSlipThisMonth.id
+                        ? "جاري التأكيد..."
+                        : canConfirmPayroll
+                          ? `تأكيد الصرف — ${formatCurrency(slipPendingAmount)}`
+                          : "مُؤكَّد بالكامل"}
                     </Button>
                     <Button
                       type="button"
@@ -2591,10 +2622,16 @@ export default function SalaryPage() {
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
-                    disabled={slip.status === "paid" || boardLocked}
+                    disabled={
+                      slip.status === "paid" ||
+                      boardLocked ||
+                      Boolean(confirmingPayrollId)
+                    }
                     onClick={() => markSlipPaid(slip.id)}
                   >
-                    تأكيد الصرف
+                    {confirmingPayrollId === slip.id
+                      ? "جاري التأكيد..."
+                      : "تأكيد الصرف"}
                   </Button>
                   <Button
                     size="sm"

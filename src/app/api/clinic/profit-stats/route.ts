@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
-import { fetchExecutiveDashboardSupplement } from "@/lib/services/executive-snapshot";
 import { fetchClinicProfitStatsForPeriod } from "@/lib/services/clinic-stats";
 
-/** GET /api/executive/supplement?from=&to= — بيانات الرواتب + ربح مُحاذٍ للتقرير */
+/** GET /api/clinic/profit-stats?from=&to= — أرباح الفترة (مصدر موحّد للإدارة والمحاسب) */
 export async function GET(req: NextRequest) {
   try {
     const caller = await getApiCallerProfile(req);
@@ -27,26 +26,14 @@ export async function GET(req: NextRequest) {
     }
 
     const admin = getAdminClient();
-    const [supplement, profitStats] = await Promise.all([
-      fetchExecutiveDashboardSupplement(admin, clinicId, from, to),
-      fetchClinicProfitStatsForPeriod(admin, clinicId, from, to),
-    ]);
+    const stats = await fetchClinicProfitStatsForPeriod(
+      admin,
+      clinicId,
+      from,
+      to
+    );
 
-    const reviewFees =
-      profitStats.breakdown.find((b) => b.label === "كشفيات المراجعين")
-        ?.amount ?? 0;
-
-    return NextResponse.json({
-      ...supplement,
-      reportAligned: {
-        netProfit: profitStats.netProfit,
-        clinicShareTotal: profitStats.clinicShareTotal,
-        totalExpenses: profitStats.totalExpenses,
-        reviewFees,
-        salariesDeducted: profitStats.totalSalariesPaid,
-        doctorShareTotal: profitStats.doctorShareTotal,
-      },
-    });
+    return NextResponse.json(stats);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
     return NextResponse.json({ error: msg }, { status: 500 });

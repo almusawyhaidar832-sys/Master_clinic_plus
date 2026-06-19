@@ -6,9 +6,8 @@ import { Select } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
 import { MasterReportDocument } from "@/components/reports/MasterReportDocument";
 import { ReportActions } from "@/components/reports/ReportActions";
-import { createClient } from "@/lib/supabase/client";
+import { fetchMasterClinicReportViaApi } from "@/lib/services/clinic-reports-api";
 import {
-  fetchMasterClinicReport,
   getReportPeriodOptions,
   type MasterClinicReport,
 } from "@/lib/services/clinic-reports";
@@ -27,8 +26,7 @@ export default function AdminMasterReportPage() {
     setLoading(true);
     setError(null);
     try {
-      const supabase = createClient();
-      const data = await fetchMasterClinicReport(supabase, monthYear);
+      const data = await fetchMasterClinicReportViaApi(monthYear);
       setReport(data);
     } catch {
       setError("تعذر إنشاء التقرير");

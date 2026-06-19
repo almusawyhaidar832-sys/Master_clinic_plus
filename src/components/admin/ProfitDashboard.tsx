@@ -3,11 +3,9 @@
 import { useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { createClient } from "@/lib/supabase/client";
-import {
-  fetchClinicProfitStats,
-  type ClinicProfitStats,
-} from "@/lib/services/clinic-stats";
-import { formatCurrency } from "@/lib/utils";
+import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
+import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
+import { currentMonthYear, formatCurrency, monthDateRange } from "@/lib/utils";
 import { TrendingDown, TrendingUp, Wallet, AlertCircle } from "lucide-react";
 
 interface ProfitDashboardProps {
@@ -21,9 +19,9 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
       try {
-        const data = await fetchClinicProfitStats(supabase);
+        const { from, to } = monthDateRange(currentMonthYear());
+        const data = await fetchClinicProfitStatsForPeriodViaApi(from, to, "admin");
         setStats(data);
       } catch {
         setError("تعذر تحميل بيانات الأرباح");
@@ -116,13 +114,13 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
                 className={
                   row.amount < 0
                     ? "font-medium text-debt-text"
-                    : row.label === "صافي الربح"
+                    : row.label === "صافي ربح العيادة"
                       ? "font-bold text-primary"
                       : "font-medium text-slate-text"
                 }
               >
                 {formatCurrency(Math.abs(row.amount))}
-                {row.amount < 0 && row.label !== "صافي الربح" ? " −" : ""}
+                {row.amount < 0 && row.label !== "صافي ربح العيادة" ? " −" : ""}
               </span>
             </div>
           ))}
@@ -136,7 +134,7 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
       >
         <Card>
           <CardHeader>
-            <p className="text-sm text-slate-muted">حصة العيادة (تراكمي)</p>
+            <p className="text-sm text-slate-muted">حصة العيادة (الشهر)</p>
             <p className="text-xl font-bold text-slate-text">
               {formatCurrency(stats.clinicShareTotal)}
             </p>
@@ -158,10 +156,9 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
             <CardTitle>صيغة الحساب</CardTitle>
           </CardHeader>
           <p className="text-sm text-slate-muted leading-relaxed">
-            صافي الربح = حصة العيادة من العمليات − رواتب الموظفين المدفوعة −
-            المصروفات العامة. التدفق النقدي = مجموع المبالغ المحصّلة من
-            المرضى. الديون المعلّقة تُعرض للمتابعة ولا تُدرج في الربح حتى
-            التحصيل.
+            صافي الربح = حصة العيادة من العمليات + كشفيات المراجعين − مصروفات
+            العيادة − رواتب مؤكَّد صرفها (نفس التقرير الشامل). التدفق النقدي =
+            مجموع المبالغ المحصّلة في الشهر.
           </p>
         </Card>
       )}

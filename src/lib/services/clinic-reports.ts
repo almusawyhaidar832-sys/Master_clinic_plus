@@ -46,6 +46,7 @@ import {
   fetchWithdrawalSumsByDoctor,
   filterWithdrawalsInPeriod,
   withdrawalEffectiveDate,
+  type DoctorWalletStats,
 } from "@/lib/services/doctor-wallet";
 import {
   type DoctorWithdrawalLine,
@@ -264,6 +265,32 @@ function resolveSalaryDoctorPeriodEarned(
   return breakdown?.netPayout ?? 0;
 }
 
+/** رصيد السحب الحالي — مستقل عن شهر التقرير (يطابق محفظة الطبيب) */
+function resolveDoctorCurrentBalances(
+  wallet: DoctorWalletStats | undefined,
+  withdrawalsAll: { pendingWithdrawalAmount?: number } | undefined,
+  salaryFallback?: { earned: number; paidAll: number }
+): Pick<
+  DoctorLedgerSummary,
+  "withdrawableBalance" | "availableBalance" | "pendingWithdrawalAmount"
+> {
+  const pendingWithdrawalAmount =
+    wallet?.pendingAmount ?? withdrawalsAll?.pendingWithdrawalAmount ?? 0;
+  const withdrawableBalance =
+    wallet?.withdrawableLimit ??
+    (salaryFallback
+      ? computeSalaryDoctorWithdrawable(
+          salaryFallback.earned,
+          salaryFallback.paidAll
+        )
+      : 0);
+  return {
+    withdrawableBalance,
+    availableBalance: wallet?.availableBalance ?? withdrawableBalance,
+    pendingWithdrawalAmount,
+  };
+}
+
 /** طبيب له نشاط فعلي ضمن شهر التقرير */
 export function doctorLedgerHasPeriodActivity(
   ledger: DoctorLedgerSummary,
@@ -396,12 +423,11 @@ export async function fetchDoctorLedgers(
         totalEarned: earnedNet,
         totalWithdrawn: periodScoped ? salaryPaidMonth : salaryPaidAll,
         monthWithdrawn: salaryPaidMonth,
+        ...resolveDoctorCurrentBalances(wallet, withdrawalsAll, {
+          earned: wallet?.totalEarnings ?? earnedNet,
+          paidAll: wallet?.totalWithdrawn ?? salaryPaidAll,
+        }),
         pendingWithdrawalAmount: 0,
-        withdrawableBalance: periodScoped
-          ? 0
-          : (wallet?.withdrawableLimit ??
-            computeSalaryDoctorWithdrawable(earnedNet, salaryPaidMonth)),
-        availableBalance: periodScoped ? 0 : (wallet?.availableBalance ?? 0),
         operationsCount: opsCount,
       };
     }
@@ -424,11 +450,7 @@ export async function fetchDoctorLedgers(
         ? monthWithdrawn
         : (withdrawalsAll?.totalWithdrawn ?? 0),
       monthWithdrawn,
-      pendingWithdrawalAmount: periodScoped
-        ? 0
-        : (withdrawalsAll?.pendingWithdrawalAmount ?? 0),
-      withdrawableBalance: periodScoped ? 0 : (wallet?.withdrawableLimit ?? 0),
-      availableBalance: periodScoped ? 0 : (wallet?.availableBalance ?? 0),
+      ...resolveDoctorCurrentBalances(wallet, withdrawalsAll),
       operationsCount: opsCountMap.get(doc.id) ?? 0,
     };
   });
@@ -538,12 +560,11 @@ export async function fetchDoctorLedgerSummary(
       totalEarned: earnedNet,
       totalWithdrawn: periodScoped ? salaryPaidMonth : salaryPaidAll,
       monthWithdrawn: salaryPaidMonth,
+      ...resolveDoctorCurrentBalances(wallet, withdrawalsAll, {
+        earned: wallet?.totalEarnings ?? earnedNet,
+        paidAll: wallet?.totalWithdrawn ?? salaryPaidAll,
+      }),
       pendingWithdrawalAmount: 0,
-      withdrawableBalance: periodScoped
-        ? 0
-        : (wallet?.withdrawableLimit ??
-          computeSalaryDoctorWithdrawable(earnedNet, salaryPaidMonth)),
-      availableBalance: periodScoped ? 0 : (wallet?.availableBalance ?? 0),
       operationsCount: opsCount,
     };
   }
@@ -566,11 +587,7 @@ export async function fetchDoctorLedgerSummary(
       ? monthWithdrawn
       : (withdrawalsAll?.totalWithdrawn ?? 0),
     monthWithdrawn,
-    pendingWithdrawalAmount: periodScoped
-      ? 0
-      : (withdrawalsAll?.pendingWithdrawalAmount ?? 0),
-    withdrawableBalance: periodScoped ? 0 : (wallet?.withdrawableLimit ?? 0),
-    availableBalance: periodScoped ? 0 : (wallet?.availableBalance ?? 0),
+    ...resolveDoctorCurrentBalances(wallet, withdrawalsAll),
     operationsCount: opsCountMap.get(doctorId) ?? 0,
   };
 }
@@ -734,7 +751,8 @@ export async function fetchDoctorLedgerDetail(
 
 export async function fetchMasterClinicReport(
   supabase: SupabaseClient,
-  monthYear?: string
+  monthYear?: string,
+  explicitClinicId?: string
 ): Promise<MasterClinicReport> {
   const { start, end, my } = getMonthBounds(monthYear);
   const isCurrentMonthReport = my === currentMonthYear();
@@ -744,10 +762,12 @@ export async function fetchMasterClinicReport(
     : `آخر يوم (${end})`;
 
   const clinicProfile = await fetchClinicProfile(supabase);
-  const active = await import("@/lib/clinic-context").then((m) =>
-    m.getActiveClinicId(supabase)
-  );
-  const clinicId = active?.clinicId;
+  const active = explicitClinicId
+    ? null
+    : await import("@/lib/clinic-context").then((m) =>
+        m.getActiveClinicId(supabase)
+      );
+  const clinicId = explicitClinicId ?? active?.clinicId;
 
   const monthOpsQuery = (select: string) => {
     let q = supabase

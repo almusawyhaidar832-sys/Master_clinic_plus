@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { ProfitDashboard } from "@/components/admin/ProfitDashboard";
+import { currentMonthYear } from "@/lib/utils";
 import { FileText } from "lucide-react";
 
 export default function ClinicProfitsPage() {
@@ -10,7 +11,9 @@ export default function ClinicProfitsPage() {
     <div className="space-y-4">
       <div>
         <h2 className="text-xl font-bold text-slate-text">أرباح العيادة</h2>
-        <p className="text-sm text-slate-muted">ملخص مالي — محسّن للجوال</p>
+        <p className="text-sm text-slate-muted">
+          ملخص شهر {currentMonthYear()} — نفس منطق التقرير الشامل
+        </p>
       </div>
 
       <Link href="/admin/report">

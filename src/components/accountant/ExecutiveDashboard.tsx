@@ -12,13 +12,15 @@ import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import {
   mergeExecutiveDashboardMetrics,
   resolveExecutiveSalaryDeduction,
+  applyReportAlignedProfitMetrics,
   type ExecutiveSnapshotCore,
+  type ReportAlignedProfitMetrics,
 } from "@/lib/services/executive-snapshot";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Alert } from "@/components/ui/Alert";
-import { cn, localDateISO, todayISO } from "@/lib/utils";
+import { cn, localDateISO, monthDateRange, todayISO, currentMonthYear } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, Minus,
   DollarSign, Wallet, Receipt, Users,
@@ -363,8 +365,7 @@ export function ExecutiveDashboard() {
       }
       case "month":
       default: {
-        const m = new Date(today.getFullYear(), today.getMonth(), 1);
-        return { from: localDateISO(m), to: todayStr };
+        return monthDateRange(currentMonthYear());
       }
     }
   }, [period]);
@@ -397,6 +398,7 @@ export function ExecutiveDashboard() {
           salariesPaidLegacy?: number;
           payrollAccruals?: number;
           visitorDebt?: { debt: number; visitorCount: number };
+          reportAligned?: ReportAlignedProfitMetrics;
           error?: string;
         })
       : null;
@@ -406,12 +408,12 @@ export function ExecutiveDashboard() {
       salariesPaidLegacy = 0,
       payrollAccruals = 0,
       visitorDebt = { debt: 0, visitorCount: 0 },
+      reportAligned,
     } = supplementJson ?? {};
 
-    const salariesDeducted = resolveExecutiveSalaryDeduction(
-      payrollAccruals,
-      salariesPaidLegacy
-    );
+    const salariesDeducted = reportAligned
+      ? reportAligned.salariesDeducted
+      : resolveExecutiveSalaryDeduction(payrollAccruals, salariesPaidLegacy);
 
     if (snapRes.error) {
       setFetchError(
@@ -420,16 +422,24 @@ export function ExecutiveDashboard() {
     }
 
     const baseSnap: Snapshot = snapRes.data
-      ? (mergeExecutiveDashboardMetrics(
-          snapRes.data as unknown as ExecutiveSnapshotCore,
-          {
-            salariesPaid: salariesDisplay,
-            salariesDeductedFromProfit: salariesDeducted,
-            reviewFees: Number(
-              (snapRes.data as Record<string, unknown>).review_fees ?? 0
-            ),
-          }
-        ) as unknown as Snapshot)
+      ? (() => {
+          const merged = mergeExecutiveDashboardMetrics(
+            snapRes.data as unknown as ExecutiveSnapshotCore,
+            {
+              salariesPaid: salariesDisplay,
+              salariesDeductedFromProfit: salariesDeducted,
+              reviewFees: Number(
+                (snapRes.data as Record<string, unknown>).review_fees ?? 0
+              ),
+            }
+          ) as unknown as Snapshot;
+          return reportAligned
+            ? (applyReportAlignedProfitMetrics(
+                merged as unknown as ExecutiveSnapshotCore,
+                reportAligned
+              ) as unknown as Snapshot)
+            : merged;
+        })()
       : {
           revenue: 0,
           collected: 0,

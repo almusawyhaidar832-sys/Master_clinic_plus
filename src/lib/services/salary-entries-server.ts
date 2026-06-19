@@ -18,7 +18,6 @@ import {
   assistantIsFullyPaid,
   slipIsFullyPaid,
 } from "@/lib/services/payroll-paid-portions";
-import { upsertStaffSlipAccrualTransaction } from "@/lib/services/payroll-financial";
 import { isMonthClosed } from "@/lib/services/salary-payroll";
 import { calculateSalaryNet, monthDateRange } from "@/lib/utils";
 import type { PayrollRecord, SalaryEntry, SalaryEntryType, SalarySlip } from "@/types";
@@ -112,9 +111,11 @@ export async function syncStaffSalarySlipDraft(
   clinicId: string,
   staffId: string,
   monthYear: string
-): Promise<{ slip: SalarySlip | null; error?: string }> {
-  const { data: staff, error: staffErr } = await admin
-    .from("staff_members")
+): Promise<{
+  slip: SalarySlip | null;
+  isDailyWage?: boolean;
+  error?: string;
+}> {
     .select("base_salary, compensation_mode")
     .eq("id", staffId)
     .eq("clinic_id", clinicId)
@@ -160,7 +161,10 @@ export async function syncStaffSalarySlipDraft(
   }
 
   if (existing?.status === "paid" && !isDailyWage(compensationMode)) {
-    return { slip: existing as SalarySlip };
+    return {
+      slip: existing as SalarySlip,
+      isDailyWage: isDailyWage(compensationMode),
+    };
   }
 
   const paidNet = roundMoney(Number(existing?.paid_net_payout ?? 0));
@@ -201,8 +205,7 @@ export async function syncStaffSalarySlipDraft(
   }
 
   const slip = data as SalarySlip;
-  await upsertStaffSlipAccrualTransaction(admin, clinicId, slip);
-  return { slip };
+  return { slip, isDailyWage: isDailyWage(compensationMode) };
 }
 
 export async function syncDoctorSalarySlipDraft(
@@ -332,6 +335,7 @@ export async function recomputeAssistantPayrollRecord(
 ): Promise<{
   record: PayrollRecord | null;
   netTotal: number;
+  dailyWage?: boolean;
   error?: string;
 }> {
   const base = await loadAssistantPayrollBase(admin, clinicId, assistantId);
@@ -380,7 +384,11 @@ export async function recomputeAssistantPayrollRecord(
     existing.status === "paid" &&
     !isDailyWageAssistant(base.compensationMode)
   ) {
-    return { record: existing as PayrollRecord, netTotal: fullNet };
+    return {
+      record: existing as PayrollRecord,
+      netTotal: fullNet,
+      dailyWage: isDailyWageAssistant(base.compensationMode),
+    };
   }
 
   const paidDoctor = roundMoney(Number(existing.paid_doctor_share_amount ?? 0));
@@ -426,7 +434,11 @@ export async function recomputeAssistantPayrollRecord(
     return { record: null, netTotal: fullNet, error: error.message };
   }
 
-  return { record: data as PayrollRecord, netTotal: pendingNet };
+  return {
+    record: data as PayrollRecord,
+    netTotal: pendingNet,
+    dailyWage,
+  };
 }
 
 function assistantDoctorName(

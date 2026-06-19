@@ -499,6 +499,31 @@ export interface ExecutiveDashboardSupplement {
   visitorDebt: { debt: number; visitorCount: number };
 }
 
+/** أرقام الربح — نفس منطق التقرير الشامل (fetchClinicProfitStatsForPeriod) */
+export interface ReportAlignedProfitMetrics {
+  netProfit: number;
+  clinicShareTotal: number;
+  totalExpenses: number;
+  reviewFees: number;
+  salariesDeducted: number;
+  doctorShareTotal: number;
+}
+
+/** محاذاة اللوحة التنفيذية مع التقرير — حصة العيادة من clinic_share_amount وليس calc_clinic_operation_earned */
+export function applyReportAlignedProfitMetrics<T extends ExecutiveSnapshotCore>(
+  snap: T,
+  aligned: ReportAlignedProfitMetrics
+): T {
+  return {
+    ...snap,
+    clinic_shares: aligned.clinicShareTotal,
+    expenses: aligned.totalExpenses,
+    review_fees: aligned.reviewFees,
+    net_profit: aligned.netProfit,
+    doctor_shares: aligned.doctorShareTotal,
+  };
+}
+
 /** بيانات اللوحة التنفيذية الإضافية — 3 مسارات بدل 5 */
 export async function fetchExecutiveDashboardSupplement(
   supabase: SupabaseClient,

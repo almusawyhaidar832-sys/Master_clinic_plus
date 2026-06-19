@@ -34,7 +34,7 @@ export default function AdminDoctorsLedgerPage() {
       <div>
         <h2 className="text-xl font-bold text-slate-text">حسابات الأطباء</h2>
         <p className="text-sm text-slate-muted">
-          دفتر مالي لكل طبيب — مستحقات، مسحوبات، وسحب معلّق
+          دفتر مالي لكل طبيب — مستحقات ومسحوبات الشهر الحالي، والرصيد القابل للسحب الآن
         </p>
       </div>
 
@@ -52,17 +52,17 @@ export default function AdminDoctorsLedgerPage() {
                 <p className="text-[11px] text-primary font-medium">{d.paymentLabel}</p>
                 <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                   <span className="text-slate-muted">
-                    مستحق:{" "}
+                    مستحق (الشهر):{" "}
                     <strong className="text-slate-text">
                       {formatCurrency(d.totalEarned)}
                     </strong>
                   </span>
                   <span className="text-slate-muted">
-                    مسحوب:{" "}
+                    مسحوب (الشهر):{" "}
                     <strong>{formatCurrency(d.totalWithdrawn)}</strong>
                   </span>
                   <span className="text-primary">
-                    قابل للسحب: {formatCurrency(d.withdrawableBalance)}
+                    قابل للسحب (الآن): {formatCurrency(d.withdrawableBalance)}
                   </span>
                   {d.pendingWithdrawalAmount > 0 && (
                     <span className="text-amber-700">
