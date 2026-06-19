@@ -54,9 +54,16 @@ interface Snapshot {
 }
 
 interface TopPerformers {
-  top_doctors: Array<{ full_name_ar: string; revenue: number; doctor_share: number; op_count: number }>;
+  top_doctors: Array<{
+    full_name_ar: string;
+    revenue: number;
+    clinic_share?: number;
+    doctor_share: number;
+    op_count: number;
+  }>;
   top_services: Array<{ service_name: string; count: number; revenue: number; avg_price: number; clinic_margin_pct: number }>;
   top_expenses: Array<{ category: string; total: number; count: number }>;
+  inactive_doctors?: Array<{ full_name_ar: string; doctor_id?: string }>;
 }
 
 type Period = "today" | "week" | "month" | "custom";
@@ -287,7 +294,10 @@ function TopDoctorsCard({ doctors }: { doctors: TopPerformers["top_doctors"] }) 
                 style={{ width: `${(d.revenue / max) * 100}%` }}
               />
             </div>
-            <p className="mt-0.5 text-xs text-slate-400">{d.op_count} {t("execTopDoctorOps")} {fmt(d.doctor_share)}</p>
+            <p className="mt-0.5 text-xs text-slate-400">
+              {d.op_count} {t("execTopDoctorOps")} ·{" "}
+              {formatMoney(d.clinic_share ?? 0)} {t("clinicNetShare")}
+            </p>
           </div>
         ))}
       </div>

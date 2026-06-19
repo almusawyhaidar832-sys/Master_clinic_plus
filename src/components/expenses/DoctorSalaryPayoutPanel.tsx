@@ -192,7 +192,7 @@ export function DoctorSalaryPayoutPanel({
               <span className="font-bold text-red-600">
                 {formatCurrency(parseFloat(amount) || 0)}
               </span>{" "}
-              من رصيد العيادة ويُسجَّل كمصروف راتب.
+              من رصيد العيادة ويُسجَّل في كشف الطبيب (خصم واحد في اللوحة التنفيذية).
             </p>
           )}
 

@@ -92,9 +92,8 @@ export async function fetchClinicProfitStatsForPeriod(
   const { fetchTotalRefundsAmount } = await import(
     "@/lib/services/session-refunds"
   );
-  const { fetchPaidSalariesInPeriod } = await import(
-    "@/lib/services/executive-snapshot"
-  );
+  const { fetchResolvedSalaryDeductionForPeriod, fetchReviewFeesInPeriod } =
+    await import("@/lib/services/executive-snapshot");
 
   const [
     opsRes,
@@ -103,6 +102,7 @@ export async function fetchClinicProfitStatsForPeriod(
     totalRefunds,
     clinicExpenseShareRes,
     visitorDebt,
+    reviewFees,
   ] = await Promise.all([
     supabase
       .from("patient_operations")
@@ -112,11 +112,11 @@ export async function fetchClinicProfitStatsForPeriod(
       .lte("operation_date", to),
     supabase
       .from("expenses")
-      .select("amount")
+      .select("amount, expense_kind")
       .eq("clinic_id", clinicId)
       .gte("expense_date", from)
       .lte("expense_date", to),
-    fetchPaidSalariesInPeriod(supabase, clinicId, from, to),
+    fetchResolvedSalaryDeductionForPeriod(supabase, clinicId, from, to),
     fetchTotalRefundsAmount(supabase, { clinicId, from, to }),
     supabase
       .from("transactions")
@@ -127,6 +127,7 @@ export async function fetchClinicProfitStatsForPeriod(
       .gte("transaction_date", from)
       .lte("transaction_date", to),
     fetchPeriodVisitorDebt(supabase, clinicId, from, to),
+    fetchReviewFeesInPeriod(supabase, clinicId, from, to),
   ]);
 
   const ops = opsRes.data ?? [];
@@ -139,10 +140,9 @@ export async function fetchClinicProfitStatsForPeriod(
     (s, r) => s + Number(r.doctor_share_amount ?? 0),
     0
   );
-  const generalExpenses = (expensesRes.data ?? []).reduce(
-    (s, r) => s + Number(r.amount ?? 0),
-    0
-  );
+  const generalExpenses = (expensesRes.data ?? [])
+    .filter((r) => (r.expense_kind ?? "general") !== "doctor_salary")
+    .reduce((s, r) => s + Number(r.amount ?? 0), 0);
   const clinicExpenseShare = (clinicExpenseShareRes.data ?? []).reduce(
     (s, row) => s + Math.abs(Number(row.amount ?? 0)),
     0
@@ -150,8 +150,11 @@ export async function fetchClinicProfitStatsForPeriod(
   const totalExpenses = generalExpenses + clinicExpenseShare;
   const outstandingDebts = visitorDebt.debt;
   const refundsRounded = Math.round(totalRefunds * 100) / 100;
-  const netProfit =
-    Math.round((cashInflow - totalExpenses - totalSalariesPaid) * 100) / 100;
+  const reviewFeesTotal = reviewFees.total;
+  const netProfit = Math.round(
+    (clinicShareTotal + reviewFeesTotal - totalExpenses - totalSalariesPaid) *
+      100
+  ) / 100;
 
   return {
     cashInflow,
@@ -164,13 +167,16 @@ export async function fetchClinicProfitStatsForPeriod(
     totalSalariesPaid,
     breakdown: [
       { label: "صافي المحصّل (بعد المرتجعات)", amount: cashInflow },
+      { label: "حصة العيادة من العمليات", amount: clinicShareTotal },
+      ...(reviewFeesTotal > 0
+        ? [{ label: "كشفيات المراجعين", amount: reviewFeesTotal }]
+        : []),
       { label: "صرفيات العيادة", amount: -generalExpenses },
       {
         label: "حصة العيادة من صرفيات الأطباء",
         amount: -clinicExpenseShare,
       },
-      { label: "رواتب مدفوعة", amount: -totalSalariesPaid },
-      { label: "حصة العيادة من العمليات", amount: clinicShareTotal },
+      { label: "رواتب مؤكَّد صرفها", amount: -totalSalariesPaid },
       { label: "أرباح الأطباء (محافظ — منفصلة)", amount: doctorShareTotal },
       { label: "صافي ربح العيادة", amount: netProfit },
     ],

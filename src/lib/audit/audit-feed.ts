@@ -36,12 +36,41 @@ const ENTITY_LABELS: Record<string, string> = {
   patient: "ملف مريض",
   appointment: "موعد",
   expense: "مصروف",
+  payroll: "رواتب",
 };
+
+function formatPayrollAuditDetail(row: AuditLogRow): string | null {
+  if (row.entity_type !== "payroll") return null;
+  const after = row.after_data as Record<string, unknown> | null;
+  if (!after) return null;
+
+  const month = after.month_year as string | undefined;
+  const monthPart = month ? ` — ${month}` : "";
+
+  if (after.kind === "assistant") {
+    const doctor = Number(after.confirmed_doctor ?? 0);
+    const clinic = Number(after.confirmed_clinic ?? 0);
+    const parts: string[] = [];
+    if (doctor > 0) parts.push(`طبيب ${doctor}`);
+    if (clinic > 0) parts.push(`عيادة ${clinic}`);
+    return parts.length
+      ? `مساعد${monthPart}: ${parts.join("، ")}`
+      : `مساعد${monthPart}`;
+  }
+
+  const confirmed = Number(after.confirmed_amount ?? 0);
+  if (confirmed > 0) {
+    return `قسيمة${monthPart}: ${confirmed}`;
+  }
+
+  return null;
+}
 
 function buildSummary(row: AuditLogRow): string {
   const entity = ENTITY_LABELS[row.entity_type] ?? row.entity_type;
   const action = ACTION_LABELS[row.action] ?? row.action;
   const note = row.note?.trim();
+  const payrollDetail = formatPayrollAuditDetail(row);
 
   if (row.entity_type === "appointment") {
     const data = (row.before_data ?? row.after_data) as Record<string, unknown> | null;
@@ -54,7 +83,8 @@ function buildSummary(row: AuditLogRow): string {
     return `${action} موعد${detail}`;
   }
 
-  if (note) return `${action} — ${entity}: ${note}`;
+  if (note) return `${action} — ${entity}: ${note}${payrollDetail ? ` (${payrollDetail})` : ""}`;
+  if (payrollDetail) return `${action} — ${entity}: ${payrollDetail}`;
   return `${action} — ${entity}`;
 }
 

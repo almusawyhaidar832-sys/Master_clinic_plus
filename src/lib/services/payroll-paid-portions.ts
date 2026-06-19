@@ -1,171 +1,214 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { PayrollRecord, SalarySlip } from "@/types";
-
-function roundMoney(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
-export type PayrollPendingMode = { dailyWage?: boolean };
-
-export function slipPaidNet(
-  slip: Pick<SalarySlip, "paid_net_payout"> | null | undefined
-): number {
-  return roundMoney(Number(slip?.paid_net_payout ?? 0));
-}
-
-/** المبلغ المتبقي غير المؤكَّد — أجر يومي: net_payout = المتبقي فقط */
-export function slipPendingNet(
-  slip: Pick<SalarySlip, "net_payout" | "paid_net_payout"> | null | undefined,
-  mode?: PayrollPendingMode
-): number {
-  if (!slip) return 0;
-  const net = roundMoney(Number(slip.net_payout ?? 0));
-  if (mode?.dailyWage) return net;
-  return roundMoney(Math.max(0, net - slipPaidNet(slip)));
-}
-
-export function slipIsFullyPaid(
-  slip: Pick<SalarySlip, "net_payout" | "paid_net_payout" | "status"> | null,
-  mode?: PayrollPendingMode
-): boolean {
-  if (!slip) return false;
-  return slipPendingNet(slip, mode) <= 0 && slipPaidNet(slip) > 0;
-}
-
-/** صافي غير مؤكَّد من مجموع الحركات − المؤكَّد سابقاً */
-export function dailyWagePendingFromAccrued(
-  accruedNet: number,
-  paidNet: number
-): number {
-  return roundMoney(Math.max(0, accruedNet - paidNet));
-}
-
-export function assistantPaidDoctorShare(
-  record: Pick<PayrollRecord, "paid_doctor_share_amount"> | null | undefined
-): number {
-  return roundMoney(Number(record?.paid_doctor_share_amount ?? 0));
-}
-
-export function assistantPaidClinicShare(
-  record: Pick<PayrollRecord, "paid_clinic_share_amount"> | null | undefined
-): number {
-  return roundMoney(Number(record?.paid_clinic_share_amount ?? 0));
-}
-
-export function assistantPaidTotalSalary(
-  record: Pick<PayrollRecord, "paid_total_salary"> | null | undefined
-): number {
-  return roundMoney(Number(record?.paid_total_salary ?? 0));
-}
-
-export function assistantPendingDoctorShare(
-  record: Pick<
-    PayrollRecord,
-    "doctor_share_amount" | "paid_doctor_share_amount"
-  > | null,
-  mode?: PayrollPendingMode
-): number {
-  if (!record) return 0;
-  if (mode?.dailyWage) {
-    return roundMoney(Number(record.doctor_share_amount ?? 0));
-  }
-  return roundMoney(
-    Math.max(
-      0,
-      Number(record.doctor_share_amount ?? 0) - assistantPaidDoctorShare(record)
-    )
-  );
-}
-
-export function assistantPendingClinicShare(
-  record: Pick<
-    PayrollRecord,
-    "clinic_share_amount" | "paid_clinic_share_amount"
-  > | null,
-  mode?: PayrollPendingMode
-): number {
-  if (!record) return 0;
-  if (mode?.dailyWage) {
-    return roundMoney(Number(record.clinic_share_amount ?? 0));
-  }
-  return roundMoney(
-    Math.max(
-      0,
-      Number(record.clinic_share_amount ?? 0) - assistantPaidClinicShare(record)
-    )
-  );
-}
-
-export function assistantPendingTotalSalary(
-  record: Pick<PayrollRecord, "total_salary" | "paid_total_salary"> | null,
-  mode?: PayrollPendingMode
-): number {
-  if (!record) return 0;
-  if (mode?.dailyWage) {
-    return roundMoney(Number(record.total_salary ?? 0));
-  }
-  return roundMoney(
-    Math.max(
-      0,
-      Number(record.total_salary ?? 0) - assistantPaidTotalSalary(record)
-    )
-  );
-}
-
-export function assistantIsFullyPaid(
-  record: Pick<
-    PayrollRecord,
-    | "total_salary"
-    | "doctor_share_amount"
-    | "clinic_share_amount"
-    | "paid_total_salary"
-    | "paid_doctor_share_amount"
-    | "paid_clinic_share_amount"
-    | "status"
-  > | null,
-  mode?: PayrollPendingMode
-): boolean {
-  if (!record) return false;
-  if (mode?.dailyWage) {
-    return (
-      assistantPendingTotalSalary(record, mode) <= 0 &&
-      assistantPaidTotalSalary(record) > 0
-    );
-  }
-  return (
-    assistantPendingTotalSalary(record) <= 0 &&
-    assistantPendingDoctorShare(record) <= 0 &&
-    assistantPendingClinicShare(record) <= 0 &&
-    assistantPaidTotalSalary(record) > 0
-  );
-}
-
-/** حركات صرف مؤكَّدة ضمن الفترة — مصدر خصم الربح في اللوحة التنفيذية */
-export async function fetchConfirmedPayrollProfitDeduction(
-  supabase: SupabaseClient,
-  clinicId: string,
-  from: string,
-  to: string
-): Promise<number> {
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("amount, type")
-    .eq("clinic_id", clinicId)
-    .gte("transaction_date", from)
-    .lte("transaction_date", to)
-    .in("type", [
-      "staff_salary_paid",
-      "assistant_payroll_clinic",
-      "doctor_salary_paid",
-    ]);
-
-  if (error || !data?.length) return 0;
-
-  return roundMoney(
-    data.reduce((sum, row) => {
-      const amt = Number(row.amount ?? 0);
-      return amt < 0 ? sum + Math.abs(amt) : sum;
-    }, 0)
-  );
-}
-
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PayrollRecord, SalarySlip } from "@/types";
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+export type PayrollPendingMode = { dailyWage?: boolean };
+
+export function slipPaidNet(
+  slip: Pick<SalarySlip, "paid_net_payout"> | null | undefined
+): number {
+  return roundMoney(Number(slip?.paid_net_payout ?? 0));
+}
+
+/** المبلغ المتبقي غير المؤكَّد — أجر يومي: net_payout = المتبقي فقط */
+export function slipPendingNet(
+  slip: Pick<SalarySlip, "net_payout" | "paid_net_payout"> | null | undefined,
+  mode?: PayrollPendingMode
+): number {
+  if (!slip) return 0;
+  const net = roundMoney(Number(slip.net_payout ?? 0));
+  if (mode?.dailyWage) return net;
+  return roundMoney(Math.max(0, net - slipPaidNet(slip)));
+}
+
+export function slipIsFullyPaid(
+  slip: Pick<SalarySlip, "net_payout" | "paid_net_payout" | "status"> | null,
+  mode?: PayrollPendingMode
+): boolean {
+  if (!slip) return false;
+  return slipPendingNet(slip, mode) <= 0 && slipPaidNet(slip) > 0;
+}
+
+/** صافي غير مؤكَّد من مجموع الحركات − المؤكَّد سابقاً */
+export function dailyWagePendingFromAccrued(
+  accruedNet: number,
+  paidNet: number
+): number {
+  return roundMoney(Math.max(0, accruedNet - paidNet));
+}
+
+export function assistantPaidDoctorShare(
+  record: Pick<PayrollRecord, "paid_doctor_share_amount"> | null | undefined
+): number {
+  return roundMoney(Number(record?.paid_doctor_share_amount ?? 0));
+}
+
+export function assistantPaidClinicShare(
+  record: Pick<PayrollRecord, "paid_clinic_share_amount"> | null | undefined
+): number {
+  return roundMoney(Number(record?.paid_clinic_share_amount ?? 0));
+}
+
+export function assistantPaidTotalSalary(
+  record: Pick<PayrollRecord, "paid_total_salary"> | null | undefined
+): number {
+  return roundMoney(Number(record?.paid_total_salary ?? 0));
+}
+
+export function assistantPendingDoctorShare(
+  record: Pick<
+    PayrollRecord,
+    "doctor_share_amount" | "paid_doctor_share_amount"
+  > | null,
+  mode?: PayrollPendingMode
+): number {
+  if (!record) return 0;
+  if (mode?.dailyWage) {
+    return roundMoney(Number(record.doctor_share_amount ?? 0));
+  }
+  return roundMoney(
+    Math.max(
+      0,
+      Number(record.doctor_share_amount ?? 0) - assistantPaidDoctorShare(record)
+    )
+  );
+}
+
+export function assistantPendingClinicShare(
+  record: Pick<
+    PayrollRecord,
+    "clinic_share_amount" | "paid_clinic_share_amount"
+  > | null,
+  mode?: PayrollPendingMode
+): number {
+  if (!record) return 0;
+  if (mode?.dailyWage) {
+    return roundMoney(Number(record.clinic_share_amount ?? 0));
+  }
+  return roundMoney(
+    Math.max(
+      0,
+      Number(record.clinic_share_amount ?? 0) - assistantPaidClinicShare(record)
+    )
+  );
+}
+
+export function assistantPendingTotalSalary(
+  record: Pick<PayrollRecord, "total_salary" | "paid_total_salary"> | null,
+  mode?: PayrollPendingMode
+): number {
+  if (!record) return 0;
+  if (mode?.dailyWage) {
+    return roundMoney(Number(record.total_salary ?? 0));
+  }
+  return roundMoney(
+    Math.max(
+      0,
+      Number(record.total_salary ?? 0) - assistantPaidTotalSalary(record)
+    )
+  );
+}
+
+export function assistantIsFullyPaid(
+  record: Pick<
+    PayrollRecord,
+    | "total_salary"
+    | "doctor_share_amount"
+    | "clinic_share_amount"
+    | "paid_total_salary"
+    | "paid_doctor_share_amount"
+    | "paid_clinic_share_amount"
+    | "status"
+  > | null,
+  mode?: PayrollPendingMode
+): boolean {
+  if (!record) return false;
+  if (mode?.dailyWage) {
+    return (
+      assistantPendingTotalSalary(record, mode) <= 0 &&
+      assistantPaidTotalSalary(record) > 0
+    );
+  }
+  return (
+    assistantPendingTotalSalary(record) <= 0 &&
+    assistantPendingDoctorShare(record) <= 0 &&
+    assistantPendingClinicShare(record) <= 0 &&
+    assistantPaidTotalSalary(record) > 0
+  );
+}
+
+const PAYROLL_DEDUCTION_TYPES = [
+  "staff_salary_paid",
+  "assistant_payroll_clinic",
+  "doctor_salary_paid",
+] as const;
+
+export const CONFIRMED_PAYROLL_TYPE_LABELS: Record<string, string> = {
+  staff_salary_paid: "صرف موظف",
+  assistant_payroll_clinic: "حصة عيادة — مساعد",
+  doctor_salary_paid: "صرف راتب طبيب",
+};
+
+export interface ConfirmedPayrollPayoutLine {
+  id: string;
+  type: string;
+  typeLabel: string;
+  amount: number;
+  transactionDate: string;
+  descriptionAr: string;
+}
+
+/** حركات صرف مؤكَّدة ضمن الفترة — transaction_date (تقويم محلي عند التأكيد) */
+export async function fetchConfirmedPayrollProfitDeduction(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<number> {
+  const lines = await fetchConfirmedPayrollPayoutLines(
+    supabase,
+    clinicId,
+    from,
+    to
+  );
+  return roundMoney(lines.reduce((sum, row) => sum + row.amount, 0));
+}
+
+/** تفاصيل صرف الرواتب المؤكَّد — للتقارير */
+export async function fetchConfirmedPayrollPayoutLines(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<ConfirmedPayrollPayoutLine[]> {
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("id, amount, type, transaction_date, description_ar")
+    .eq("clinic_id", clinicId)
+    .gte("transaction_date", from)
+    .lte("transaction_date", to)
+    .in("type", [...PAYROLL_DEDUCTION_TYPES])
+    .order("transaction_date", { ascending: false });
+
+  if (error || !data?.length) return [];
+
+  return data
+    .map((row) => {
+      const amt = Number(row.amount ?? 0);
+      if (amt >= 0) return null;
+      const type = String(row.type ?? "");
+      return {
+        id: row.id as string,
+        type,
+        typeLabel: CONFIRMED_PAYROLL_TYPE_LABELS[type] ?? type,
+        amount: roundMoney(Math.abs(amt)),
+        transactionDate: String(row.transaction_date ?? ""),
+        descriptionAr: String(row.description_ar ?? "").trim(),
+      };
+    })
+    .filter((row): row is ConfirmedPayrollPayoutLine => row != null);
+}
+

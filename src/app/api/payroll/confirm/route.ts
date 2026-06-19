@@ -89,10 +89,6 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      if (slipIsFullyPaid(slip as SalarySlip, { dailyWage: isDailyStaff })) {
-        return NextResponse.json({ success: true, already_paid: true });
-      }
-
       let activeSlip = slip as SalarySlip;
       if (!slip.doctor_id && slip.staff_id) {
         const synced = await syncStaffSalarySlipDraft(
@@ -107,6 +103,10 @@ export async function POST(req: NextRequest) {
         if (synced.slip) {
           activeSlip = synced.slip;
         }
+      }
+
+      if (slipIsFullyPaid(activeSlip, { dailyWage: isDailyStaff })) {
+        return NextResponse.json({ success: true, already_paid: true });
       }
 
       const pending = slipPendingNet(activeSlip, { dailyWage: isDailyStaff });
@@ -237,10 +237,6 @@ export async function POST(req: NextRequest) {
       )
     );
 
-    if (assistantIsFullyPaid(record as PayrollRecord, { dailyWage })) {
-      return NextResponse.json({ success: true, already_paid: true });
-    }
-
     const { record: freshRecord, error: recomputeErr } =
       await recomputeAssistantPayrollRecord(
         admin,
@@ -254,6 +250,11 @@ export async function POST(req: NextRequest) {
     }
 
     const activeRecord = (freshRecord ?? record) as PayrollRecord;
+
+    if (assistantIsFullyPaid(activeRecord, { dailyWage })) {
+      return NextResponse.json({ success: true, already_paid: true });
+    }
+
     const pendingDoctor = assistantPendingDoctorShare(activeRecord, { dailyWage });
     const pendingClinic = assistantPendingClinicShare(activeRecord, { dailyWage });
 
@@ -340,6 +341,24 @@ export async function POST(req: NextRequest) {
       },
       note: "تأكيد صرف راتب مساعد",
     });
+
+    const doctorId = activeRecord.doctor_id?.trim();
+    if (doctorId) {
+      void import("@/lib/notifications/server")
+        .then(({ notifyDoctorAssistantPayrollConfirmed }) =>
+          notifyDoctorAssistantPayrollConfirmed({
+            clinicId,
+            doctorId,
+            assistantName: String(activeRecord.assistant_name_ar ?? "مساعد"),
+            monthYear: String(activeRecord.month_year ?? ""),
+            doctorDeducted: tx.doctorAmount ?? pendingDoctor,
+            clinicDeducted: tx.clinicAmount ?? pendingClinic,
+          })
+        )
+        .catch((err) => {
+          console.error("[payroll-confirm] doctor notify failed:", err);
+        });
+    }
 
     return NextResponse.json({
       success: true,

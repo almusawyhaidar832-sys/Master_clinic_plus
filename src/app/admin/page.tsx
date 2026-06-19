@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
-import { getAuthProfile } from "@/lib/clinic-context";
+import { getAuthProfile, getActiveClinicId } from "@/lib/clinic-context";
 import {
   fetchClinicProfitStats,
   type ClinicProfitStats,
@@ -21,6 +21,7 @@ import {
   Activity,
 } from "lucide-react";
 import { ActivityFeed } from "@/components/admin/ActivityFeed";
+import { AdminDoctorPerformance } from "@/components/admin/AdminDoctorPerformance";
 
 export default function AdminHomePage() {
   const [stats, setStats] = useState<ClinicProfitStats | null>(null);
@@ -33,13 +34,18 @@ export default function AdminHomePage() {
       const supabase = createClient();
       const profile = await getAuthProfile(supabase);
       setIsSuperAdmin(profile?.role === "super_admin");
+      const active = await getActiveClinicId(supabase);
+      const clinicId = active?.clinicId;
       const [profit, doctors, pending] = await Promise.all([
         fetchClinicProfitStats(supabase),
         fetchDoctorLedgers(supabase),
-        supabase
-          .from("doctor_withdrawals")
-          .select("*", { count: "exact", head: true })
-          .eq("status", "pending"),
+        clinicId
+          ? supabase
+              .from("doctor_withdrawals")
+              .select("*", { count: "exact", head: true })
+              .eq("clinic_id", clinicId)
+              .eq("status", "pending")
+          : Promise.resolve({ count: 0 }),
       ]);
       setStats(profit);
       setDoctorCount(doctors.length);
@@ -101,6 +107,8 @@ export default function AdminHomePage() {
           </Card>
         </Link>
       </div>
+
+      <AdminDoctorPerformance />
 
       <Card className="p-4 ring-1 ring-amber-200/60">
         <div className="mb-3 flex items-center justify-between gap-2">

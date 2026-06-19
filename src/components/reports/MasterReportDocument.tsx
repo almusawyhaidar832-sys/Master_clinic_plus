@@ -40,7 +40,10 @@ export function MasterReportDocument({
           <StatBox label="إجمالي الإيرادات (الشهر)" value={summary.totalRevenue} />
           <StatBox label="المرتجعات (مطروحة)" value={summary.totalRefunds} negative />
           <StatBox label="صرفيات العيادة" value={summary.generalExpenses} negative />
-          <StatBox label="رواتب الموظفين" value={summary.staffSalaries} negative />
+          <StatBox label="رواتب مؤكَّد صرفها" value={summary.staffSalaries} negative />
+          {summary.reviewFees > 0 ? (
+            <StatBox label="كشفيات المراجعين" value={summary.reviewFees} />
+          ) : null}
           <StatBox label="محصّل الفترة" value={summary.cashInflow} />
           <StatBox label="حصة العيادة" value={summary.totalClinicShare} />
           <StatBox label="مستحقات الأطباء" value={summary.doctorPayouts} negative />
@@ -53,7 +56,9 @@ export function MasterReportDocument({
           />
         </div>
         <p className="mt-2 text-xs text-slate-muted">
-          الربح الصافي = الإيرادات − المرتجعات − المصروفات − الرواتب
+          صافي ربح العيادة = حصة العيادة من العمليات
+          {summary.reviewFees > 0 ? " + كشفيات المراجعين" : ""} − المصروفات −
+          الرواتب المؤكَّد صرفها (موظفون + مساعدون + أطباء راتب)
         </p>
       </section>
 
@@ -225,6 +230,9 @@ export function MasterReportDocument({
           <h3 className="mb-2 text-sm font-bold">
             سلف وخصومات ومكافآت الرواتب (الشهر)
           </h3>
+          <p className="mb-2 text-xs text-slate-muted">
+            كتابة الاستحقاق (أجر يومي، سلفة، خصم…) — قبل «تأكيد الصرف».
+          </p>
           <table className="w-full text-xs sm:text-sm">
             <thead>
               <tr className="border-b text-right text-slate-muted">
@@ -250,6 +258,42 @@ export function MasterReportDocument({
                   <td className="py-1">{formatCurrency(e.amount)}</td>
                   <td className="py-1 text-slate-muted">{e.notes ?? "—"}</td>
                   <td className="py-1">{formatDate(e.entry_date)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {report.confirmedPayrollPayouts.length > 0 && (
+        <section className="mb-6">
+          <h3 className="mb-2 text-sm font-bold">
+            صرف رواتب مؤكَّد (حركات مالية)
+          </h3>
+          <p className="mb-2 text-xs text-slate-muted">
+            يظهر هنا ما تم «تأكيد صرفه» فقط — وليس كتابة السلف/الأجر اليومي قبل
+            التأكيد.
+          </p>
+          <table className="w-full text-xs sm:text-sm">
+            <thead>
+              <tr className="border-b text-right text-slate-muted">
+                <th className="py-1">التاريخ</th>
+                <th className="py-1">النوع</th>
+                <th className="py-1">الوصف</th>
+                <th className="py-1">المبلغ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.confirmedPayrollPayouts.map((row) => (
+                <tr key={row.id} className="border-b border-slate-border/40">
+                  <td className="py-1">{formatDate(row.transactionDate)}</td>
+                  <td className="py-1">{row.typeLabel}</td>
+                  <td className="py-1 text-slate-muted">
+                    {row.descriptionAr || "—"}
+                  </td>
+                  <td className="py-1 font-medium text-red-600">
+                    {formatCurrency(row.amount)}
+                  </td>
                 </tr>
               ))}
             </tbody>

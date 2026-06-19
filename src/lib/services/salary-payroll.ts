@@ -83,7 +83,7 @@ export interface ResetPayrollResult {
 
 /**
  * تصفير لوحة الرواتب: إغلاق شهر العمل والانتقال للتالي.
- * لا يحذف قسائم «مدفوعة» ولا يغيّر خصم الربح في لوحة التحكم.
+ * يحذف مسودات غير مؤكَّدة (قسائم + سجلات مساعدين) — المدفوع يبقى للربح.
  */
 export async function resetPayrollBoard(
   supabase: SupabaseClient,
@@ -112,13 +112,24 @@ export async function resetPayrollBoard(
     };
   }
 
-  // مسودات فقط — المدفوعة تبقى للتقارير والربح
+  // مسودات غير مؤكَّدة — المدفوعة (جزئياً أو كاملاً) تبقى للتقارير والربح
   await supabase
     .from("salary_slips")
     .delete()
     .eq("clinic_id", clinicId)
     .eq("month_year", monthYear)
-    .eq("status", "draft");
+    .eq("status", "draft")
+    .eq("paid_net_payout", 0);
+
+  await supabase
+    .from("payroll_records")
+    .delete()
+    .eq("clinic_id", clinicId)
+    .eq("month_year", monthYear)
+    .eq("status", "generated")
+    .eq("paid_total_salary", 0)
+    .eq("paid_doctor_share_amount", 0)
+    .eq("paid_clinic_share_amount", 0);
 
   const next = nextMonthYear(monthYear);
   return { ok: true, closedMonth: monthYear, nextMonth: next };

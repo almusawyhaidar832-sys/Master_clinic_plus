@@ -709,3 +709,41 @@ export async function notifyAssistantSalaryEntry(input: {
     linkPath: "/assistant/dashboard",
   });
 }
+
+/** إشعار الطبيب عند تأكيد صرف راتب مساعد (خصم حصته) */
+export async function notifyDoctorAssistantPayrollConfirmed(input: {
+  clinicId: string;
+  doctorId: string;
+  assistantName: string;
+  monthYear: string;
+  doctorDeducted: number;
+  clinicDeducted: number;
+}) {
+  if (input.doctorDeducted <= 0 && input.clinicDeducted <= 0) return;
+
+  const admin = adminClient();
+  const profileId = await resolveDoctorProfileId(
+    admin,
+    input.doctorId,
+    input.clinicId
+  );
+  if (!profileId) return;
+
+  const parts: string[] = [];
+  if (input.doctorDeducted > 0) {
+    parts.push(`خصم ${formatCurrency(input.doctorDeducted)} من حصتك`);
+  }
+  if (input.clinicDeducted > 0) {
+    parts.push(`${formatCurrency(input.clinicDeducted)} من ربح العيادة`);
+  }
+
+  await insertNotifications([
+    {
+      clinic_id: input.clinicId,
+      recipient_profile_id: profileId,
+      title_ar: "تأكيد صرف راتب مساعد",
+      body_ar: `${input.assistantName} — ${input.monthYear}: ${parts.join(" — ")}`,
+      link_path: "/doctor/ledger",
+    },
+  ]);
+}

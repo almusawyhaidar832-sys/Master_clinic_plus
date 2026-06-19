@@ -223,37 +223,67 @@ function monthKeysBetween(from: string, to: string): Set<string> {
   return keys;
 }
 
+function slipConfirmedPayout(row: {
+  net_payout: number | null;
+  paid_net_payout?: number | null;
+  status?: string | null;
+}): number {
+  const paidPortion = roundMoney(Number(row.paid_net_payout ?? 0));
+  if (paidPortion > 0) return paidPortion;
+  if (row.status === "paid") {
+    return roundMoney(Number(row.net_payout ?? 0));
+  }
+  return 0;
+}
+
+/** فلتر الفترة — cash_date: تاريخ الصرف الفعلي؛ payroll_month: شهر القسيمة (عرض) */
+type SalaryPeriodFilter = "cash_date" | "payroll_month";
+
+function localPaidAtInRange(
+  paidAt: string | null | undefined,
+  from: string,
+  to: string
+): boolean {
+  if (!paidAt) return false;
+  const day = localDateISO(new Date(paidAt));
+  return day >= from && day <= to;
+}
+
+function rowInSalaryPeriod(
+  row: { paid_at: string | null; month_year: string | null },
+  from: string,
+  to: string,
+  filter: SalaryPeriodFilter
+): boolean {
+  if (localPaidAtInRange(row.paid_at, from, to)) return true;
+  if (filter === "cash_date") return false;
+  const my = row.month_year as string | null;
+  if (!my) return false;
+  return monthKeysBetween(from, to).has(my);
+}
+
 function sumPaidSlipsInPeriod(
   rows: {
     net_payout: number | null;
     paid_net_payout?: number | null;
     paid_at: string | null;
     month_year: string | null;
+    status?: string | null;
   }[],
   from: string,
   to: string,
   closedMonths: Set<string>,
-  excludeClosedPayrollMonths: boolean
+  excludeClosedPayrollMonths: boolean,
+  periodFilter: SalaryPeriodFilter
 ): number {
-  const fromMs = new Date(`${from}T00:00:00`).getTime();
-  const toMs = new Date(`${to}T23:59:59.999`).getTime();
-  const months = monthKeysBetween(from, to);
-
   return rows.reduce((sum, row) => {
-    const payout = roundMoney(
-      Number(row.paid_net_payout ?? row.net_payout ?? 0)
-    );
+    const payout = slipConfirmedPayout(row);
     if (payout <= 0) return sum;
 
     const my = row.month_year as string | null;
     if (excludeClosedPayrollMonths && my && closedMonths.has(my)) return sum;
 
-    if (row.paid_at) {
-      const t = new Date(row.paid_at).getTime();
-      if (t >= fromMs && t <= toMs) return sum + payout;
-    }
-
-    if (my && months.has(my)) return sum + payout;
+    if (rowInSalaryPeriod(row, from, to, periodFilter)) return sum + payout;
 
     return sum;
   }, 0);
@@ -294,8 +324,8 @@ export function monthYearsInRange(from: string, to: string): string[] {
 }
 
 /**
- * خصم الرواتب من ربح العيادة — **فقط** المبالغ المُؤكَّد صرفها (تأكيد الصرف).
- * التجميع قبل التأكيد يظهر في «رواتب الشهر» فقط.
+ * خصم الربح من **حركات الصرف المؤكَّدة** ضمن الفترة (ليس استحقاقاً قبل التأكيد).
+ * @deprecated الاسم القديم مضلّل — استخدم fetchConfirmedPayrollProfitDeduction
  */
 export async function fetchPayrollAccrualsForProfitDeduction(
   supabase: SupabaseClient,
@@ -324,6 +354,88 @@ export interface PaidSalariesBundle {
   profitDeduction: number;
 }
 
+/** استعلام salary_slips — المُؤكَّد صرفه فقط (paid_net_payout)، مو المتبقي */
+async function fetchSalarySlipsForProfitLegacy(
+  supabase: SupabaseClient,
+  clinicId: string
+) {
+  const withPaidColumn = await supabase
+    .from("salary_slips")
+    .select("net_payout, paid_net_payout, paid_at, month_year, status")
+    .eq("clinic_id", clinicId)
+    .or("status.eq.paid,paid_net_payout.gt.0");
+
+  if (!withPaidColumn.error) {
+    return withPaidColumn.data ?? [];
+  }
+
+  const legacy = await supabase
+    .from("salary_slips")
+    .select("net_payout, paid_at, month_year, status")
+    .eq("clinic_id", clinicId)
+    .eq("status", "paid");
+
+  return legacy.data ?? [];
+}
+
+function sumAssistantClinicPaidInPeriod(
+  rows: {
+    clinic_share_amount?: number | null;
+    paid_clinic_share_amount?: number | null;
+    paid_at: string | null;
+    month_year: string | null;
+    status?: string | null;
+  }[],
+  from: string,
+  to: string,
+  closedMonths: Set<string>,
+  excludeClosedPayrollMonths: boolean,
+  periodFilter: SalaryPeriodFilter
+): number {
+  return rows.reduce((sum, row) => {
+    const paidClinic = roundMoney(Number(row.paid_clinic_share_amount ?? 0));
+    const payout =
+      paidClinic > 0
+        ? paidClinic
+        : row.status === "paid"
+          ? roundMoney(Number(row.clinic_share_amount ?? 0))
+          : 0;
+    if (payout <= 0) return sum;
+
+    const my = row.month_year as string | null;
+    if (excludeClosedPayrollMonths && my && closedMonths.has(my)) return sum;
+
+    if (rowInSalaryPeriod(row, from, to, periodFilter)) return sum + payout;
+
+    return sum;
+  }, 0);
+}
+
+async function fetchPayrollRecordsForProfitLegacy(
+  supabase: SupabaseClient,
+  clinicId: string
+) {
+  const withPaid = await supabase
+    .from("payroll_records")
+    .select(
+      "clinic_share_amount, paid_clinic_share_amount, paid_at, month_year, status"
+    )
+    .eq("clinic_id", clinicId)
+    .or("status.eq.paid,paid_clinic_share_amount.gt.0");
+
+  if (!withPaid.error) {
+    return withPaid.data ?? [];
+  }
+
+  const legacy = await supabase
+    .from("payroll_records")
+    .select("clinic_share_amount, paid_at, month_year, status")
+    .eq("clinic_id", clinicId)
+    .eq("status", "paid");
+
+  return legacy.data ?? [];
+}
+
 /** استعلام salary_slips واحد — عرض اللوحة + خصم الربح */
 export async function fetchPaidSalariesBundle(
   supabase: SupabaseClient,
@@ -331,23 +443,52 @@ export async function fetchPaidSalariesBundle(
   from: string,
   to: string
 ): Promise<PaidSalariesBundle> {
-  const [slipsRes, closedMonths] = await Promise.all([
-    supabase
-      .from("salary_slips")
-      .select("net_payout, paid_net_payout, paid_at, month_year")
-      .eq("clinic_id", clinicId)
-      .eq("status", "paid"),
+  const [slipRows, recordRows, closedMonths] = await Promise.all([
+    fetchSalarySlipsForProfitLegacy(supabase, clinicId),
+    fetchPayrollRecordsForProfitLegacy(supabase, clinicId),
     fetchClosedPayrollMonths(supabase, clinicId),
   ]);
 
-  const data = slipsRes.data ?? [];
-  if (slipsRes.error || !data.length) {
+  if (!slipRows.length && !recordRows.length) {
     return { display: 0, profitDeduction: 0 };
   }
 
+  const staffDisplay = sumPaidSlipsInPeriod(
+    slipRows,
+    from,
+    to,
+    closedMonths,
+    true,
+    "payroll_month"
+  );
+  const staffProfit = sumPaidSlipsInPeriod(
+    slipRows,
+    from,
+    to,
+    closedMonths,
+    false,
+    "cash_date"
+  );
+  const assistantDisplay = sumAssistantClinicPaidInPeriod(
+    recordRows,
+    from,
+    to,
+    closedMonths,
+    true,
+    "payroll_month"
+  );
+  const assistantProfit = sumAssistantClinicPaidInPeriod(
+    recordRows,
+    from,
+    to,
+    closedMonths,
+    false,
+    "cash_date"
+  );
+
   return {
-    display: sumPaidSlipsInPeriod(data, from, to, closedMonths, true),
-    profitDeduction: sumPaidSlipsInPeriod(data, from, to, closedMonths, false),
+    display: roundMoney(staffDisplay + assistantDisplay),
+    profitDeduction: roundMoney(staffProfit + assistantProfit),
   };
 }
 
@@ -367,7 +508,7 @@ export async function fetchExecutiveDashboardSupplement(
 ): Promise<ExecutiveDashboardSupplement> {
   const [salaries, payrollAccruals, visitorDebt] = await Promise.all([
     fetchPaidSalariesBundle(supabase, clinicId, from, to),
-    fetchPayrollAccrualsForProfitDeduction(supabase, clinicId, from, to),
+    fetchConfirmedPayrollProfitDeduction(supabase, clinicId, from, to),
     fetchPeriodVisitorDebt(supabase, clinicId, from, to),
   ]);
 
@@ -386,23 +527,28 @@ export async function fetchPaidSalariesInPeriod(
   to: string,
   options?: { excludeClosedPayrollMonths?: boolean }
 ): Promise<number> {
-  const excludeClosed = options?.excludeClosedPayrollMonths ?? false;
+  const bundle = await fetchPaidSalariesBundle(supabase, clinicId, from, to);
+  if (options?.excludeClosedPayrollMonths) {
+    return bundle.display;
+  }
+  return bundle.profitDeduction;
+}
 
-  const [slipsRes, closedMonths] = await Promise.all([
-    supabase
-      .from("salary_slips")
-      .select("net_payout, paid_net_payout, paid_at, month_year")
-      .eq("clinic_id", clinicId)
-      .eq("status", "paid"),
-    excludeClosed
-      ? fetchClosedPayrollMonths(supabase, clinicId)
-      : Promise.resolve(new Set<string>()),
+/** خصم الرواتب للتقارير — نفس منطق اللوحة التنفيذية */
+export async function fetchResolvedSalaryDeductionForPeriod(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<number> {
+  const [payrollAccruals, bundle] = await Promise.all([
+    fetchConfirmedPayrollProfitDeduction(supabase, clinicId, from, to),
+    fetchPaidSalariesBundle(supabase, clinicId, from, to),
   ]);
-
-  const data = slipsRes.data;
-  if (slipsRes.error || !data?.length) return 0;
-
-  return sumPaidSlipsInPeriod(data, from, to, closedMonths, excludeClosed);
+  return resolveExecutiveSalaryDeduction(
+    payrollAccruals,
+    bundle.profitDeduction
+  );
 }
 
 /** كشفيات المراجع في الفترة — تُجمع كلما تُسجَّل جلسة بكشفية */
@@ -533,12 +679,12 @@ export interface ExecutiveSnapshotCore {
   [key: string]: unknown;
 }
 
-/** خصم الرواتب من الربح — الأكبر بين المُولَّد والمُسلَّم */
+/** خصم الرواتب من الربح — المُؤكَّد صرفه (حركات + قسائم) */
 export function resolveExecutiveSalaryDeduction(
   payrollAccruals: number,
   salariesPaidLegacy: number
 ): number {
-  return Math.max(payrollAccruals, salariesPaidLegacy);
+  return roundMoney(Math.max(payrollAccruals, salariesPaidLegacy));
 }
 
 /** دمج رواتب + كشفيات في اللوحة التنفيذية */

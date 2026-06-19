@@ -11,7 +11,7 @@ export interface DoctorSalaryPayoutInput {
 }
 
 export interface DoctorSalaryPayoutResult {
-  expenseId: string;
+  referenceId: string;
   descriptionAr: string;
 }
 
@@ -61,26 +61,8 @@ export async function recordDoctorSalaryPayout(
     ? `راتب طبيب: ${doctorName} — ${notes}`
     : `راتب طبيب: ${doctorName}`;
 
-  const { data: expense, error: expenseErr } = await admin
-    .from("expenses")
-    .insert({
-      clinic_id: input.clinicId,
-      description_ar: descriptionAr,
-      amount,
-      expense_date: payoutDate,
-      category_id: null,
-      doctor_id: input.doctorId,
-      expense_kind: "doctor_salary",
-    })
-    .select("id")
-    .single();
-
-  if (expenseErr || !expense?.id) {
-    return {
-      ok: false,
-      error: expenseErr?.message ?? "تعذر تسجيل مصروف الراتب",
-    };
-  }
+  // حركة مالية واحدة فقط — مثل «تأكيد صرف» القسيمة؛ لا مصروف منفصل (كان يُخصَم مرتين في اللوحة)
+  const referenceId = `${input.doctorId}:${Date.now()}`;
 
   const txResult = await recordFinancialTransaction(admin, {
     clinicId: input.clinicId,
@@ -90,18 +72,18 @@ export async function recordDoctorSalaryPayout(
     transactionDate: payoutDate,
     doctorId: input.doctorId,
     referenceType: "doctor_salary_payout",
-    referenceId: expense.id,
+    referenceId,
   });
 
   if (!txResult.ok) {
     return {
       ok: false,
-      error: `تم حفظ المصروف لكن فشل تسجيل الحركة المالية: ${txResult.error}`,
+      error: txResult.error ?? "تعذر تسجيل صرف الراتب",
     };
   }
 
   return {
     ok: true,
-    result: { expenseId: expense.id, descriptionAr },
+    result: { referenceId, descriptionAr },
   };
 }

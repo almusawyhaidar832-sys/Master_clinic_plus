@@ -64,7 +64,7 @@ export function buildAssistantPayrollLines(
   });
 }
 
-/** من سجلات payroll_records المجمّدة لشهر محدد */
+/** من سجلات payroll_records — accrual = المتبقي؛ paid = المؤكَّد صرفه */
 export function buildAssistantPayrollLinesFromRecords(
   records: {
     assistant_id: string;
@@ -73,8 +73,27 @@ export function buildAssistantPayrollLinesFromRecords(
     doctor_share_percentage: number;
     doctor_share_amount: number;
     clinic_share_amount: number;
-  }[]
+    paid_total_salary?: number | null;
+    paid_doctor_share_amount?: number | null;
+    paid_clinic_share_amount?: number | null;
+  }[],
+  mode: "accrual" | "paid" = "accrual"
 ): AssistantPayrollLine[] {
+  if (mode === "paid") {
+    return records
+      .map((r) => ({
+        assistantId: r.assistant_id,
+        assistantName: r.assistant_name_ar,
+        totalSalary: Number(r.paid_total_salary ?? 0),
+        doctorSharePercentage: Number(r.doctor_share_percentage),
+        doctorDeduction: Number(r.paid_doctor_share_amount ?? 0),
+        clinicShare: Number(r.paid_clinic_share_amount ?? 0),
+      }))
+      .filter(
+        (line) => line.totalSalary > 0 || line.doctorDeduction > 0 || line.clinicShare > 0
+      );
+  }
+
   return records.map((r) => ({
     assistantId: r.assistant_id,
     assistantName: r.assistant_name_ar,

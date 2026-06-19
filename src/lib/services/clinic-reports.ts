@@ -53,6 +53,8 @@ import {
 } from "@/lib/withdrawals/display";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import { currentMonthYear, monthDateRange, todayISO } from "@/lib/utils";
+import type { ConfirmedPayrollPayoutLine } from "@/lib/services/payroll-paid-portions";
+import { fetchConfirmedPayrollPayoutLines } from "@/lib/services/payroll-paid-portions";
 import {
   labDetailsFromOperation,
   sumMaterialsCosts,
@@ -167,6 +169,7 @@ export interface MasterClinicReport {
     netProfit: number;
     totalRefunds: number;
     cashInflow: number;
+    reviewFees: number;
   };
   /** ملخص يوم واحد — اليوم الحالي إن كان التقرير للشهر الجاري، وإلا آخر يوم في الشهر */
   today: {
@@ -204,6 +207,8 @@ export interface MasterClinicReport {
     entry_date: string;
     notes: string | null;
   }[];
+  /** صرف رواتب مؤكَّد — حركات مالية (مو كتابة الاستحقاق) */
+  confirmedPayrollPayouts: ConfirmedPayrollPayoutLine[];
   monthWithdrawals: DoctorWithdrawalLine[];
   monthOperations: {
     operation_date?: string;
@@ -679,7 +684,7 @@ export async function fetchDoctorLedgerDetail(
 
   const assistantLines =
     payrollRes.length > 0
-      ? buildAssistantPayrollLinesFromRecords(payrollRes)
+      ? buildAssistantPayrollLinesFromRecords(payrollRes, "paid")
       : periodScoped
         ? []
         : buildAssistantPayrollLines(
@@ -806,6 +811,7 @@ export async function fetchMasterClinicReport(
     monthOpsCountRes,
     refunds,
     monthRefundsTotal,
+    confirmedPayrollPayouts,
   ] = await Promise.all([
     clinicId
       ? fetchClinicProfitStatsForPeriod(supabase, clinicId, start, end)
@@ -864,6 +870,9 @@ export async function fetchMasterClinicReport(
           to: end,
         })
       : Promise.resolve(0),
+    clinicId
+      ? fetchConfirmedPayrollPayoutLines(supabase, clinicId, start, end)
+      : Promise.resolve([]),
   ]);
 
   const monthRows = monthOpsCountRes.data ?? [];
@@ -883,6 +892,9 @@ export async function fetchMasterClinicReport(
   const totalRevenue = monthCollected;
   const totalRefunds = Math.round(monthRefundsTotal * 100) / 100;
   const netProfit = profitStats.netProfit;
+  const reviewFees = profitStats.breakdown.find(
+    (b) => b.label === "كشفيات المراجعين"
+  )?.amount ?? 0;
 
   const monthWithdrawals = await fetchClinicMonthWithdrawalLines(
     supabase,
@@ -941,6 +953,7 @@ export async function fetchMasterClinicReport(
       totalRefunds,
       netProfit,
       cashInflow: profitStats.cashInflow,
+      reviewFees,
     },
     today: {
       ...today,
@@ -982,6 +995,7 @@ export async function fetchMasterClinicReport(
         notes: e.notes_ar,
       };
     }),
+    confirmedPayrollPayouts,
     refunds: refunds.map((r) => ({
       id: r.id,
       patientName: r.patientName,

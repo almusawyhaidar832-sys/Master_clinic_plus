@@ -3,8 +3,8 @@ import {
   deleteFinancialTransactionsByReference,
   recordFinancialTransaction,
 } from "@/lib/services/clinic-profit";
-import type { PayrollRecord } from "@/types";
-import type { SalarySlip } from "@/types";
+import { todayISO } from "@/lib/utils";
+import type { PayrollRecord, SalarySlip } from "@/types";
 
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
@@ -12,6 +12,47 @@ function roundMoney(n: number): number {
 
 function confirmReference(parentId: string): string {
   return `${parentId}:${Date.now()}`;
+}
+
+function parseAssistantBatchTimestamp(
+  referenceId: string,
+  parentId: string
+): number | null {
+  const prefix = `${parentId}:`;
+  if (!referenceId.startsWith(prefix)) return null;
+  const ts = Number(referenceId.slice(prefix.length));
+  return Number.isFinite(ts) ? ts : null;
+}
+
+type PayrollConfirmRow = {
+  id: string;
+  amount: number;
+  reference_id: string;
+  transaction_date: string;
+};
+
+/** تجميع حركات تأكيد المساعد حسب جلسة التأكيد (reference_id) */
+function groupAssistantConfirmBatches(
+  doctorRows: PayrollConfirmRow[],
+  clinicRows: PayrollConfirmRow[],
+  parentId: string
+): Map<number, { doctor?: PayrollConfirmRow; clinic?: PayrollConfirmRow }> {
+  const batches = new Map<
+    number,
+    { doctor?: PayrollConfirmRow; clinic?: PayrollConfirmRow }
+  >();
+
+  const add = (row: PayrollConfirmRow, leg: "doctor" | "clinic") => {
+    const ts = parseAssistantBatchTimestamp(String(row.reference_id), parentId);
+    if (ts == null) return;
+    const batch = batches.get(ts) ?? {};
+    batch[leg] = row;
+    batches.set(ts, batch);
+  };
+
+  for (const row of doctorRows) add(row, "doctor");
+  for (const row of clinicRows) add(row, "clinic");
+  return batches;
 }
 
 async function listPayrollConfirmTransactions(
@@ -93,7 +134,7 @@ export async function recordDoctorSalarySlipPaidTransaction(
     amount: -pending,
     type: "doctor_salary_paid",
     descriptionAr: `صرف راتب طبيب — ${slip.month_year}`,
-    transactionDate: new Date().toISOString().slice(0, 10),
+    transactionDate: todayISO(),
     doctorId,
     referenceType: "salary_slip_doctor_paid",
     referenceId: confirmReference(slip.id),
@@ -125,7 +166,7 @@ export async function recordStaffSlipPaidTransaction(
     amount: -pending,
     type: "staff_salary_paid",
     descriptionAr: `صرف راتب موظف — ${slip.month_year}`,
-    transactionDate: new Date().toISOString().slice(0, 10),
+    transactionDate: todayISO(),
     referenceType: "salary_slip_paid",
     referenceId: confirmReference(slip.id),
   });
@@ -156,16 +197,18 @@ export async function recordAssistantPayrollPaidTransaction(
     return { ok: true, doctorAmount: 0, clinicAmount: 0 };
   }
 
+  const batchReferenceId = confirmReference(record.id);
+
   if (deltaDoctor > 0) {
     const doctorTx = await recordFinancialTransaction(admin, {
       clinicId,
       amount: -deltaDoctor,
       type: "assistant_payroll_doctor",
       descriptionAr: `صرف راتب مساعد ${record.assistant_name_ar} — ${record.month_year}`,
-      transactionDate: new Date().toISOString().slice(0, 10),
+      transactionDate: todayISO(),
       doctorId: record.doctor_id,
       referenceType: "payroll_record_paid",
-      referenceId: confirmReference(record.id),
+      referenceId: batchReferenceId,
     });
     if (!doctorTx.ok) {
       return { ok: false, error: doctorTx.error };
@@ -178,9 +221,9 @@ export async function recordAssistantPayrollPaidTransaction(
       amount: -deltaClinic,
       type: "assistant_payroll_clinic",
       descriptionAr: `حصة عيادة — مساعد ${record.assistant_name_ar} — ${record.month_year}`,
-      transactionDate: new Date().toISOString().slice(0, 10),
+      transactionDate: todayISO(),
       referenceType: "payroll_record_clinic_paid",
-      referenceId: confirmReference(record.id),
+      referenceId: batchReferenceId,
     });
     if (!clinicTx.ok) {
       return { ok: false, error: clinicTx.error };
@@ -267,7 +310,7 @@ export async function reverseStaffSlipPaidTransaction(
   return res.ok ? { ok: true } : { ok: false, error: res.error };
 }
 
-/** إلغاء آخر تأكيد صرف لمساعد */
+/** إلغاء آخر تأكيد صرف لمساعد — جلسة واحدة (طبيب + عيادة بنفس reference_id) */
 export async function reverseLastAssistantPayrollPaidTransaction(
   admin: SupabaseClient,
   clinicId: string,
@@ -291,22 +334,20 @@ export async function reverseLastAssistantPayrollPaidTransaction(
     record.id
   );
 
-  const lastDoctor = doctorRows.rows[doctorRows.rows.length - 1];
-  const lastClinic = clinicRows.rows[clinicRows.rows.length - 1];
-
-  let reversedDoctor = 0;
-  let reversedClinic = 0;
-
-  if (lastDoctor) {
-    await admin.from("transactions").delete().eq("id", lastDoctor.id);
-    reversedDoctor = roundMoney(Math.abs(Number(lastDoctor.amount ?? 0)));
+  if (doctorRows.error) {
+    return { ok: false, error: doctorRows.error };
   }
-  if (lastClinic) {
-    await admin.from("transactions").delete().eq("id", lastClinic.id);
-    reversedClinic = roundMoney(Math.abs(Number(lastClinic.amount ?? 0)));
+  if (clinicRows.error) {
+    return { ok: false, error: clinicRows.error };
   }
 
-  if (!lastDoctor && !lastClinic) {
+  const batches = groupAssistantConfirmBatches(
+    doctorRows.rows,
+    clinicRows.rows,
+    record.id
+  );
+
+  if (batches.size === 0) {
     const legacy = await deleteFinancialTransactionsByReference(
       admin,
       clinicId,
@@ -316,6 +357,37 @@ export async function reverseLastAssistantPayrollPaidTransaction(
     return legacy.ok
       ? { ok: true, reversedDoctor: 0, reversedClinic: 0 }
       : { ok: false, error: legacy.error };
+  }
+
+  const lastBatchTs = Math.max(...batches.keys());
+  const batch = batches.get(lastBatchTs);
+  if (!batch) {
+    return { ok: false, error: "تعذر تحديد جلسة الإلغاء" };
+  }
+
+  let reversedDoctor = 0;
+  let reversedClinic = 0;
+
+  if (batch.doctor) {
+    const { error: delDoctorErr } = await admin
+      .from("transactions")
+      .delete()
+      .eq("id", batch.doctor.id);
+    if (delDoctorErr) {
+      return { ok: false, error: delDoctorErr.message };
+    }
+    reversedDoctor = roundMoney(Math.abs(Number(batch.doctor.amount ?? 0)));
+  }
+
+  if (batch.clinic) {
+    const { error: delClinicErr } = await admin
+      .from("transactions")
+      .delete()
+      .eq("id", batch.clinic.id);
+    if (delClinicErr) {
+      return { ok: false, error: delClinicErr.message };
+    }
+    reversedClinic = roundMoney(Math.abs(Number(batch.clinic.amount ?? 0)));
   }
 
   return { ok: true, reversedDoctor, reversedClinic };

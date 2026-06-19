@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      expense_id: result.result.expenseId,
+      reference_id: result.result.referenceId,
       description_ar: result.result.descriptionAr,
     });
   } catch (e) {
