@@ -1,7 +1,11 @@
 import { calculateSalaryNet } from "@/lib/utils";
 import type { SalaryEntry } from "@/types";
-import type { CompensationMode } from "@/lib/services/assistant-compensation";
-import { isDailyWage } from "@/lib/services/assistant-compensation";
+import {
+  isDailyWage,
+  isDailyWageAssistant,
+  type AssistantCompensationMode,
+  type CompensationMode,
+} from "@/lib/services/assistant-compensation";
 export function summarizeSalaryEntries(
   entries: Pick<SalaryEntry, "entry_type" | "amount">[]
 ) {
