@@ -15,7 +15,12 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { buildLedgerPayUrl } from "@/lib/ledger/navigation";
 import {
   fetchTodayLedgerOperations,
+  ledgerCaseName,
   ledgerDisplayRemaining,
+  ledgerPaidToday,
+  resolveOperationCaseId,
+  sessionKindLabel,
+  type TodayCaseInfo,
   type TodayOperationRow,
 } from "@/lib/ledger/today-operations";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
@@ -55,6 +60,12 @@ function LedgerPageContent() {
   const [caseRemainingById, setCaseRemainingById] = useState<
     Map<string, number>
   >(new Map());
+  const [caseInfoById, setCaseInfoById] = useState<Map<string, TodayCaseInfo>>(
+    new Map()
+  );
+  const [patientPrimaryCaseId, setPatientPrimaryCaseId] = useState<
+    Map<string, string>
+  >(new Map());
   const [loading, setLoading] = useState(true);
   const [patientContext, setPatientContext] = useState<LedgerPatientContext | null>(
     null
@@ -72,10 +83,16 @@ function LedgerPageContent() {
     }
     setLoading(true);
     const supabase = createClient();
-    const { operations: rows, caseRemainingById: caseMap } =
-      await fetchTodayLedgerOperations(supabase, clinicId);
+    const {
+      operations: rows,
+      caseRemainingById: caseMap,
+      caseInfoById: infoMap,
+      patientPrimaryCaseId: primaryCaseMap,
+    } = await fetchTodayLedgerOperations(supabase, clinicId);
     setOperations(rows);
     setCaseRemainingById(caseMap);
+    setCaseInfoById(infoMap);
+    setPatientPrimaryCaseId(primaryCaseMap);
     setLoading(false);
   }, [clinicId]);
 
@@ -298,35 +315,82 @@ function LedgerPageContent() {
       render: (row) => formatDoctorDisplayName(row.doctor?.full_name_ar),
     },
     {
-      key: "operation",
-      header: "العملية / الإجراء",
-      render: (row) => (
-        <span className="font-medium">{opName(row)}</span>
-      ),
+      key: "case",
+      header: "الحالة",
+      render: (row) => {
+        const caseId = resolveOperationCaseId(row, patientPrimaryCaseId);
+        const info = caseId ? caseInfoById.get(caseId) : undefined;
+        const name = ledgerCaseName(row, caseInfoById, patientPrimaryCaseId);
+        return (
+          <div className="min-w-[8rem]">
+            <p className="font-semibold text-slate-text">{name}</p>
+            {info ? (
+              <p className="mt-0.5 text-xs text-slate-muted">
+                سعر الحالة: {formatCurrency(info.finalPrice)}
+                {info.status === "completed" ? " · مكتملة" : ""}
+              </p>
+            ) : (
+              <p className="mt-0.5 text-xs text-slate-muted">{opName(row)}</p>
+            )}
+          </div>
+        );
+      },
     },
     {
-      key: "total",
-      header: "الإجمالي",
-      render: (row) => formatCurrency(row.total_amount),
-    },
-    {
-      key: "paid",
-      header: "المدفوع",
+      key: "session_kind",
+      header: "نوع السجل",
       render: (row) => (
-        <span className="text-primary font-medium">
-          {formatCurrency(row.paid_amount)}
+        <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+          {sessionKindLabel(row.session_kind)}
         </span>
       ),
     },
     {
-      key: "remaining",
-      header: "المتبقي",
+      key: "paid_today",
+      header: "دفع اليوم",
       render: (row) => {
-        const debt = ledgerDisplayRemaining(row, caseRemainingById);
+        const paid = ledgerPaidToday(row);
         return (
-          <span className={debt > 0 ? "font-semibold text-debt-text" : "text-slate-muted"}>
-            {formatCurrency(debt)}
+          <span
+            className={
+              paid > 0
+                ? "font-bold tabular-nums text-emerald-700"
+                : "tabular-nums text-slate-muted"
+            }
+          >
+            {formatCurrency(paid)}
           </span>
+        );
+      },
+    },
+    {
+      key: "remaining",
+      header: "المتبقي على الحالة",
+      render: (row) => {
+        const debt = ledgerDisplayRemaining(
+          row,
+          caseRemainingById,
+          patientPrimaryCaseId
+        );
+        const caseId = resolveOperationCaseId(row, patientPrimaryCaseId);
+        const info = caseId ? caseInfoById.get(caseId) : undefined;
+        return (
+          <div>
+            <span
+              className={
+                debt > 0
+                  ? "font-bold tabular-nums text-debt-text"
+                  : "font-semibold tabular-nums text-emerald-700"
+              }
+            >
+              {formatCurrency(debt)}
+            </span>
+            {info && info.totalPaid > 0 && (
+              <p className="mt-0.5 text-[11px] text-slate-muted">
+                مدفوع من الحالة: {formatCurrency(info.totalPaid)}
+              </p>
+            )}
+          </div>
         );
       },
     },
@@ -467,7 +531,10 @@ function LedgerPageContent() {
             columns={columns}
             data={operations}
             emptyMessage="لا توجد جلسات مسجّلة اليوم"
-            highlightDebt={(row) => ledgerDisplayRemaining(row, caseRemainingById) > 0}
+            highlightDebt={(row) =>
+              ledgerDisplayRemaining(row, caseRemainingById, patientPrimaryCaseId) >
+              0
+            }
           />
         )}
       </div>
