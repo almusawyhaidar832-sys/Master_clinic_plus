@@ -35,8 +35,14 @@ import type { PatientSearchResult } from "@/lib/services/patient-search";
 import type { Assistant } from "@/types";
 import {
   Users, Clock, UserCheck, Plus, RefreshCw, Send, RotateCcw,
-  ChevronRight, X, LogIn,
+  ChevronRight, X, LogIn, ArrowRightLeft,
 } from "lucide-react";
+
+interface ClinicDoctor {
+  id: string;
+  full_name_ar: string;
+  specialty_ar: string | null;
+}
 
 type QueueStatus =
   | "waiting"
@@ -56,6 +62,9 @@ interface QueueEntry {
   patient_id: string | null;
   doctor_id: string;
   sent_to_doctor_at: string | null;
+  transfer_to_doctor_id: string | null;
+  transfer_requested_at: string | null;
+  transfer_to_doctor?: { full_name_ar: string } | null;
   patient: { full_name_ar: string; speech_name_ar?: string | null } | null;
   doctor?: { full_name_ar: string } | null;
 }
@@ -263,6 +272,9 @@ export function AssistantQueuePanel() {
   const [updating, setUpdating] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [clinicalEntryId, setClinicalEntryId] = useState<string | null>(null);
+  const [clinicDoctors, setClinicDoctors] = useState<ClinicDoctor[]>([]);
+  const [transferEntry, setTransferEntry] = useState<QueueEntry | null>(null);
+  const [transferTargetId, setTransferTargetId] = useState("");
 
   useEffect(() => {
     async function loadAssistant() {
@@ -287,9 +299,11 @@ export function AssistantQueuePanel() {
       const data = await apiJson<{
         queue: QueueEntry[];
         doctorId: string | null;
+        doctors?: ClinicDoctor[];
       }>("/api/queue", lang, t);
 
       setDoctorId(data.doctorId);
+      setClinicDoctors(data.doctors ?? []);
       const rows = (data.queue ?? []).filter(
         (e) =>
           e.status !== "done" &&
@@ -437,6 +451,29 @@ export function AssistantQueuePanel() {
       await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errOperationFailed"));
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const submitTransfer = async () => {
+    if (!transferEntry || !transferTargetId) return;
+    setUpdating(transferEntry.id);
+    try {
+      await apiJson(`/api/queue/${transferEntry.id}`, lang, t, {
+        method: "PATCH",
+        body: JSON.stringify({
+          action: "request_transfer",
+          target_doctor_id: transferTargetId,
+        }),
+      });
+      notifyQueueRefresh({ scope: "doctor", doctorId: transferEntry.doctor_id });
+      notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
+      setTransferEntry(null);
+      setTransferTargetId("");
+      await fetchQueue();
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : t("docErrTransfer"));
     } finally {
       setUpdating(null);
     }
@@ -606,6 +643,10 @@ export function AssistantQueuePanel() {
               entry.status === "called" ||
               entry.status === "in_progress" ||
               (entry.status === "waiting" && !!entry.sent_to_doctor_at);
+            const transferPending = Boolean(entry.transfer_to_doctor_id);
+            const canTransfer =
+              !transferPending &&
+              (entry.status === "waiting" || entry.status === "called");
 
             return (
               <div
@@ -625,9 +666,17 @@ export function AssistantQueuePanel() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold text-slate-800">{patientDisplay}</p>
                     <p className={cn("text-xs font-medium", style.color)}>{statusLabel}</p>
+                    {transferPending && (
+                      <p className="mt-0.5 text-[10px] text-violet-700">
+                        {t("docQueueTransferLine")}{" "}
+                        {entry.transfer_to_doctor?.full_name_ar ?? t("docQueueOtherDoctor")} —{" "}
+                        {t("docQueueAwaitAccountant")}
+                      </p>
+                    )}
                   </div>
                 </div>
 
+                {!transferPending && (
                 <div className="flex flex-wrap gap-2">
                   {canSend && (
                     <button
@@ -671,6 +720,20 @@ export function AssistantQueuePanel() {
                       {t("navPatientCare")}
                     </button>
                   )}
+                  {canTransfer && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTransferEntry(entry);
+                        setTransferTargetId("");
+                      }}
+                      disabled={updating === entry.id}
+                      className="flex items-center gap-1 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 disabled:opacity-60"
+                    >
+                      <ArrowRightLeft className="h-3.5 w-3.5" />
+                      {t("docTransferShort")}
+                    </button>
+                  )}
                   {entry.status !== "in_progress" && (
                     <button
                       onClick={() => void cancelEntry(entry)}
@@ -681,6 +744,7 @@ export function AssistantQueuePanel() {
                     </button>
                   )}
                 </div>
+                )}
               </div>
             );
           })}
@@ -694,6 +758,62 @@ export function AssistantQueuePanel() {
           onClose={() => setShowAdd(false)}
           onAdd={(data) => void addToQueue(data)}
         />
+      )}
+
+      {transferEntry && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-800">{t("docTransferModalTitle")}</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setTransferEntry(null);
+                  setTransferTargetId("");
+                }}
+                className="rounded-lg p-1 hover:bg-slate-100"
+              >
+                <X className="h-5 w-5 text-slate-500" />
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-slate-600">{t("docTransferModalHint")}</p>
+            <select
+              value={transferTargetId}
+              onChange={(e) => setTransferTargetId(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+            >
+              <option value="">{t("docSelectDoctor")}</option>
+              {clinicDoctors
+                .filter((d) => d.id !== doctorId)
+                .map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.full_name_ar}
+                    {d.specialty_ar ? ` — ${d.specialty_ar}` : ""}
+                  </option>
+                ))}
+            </select>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setTransferEntry(null);
+                  setTransferTargetId("");
+                }}
+                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600"
+              >
+                {t("cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitTransfer()}
+                disabled={!transferTargetId || updating === transferEntry.id}
+                className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              >
+                {t("docRequestTransfer")}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -16,7 +16,7 @@ import {
   notifyAccountantsReadyForBilling,
   notifyAccountantsReadyForPayment,
   rejectQueueEntryByDoctor,
-  requestQueueTransferByDoctor,
+  requestQueueTransferByStaff,
   requestQueueCancellationByStaff,
   updateQueueStatus,
   type QueueStatus,
@@ -163,19 +163,42 @@ export async function PATCH(
     }
 
     if (body.action === "request_transfer") {
-      if (!isApiDoctorRole(role)) {
-        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
-      }
-      const doctor = await getDoctorByProfileId(profile.id);
-      if (!doctor) {
-        return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
-      }
       const targetDoctorId = String(body.target_doctor_id ?? "").trim();
       if (!targetDoctorId) {
         return NextResponse.json({ error: "اختر الطبيب المستهدف" }, { status: 400 });
       }
-      await requestQueueTransferByDoctor(id, doctor.id, targetDoctorId);
-      return NextResponse.json({ success: true });
+
+      if (isApiDoctorRole(role)) {
+        const doctor = await getDoctorByProfileId(profile.id);
+        if (!doctor) {
+          return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+        }
+        await requestQueueTransferByStaff(
+          id,
+          { profileId: profile.id, role: "doctor", doctorId: doctor.id },
+          targetDoctorId
+        );
+        return NextResponse.json({ success: true });
+      }
+
+      if (isApiAssistantRole(role)) {
+        const ctx = await resolveAssistantApiContext(profile);
+        if (!ctx) {
+          return NextResponse.json({ error: "حساب المساعد غير مربوط" }, { status: 403 });
+        }
+        const owned = await assertAssistantOwnsQueueEntry(id, ctx);
+        if (!owned.ok) {
+          return NextResponse.json({ error: owned.error }, { status: owned.status });
+        }
+        await requestQueueTransferByStaff(
+          id,
+          { profileId: profile.id, role: "assistant", doctorId: ctx.doctorId },
+          targetDoctorId
+        );
+        return NextResponse.json({ success: true });
+      }
+
+      return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
     if (body.action === "confirm_transfer") {

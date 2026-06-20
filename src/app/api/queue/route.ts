@@ -76,16 +76,7 @@ export async function GET(req: NextRequest) {
         .from("doctors")
         .select("id, full_name_ar, specialty_ar")
         .eq("clinic_id", profile.clinic_id)
-        .eq("is_active", true)
-        .then((res) => {
-          if (isApiAssistantRole(role) && doctorId) {
-            return {
-              ...res,
-              data: (res.data ?? []).filter((d) => d.id === doctorId),
-            };
-          }
-          return res;
-        }),
+        .eq("is_active", true),
     ]);
 
     return NextResponse.json({

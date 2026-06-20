@@ -321,7 +321,7 @@ function DoctorQueuePageContent() {
     if (!transferEntry || !transferTargetId) return;
     setUpdating(transferEntry.id);
     try {
-      await apiJson(`/api/queue/${transferEntry.id}`, {
+      await apiJson(`/api/queue/${transferEntry.id}`, lang, t, {
         method: "PATCH",
         body: JSON.stringify({
           action: "request_transfer",

@@ -746,14 +746,19 @@ export async function rejectQueueEntryByDoctor(
   });
 }
 
-/** طلب تحويل مراجع لطبيب آخر — بانتظار تأكيد المحاسب */
-export async function requestQueueTransferByDoctor(
+/** طلب تحويل مراجع لطبيب آخر — بانتظار تأكيد المحاسب (طبيب أو مساعد) */
+export async function requestQueueTransferByStaff(
   queueEntryId: string,
-  doctorId: string,
+  actor: {
+    profileId: string;
+    role: "doctor" | "assistant";
+    doctorId: string;
+  },
   targetDoctorId: string
 ) {
   const admin = getAdminClient();
   const entry = await loadQueueEntryContext(queueEntryId);
+  const { doctorId } = actor;
 
   if (entry.doctor_id !== doctorId) {
     throw new Error("غير مصرح");
@@ -776,6 +781,10 @@ export async function requestQueueTransferByDoctor(
   }
 
   const fromName = await fetchDoctorNameById(admin, doctorId);
+  const actorLabel =
+    actor.role === "assistant"
+      ? `المساعد (طبيب ${fromName})`
+      : `الطبيب ${fromName}`;
   const toName = String(target.full_name_ar ?? "طبيب");
   const patientName = resolveQueuePatientName(entry);
   const now = new Date().toISOString();
@@ -796,7 +805,7 @@ export async function requestQueueTransferByDoctor(
 
   await notifyAccountantProfiles(entry.clinic_id, {
     title_ar: "طلب تحويل مراجع",
-    body_ar: `الطبيب ${fromName} يطلب تحويل ${patientName} إلى ${toName}`,
+    body_ar: `${actorLabel} يطلب تحويل ${patientName} إلى ${toName}`,
     link_path: "/dashboard/queue",
   });
 }
