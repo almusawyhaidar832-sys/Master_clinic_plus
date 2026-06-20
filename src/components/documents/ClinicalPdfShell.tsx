@@ -57,6 +57,7 @@ export function ClinicalPdfShell({
     <div
       id={id}
       dir="rtl"
+      lang="ar"
       className={cn("mc-pdf-doc mx-auto overflow-hidden bg-white", className)}
       style={{
         width: "720px",
@@ -78,7 +79,7 @@ export function ClinicalPdfShell({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <span
-              className="inline-block rounded-full px-3 py-1 text-xs font-black tracking-wide"
+              className="inline-block rounded-full px-3 py-1 text-xs font-black"
               style={{
                 backgroundColor: "rgba(255,255,255,0.22)",
                 border: "1px solid rgba(255,255,255,0.35)",
@@ -89,7 +90,7 @@ export function ClinicalPdfShell({
             </span>
             <h1
               className="mt-3 font-black leading-tight"
-              style={{ fontSize: "26px", letterSpacing: "-0.02em" }}
+              style={{ fontSize: "26px" }}
             >
               {clinicName}
             </h1>
@@ -214,7 +215,7 @@ export function PdfInfoCard({
       }}
     >
       <p
-        className="text-xs font-bold uppercase tracking-wide"
+        className="text-xs font-bold"
         style={{ color: accent ? accentColor : "#64748b" }}
       >
         {label}

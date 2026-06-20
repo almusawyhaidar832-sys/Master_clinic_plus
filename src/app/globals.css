@@ -408,6 +408,13 @@ html.dark .mc-app-main h3.text-lg.font-bold {
   .text-balance {
     text-wrap: balance;
   }
+
+  .mc-pdf-doc,
+  .mc-pdf-doc *:not([dir="ltr"]) {
+    letter-spacing: normal;
+    word-spacing: normal;
+    text-transform: none;
+  }
 }
 
 @media print {

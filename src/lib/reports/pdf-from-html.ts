@@ -1,3 +1,8 @@
+import {
+  ensureArabicPdfFontsReady,
+  preparePdfElementForArabicCapture,
+} from "@/lib/reports/pdf-arabic-prepare";
+
 /** حد آمن لإرسال PDF عبر واتساب (أقل من حد الخادم 8MB) */
 export const WHATSAPP_PDF_MAX_BYTES = 6 * 1024 * 1024;
 
@@ -46,10 +51,7 @@ async function renderElementToPdf(elementId: string) {
     throw new Error("تعذر العثور على محتوى المستند للتصدير");
   }
 
-  if (document.fonts?.ready) {
-    await document.fonts.ready;
-  }
-
+  await ensureArabicPdfFontsReady();
   await waitForPaint();
 
   element.querySelectorAll(".statement-case-body").forEach((panel) => {
@@ -59,20 +61,28 @@ async function renderElementToPdf(elementId: string) {
   const html2canvas = (await import("html2canvas")).default;
   const { jsPDF } = await import("jspdf");
 
-  const canvas = await html2canvas(element, {
+  const canvasOptions = {
     scale: 2,
     useCORS: true,
     logging: false,
     backgroundColor: "#ffffff",
-    onclone: (doc) => {
-      const cloned = doc.getElementById(elementId);
-      if (cloned) {
-        cloned.style.direction = "rtl";
-        cloned.style.fontFamily =
-          "var(--font-noto-arabic), 'Noto Sans Arabic', sans-serif";
-      }
+    onclone: (doc: Document) => {
+      preparePdfElementForArabicCapture(doc, elementId);
     },
-  });
+  } as const;
+
+  let canvas: HTMLCanvasElement;
+  try {
+    canvas = await html2canvas(element, {
+      ...canvasOptions,
+      foreignObjectRendering: true,
+    });
+    if (canvas.width <= 1 || canvas.height <= 1) {
+      throw new Error("empty canvas from foreignObjectRendering");
+    }
+  } catch {
+    canvas = await html2canvas(element, canvasOptions);
+  }
 
   const imgData = canvas.toDataURL("image/jpeg", 0.92);
   const pdf = new jsPDF({

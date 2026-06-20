@@ -145,7 +145,8 @@ export function SessionPaymentInvoiceDocument({
         </span>
         <span
           className="font-black tabular-nums"
-          style={{ fontSize: "28px", color: "#0056b3", letterSpacing: "-0.02em" }}
+          style={{ fontSize: "28px", color: "#0056b3" }}
+          dir="ltr"
         >
           {paidToday}
         </span>
