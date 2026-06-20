@@ -12,6 +12,10 @@ function todayIsoDate() {
   return new Date().toISOString().split("T")[0];
 }
 
+function appointmentDateOnly(value: string | null | undefined): string {
+  return String(value ?? "").slice(0, 10);
+}
+
 const QUEUE_TO_APPOINTMENT: Partial<Record<QueueStatus, AppointmentStatus>> = {
   waiting: "waiting",
   called: "waiting",
@@ -22,7 +26,7 @@ const QUEUE_TO_APPOINTMENT: Partial<Record<QueueStatus, AppointmentStatus>> = {
   cancelled: "cancelled",
 };
 
-/** إدراج موعد في غرفة الانتظار (باركود / حجز يدوي / دخول) */
+/** إدراج موعد في غرفة الانتظار — بتاريخ الموعد (اليوم فقط عند الموافقة) */
 export async function enqueueAppointmentToQueue(
   admin: SupabaseClient,
   appointment: {
@@ -32,16 +36,17 @@ export async function enqueueAppointmentToQueue(
     patient_name_ar: string | null;
     patient_phone: string | null;
     patient_id?: string | null;
+    appointment_date?: string | null;
     source?: "walk_in" | "appointment" | "online";
   }
 ): Promise<string> {
-  const today = todayIsoDate();
+  const queueDate = appointmentDateOnly(appointment.appointment_date) || todayIsoDate();
 
   const { data: existing } = await admin
     .from("patient_queue")
     .select("id")
     .eq("appointment_id", appointment.id)
-    .eq("queue_date", today)
+    .eq("queue_date", queueDate)
     .neq("status", "cancelled")
     .maybeSingle();
 
@@ -56,12 +61,13 @@ export async function enqueueAppointmentToQueue(
     appointment_id: appointment.id,
     source: appointment.source ?? "appointment",
     send_to_doctor: true,
+    queue_date: queueDate,
   });
 
   return queueId;
 }
 
-/** بعد الموافقة على طلب الباركود — waiting + إدراج في غرفة الانتظار */
+/** بعد الموافقة على طلب الباركود — waiting + إدراج في غرفة الانتظار (اليوم فقط) */
 export async function enqueueApprovedAppointment(
   admin: SupabaseClient,
   appointment: {
@@ -71,6 +77,7 @@ export async function enqueueApprovedAppointment(
     patient_name_ar: string | null;
     patient_phone: string | null;
     patient_id?: string | null;
+    appointment_date?: string | null;
   }
 ): Promise<string> {
   return enqueueAppointmentToQueue(admin, {
@@ -146,16 +153,15 @@ export async function syncQueueFromAppointmentStatus(
   clinicId: string,
   appointmentStatus: AppointmentStatus
 ): Promise<void> {
-  const today = todayIsoDate();
-
   const { data: entry } = await admin
     .from("patient_queue")
-    .select("id, status")
+    .select("id, status, queue_date")
     .eq("appointment_id", appointmentId)
     .eq("clinic_id", clinicId)
-    .eq("queue_date", today)
     .neq("status", "cancelled")
     .neq("status", "done")
+    .order("queue_date", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (!entry?.id) return;

@@ -84,7 +84,7 @@ async function assertNoOverlapForDoctor(
   }
 }
 
-/** موافقة على طلب باركود — pending → waiting + غرفة الانتظار */
+/** موافقة على طلب باركود — اليوم: waiting + غرفة انتظار؛ مستقبل: confirmed فقط */
 export async function approvePendingAppointment(
   admin: SupabaseClient,
   clinicId: string,
@@ -103,8 +103,12 @@ export async function approvePendingAppointment(
     throw new Error("يمكن الموافقة على الطلبات بحالة «قيد المراجعة» فقط");
   }
 
+  const appointmentDate = String(current.appointment_date ?? "").slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  const isToday = appointmentDate === today;
+
   const updatePayload: Record<string, unknown> = {
-    status: "waiting",
+    status: isToday ? "waiting" : "confirmed",
     reason_for_change: null,
   };
   if (opts?.assistantId) {
@@ -120,15 +124,19 @@ export async function approvePendingAppointment(
 
   if (error || !data) throw new Error(error?.message ?? "تعذر الموافقة على الموعد");
 
-  const queueId = await enqueueApprovedAppointment(admin, {
-    id: data.id as string,
-    clinic_id: data.clinic_id as string,
-    doctor_id: data.doctor_id as string,
-    patient_name_ar: data.patient_name_ar as string | null,
-    patient_phone: data.patient_phone as string | null,
-    patient_id: data.patient_id as string | null,
-  });
-  await notifyDoctorForApprovedAppointment(queueId);
+  let queueId: string | null = null;
+  if (isToday) {
+    queueId = await enqueueApprovedAppointment(admin, {
+      id: data.id as string,
+      clinic_id: data.clinic_id as string,
+      doctor_id: data.doctor_id as string,
+      patient_name_ar: data.patient_name_ar as string | null,
+      patient_phone: data.patient_phone as string | null,
+      patient_id: data.patient_id as string | null,
+      appointment_date: data.appointment_date as string,
+    });
+    await notifyDoctorForApprovedAppointment(queueId);
+  }
 
   const doctorName = await fetchDoctorName(admin, data.doctor_id as string);
   await sendAppointmentUpdate(admin, {

@@ -82,7 +82,12 @@ export async function setAccountantAppointmentStatusViaApi(
   id: string,
   action: "accept" | "reject",
   reason_for_change?: string
-): Promise<{ ok: boolean; appointment?: Appointment; error?: string }> {
+): Promise<{
+  ok: boolean;
+  appointment?: Appointment;
+  queuedToWaitingRoom?: boolean;
+  error?: string;
+}> {
   const res = await fetch(`/api/accountant/appointments/${id}/status`, {
     method: "POST",
     credentials: "include",
@@ -92,10 +97,17 @@ export async function setAccountantAppointmentStatusViaApi(
     },
     body: JSON.stringify({ action, reason_for_change }),
   });
-  const json = await parseJson<{ appointment?: Appointment }>(res);
+  const json = await parseJson<{
+    appointment?: Appointment;
+    queued_to_waiting_room?: boolean;
+  }>(res);
   if (!res.ok) return { ok: false, error: json.error ?? "تعذر تحديث الحالة" };
   syncAppointment(json.appointment);
-  return { ok: true, appointment: json.appointment };
+  return {
+    ok: true,
+    appointment: json.appointment,
+    queuedToWaitingRoom: json.queued_to_waiting_room,
+  };
 }
 
 export async function deleteAccountantAppointmentViaApi(

@@ -135,8 +135,15 @@ export function TodayAppointmentsPanel({
         setMessage(result.error ?? t("msgApproveFailed"));
         return;
       }
-      setToast(t("toastPatientToQueue"));
-      if (clinicId) {
+      setToast(
+        result.queuedToWaitingRoom
+          ? t("toastPatientToQueue")
+          : bi(
+              "تم تأكيد الحجز — سيظهر في غرفة الانتظار يوم الموعد",
+              "Booking confirmed — patient joins the queue on appointment day"
+            )
+      );
+      if (result.queuedToWaitingRoom && clinicId) {
         notifyQueueRefresh({ scope: "clinic", clinicId });
       }
       onApprovedToQueue?.();

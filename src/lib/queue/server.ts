@@ -594,9 +594,10 @@ export async function insertQueueEntry(input: {
   appointment_id?: string | null;
   source?: "walk_in" | "appointment" | "online";
   send_to_doctor?: boolean;
+  queue_date?: string;
 }) {
   const admin = getAdminClient();
-  const today = todayIsoDate();
+  const queueDate = input.queue_date ?? todayIsoDate();
 
   const { data, error } = await admin
     .from("patient_queue")
@@ -607,7 +608,7 @@ export async function insertQueueEntry(input: {
       patient_phone: input.patient_phone?.trim() || null,
       patient_id: input.patient_id ?? null,
       appointment_id: input.appointment_id ?? null,
-      queue_date: today,
+      queue_date: queueDate,
       status: "waiting",
       source: input.source ?? "walk_in",
       sent_to_doctor_at: input.send_to_doctor ? new Date().toISOString() : null,

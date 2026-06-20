@@ -95,7 +95,11 @@ export function AppointmentTable({
       setMessage(result.error ?? "تعذر القبول");
       return;
     }
-    setMessage("تمت الموافقة — المريض في غرفة الانتظار");
+    setMessage(
+      result.queuedToWaitingRoom
+        ? "تمت الموافقة — المريض في غرفة الانتظار"
+        : "تم تأكيد الحجز — سيُضاف لغرفة الانتظار في يوم الموعد"
+    );
     refresh();
   }
 

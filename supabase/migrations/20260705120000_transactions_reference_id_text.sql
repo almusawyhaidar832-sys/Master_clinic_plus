@@ -1,17 +1,33 @@
--- reference_id: UUID → TEXT لدعم تأكيدات الصرف الجزئية (slip_id:timestamp)
-
-DROP INDEX IF EXISTS public.transactions_reference_unique;
-DROP INDEX IF EXISTS public.idx_transactions_clinic_ref;
-
-ALTER TABLE public.transactions
-  ALTER COLUMN reference_id TYPE TEXT USING reference_id::text;
-
-CREATE UNIQUE INDEX IF NOT EXISTS transactions_reference_unique
-  ON public.transactions(clinic_id, reference_type, reference_id)
-  WHERE reference_id IS NOT NULL;
-
-COMMENT ON COLUMN public.transactions.reference_id IS
-  'مرجع الحركة — UUID أو slip_id:timestamp لتأكيدات جزئية متعددة';
-
-NOTIFY pgrst, 'reload schema';
-
+-- reference_id: UUID → TEXT لدعم تأكيدات الصرف الجزئية (slip_id:timestamp)
+
+
+
+DROP INDEX IF EXISTS public.transactions_reference_unique;
+
+DROP INDEX IF EXISTS public.idx_transactions_clinic_ref;
+
+
+
+ALTER TABLE public.transactions
+
+  ALTER COLUMN reference_id TYPE TEXT USING reference_id::text;
+
+
+
+CREATE UNIQUE INDEX IF NOT EXISTS transactions_reference_unique
+
+  ON public.transactions(clinic_id, reference_type, reference_id)
+
+  WHERE reference_id IS NOT NULL;
+
+
+
+COMMENT ON COLUMN public.transactions.reference_id IS
+
+  'مرجع الحركة — UUID أو slip_id:timestamp لتأكيدات جزئية متعددة';
+
+
+
+NOTIFY pgrst, 'reload schema';
+
+

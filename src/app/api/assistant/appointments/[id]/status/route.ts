@@ -30,7 +30,11 @@ export async function POST(
 
     if (action === "accept") {
       const appointment = await acceptAssistantAppointment(admin, ctx, id);
-      return NextResponse.json({ success: true, appointment });
+      return NextResponse.json({
+        success: true,
+        appointment,
+        queued_to_waiting_room: appointment.status === "waiting",
+      });
     }
 
     if (action === "reject") {
