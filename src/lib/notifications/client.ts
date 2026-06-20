@@ -1,9 +1,12 @@
 import { authPortalHeaders, type AuthPortalId } from "@/lib/auth/api-portal";
 import { notifyClinicSync } from "@/lib/sync/clinic-events";
 
-/** Columns that exist in all DB versions (link_path may be missing) */
-export const NOTIFICATION_SELECT =
-  "id, title_ar, body_ar, is_read, created_at, link_path";
+/** أعمدة أساسية — link_path قد يكون غير موجود في بعض قواعد البيانات */
+export const NOTIFICATION_SELECT_BASE =
+  "id, title_ar, body_ar, is_read, created_at";
+
+/** @deprecated prefer fetchNotificationsInboxViaApi */
+export const NOTIFICATION_SELECT = `${NOTIFICATION_SELECT_BASE}, link_path`;
 
 export interface NotificationRow {
   id: string;
@@ -54,6 +57,46 @@ export function resolveDoctorNotificationHref(n: NotificationRow): string | null
 /** أبلغ الواجهة بتحديث عداد الإشعارات */
 export function notifyNotificationsRead(): void {
   notifyClinicSync({ topic: "notifications", source: "mutation" });
+}
+
+/** جلب الإشعارات عبر السيرفر — يتجاوز RLS ومشاكل عمود link_path */
+export async function fetchNotificationsInboxViaApi(
+  portal: AuthPortalId
+): Promise<{
+  ok: boolean;
+  items?: NotificationRow[];
+  unreadCount?: number;
+  error?: string;
+}> {
+  try {
+    const res = await fetch("/api/notifications/inbox", {
+      credentials: "include",
+      headers: authPortalHeaders(portal),
+    });
+    const json = (await res.json()) as {
+      items?: NotificationRow[];
+      unread_count?: number;
+      error?: string;
+    };
+    if (!res.ok) {
+      return { ok: false, error: json.error ?? "تعذر تحميل الإشعارات" };
+    }
+    return {
+      ok: true,
+      items: json.items ?? [],
+      unreadCount: json.unread_count ?? 0,
+    };
+  } catch {
+    return { ok: false, error: "تعذر تحميل الإشعارات" };
+  }
+}
+
+/** عدد الإشعارات غير المقروءة — عبر السيرفر */
+export async function fetchUnreadNotificationCountViaApi(
+  portal: AuthPortalId
+): Promise<number> {
+  const result = await fetchNotificationsInboxViaApi(portal);
+  return result.ok ? (result.unreadCount ?? 0) : 0;
 }
 
 /** تعليم إشعار أو الكل كمقروء — عبر السيرفر لضمان التحديث */

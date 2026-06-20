@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { accountantModuleNav, superAdminModuleNav } from "@/config/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { fetchUnreadNotificationCount } from "@/lib/services/clinic-stats";
+import { fetchUnreadNotificationCountViaApi } from "@/lib/notifications/client";
 import { getAuthProfile } from "@/lib/clinic-context";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicModules } from "@/contexts/ClinicModulesContext";
@@ -56,7 +56,7 @@ export function DashboardLayoutClient({
         authProfile.username?.trim() ||
         ""
     );
-    const count = await fetchUnreadNotificationCount(supabase, authProfile.id);
+    const count = await fetchUnreadNotificationCountViaApi("accountant");
     setNotificationCount(count);
   }, []);
 

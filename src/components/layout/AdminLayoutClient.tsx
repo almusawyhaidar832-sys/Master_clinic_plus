@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AdminMobileShell } from "./AdminMobileShell";
 import { createClient } from "@/lib/supabase/client";
-import { fetchUnreadNotificationCount } from "@/lib/services/clinic-stats";
+import { fetchUnreadNotificationCountViaApi } from "@/lib/notifications/client";
 import { getAuthProfile } from "@/lib/clinic-context";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
@@ -20,7 +20,7 @@ export function AdminLayoutClient({
     const supabase = createClient();
     const authProfile = await getAuthProfile(supabase);
     if (!authProfile) return;
-    const count = await fetchUnreadNotificationCount(supabase, authProfile.id);
+    const count = await fetchUnreadNotificationCountViaApi("admin");
     setNotificationCount(count);
   }, []);
 

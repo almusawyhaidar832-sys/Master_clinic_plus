@@ -747,3 +747,61 @@ export async function notifyDoctorAssistantPayrollConfirmed(input: {
     },
   ]);
 }
+
+const NOTIFICATION_INBOX_BASE =
+  "id, title_ar, body_ar, is_read, created_at";
+
+export type NotificationInboxRow = {
+  id: string;
+  title_ar: string;
+  body_ar: string;
+  is_read: boolean;
+  created_at: string;
+  link_path?: string | null;
+};
+
+function isMissingLinkPathColumn(message: string): boolean {
+  const m = message.toLowerCase();
+  return m.includes("link_path") || m.includes("schema cache");
+}
+
+/** قائمة إشعارات المستخدم — يتجاوز RLS ويدعم DB بدون عمود link_path */
+export async function fetchNotificationsForRecipient(
+  profileId: string,
+  limit = 50
+): Promise<NotificationInboxRow[]> {
+  const admin = adminClient();
+
+  let { data, error } = await admin
+    .from("notifications")
+    .select(`${NOTIFICATION_INBOX_BASE}, link_path`)
+    .eq("recipient_profile_id", profileId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error && isMissingLinkPathColumn(error.message)) {
+    ({ data, error } = await admin
+      .from("notifications")
+      .select(NOTIFICATION_INBOX_BASE)
+      .eq("recipient_profile_id", profileId)
+      .order("created_at", { ascending: false })
+      .limit(limit));
+  }
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as NotificationInboxRow[];
+}
+
+export async function fetchUnreadNotificationCountForRecipient(
+  profileId: string
+): Promise<number> {
+  const admin = adminClient();
+  const { count, error } = await admin
+    .from("notifications")
+    .select("*", { count: "exact", head: true })
+    .eq("recipient_profile_id", profileId)
+    .eq("is_read", false);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}

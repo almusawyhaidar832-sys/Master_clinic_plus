@@ -3,14 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { getAuthProfile } from "@/lib/clinic-context";
 import type { AuthPortalId } from "@/lib/auth/api-portal";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import {
-  NOTIFICATION_SELECT,
   markNotificationsReadViaApi,
+  fetchNotificationsInboxViaApi,
   notificationActionHref,
   type NotificationRow,
 } from "@/lib/notifications/client";
@@ -29,37 +27,42 @@ export function NotificationsInbox({
   const router = useRouter();
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const supabase = createClient();
-    const profile = await getAuthProfile(supabase);
-    if (!profile) {
+    setLoadError(null);
+    const result = await fetchNotificationsInboxViaApi(portal);
+    if (!result.ok) {
+      setLoadError(result.error ?? "تعذر تحميل الإشعارات");
       setItems([]);
       setLoading(false);
       return;
     }
-
-    const { data, error } = await supabase
-      .from("notifications")
-      .select(NOTIFICATION_SELECT)
-      .eq("recipient_profile_id", profile.id)
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (!error && data) {
-      setItems(data as NotificationRow[]);
-    }
+    setItems(result.items ?? []);
     setLoading(false);
-  }, []);
+  }, [portal]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function openInbox() {
       setLoading(true);
+      const result = await fetchNotificationsInboxViaApi(portal);
+      if (cancelled) return;
+
+      if (!result.ok) {
+        setLoadError(result.error ?? "تعذر تحميل الإشعارات");
+        setItems([]);
+        setLoading(false);
+        return;
+      }
+
+      setItems(result.items ?? []);
+      setLoading(false);
+
       await markNotificationsReadViaApi(portal, { all: true });
       if (!cancelled) {
-        await load();
+        setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
       }
     }
 
@@ -67,7 +70,7 @@ export function NotificationsInbox({
     return () => {
       cancelled = true;
     };
-  }, [portal, load]);
+  }, [portal]);
 
   async function markOneRead(id: string) {
     await markNotificationsReadViaApi(portal, { id });
@@ -84,6 +87,8 @@ export function NotificationsInbox({
       <h2 className="text-2xl font-bold text-slate-text">{title}</h2>
       {loading ? (
         <p className="text-sm text-slate-muted">جاري التحميل...</p>
+      ) : loadError ? (
+        <Alert variant="error">{loadError}</Alert>
       ) : items.length === 0 ? (
         <Alert variant="info">لا توجد إشعارات</Alert>
       ) : (

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser, getAuthProfile } from "@/lib/clinic-context";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
-import { fetchUnreadNotificationCount } from "@/lib/services/clinic-stats";
+import { fetchUnreadNotificationCountViaApi } from "@/lib/notifications/client";
 import { todayISO } from "@/lib/utils";
 import { doctorQuickActions, QUICK_ACTION_ICON_MAP } from "@/components/layout/DoctorMobileShell";
 import { useModuleNav } from "@/hooks/useModuleNav";
@@ -50,9 +50,7 @@ export function DoctorHomeDashboard() {
         .select("id", { count: "exact", head: true })
         .eq("doctor_id", doctor.id)
         .eq("operation_date", todayISO()),
-      profile
-        ? fetchUnreadNotificationCount(supabase, profile.id)
-        : Promise.resolve(0),
+      fetchUnreadNotificationCountViaApi("doctor"),
     ]);
 
     setWallet(stats);
