@@ -1,6 +1,11 @@
 "use client";
 
-import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
+import {
+  ClinicalPdfShell,
+  PdfInfoCard,
+  PdfSectionTitle,
+  PdfTable,
+} from "@/components/documents/ClinicalPdfShell";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import type { PrescriptionPrintData } from "@/lib/prescriptions/types";
 import { formatDate } from "@/lib/utils";
@@ -23,85 +28,133 @@ export function PrescriptionPrintDocument({
   const { prescription, patientName, patientPhone, doctorName, clinic } = data;
 
   return (
-    <div
+    <ClinicalPdfShell
       id={printId}
-      dir="rtl"
-      className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-6 text-slate-800 shadow-sm"
-    >
-      <ClinicBrandingHeader
-        profile={clinic}
-        title="وصفة طبية"
-        subtitle={`تاريخ: ${formatDate(prescription.prescription_date)}`}
-        size="md"
-        className="mb-5"
-      />
-
-      <div className="mb-5 grid gap-3 rounded-xl bg-primary/5 p-4 text-sm sm:grid-cols-2">
-        <div>
-          <p className="text-xs font-semibold text-slate-500">المراجع</p>
-          <p className="mt-0.5 font-bold text-slate-900">{patientName}</p>
-          {patientPhone && (
-            <p className="text-slate-600" dir="ltr">
-              {patientPhone}
-            </p>
-          )}
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-slate-500">الطبيب المعالج</p>
-          <p className="mt-0.5 font-bold text-primary">
-            {formatDoctorDisplayName(doctorName)}
+      variant="prescription"
+      clinic={clinic}
+      headline="الوصفة الطبية"
+      subline={`المراجع: ${patientName}`}
+      metaLine={`تاريخ الوصفة: ${formatDate(prescription.prescription_date)} · الطبيب: ${formatDoctorDisplayName(doctorName)}`}
+      footer={
+        <div
+          className="px-8 py-5 text-center"
+          style={{ borderTop: "2px solid #e2e8f0", backgroundColor: "#ffffff" }}
+        >
+          <p className="text-sm font-bold" style={{ color: "#059669" }}>
+            يرجى الالتزام بتعليمات الطبيب وعدم صرف الدواء دون وصفة معتمدة
+          </p>
+          <p className="mt-1 text-xs" style={{ color: "#64748b" }}>
+            مع تمنياتنا بالشفاء العاجل — {formatDoctorDisplayName(doctorName)}
           </p>
         </div>
+      }
+    >
+      <div className="mb-6 grid grid-cols-2 gap-3">
+        <PdfInfoCard
+          label="المراجع"
+          value={patientName}
+          hint={patientPhone ?? undefined}
+          hintDir={patientPhone ? "ltr" : undefined}
+        />
+        <PdfInfoCard
+          label="الطبيب المعالج"
+          value={formatDoctorDisplayName(doctorName)}
+          accent
+          accentColor="#059669"
+        />
       </div>
 
       {prescription.diagnosis_ar && (
-        <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-          <span className="font-semibold text-slate-700">التشخيص: </span>
-          {prescription.diagnosis_ar}
-        </div>
+        <>
+          <PdfSectionTitle color="#059669">التشخيص</PdfSectionTitle>
+          <div
+            className="mb-6 rounded-xl px-4 py-3"
+            style={{
+              background: "linear-gradient(90deg, #ecfdf5 0%, #f0fdfa 100%)",
+              border: "2px solid #5eead4",
+            }}
+          >
+            <p className="text-base font-bold leading-relaxed" style={{ color: "#065f46" }}>
+              {prescription.diagnosis_ar}
+            </p>
+          </div>
+        </>
       )}
 
-      <table className="mb-5 w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b-2 border-primary/30 text-right text-xs text-slate-500">
-            <th className="py-2 pe-2">#</th>
-            <th className="py-2 pe-2">الدواء</th>
-            <th className="py-2 pe-2">الجرعة</th>
-            <th className="py-2 pe-2">التكرار</th>
-            <th className="py-2">المدة</th>
-          </tr>
-        </thead>
-        <tbody>
-          {prescription.medications.map((med, i) => (
-            <tr key={i} className="border-b border-slate-100 align-top">
-              <td className="py-2 pe-2 tabular-nums text-slate-400">{i + 1}</td>
-              <td className="py-2 pe-2 font-semibold text-slate-900">
+      <PdfSectionTitle color="#059669">الأدوية الموصوفة</PdfSectionTitle>
+
+      <PdfTable
+        variant="prescription"
+        headers={["#", "الدواء", "الجرعة", "التكرار", "المدة"]}
+      >
+        {prescription.medications.map((med, i) => (
+          <tr
+            key={i}
+            style={{
+              borderBottom: "1px solid #f1f5f9",
+              backgroundColor: i % 2 === 0 ? "#ffffff" : "#f0fdf4",
+            }}
+          >
+            <td
+              className="px-3 py-3 tabular-nums font-black"
+              style={{ color: "#059669", width: "36px" }}
+            >
+              {i + 1}
+            </td>
+            <td className="px-3 py-3">
+              <span className="font-black" style={{ fontSize: "15px", color: "#0f172a" }}>
                 {med.drug_name_ar}
-                {med.instructions && (
-                  <p className="mt-0.5 text-xs font-normal text-slate-500">
-                    {med.instructions}
-                  </p>
-                )}
-              </td>
-              <td className="py-2 pe-2 text-slate-700">{med.dosage ?? "—"}</td>
-              <td className="py-2 pe-2 text-slate-700">{med.frequency ?? "—"}</td>
-              <td className="py-2 text-slate-700">{med.duration ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              </span>
+              {med.instructions && (
+                <p className="mt-1 text-xs font-medium leading-relaxed" style={{ color: "#64748b" }}>
+                  {med.instructions}
+                </p>
+              )}
+            </td>
+            <td className="px-3 py-3 font-semibold" style={{ color: "#334155" }}>
+              {med.dosage ?? "—"}
+            </td>
+            <td className="px-3 py-3 font-semibold" style={{ color: "#334155" }}>
+              {med.frequency ?? "—"}
+            </td>
+            <td className="px-3 py-3 font-semibold" style={{ color: "#334155" }}>
+              {med.duration ?? "—"}
+            </td>
+          </tr>
+        ))}
+      </PdfTable>
 
       {prescription.notes_ar && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          <span className="font-semibold">ملاحظات: </span>
-          {prescription.notes_ar}
+        <div
+          className="mt-5 rounded-xl px-4 py-3"
+          style={{
+            backgroundColor: "#fffbeb",
+            border: "2px solid #fbbf24",
+          }}
+        >
+          <p className="text-xs font-black" style={{ color: "#92400e" }}>
+            ملاحظات الطبيب
+          </p>
+          <p className="mt-1 text-sm font-semibold leading-relaxed" style={{ color: "#78350f" }}>
+            {prescription.notes_ar}
+          </p>
         </div>
       )}
 
-      <div className="mt-8 border-t border-slate-200 pt-6 text-center text-xs text-slate-500">
-        <p>يرجى الالتزام بتعليمات الطبيب وعدم صرف الدواء دون وصفة.</p>
-        <p className="mt-1">مع تمنياتنا بالشفاء العاجل</p>
+      <div
+        className="mt-6 flex items-center justify-between rounded-xl px-4 py-3"
+        style={{
+          border: "1px dashed #94a3b8",
+          backgroundColor: "#ffffff",
+        }}
+      >
+        <span className="text-xs font-bold" style={{ color: "#64748b" }}>
+          توقيع الطبيب
+        </span>
+        <span className="text-sm font-black" style={{ color: "#059669" }}>
+          {formatDoctorDisplayName(doctorName)}
+        </span>
       </div>
-    </div>
+    </ClinicalPdfShell>
   );
 }

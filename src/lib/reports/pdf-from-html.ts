@@ -60,7 +60,7 @@ async function renderElementToPdf(elementId: string) {
   const { jsPDF } = await import("jspdf");
 
   const canvas = await html2canvas(element, {
-    scale: 1.5,
+    scale: 2,
     useCORS: true,
     logging: false,
     backgroundColor: "#ffffff",
@@ -74,7 +74,7 @@ async function renderElementToPdf(elementId: string) {
     },
   });
 
-  const imgData = canvas.toDataURL("image/jpeg", 0.88);
+  const imgData = canvas.toDataURL("image/jpeg", 0.92);
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "mm",
