@@ -180,3 +180,63 @@ export function invoiceFromOperation(
     ...extras,
   });
 }
+
+/** استرجاع بيانات الفاتورة من صف السجل التاريخي — لإعادة الإرسال على واتساب */
+export function sessionInvoiceFromHistoryRow(
+  row: {
+    record_kind?: string;
+    doctor_expense_id?: string | null;
+    operation_id: string | null;
+    invoice_id: string | null;
+    invoice_number: string;
+    patient_id: string | null;
+    doctor_id: string | null;
+    patient_name_ar: string;
+    doctor_name_ar: string;
+    procedure_label: string;
+    treatment_name: string;
+    total_amount: number;
+    paid_amount: number;
+    remaining_amount: number;
+    invoice_date: string;
+    snapshot_json: SessionInvoiceData | Record<string, unknown>;
+  },
+  clinic: ClinicProfile | null
+): SessionInvoiceData | null {
+  if (row.record_kind === "doctor_expense" || row.doctor_expense_id) {
+    return null;
+  }
+
+  const snap =
+    row.snapshot_json && typeof row.snapshot_json === "object"
+      ? (row.snapshot_json as SessionInvoiceData)
+      : null;
+
+  const operationId =
+    snap?.operationId ?? row.operation_id ?? "";
+  if (!operationId) return null;
+
+  return {
+    ...(snap ?? ({} as SessionInvoiceData)),
+    operationId,
+    invoiceId: snap?.invoiceId ?? row.invoice_id ?? null,
+    doctorId: snap?.doctorId ?? row.doctor_id ?? null,
+    patientId: snap?.patientId ?? row.patient_id ?? null,
+    invoiceNumber: snap?.invoiceNumber ?? row.invoice_number,
+    issuedAt: snap?.issuedAt ?? row.invoice_date,
+    clinic: snap?.clinic ?? clinic,
+    patientName: snap?.patientName ?? row.patient_name_ar ?? "مراجع",
+    patientPhone: snap?.patientPhone ?? null,
+    doctorName: snap?.doctorName ?? row.doctor_name_ar ?? "—",
+    procedureLabel: snap?.procedureLabel ?? row.procedure_label,
+    treatmentName: snap?.treatmentName ?? row.treatment_name,
+    sessionDate: snap?.sessionDate ?? row.invoice_date,
+    paidThisSession: snap?.paidThisSession ?? row.paid_amount,
+    caseTotalAmount: snap?.caseTotalAmount ?? row.total_amount,
+    caseTotalPaid:
+      snap?.caseTotalPaid ??
+      Math.max(0, row.total_amount - row.remaining_amount),
+    remainingBalance: snap?.remainingBalance ?? row.remaining_amount,
+    treatmentCompleted: snap?.treatmentCompleted ?? row.remaining_amount <= 0,
+  };
+}

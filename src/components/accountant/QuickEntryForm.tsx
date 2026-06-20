@@ -74,9 +74,7 @@ import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { SessionInvoiceModal } from "@/components/invoices/SessionInvoiceModal";
 import { PrescriptionPrintModal } from "@/components/prescriptions/PrescriptionPrintModal";
-import { fetchVisitSessionByQueue } from "@/lib/clinical/visit-session-client";
-import { fetchPrescriptionByOperation } from "@/lib/prescriptions/client";
-import { prescriptionHasContent } from "@/lib/prescriptions/content";
+import { resolvePrescriptionForSession } from "@/lib/prescriptions/client";
 import {
   quickEntryDraftKey,
   hasQuickEntryDraftContent,
@@ -282,31 +280,17 @@ export function QuickEntryForm({
     ) => {
       if (!queueEntryId) return;
 
-      // محاولة مع إعادة مرة واحدة بعد ثانيتين — الوصفة قد تتأخر في الحفظ
-      async function attempt(): Promise<boolean> {
-        const session = await fetchVisitSessionByQueue(queueEntryId!, "accountant");
-        if (!session?.operationId) return false;
-        const rx = await fetchPrescriptionByOperation(
-          session.operationId,
+      try {
+        const rx = await resolvePrescriptionForSession(
+          { queueEntryId },
           "accountant",
-          queueEntryId
+          { retries: 3, retryDelayMs: 2000 }
         );
-        if (rx && prescriptionHasContent(rx)) {
+        if (rx) {
           setPendingPrescriptionId(rx.id);
           if (openImmediately) {
             setPrescriptionModalId(rx.id);
           }
-          return true;
-        }
-        return false;
-      }
-
-      try {
-        const found = await attempt();
-        if (!found) {
-          // أعد المحاولة بعد ثانيتين — احتمال أن الطبيب لم ينته من الحفظ
-          await new Promise((r) => setTimeout(r, 2000));
-          await attempt();
         }
       } catch {
         /* لا وصفة — طبيعي */
@@ -1604,6 +1588,20 @@ export function QuickEntryForm({
 
     if (paid > 0) {
       setPendingSuccessOp(savedOp);
+      let rxIdForInvoice: string | null = null;
+      if (visitQueueEntryId) {
+        try {
+          const rx = await resolvePrescriptionForSession(
+            { queueEntryId: visitQueueEntryId },
+            "accountant",
+            { retries: 3, retryDelayMs: 1500 }
+          );
+          rxIdForInvoice = rx?.id ?? null;
+        } catch {
+          rxIdForInvoice = null;
+        }
+      }
+      setPendingPrescriptionId(rxIdForInvoice);
       setInvoiceData(
         buildSessionInvoiceData({
           operation: savedOp,
@@ -1639,9 +1637,8 @@ export function QuickEntryForm({
       );
     } else {
       onSuccess?.(savedOp);
+      void openPrescriptionModalIfAny(visitQueueEntryId, true);
     }
-
-    void openPrescriptionModalIfAny(visitQueueEntryId, paid <= 0);
 
     const postSaveClinical = clinical;
     const postSaveBackfillCaseId =

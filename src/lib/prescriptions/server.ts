@@ -119,6 +119,71 @@ export async function fetchPrescriptionForSession(
   return null;
 }
 
+/** ربط الوصفة بجلسة الدفع — قد تكون مربوطة بجلسة الكشف أو الطابور */
+export async function resolvePrescriptionForOperation(
+  admin: SupabaseClient,
+  clinicId: string,
+  operationId: string
+): Promise<PatientPrescription | null> {
+  const opId = String(operationId ?? "").trim();
+  if (!opId) return null;
+
+  const { data: op, error: opErr } = await admin
+    .from("patient_operations")
+    .select("id, patient_id, doctor_id, queue_entry_id, operation_date")
+    .eq("id", opId)
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+
+  if (opErr || !op) return null;
+
+  const queueEntryId = (op.queue_entry_id as string | null) ?? null;
+
+  const direct = await fetchPrescriptionForSession(admin, clinicId, {
+    operationId: opId,
+    queueEntryId,
+  });
+  if (direct) return direct;
+
+  if (queueEntryId) {
+    const { data: queueOp } = await admin
+      .from("patient_operations")
+      .select("id")
+      .eq("queue_entry_id", queueEntryId)
+      .neq("id", opId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (queueOp?.id) {
+      const byVisitOp = await fetchPrescriptionForSession(admin, clinicId, {
+        operationId: String(queueOp.id),
+        queueEntryId,
+      });
+      if (byVisitOp) return byVisitOp;
+    }
+  }
+
+  const patientId = op.patient_id as string | null;
+  const opDate = String(op.operation_date ?? "").slice(0, 10);
+  if (patientId && opDate) {
+    const { data: rows } = await admin
+      .from("patient_prescriptions")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .eq("patient_id", patientId)
+      .eq("prescription_date", opDate)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+
+    if (rows?.[0]) {
+      return mapPrescriptionRow(rows[0] as Record<string, unknown>);
+    }
+  }
+
+  return null;
+}
+
 export async function fetchPrescriptionPrintData(
   admin: SupabaseClient,
   clinicId: string,

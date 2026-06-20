@@ -15,6 +15,7 @@ import { getDoctorByProfileId } from "@/lib/queue/server";
 import {
   fetchPrescriptionForSession,
   fetchPrescriptionPrintData,
+  resolvePrescriptionForOperation,
   upsertPrescription,
   normalizeMedications,
 } from "@/lib/prescriptions/server";
@@ -76,6 +77,7 @@ export async function GET(req: NextRequest) {
     const admin = getAdminClient();
     const operationId = req.nextUrl.searchParams.get("operation_id");
     const queueEntryId = req.nextUrl.searchParams.get("queue_entry_id");
+    const resolveLinked = req.nextUrl.searchParams.get("resolve_linked") === "1";
     const prescriptionId = req.nextUrl.searchParams.get("id");
     const forPrint = req.nextUrl.searchParams.get("print") === "1";
 
@@ -98,10 +100,12 @@ export async function GET(req: NextRequest) {
     if (scopeError) return scopeError;
 
     if (operationId) {
-      const prescription = await fetchPrescriptionForSession(admin, clinicId, {
-        operationId,
-        queueEntryId,
-      });
+      const prescription = resolveLinked
+        ? await resolvePrescriptionForOperation(admin, clinicId, operationId)
+        : await fetchPrescriptionForSession(admin, clinicId, {
+            operationId,
+            queueEntryId,
+          });
       if (!prescription) {
         return NextResponse.json({ error: "لا توجد وصفة" }, { status: 404 });
       }

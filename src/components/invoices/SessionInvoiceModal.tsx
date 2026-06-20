@@ -3,6 +3,7 @@
 
 
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 
 import { X, MessageCircle, Loader2, CheckCircle2 } from "lucide-react";
 
@@ -36,7 +37,7 @@ import {
 
 } from "@/lib/invoices/session-invoice";
 
-import { fetchPrescriptionPrintData } from "@/lib/prescriptions/client";
+import { fetchPrescriptionPrintData, resolvePrescriptionForSession } from "@/lib/prescriptions/client";
 import { prescriptionHasContent } from "@/lib/prescriptions/content";
 import { prescriptionWhatsAppMessage } from "@/lib/prescriptions/messages";
 
@@ -48,6 +49,7 @@ import {
   generateElementPdfBase64,
   isPdfBase64TooLarge,
   withTimeout,
+  waitForPaint,
   WHATSAPP_PDF_MAX_BYTES,
 } from "@/lib/reports/pdf-from-html";
 
@@ -82,6 +84,9 @@ interface SessionInvoiceModalProps {
 
   prescriptionId?: string | null;
 
+  /** من السجل التاريخي — إعادة إرسال فقط بدون اعتماد */
+  archivedHistory?: boolean;
+
 }
 
 
@@ -100,6 +105,8 @@ export function SessionInvoiceModal({
 
   prescriptionId,
 
+  archivedHistory = false,
+
 }: SessionInvoiceModalProps) {
 
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -108,7 +115,7 @@ export function SessionInvoiceModal({
 
   const [finalizeLoading, setFinalizeLoading] = useState(false);
 
-  const [finalized, setFinalized] = useState(false);
+  const [finalized, setFinalized] = useState(archivedHistory);
 
   const [invoiceId, setInvoiceId] = useState<string | null>(
 
@@ -117,8 +124,11 @@ export function SessionInvoiceModal({
   );
 
   const [prescriptionData, setPrescriptionData] =
-
     useState<PrescriptionPrintData | null>(null);
+  const [resolvedPrescriptionId, setResolvedPrescriptionId] = useState<string | null>(
+    prescriptionId ?? null
+  );
+  const [prescriptionLoading, setPrescriptionLoading] = useState(false);
 
   const [actionMessage, setActionMessage] = useState<{
 
@@ -137,12 +147,40 @@ export function SessionInvoiceModal({
   const clinicName = getClinicDisplayName(data.clinic);
 
   const hasPrescription = Boolean(
-    prescriptionId &&
+    resolvedPrescriptionId &&
       prescriptionData &&
       prescriptionHasContent(prescriptionData.prescription)
   );
 
   const PDF_TIMEOUT_MS = 25_000;
+
+  useEffect(() => {
+    setResolvedPrescriptionId(prescriptionId ?? null);
+  }, [prescriptionId]);
+
+  useEffect(() => {
+    if (prescriptionId || (!queueEntryId && !data.operationId)) return;
+
+    let cancelled = false;
+    setPrescriptionLoading(true);
+
+    void resolvePrescriptionForSession(
+      { queueEntryId, operationId: data.operationId },
+      "accountant",
+      { retries: archivedHistory ? 2 : 3, retryDelayMs: 1500 }
+    )
+      .then((rx) => {
+        if (cancelled || !rx) return;
+        setResolvedPrescriptionId(rx.id);
+      })
+      .finally(() => {
+        if (!cancelled) setPrescriptionLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [prescriptionId, queueEntryId, data.operationId, archivedHistory]);
 
   async function tryGeneratePdf(elementId: string): Promise<string | null> {
     try {
@@ -161,38 +199,72 @@ export function SessionInvoiceModal({
 
 
   useEffect(() => {
-
-    if (!prescriptionId) {
-
+    if (!resolvedPrescriptionId) {
       setPrescriptionData(null);
-
       return;
-
     }
 
     let cancelled = false;
+    setPrescriptionLoading(true);
 
-    void fetchPrescriptionPrintData(prescriptionId, "accountant")
+    void fetchPrescriptionPrintData(resolvedPrescriptionId, "accountant")
       .then((result) => {
         if (cancelled) return;
         setPrescriptionData(
           result && prescriptionHasContent(result.prescription) ? result : null
         );
       })
-
       .catch(() => {
-
         if (!cancelled) setPrescriptionData(null);
-
+      })
+      .finally(() => {
+        if (!cancelled) setPrescriptionLoading(false);
       });
 
     return () => {
-
       cancelled = true;
-
     };
+  }, [resolvedPrescriptionId]);
 
-  }, [prescriptionId]);
+
+
+  async function ensurePrescriptionReady(): Promise<PrescriptionPrintData | null> {
+    if (prescriptionData && prescriptionHasContent(prescriptionData.prescription)) {
+      return prescriptionData;
+    }
+
+    let rxId = resolvedPrescriptionId;
+    if (!rxId && queueEntryId) {
+      const rx = await resolvePrescriptionForSession({ queueEntryId }, "accountant", {
+        retries: 2,
+        retryDelayMs: 1000,
+      });
+      rxId = rx?.id ?? null;
+      if (rxId) setResolvedPrescriptionId(rxId);
+    }
+    if (!rxId && data.operationId) {
+      const rx = await resolvePrescriptionForSession(
+        { operationId: data.operationId },
+        "accountant",
+        { retries: 2, retryDelayMs: 1000 }
+      );
+      rxId = rx?.id ?? null;
+      if (rxId) setResolvedPrescriptionId(rxId);
+    }
+
+    if (!rxId) return null;
+
+    try {
+      const result = await fetchPrescriptionPrintData(rxId, "accountant");
+      if (!prescriptionHasContent(result.prescription)) return null;
+      flushSync(() => setPrescriptionData(result));
+      await waitForPaint();
+      await waitForPaint();
+      return result;
+    } catch {
+      return null;
+    }
+  }
 
 
 
@@ -259,18 +331,22 @@ export function SessionInvoiceModal({
       }
 
       let prescriptionSent = false;
-      if (hasPrescription && prescriptionData) {
+      let prescriptionExpected = false;
+      const rxPrintData = await ensurePrescriptionReady();
+      if (rxPrintData) {
+        prescriptionExpected = true;
+        await waitForPaint();
         const prescriptionPdfBase64 = await tryGeneratePdf(rxPrintId);
         if (prescriptionPdfBase64) {
           const rxResult = await sendWhatsAppPdf({
             pdfBase64: prescriptionPdfBase64,
             filename: `prescription-${data.patientName.replace(/\s/g, "-")}.pdf`,
-            caption: prescriptionWhatsAppMessage(prescriptionData),
+            caption: prescriptionWhatsAppMessage(rxPrintData),
             messageType: "prescription_pdf",
             phone,
             patientId: data.patientId ?? undefined,
-            operationId: data.operationId,
-            prescriptionId: prescriptionId ?? undefined,
+            operationId: rxPrintData.prescription.operation_id ?? data.operationId,
+            prescriptionId: resolvedPrescriptionId ?? undefined,
             portal: "accountant",
           });
           prescriptionSent = rxResult.ok;
@@ -278,7 +354,7 @@ export function SessionInvoiceModal({
       }
 
       const parts = [invoicePdfSent ? "فاتورة PDF" : "فاتورة (نص)"];
-      if (hasPrescription) {
+      if (prescriptionExpected) {
         parts.push(prescriptionSent ? "وصفة PDF" : "الوصفة (تعذر الإرسال)");
       }
 
@@ -500,7 +576,9 @@ export function SessionInvoiceModal({
 
           <div>
 
-            <h2 className="text-lg font-bold text-slate-text">فاتورة الدفع</h2>
+            <h2 className="text-lg font-bold text-slate-text">
+              {archivedHistory ? "إعادة إرسال من السجل" : "فاتورة الدفع"}
+            </h2>
 
             <p className="text-xs text-slate-muted">
 
@@ -562,7 +640,7 @@ export function SessionInvoiceModal({
 
 
 
-          {!finalized && (
+          {!finalized && !archivedHistory && (
 
             <Alert variant="info">
 
@@ -573,6 +651,13 @@ export function SessionInvoiceModal({
 
             </Alert>
 
+          )}
+
+          {archivedHistory && (
+            <Alert variant="info">
+              فاتورة مؤرشفة — يمكنك إعادة إرسال <strong>الفاتورة والوصفة</strong>{" "}
+              للمراجع على واتساب. لن يُنشأ سجل جديد.
+            </Alert>
           )}
 
 
@@ -657,25 +742,27 @@ export function SessionInvoiceModal({
 
               className="w-full bg-[#25D366] hover:bg-[#1da851] text-white"
 
-              disabled={waLoading || !data.patientPhone}
+              disabled={waLoading || prescriptionLoading || !data.patientPhone}
 
               onClick={() => void sendWhatsAppPackage()}
 
             >
 
-              {waLoading ? (
-
+              {waLoading || prescriptionLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
-
               ) : (
-
                 <MessageCircle className="h-4 w-4" />
-
               )}
 
-              {hasPrescription
-                ? "إرسال للمراجع (فاتورة + وصفة PDF)"
-                : "إرسال للمراجع (فاتورة)"}
+              {prescriptionLoading
+                ? "جاري تحميل الوصفة..."
+                : hasPrescription
+                  ? archivedHistory
+                    ? "إعادة إرسال (فاتورة + وصفة)"
+                    : "إرسال للمراجع (فاتورة + وصفة PDF)"
+                  : archivedHistory
+                    ? "إعادة إرسال الفاتورة"
+                    : "إرسال للمراجع (فاتورة)"}
 
             </Button>
 
@@ -685,7 +772,7 @@ export function SessionInvoiceModal({
 
           <SessionPaymentInvoiceDocument data={data} printId={invoicePrintId} />
 
-          {hasPrescription && prescriptionData && (
+          {(hasPrescription || prescriptionLoading) && prescriptionData && (
             <div className="space-y-2 border-t border-slate-border pt-4">
 
               <h3 className="text-sm font-bold text-slate-text">
@@ -712,7 +799,7 @@ export function SessionInvoiceModal({
 
         <div className="border-t border-slate-border p-4 no-print space-y-2">
 
-          {!finalized ? (
+          {!finalized && !archivedHistory ? (
 
             <>
 

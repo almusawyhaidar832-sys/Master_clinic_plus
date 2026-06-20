@@ -13,7 +13,12 @@ import {
   labSplitFromHistoryRow,
   truncateLabNotes,
 } from "@/lib/invoices/lab-session-details";
-import { History, RefreshCw } from "lucide-react";
+import { sessionInvoiceFromHistoryRow } from "@/lib/invoices/session-invoice";
+import type { SessionInvoiceData } from "@/lib/invoices/session-invoice";
+import { SessionInvoiceModal } from "@/components/invoices/SessionInvoiceModal";
+import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { createClient } from "@/lib/supabase/client";
+import { History, MessageCircle, RefreshCw } from "lucide-react";
 
 function historyPatientLabel(row: InvoiceHistoryRow): string {
   if (row.record_kind === "doctor_expense" || row.doctor_expense_id) {
@@ -42,6 +47,8 @@ export function InvoiceHistoryPanel({
   doctors,
   refreshKey = 0,
 }: InvoiceHistoryPanelProps) {
+  const supabase = createClient();
+  const { profile: clinicProfile } = useClinicProfile();
   const [doctorId, setDoctorId] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -49,6 +56,9 @@ export function InvoiceHistoryPanel({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resendInvoice, setResendInvoice] = useState<SessionInvoiceData | null>(
+    null
+  );
 
   const load = useCallback(async () => {
     if (!clinicId) {
@@ -95,6 +105,24 @@ export function InvoiceHistoryPanel({
   useEffect(() => {
     void load();
   }, [load, refreshKey]);
+
+  async function openResendModal(row: InvoiceHistoryRow) {
+    const data = sessionInvoiceFromHistoryRow(row, clinicProfile ?? null);
+    if (!data) return;
+
+    let patientPhone = data.patientPhone;
+    if (!patientPhone?.trim() && row.patient_id && clinicId) {
+      const { data: patient } = await supabase
+        .from("patients")
+        .select("phone")
+        .eq("id", row.patient_id)
+        .eq("clinic_id", clinicId)
+        .maybeSingle();
+      patientPhone = (patient as { phone?: string } | null)?.phone ?? null;
+    }
+
+    setResendInvoice({ ...data, patientPhone });
+  }
 
   const columns: Column<InvoiceHistoryRow>[] = [
     {
@@ -276,6 +304,26 @@ export function InvoiceHistoryPanel({
         );
       },
     },
+    {
+      key: "actions",
+      header: "إرسال",
+      render: (row) => {
+        if (row.record_kind === "doctor_expense" || row.doctor_expense_id) {
+          return <span className="text-slate-400">—</span>;
+        }
+        return (
+          <button
+            type="button"
+            onClick={() => void openResendModal(row)}
+            className="inline-flex items-center gap-1 rounded-lg border border-[#25D366]/30 bg-[#25D366]/10 px-2.5 py-1 text-xs font-semibold text-[#128C7E] hover:bg-[#25D366]/20"
+            title="إعادة إرسال الفاتورة والوصفة على واتساب"
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+            واتساب
+          </button>
+        );
+      },
+    },
   ];
 
   return (
@@ -356,6 +404,17 @@ export function InvoiceHistoryPanel({
               ? "لا توجد سجلات لهذا الطبيب في الفترة المحددة"
               : "لا توجد سجلات — أضف فاتورة صرف أو اعتمد فاتورة جلسة"
           }
+        />
+      )}
+
+      {resendInvoice && (
+        <SessionInvoiceModal
+          data={resendInvoice}
+          invoiceId={resendInvoice.invoiceId}
+          archivedHistory
+          onClose={() => {
+            setResendInvoice(null);
+          }}
         />
       )}
     </div>

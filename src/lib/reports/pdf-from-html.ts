@@ -28,7 +28,7 @@ export function withTimeout<T>(
   });
 }
 
-function waitForPaint(): Promise<void> {
+export function waitForPaint(): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => resolve());
