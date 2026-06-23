@@ -52,23 +52,40 @@ export function preparePdfElementForArabicCapture(
   });
 }
 
-/** هل اللقطة سوداء/فارغة؟ (مشكلة شائعة مع foreignObjectRendering) */
+/** هل اللقطة سوداء بالكامل؟ — لا نفحص الزاوية العليا (قد تكون الهيدر الأزرق) */
 export function isCanvasBlankOrBlack(canvas: HTMLCanvasElement): boolean {
   const ctx = canvas.getContext("2d");
   if (!ctx || canvas.width < 2 || canvas.height < 2) return true;
 
-  const w = Math.min(80, canvas.width);
-  const h = Math.min(80, canvas.height);
-  const sample = ctx.getImageData(0, 0, w, h);
-  let dark = 0;
-  const total = sample.data.length / 4;
-  for (let i = 0; i < sample.data.length; i += 4) {
-    const r = sample.data[i]!;
-    const g = sample.data[i + 1]!;
-    const b = sample.data[i + 2]!;
-    if (r < 40 && g < 40 && b < 40) dark++;
+  try {
+    const regions = [
+      { x: Math.floor(canvas.width * 0.35), y: Math.floor(canvas.height * 0.45) },
+      { x: Math.floor(canvas.width * 0.35), y: Math.floor(canvas.height * 0.7) },
+      { x: Math.floor(canvas.width * 0.1), y: Math.floor(canvas.height * 0.55) },
+    ];
+    const sampleSize = 24;
+    let blackRegions = 0;
+
+    for (const { x, y } of regions) {
+      const sx = Math.min(x, Math.max(0, canvas.width - sampleSize));
+      const sy = Math.min(y, Math.max(0, canvas.height - sampleSize));
+      const sample = ctx.getImageData(sx, sy, sampleSize, sampleSize);
+      let dark = 0;
+      const total = sample.data.length / 4;
+      for (let i = 0; i < sample.data.length; i += 4) {
+        const r = sample.data[i]!;
+        const g = sample.data[i + 1]!;
+        const b = sample.data[i + 2]!;
+        if (r < 20 && g < 20 && b < 20) dark++;
+      }
+      if (dark / total > 0.92) blackRegions++;
+    }
+
+    return blackRegions >= regions.length;
+  } catch {
+    // لوحة ملوّنة بصورة خارجية (شعار) — لا نرفض اللقطة
+    return false;
   }
-  return dark / total > 0.9;
 }
 
 function copyFontStylesIntoClone(clonedDoc: Document): void {

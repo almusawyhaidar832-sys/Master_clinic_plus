@@ -112,6 +112,7 @@ export function ClinicalPdfShell({
               <img
                 src={clinic.logo_url}
                 alt=""
+                crossOrigin="anonymous"
                 className="h-16 w-16 object-contain"
               />
             </div>

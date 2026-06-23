@@ -47,7 +47,6 @@ import { downloadSessionInvoicePdf } from "@/lib/reports/pdf-export";
 
 import {
   generateElementPdfBase64,
-  isPdfBase64TooLarge,
   withTimeout,
   waitForPaint,
   WHATSAPP_PDF_MAX_BYTES,
@@ -182,17 +181,23 @@ export function SessionInvoiceModal({
     };
   }, [prescriptionId, queueEntryId, data.operationId, archivedHistory]);
 
-  async function tryGeneratePdf(elementId: string): Promise<string | null> {
+  async function tryGeneratePdf(
+    elementId: string
+  ): Promise<{ base64: string | null; error?: string }> {
     try {
       const base64 = await withTimeout(
-        generateElementPdfBase64(elementId),
+        generateElementPdfBase64(elementId, {
+          maxBytes: WHATSAPP_PDF_MAX_BYTES,
+        }),
         PDF_TIMEOUT_MS,
         "انتهت مهلة إنشاء الملف"
       );
-      if (isPdfBase64TooLarge(base64, WHATSAPP_PDF_MAX_BYTES)) return null;
-      return base64;
-    } catch {
-      return null;
+      return { base64 };
+    } catch (err) {
+      return {
+        base64: null,
+        error: err instanceof Error ? err.message : "تعذر إنشاء PDF",
+      };
     }
   }
 
@@ -315,10 +320,13 @@ export function SessionInvoiceModal({
 
       // الفاتورة تُرسل كنص — PDF اختياري (إن فشل أو كَبُر يكفي النص)
       let invoicePdfSent = false;
-      const invoicePdfBase64 = await tryGeneratePdf(invoicePrintId);
-      if (invoicePdfBase64) {
+      let invoicePdfError: string | undefined;
+      await waitForPaint();
+      const invoicePdf = await tryGeneratePdf(invoicePrintId);
+      invoicePdfError = invoicePdf.error;
+      if (invoicePdf.base64) {
         const invoiceResult = await sendWhatsAppPdf({
-          pdfBase64: invoicePdfBase64,
+          pdfBase64: invoicePdf.base64,
           filename: `invoice-${inv}.pdf`,
           caption: "📎 إيصال الدفع — PDF",
           messageType: "session_invoice_pdf",
@@ -328,18 +336,24 @@ export function SessionInvoiceModal({
           portal: "accountant",
         });
         invoicePdfSent = invoiceResult.ok;
+        if (!invoiceResult.ok) {
+          invoicePdfError = invoiceResult.error ?? "تعذر إرسال PDF الفاتورة";
+        }
       }
 
       let prescriptionSent = false;
       let prescriptionExpected = false;
+      let prescriptionError: string | undefined;
       const rxPrintData = await ensurePrescriptionReady();
       if (rxPrintData) {
         prescriptionExpected = true;
         await waitForPaint();
-        const prescriptionPdfBase64 = await tryGeneratePdf(rxPrintId);
-        if (prescriptionPdfBase64) {
+        await waitForPaint();
+        const prescriptionPdf = await tryGeneratePdf(rxPrintId);
+        prescriptionError = prescriptionPdf.error;
+        if (prescriptionPdf.base64) {
           const rxResult = await sendWhatsAppPdf({
-            pdfBase64: prescriptionPdfBase64,
+            pdfBase64: prescriptionPdf.base64,
             filename: `prescription-${data.patientName.replace(/\s/g, "-")}.pdf`,
             caption: prescriptionWhatsAppMessage(rxPrintData),
             messageType: "prescription_pdf",
@@ -350,6 +364,9 @@ export function SessionInvoiceModal({
             portal: "accountant",
           });
           prescriptionSent = rxResult.ok;
+          if (!rxResult.ok) {
+            prescriptionError = rxResult.error ?? "تعذر إرسال PDF الوصفة";
+          }
         }
       }
 
@@ -358,9 +375,18 @@ export function SessionInvoiceModal({
         parts.push(prescriptionSent ? "وصفة PDF" : "الوصفة (تعذر الإرسال)");
       }
 
+      const detail =
+        !invoicePdfSent && invoicePdfError
+          ? ` — ${invoicePdfError}`
+          : prescriptionExpected && !prescriptionSent && prescriptionError
+            ? ` — ${prescriptionError}`
+            : "";
+
       setActionMessage({
-        type: "success",
-        text: `✓ أُرسل للمراجع (${parts.join(" + ")})`,
+        type: invoicePdfSent && (!prescriptionExpected || prescriptionSent)
+          ? "success"
+          : "info",
+        text: `✓ أُرسل للمراجع (${parts.join(" + ")})${detail}`,
       });
     } catch (e) {
       setActionMessage({

@@ -15,7 +15,10 @@ import {
 } from "@/lib/prescriptions/client";
 import { prescriptionWhatsAppMessage } from "@/lib/prescriptions/messages";
 import { downloadPrescriptionPdf } from "@/lib/reports/pdf-export";
-import { generateElementPdfBase64 } from "@/lib/reports/pdf-from-html";
+import {
+  generateElementPdfBase64,
+  WHATSAPP_PDF_MAX_BYTES,
+} from "@/lib/reports/pdf-from-html";
 import { sendSessionWhatsAppPackage } from "@/lib/whatsapp/send-session-package-client";
 import type { PrescriptionPrintData } from "@/lib/prescriptions/types";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
@@ -112,7 +115,9 @@ export function PrescriptionPrintModal({
     setActionMessage(null);
 
     try {
-      const prescriptionPdfBase64 = await generateElementPdfBase64(printId);
+      const prescriptionPdfBase64 = await generateElementPdfBase64(printId, {
+        maxBytes: WHATSAPP_PDF_MAX_BYTES,
+      });
       const intro = `💊 *وصفة طبية — ${data.patientName}*\n\nمرحباً ${data.patientName}،\nتفاصيل زيارتك ووصفتك الطبية:`;
 
       const result = await sendSessionWhatsAppPackage(
