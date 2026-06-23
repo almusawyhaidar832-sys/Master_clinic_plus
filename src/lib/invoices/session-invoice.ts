@@ -181,6 +181,75 @@ export function invoiceFromOperation(
   });
 }
 
+/** مبالغ العرض في السجل التاريخي — من الصف أو اللقطة المحفوظة */
+export function historyRowFinancials(row: {
+  record_kind?: string;
+  doctor_expense_id?: string | null;
+  procedure_label?: string;
+  treatment_name?: string;
+  total_amount?: number;
+  paid_amount?: number;
+  remaining_amount?: number;
+  operation_id?: string | null;
+  snapshot_json?: SessionInvoiceData | Record<string, unknown>;
+}) {
+  if (row.record_kind === "doctor_expense" || row.doctor_expense_id) {
+    return null;
+  }
+
+  const snap =
+    row.snapshot_json && typeof row.snapshot_json === "object"
+      ? (row.snapshot_json as SessionInvoiceData)
+      : null;
+
+  const paidSession = Math.max(
+    Number(row.paid_amount ?? 0),
+    Number(snap?.paidThisSession ?? 0)
+  );
+  const caseTotal = Math.max(
+    Number(row.total_amount ?? 0),
+    Number(snap?.caseTotalAmount ?? 0)
+  );
+  const remaining = Math.max(
+    Number(row.remaining_amount ?? 0),
+    Number(snap?.remainingBalance ?? 0)
+  );
+  const casePaid = Math.max(
+    Number(snap?.caseTotalPaid ?? 0),
+    caseTotal > 0 ? Math.max(0, caseTotal - remaining) : paidSession
+  );
+
+  const treatmentName =
+    String(snap?.treatmentName ?? row.treatment_name ?? row.procedure_label ?? "")
+      .trim() || "—";
+
+  return {
+    treatmentName,
+    paidSession,
+    caseTotal,
+    casePaid,
+    remaining,
+    canResend: Boolean(snap?.operationId ?? row.operation_id),
+  };
+}
+
+export function canResendHistoryInvoice(row: {
+  record_kind?: string;
+  doctor_expense_id?: string | null;
+  operation_id?: string | null;
+  invoice_id?: string | null;
+  snapshot_json?: SessionInvoiceData | Record<string, unknown>;
+}): boolean {
+  if (row.record_kind === "doctor_expense" || row.doctor_expense_id) {
+    return false;
+  }
+  const snap =
+    row.snapshot_json && typeof row.snapshot_json === "object"
+      ? (row.snapshot_json as SessionInvoiceData)
+      : null;
+  return Boolean(snap?.operationId ?? row.operation_id ?? row.invoice_id);
+}
+
 /** استرجاع بيانات الفاتورة من صف السجل التاريخي — لإعادة الإرسال على واتساب */
 export function sessionInvoiceFromHistoryRow(
   row: {

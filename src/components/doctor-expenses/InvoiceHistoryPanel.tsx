@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import type { InvoiceHistoryRow } from "@/lib/services/invoice-archive";
@@ -13,11 +14,16 @@ import {
   labSplitFromHistoryRow,
   truncateLabNotes,
 } from "@/lib/invoices/lab-session-details";
-import { sessionInvoiceFromHistoryRow } from "@/lib/invoices/session-invoice";
+import {
+  canResendHistoryInvoice,
+  historyRowFinancials,
+  sessionInvoiceFromHistoryRow,
+} from "@/lib/invoices/session-invoice";
 import type { SessionInvoiceData } from "@/lib/invoices/session-invoice";
 import { SessionInvoiceModal } from "@/components/invoices/SessionInvoiceModal";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { createClient } from "@/lib/supabase/client";
+import { getPatientDisplayPhone } from "@/lib/phone";
 import { History, MessageCircle, RefreshCw } from "lucide-react";
 
 function historyPatientLabel(row: InvoiceHistoryRow): string {
@@ -56,6 +62,7 @@ export function InvoiceHistoryPanel({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resendNotice, setResendNotice] = useState<string | null>(null);
   const [resendInvoice, setResendInvoice] = useState<SessionInvoiceData | null>(
     null
   );
@@ -107,21 +114,48 @@ export function InvoiceHistoryPanel({
   }, [load, refreshKey]);
 
   async function openResendModal(row: InvoiceHistoryRow) {
-    const data = sessionInvoiceFromHistoryRow(row, clinicProfile ?? null);
-    if (!data) return;
+    setResendNotice(null);
+
+    let operationId = row.operation_id;
+    if (!operationId && row.invoice_id && clinicId) {
+      const { data: invoice } = await supabase
+        .from("invoices")
+        .select("operation_id")
+        .eq("id", row.invoice_id)
+        .eq("clinic_id", clinicId)
+        .maybeSingle();
+      operationId = (invoice as { operation_id?: string } | null)?.operation_id ?? null;
+    }
+
+    const data = sessionInvoiceFromHistoryRow(
+      { ...row, operation_id: operationId },
+      clinicProfile ?? null
+    );
+
+    if (!data) {
+      setResendNotice("تعذر فتح إعادة الإرسال — السجل ناقص أو غير مرتبط بجلسة");
+      return;
+    }
 
     let patientPhone = data.patientPhone;
     if (!patientPhone?.trim() && row.patient_id && clinicId) {
       const { data: patient } = await supabase
         .from("patients")
-        .select("phone")
+        .select("phone, phone_number")
         .eq("id", row.patient_id)
         .eq("clinic_id", clinicId)
         .maybeSingle();
-      patientPhone = (patient as { phone?: string } | null)?.phone ?? null;
+      patientPhone = getPatientDisplayPhone(patient ?? {}) || null;
     }
 
-    setResendInvoice({ ...data, patientPhone });
+    if (!patientPhone?.trim()) {
+      setResendNotice(
+        `لا يوجد رقم جوال لـ «${data.patientName}» — أضف الرقم في ملف المريض ثم أعد المحاولة`
+      );
+      return;
+    }
+
+    setResendInvoice({ ...data, patientPhone, operationId: data.operationId });
   }
 
   const columns: Column<InvoiceHistoryRow>[] = [
@@ -129,6 +163,122 @@ export function InvoiceHistoryPanel({
       key: "date",
       header: "التاريخ",
       render: (row) => formatDate(row.invoice_date),
+    },
+    {
+      key: "patient",
+      header: "المراجع",
+      render: (row) => (
+        <span className="min-w-[6rem] font-medium text-slate-800">
+          {historyPatientLabel(row)}
+        </span>
+      ),
+    },
+    {
+      key: "case",
+      header: "الحالة",
+      render: (row) => {
+        const fin = historyRowFinancials(row);
+        if (!fin) return <span className="text-slate-400">—</span>;
+        return (
+          <div className="min-w-[7rem]">
+            <p className="font-semibold text-slate-text">{fin.treatmentName}</p>
+            <p className="mt-0.5 text-xs text-slate-muted">{row.procedure_label}</p>
+          </div>
+        );
+      },
+    },
+    {
+      key: "doctor",
+      header: "الطبيب",
+      render: (row) => row.doctor_name_ar || "—",
+    },
+    {
+      key: "paid_session",
+      header: "دفع الجلسة",
+      render: (row) => {
+        const fin = historyRowFinancials(row);
+        if (!fin) return <span className="text-slate-400">—</span>;
+        return (
+          <span
+            className={
+              fin.paidSession > 0
+                ? "font-bold tabular-nums text-emerald-700"
+                : "tabular-nums text-slate-muted"
+            }
+          >
+            {formatCurrency(fin.paidSession)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "case_total",
+      header: "إجمالي الحالة",
+      render: (row) => {
+        const fin = historyRowFinancials(row);
+        if (!fin || fin.caseTotal <= 0) {
+          return <span className="text-slate-400">—</span>;
+        }
+        return (
+          <span className="tabular-nums font-medium text-slate-700">
+            {formatCurrency(fin.caseTotal)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "case_paid",
+      header: "مدفوع الحالة",
+      render: (row) => {
+        const fin = historyRowFinancials(row);
+        if (!fin || fin.casePaid <= 0) {
+          return <span className="text-slate-400">—</span>;
+        }
+        return (
+          <span className="tabular-nums font-semibold text-primary">
+            {formatCurrency(fin.casePaid)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "remaining",
+      header: "المتبقي",
+      render: (row) => {
+        const fin = historyRowFinancials(row);
+        if (!fin) return <span className="text-slate-400">—</span>;
+        return (
+          <span
+            className={
+              fin.remaining > 0
+                ? "font-bold tabular-nums text-debt-text"
+                : "font-semibold tabular-nums text-emerald-700"
+            }
+          >
+            {formatCurrency(fin.remaining)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "actions",
+      header: "إعادة إرسال",
+      render: (row) => {
+        if (!canResendHistoryInvoice(row)) {
+          return <span className="text-slate-400">—</span>;
+        }
+        return (
+          <button
+            type="button"
+            onClick={() => void openResendModal(row)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#25D366] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-[#1da851]"
+            title="إعادة إرسال الفاتورة والوصفة للمراجع على واتساب"
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+            واتساب
+          </button>
+        );
+      },
     },
     {
       key: "invoice",
@@ -152,27 +302,6 @@ export function InvoiceHistoryPanel({
             جلسة
           </span>
         ),
-    },
-    {
-      key: "doctor",
-      header: "الطبيب",
-      render: (row) => row.doctor_name_ar || "—",
-    },
-    {
-      key: "patient",
-      header: "المراجع",
-      render: (row) => (
-        <span className="font-medium text-slate-800">
-          {historyPatientLabel(row)}
-        </span>
-      ),
-    },
-    {
-      key: "procedure",
-      header: "البيان",
-      render: (row) => (
-        <span className="text-slate-700">{row.procedure_label}</span>
-      ),
     },
     {
       key: "lab_cost",
@@ -252,17 +381,8 @@ export function InvoiceHistoryPanel({
       },
     },
     {
-      key: "paid",
-      header: "المبلغ المدفوع",
-      render: (row) => (
-        <span className="font-bold text-primary tabular-nums">
-          {formatCurrency(row.paid_amount)}
-        </span>
-      ),
-    },
-    {
       key: "doctor_share",
-      header: "حصة الطبيب (جلسة)",
+      header: "حصة الطبيب",
       render: (row) => {
         if (row.record_kind === "doctor_expense") {
           return <span className="text-slate-400">—</span>;
@@ -284,7 +404,7 @@ export function InvoiceHistoryPanel({
     },
     {
       key: "clinic_share",
-      header: "حصة العيادة (جلسة)",
+      header: "حصة العيادة",
       render: (row) => {
         if (row.record_kind === "doctor_expense") {
           return <span className="text-slate-400">—</span>;
@@ -304,26 +424,6 @@ export function InvoiceHistoryPanel({
         );
       },
     },
-    {
-      key: "actions",
-      header: "إرسال",
-      render: (row) => {
-        if (row.record_kind === "doctor_expense" || row.doctor_expense_id) {
-          return <span className="text-slate-400">—</span>;
-        }
-        return (
-          <button
-            type="button"
-            onClick={() => void openResendModal(row)}
-            className="inline-flex items-center gap-1 rounded-lg border border-[#25D366]/30 bg-[#25D366]/10 px-2.5 py-1 text-xs font-semibold text-[#128C7E] hover:bg-[#25D366]/20"
-            title="إعادة إرسال الفاتورة والوصفة على واتساب"
-          >
-            <MessageCircle className="h-3.5 w-3.5" />
-            واتساب
-          </button>
-        );
-      },
-    },
   ];
 
   return (
@@ -335,8 +435,8 @@ export function InvoiceHistoryPanel({
             السجل التاريخي
           </h2>
           <p className="text-sm text-slate-500">
-            فواتير الجلسات + فواتير وصرفيات الأطباء + رواتب الأطباء — فلترة حسب الطبيب
-            والتاريخ
+            فواتير الجلسات مع المبالغ المدفوعة والمتبقية — إعادة إرسال الفاتورة
+            والوصفة للمراجع عبر واتساب
           </p>
         </div>
         <button
@@ -387,6 +487,10 @@ export function InvoiceHistoryPanel({
         </p>
       )}
 
+      {resendNotice && (
+        <Alert variant="warning">{resendNotice}</Alert>
+      )}
+
       <p className="text-sm text-slate-600">
         إجمالي النتائج: <strong>{total}</strong>
       </p>
@@ -404,6 +508,7 @@ export function InvoiceHistoryPanel({
               ? "لا توجد سجلات لهذا الطبيب في الفترة المحددة"
               : "لا توجد سجلات — أضف فاتورة صرف أو اعتمد فاتورة جلسة"
           }
+          highlightDebt={(row) => (historyRowFinancials(row)?.remaining ?? 0) > 0}
         />
       )}
 
