@@ -1,5 +1,6 @@
 import {
   ensureArabicPdfFontsReady,
+  isCanvasBlankOrBlack,
   preparePdfElementForArabicCapture,
 } from "@/lib/reports/pdf-arabic-prepare";
 
@@ -61,7 +62,7 @@ async function renderElementToPdf(elementId: string) {
   const html2canvas = (await import("html2canvas")).default;
   const { jsPDF } = await import("jspdf");
 
-  const canvasOptions = {
+  const canvas = await html2canvas(element, {
     scale: 2,
     useCORS: true,
     logging: false,
@@ -69,22 +70,13 @@ async function renderElementToPdf(elementId: string) {
     onclone: (doc: Document) => {
       preparePdfElementForArabicCapture(doc, elementId);
     },
-  } as const;
+  });
 
-  let canvas: HTMLCanvasElement;
-  try {
-    canvas = await html2canvas(element, {
-      ...canvasOptions,
-      foreignObjectRendering: true,
-    });
-    if (canvas.width <= 1 || canvas.height <= 1) {
-      throw new Error("empty canvas from foreignObjectRendering");
-    }
-  } catch {
-    canvas = await html2canvas(element, canvasOptions);
+  if (isCanvasBlankOrBlack(canvas)) {
+    throw new Error("تعذر تصدير المستند — اللقطة فارغة");
   }
 
-  const imgData = canvas.toDataURL("image/jpeg", 0.92);
+  const imgData = canvas.toDataURL("image/png");
   const pdf = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -99,13 +91,13 @@ async function renderElementToPdf(elementId: string) {
   let heightLeft = imgHeight;
   let position = 0;
 
-  pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
   heightLeft -= pageHeight;
 
   while (heightLeft > 0) {
     position = heightLeft - imgHeight;
     pdf.addPage();
-    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
     heightLeft -= pageHeight;
   }
 

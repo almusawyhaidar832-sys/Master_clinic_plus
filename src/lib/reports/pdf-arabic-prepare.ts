@@ -36,6 +36,10 @@ export function preparePdfElementForArabicCapture(
     el.style.wordSpacing = "normal";
     el.style.textTransform = "none";
 
+    // html2canvas يُنتج صفحة سوداء مع هذه الخصائص
+    el.style.backdropFilter = "none";
+    el.style.webkitBackdropFilter = "none";
+
     const font = doc.defaultView?.getComputedStyle(el).fontFamily ?? "";
     if (!font || font.includes("var(")) {
       el.style.fontFamily = PDF_FONT_STACK;
@@ -46,6 +50,25 @@ export function preparePdfElementForArabicCapture(
       el.style.unicodeBidi = "isolate";
     }
   });
+}
+
+/** هل اللقطة سوداء/فارغة؟ (مشكلة شائعة مع foreignObjectRendering) */
+export function isCanvasBlankOrBlack(canvas: HTMLCanvasElement): boolean {
+  const ctx = canvas.getContext("2d");
+  if (!ctx || canvas.width < 2 || canvas.height < 2) return true;
+
+  const w = Math.min(80, canvas.width);
+  const h = Math.min(80, canvas.height);
+  const sample = ctx.getImageData(0, 0, w, h);
+  let dark = 0;
+  const total = sample.data.length / 4;
+  for (let i = 0; i < sample.data.length; i += 4) {
+    const r = sample.data[i]!;
+    const g = sample.data[i + 1]!;
+    const b = sample.data[i + 2]!;
+    if (r < 40 && g < 40 && b < 40) dark++;
+  }
+  return dark / total > 0.9;
 }
 
 function copyFontStylesIntoClone(clonedDoc: Document): void {

@@ -81,9 +81,8 @@ export function ClinicalPdfShell({
             <span
               className="inline-block rounded-full px-3 py-1 text-xs font-black"
               style={{
-                backgroundColor: "rgba(255,255,255,0.22)",
-                border: "1px solid rgba(255,255,255,0.35)",
-                backdropFilter: "blur(4px)",
+                backgroundColor: "rgba(255,255,255,0.28)",
+                border: "1px solid rgba(255,255,255,0.4)",
               }}
             >
               {style.badgeLabel}
