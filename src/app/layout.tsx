@@ -5,6 +5,7 @@ import { APP_NAME, DEVELOPER } from "@/lib/constants";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import { OfflineToast } from "@/components/pwa/OfflineToast";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const notoArabic = Noto_Sans_Arabic({
   subsets: ["arabic"],
@@ -66,6 +67,7 @@ export default function RootLayout({
           {children}
           <OfflineToast />
           <ServiceWorkerRegister />
+          <SpeedInsights />
         </LanguageProvider>
       </body>
     </html>

@@ -17,6 +17,7 @@
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.1",
     "@travisvn/edge-tts": "^1.0.2",
+    "@vercel/speed-insights": "^2.0.0",
     "arabic-persian-reshaper": "^1.0.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
