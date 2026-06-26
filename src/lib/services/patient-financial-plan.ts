@@ -4,6 +4,7 @@ import {
   splitTreatmentAndReviewFee,
   type DoctorShareInput,
 } from "@/lib/finance";
+import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import type { Doctor, DoctorPercentage, MaterialsCostShare } from "@/types";
 
 export type SessionKind = "plan" | "payment";
@@ -611,6 +612,61 @@ export function previewTreatmentSplitWithReview(
     materialsCost,
     doctor ? doctorShareInput(doctor) : null
   );
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * توزيع المبلغ المدفوع في هذه الجلسة — نفس منطق قاعدة البيانات:
+ * paid × (حصة الحالة / السعر النهائي)
+ */
+export function previewPaidSessionSplit(opts: {
+  paidAmount: number;
+  caseFinalPrice: number;
+  caseDoctorShare: number;
+  caseClinicShare: number;
+  doctor: Doctor | null;
+}): { doctorShare: number; clinicShare: number; paidAmount: number } | null {
+  const paid = Math.max(0, opts.paidAmount);
+  if (paid <= 0) return null;
+
+  const finalPrice = Math.max(0, opts.caseFinalPrice);
+  let caseDoc = Math.max(0, opts.caseDoctorShare);
+  let caseClinic = Math.max(0, opts.caseClinicShare);
+
+  if (caseDoc <= 0 && caseClinic <= 0 && finalPrice > 0 && opts.doctor) {
+    const full = previewTreatmentSplit(finalPrice, 0, opts.doctor);
+    if (full) {
+      caseDoc = full.doctorShare;
+      caseClinic = full.clinicShare;
+    }
+  }
+
+  if (opts.doctor && isSalaryDoctor(opts.doctor)) {
+    return { paidAmount: paid, doctorShare: 0, clinicShare: roundMoney(paid) };
+  }
+
+  if (finalPrice > 0 && (caseDoc > 0 || caseClinic > 0)) {
+    return {
+      paidAmount: paid,
+      doctorShare: roundMoney((paid * caseDoc) / finalPrice),
+      clinicShare: roundMoney((paid * caseClinic) / finalPrice),
+    };
+  }
+
+  if (opts.doctor && finalPrice <= 0) {
+    const pct = Number(opts.doctor.percentage ?? 50) / 100;
+    const doc = roundMoney(paid * pct);
+    return {
+      paidAmount: paid,
+      doctorShare: doc,
+      clinicShare: roundMoney(Math.max(0, paid - doc)),
+    };
+  }
+
+  return null;
 }
 
 export function resolveSessionKind(

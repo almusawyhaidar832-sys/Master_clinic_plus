@@ -2454,6 +2454,18 @@ export function QuickEntryForm({
           reviewFee={reviewFeeLive}
           lockedSplit={lockedSplit}
           isPaymentSession={isFollowUpSession}
+          paidAmount={paid}
+          caseFinalPrice={finalPriceLive}
+          caseDoctorShareTotal={
+            lockedSplit?.doctorShare ??
+            liveSplit?.doctorShare ??
+            plan.doctor_share_total
+          }
+          caseClinicShareTotal={
+            lockedSplit?.clinicShare ??
+            liveSplit?.clinicShare ??
+            plan.clinic_share_total
+          }
         />
         )}
 
