@@ -18,6 +18,11 @@ export interface CurrencyInputProps {
   min?: number;
   readOnly?: boolean;
   disabled?: boolean;
+  /** حجم أكبر لواجهة المحاسب */
+  size?: "default" | "large";
+  /** تمييز لوني للحقل */
+  tone?: "default" | "total" | "paid";
+  hint?: string;
 }
 
 /**
@@ -36,16 +41,31 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
       min = 0,
       readOnly,
       disabled,
+      size = "default",
+      tone = "default",
+      hint,
     },
     ref
   ) {
     const displayValue = value ? formatNumberInput(value) : "";
     const locked = readOnly || disabled;
+    const isLarge = size === "large";
+
+    const toneClasses = {
+      default: "border-slate-200 bg-white focus:border-primary",
+      total: "border-primary/50 bg-primary/[0.04] focus:border-primary",
+      paid: "border-emerald-500/50 bg-emerald-50/80 focus:border-emerald-600",
+    }[tone];
 
     return (
-      <div className="w-full space-y-1.5">
+      <div className="w-full space-y-2">
         {label && (
-          <label className="block text-sm font-medium text-slate-text">
+          <label
+            className={cn(
+              "block font-bold text-slate-800",
+              isLarge ? "text-base" : "text-sm font-medium text-slate-text"
+            )}
+          >
             {label}
           </label>
         )}
@@ -75,11 +95,17 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
             }
           }}
           className={cn(
-            "tabular-nums flex h-10 w-full rounded-lg border border-slate-border bg-surface-card px-3 py-2 text-sm text-slate-text text-left placeholder:text-slate-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20",
+            "tabular-nums flex w-full rounded-xl border-2 text-left text-slate-900 shadow-sm outline-none transition-colors placeholder:text-slate-400 focus:ring-4",
+            isLarge
+              ? "h-14 px-4 text-2xl font-bold focus:ring-primary/15"
+              : "h-11 px-3 text-base font-semibold focus:ring-primary/20",
+            tone === "paid" && isLarge && "focus:ring-emerald-500/20",
+            toneClasses,
             locked && "cursor-default bg-surface text-slate-muted",
             className
           )}
         />
+        {hint && <p className="text-sm font-medium text-slate-600">{hint}</p>}
         {min > 0 && value && Number(value) < min && (
           <p className="text-xs text-debt-text">الحد الأدنى {min}</p>
         )}

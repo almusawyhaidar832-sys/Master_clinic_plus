@@ -1830,7 +1830,7 @@ export function QuickEntryForm({
     >
       {!embedded && (
         <CardHeader>
-          <CardTitle>
+          <CardTitle className="!text-xl !font-black text-primary-800">
             {loadingPlan && selectedPatientId
               ? "جاري تحميل ملف المريض..."
               : showCasePicker
@@ -1840,8 +1840,13 @@ export function QuickEntryForm({
                   : "حالة علاج جديدة"}
           </CardTitle>
           {isFollowUpSession && !loadingPlan && (
-            <p className="text-sm text-slate-muted mt-1">
-              السعر والخصم من قاعدة البيانات — أدخل المبلغ المدفوع والملاحظات
+            <p className="mt-1 text-base font-medium text-slate-600">
+              السعر محفوظ — أدخل المبلغ المدفوع في هذه الجلسة
+            </p>
+          )}
+          {!isFollowUpSession && !showCasePicker && !loadingPlan && (
+            <p className="mt-1 text-base font-medium text-slate-600">
+              أدخل السعر الكلي ثم المبلغ المدفوع مباشرة تحته
             </p>
           )}
         </CardHeader>
@@ -1850,7 +1855,7 @@ export function QuickEntryForm({
       <form
         noValidate
         onSubmit={handleSubmit}
-        className={`grid gap-4 sm:grid-cols-2 ${embedded ? "px-0" : ""}`}
+        className={`mc-quick-entry-form grid gap-5 sm:grid-cols-2 ${embedded ? "px-0" : ""}`}
       >
 
         {isCaseClosed && (
@@ -1874,9 +1879,12 @@ export function QuickEntryForm({
         )}
 
         {forceNewPlan && !showCasePicker && (
-          <div className="sm:col-span-2 mc-section-box">
-            <p className="text-sm font-semibold text-primary">
-              حالة علاج جديدة — أدخل السعر الكلي والمبلغ المدفوع في هذه الجلسة
+          <div className="sm:col-span-2 rounded-xl border-2 border-primary/30 bg-primary/[0.08] px-4 py-3">
+            <p className="text-base font-black text-primary-800">
+              حالة علاج جديدة
+            </p>
+            <p className="mt-1 text-sm font-semibold text-primary-700">
+              ١) السعر الكلي للحالة — ٢) المبلغ المدفوع اليوم — ٣) الخصم إن وُجد
             </p>
             {operationName.trim() && (
               <p className="text-xs text-slate-muted mt-1">
@@ -1918,10 +1926,10 @@ export function QuickEntryForm({
 
         {formSchema.showPatientSearch && (
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-slate-text">
+          <label className="mc-entry-field-label">
             المريض{" "}
             {selectedPatientId && (
-              <span className="text-xs text-primary">← مريض موجود محدد</span>
+              <span className="text-sm font-semibold text-primary">← مريض محدد</span>
             )}
           </label>
           <div className="flex gap-2">
@@ -1968,14 +1976,14 @@ export function QuickEntryForm({
 
         {formSchema.showPatientSearch && !selectedPatientId && (
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-slate-text">
+            <label className="mc-entry-field-label">
               رقم هاتف المراجع <span className="text-debt-text">*</span>
             </label>
             <input
               type="tel"
               dir="ltr"
               required
-              className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm text-slate-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              className="mc-entry-input"
               value={patientPhone}
               onChange={(e) => setPatientPhone(e.target.value)}
               placeholder="07XX XXX XXXX أو +9647XXXXXXXXX"
@@ -1988,19 +1996,19 @@ export function QuickEntryForm({
 
         {selectedPatientId && (
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-slate-text">
+            <label className="mc-entry-field-label">
               رقم واتساب المراجع{" "}
               <span className="text-debt-text">*</span>
-              <span className="font-normal text-slate-muted">
+              <span className="text-sm font-medium text-slate-500">
                 {" "}
-                (للإشعار التلقائي بعد الجلسة)
+                (لإرسال الفاتورة بعد الجلسة)
               </span>
             </label>
             <input
               type="tel"
               dir="ltr"
               required={phoneInputRequired}
-              className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm text-slate-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              className="mc-entry-input"
               value={patientPhone}
               onChange={(e) => setPatientPhone(e.target.value)}
               placeholder="07XX XXX XXXX"
@@ -2127,6 +2135,7 @@ export function QuickEntryForm({
               options={doctors.map((d) => ({ value: d.id, label: d.full_name_ar }))}
               placeholder="اختر الطبيب"
               required
+              className="!h-12 !rounded-xl !border-2 !text-base !font-semibold"
             />
           </>
         )}
@@ -2134,9 +2143,12 @@ export function QuickEntryForm({
         )}
 
         {formSchema.showPlanSummary && plan.final_price > 0 && (
-          <div className="sm:col-span-2 mc-section-box space-y-1 text-sm">
-            <p className="font-semibold text-slate-text">
-              من أول جلسة (محفوظ): السعر الكلي {formatCurrency(plan.case_price)}
+          <div className="sm:col-span-2 rounded-xl border-2 border-primary/25 bg-primary/[0.06] px-4 py-4 space-y-2 text-sm">
+            <p className="text-base font-black text-primary-800">
+              ملخص الحالة المحفوظة
+            </p>
+            <p className="font-bold text-slate-800">
+              السعر الكلي: {formatCurrency(plan.case_price)}
             </p>
             {plan.discount_total > 0 && (
               <p className="text-slate-muted">
@@ -2171,13 +2183,13 @@ export function QuickEntryForm({
 
         {formSchema.showOperation && (
         <div className={isFollowUpSession ? "sm:col-span-2" : ""}>
-          <label className="mb-1 block text-sm font-medium text-slate-text">
+          <label className="mc-entry-field-label">
             نوع الإجراء *
           </label>
           <input
             list={listId}
             type="text"
-            className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm text-slate-text outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            className="mc-entry-input"
             value={operationName}
             onChange={(e) => setOperationName(e.target.value)}
             placeholder="حشوة ضوئية / تاج زيركون / ..."
@@ -2191,42 +2203,119 @@ export function QuickEntryForm({
         </div>
         )}
 
-        {formSchema.showCasePrice && (
-          <>
-            <CurrencyInput
-              label="السعر الكلي للحالة *"
-              value={totalAmount}
-              onChange={setTotalAmount}
-              placeholder="150,000"
-              required
-            />
+        {(formSchema.showCasePrice ||
+          formSchema.showPaidAmount ||
+          formSchema.showAdditionalDiscount) && (
+          <div className="sm:col-span-2 mc-entry-finance space-y-4">
+            <div>
+              <h4 className="mc-entry-finance__title">المبالغ المالية</h4>
+              <p className="mc-entry-finance__subtitle">
+                {isFollowUpSession
+                  ? "أدخل المبلغ الذي دفعه المراجع في هذه الجلسة"
+                  : "حدد السعر الكلي للحالة ثم المبلغ المدفوع اليوم"}
+              </p>
+            </div>
+
+            {formSchema.showCasePrice && (
+              <CurrencyInput
+                label="السعر الكلي للحالة *"
+                value={totalAmount}
+                onChange={setTotalAmount}
+                placeholder="150,000"
+                required
+                size="large"
+                tone="total"
+                hint="إجمالي تكلفة العلاج قبل الخصم"
+              />
+            )}
+
+            {formSchema.showPaidAmount && (
+              <div className="space-y-2">
+                <CurrencyInput
+                  label={
+                    isFollowUpSession
+                      ? "المبلغ المدفوع في هذه الجلسة *"
+                      : "المبلغ المدفوع في هذه الجلسة"
+                  }
+                  value={paidAmount}
+                  onChange={setPaidAmount}
+                  placeholder="50,000"
+                  required={isFollowUpSession && additionalDiscountNum <= 0}
+                  size="large"
+                  tone="paid"
+                  hint={
+                    isFollowUpSession
+                      ? "ما دفعه المراجع الآن — يظهر أسفل السعر الكلي"
+                      : "الدفعة الأولى أو المقدّم — مباشرة تحت السعر الكلي"
+                  }
+                />
+                {isFollowUpSession && remaining > 0 && !isCaseClosed && (
+                  <button
+                    type="button"
+                    className="w-full rounded-xl border-2 border-primary bg-primary px-4 py-3 text-base font-bold text-white shadow-sm hover:bg-primary-700"
+                    onClick={() =>
+                      setPaidAmount(String(Math.round(remaining)))
+                    }
+                  >
+                    دفع الذمة كاملة ({formatCurrency(remaining)})
+                  </button>
+                )}
+              </div>
+            )}
+
             {formSchema.showInitialDiscount && (
               <CurrencyInput
                 label="الخصم (اختياري)"
                 value={discountAmount}
                 onChange={setDiscountAmount}
                 placeholder="0"
+                size="large"
+                hint="يُخصم من السعر الكلي قبل حساب الذمة"
               />
             )}
-            <div className="sm:col-span-2 mc-section-box--success">
-              <p className="text-sm text-emerald-900">
-                السعر النهائي بعد الخصم:{" "}
-                <span className="text-lg font-bold tabular-nums">
-                  {formatCurrency(finalPriceLive)}
-                </span>
-              </p>
-              {discountNum > 0 && (
-                <p className="text-xs text-emerald-800 mt-1 tabular-nums">
-                  {formatCurrency(casePriceNum)} − {formatCurrency(discountNum)} ={" "}
+
+            {formSchema.showAdditionalDiscount && (
+              <div className="space-y-1">
+                <CurrencyInput
+                  label="خصم إضافي (اختياري)"
+                  value={additionalDiscountAmount}
+                  onChange={setAdditionalDiscountAmount}
+                  placeholder="0"
+                  size="large"
+                  hint="يُخصم من الذمة المتبقية على الحالة"
+                />
+                {additionalDiscountNum > 0 && (
+                  <p className="text-sm font-semibold text-amber-800 tabular-nums">
+                    يُخصم {formatCurrency(additionalDiscountNum)} — السعر النهائي:{" "}
+                    {formatCurrency(finalPriceLive)} — المتبقي:{" "}
+                    {formatCurrency(remaining)}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {formSchema.showCasePrice && (
+              <div className="rounded-xl border-2 border-emerald-400/60 bg-emerald-50 px-4 py-4">
+                <p className="text-sm font-bold text-emerald-900">
+                  السعر النهائي بعد الخصم
+                </p>
+                <p className="mt-1 text-3xl font-black tabular-nums text-emerald-800">
                   {formatCurrency(finalPriceLive)}
                 </p>
-              )}
-            </div>
-          </>
+                {discountNum > 0 && (
+                  <p className="mt-2 text-sm font-medium text-emerald-800 tabular-nums">
+                    {formatCurrency(casePriceNum)} − {formatCurrency(discountNum)} ={" "}
+                    {formatCurrency(finalPriceLive)}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {formSchema.showMaterials && (
-          <div className="sm:col-span-2 space-y-3">
+          <div className="sm:col-span-2 space-y-3 rounded-xl border-2 border-amber-200/80 bg-amber-50/50 p-4">
+            <p className="text-base font-bold text-amber-900">المختبر (اختياري)</p>
             <CurrencyInput
               label="تكلفة عمل المختبر"
               value={materialsCost}
@@ -2234,57 +2323,17 @@ export function QuickEntryForm({
               placeholder="0"
             />
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-text">
+              <label className="mc-entry-field-label">
                 ملاحظات المختبر
               </label>
               <textarea
-                className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm text-slate-text outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+                className="mc-entry-input min-h-[5rem] resize-none"
                 rows={3}
                 value={labNotes}
                 onChange={(e) => setLabNotes(e.target.value)}
                 placeholder="تعليمات تفصيلية لعمل المختبر..."
               />
             </div>
-          </div>
-        )}
-
-        {formSchema.showPaidAmount && (
-        <div className={isFollowUpSession ? "sm:col-span-2 space-y-2" : undefined}>
-          <CurrencyInput
-            label={isFollowUpSession ? "المبلغ المدفوع *" : "المبلغ المدفوع"}
-            value={paidAmount}
-            onChange={setPaidAmount}
-            placeholder="50,000"
-            required={isFollowUpSession && additionalDiscountNum <= 0}
-          />
-          {isFollowUpSession && remaining > 0 && !isCaseClosed && (
-            <button
-              type="button"
-              className="w-full rounded-lg border-2 border-primary bg-primary/10 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/15"
-              onClick={() =>
-                setPaidAmount(String(Math.round(remaining)))
-              }
-            >
-              دفع الذمة كاملة ({formatCurrency(remaining)})
-            </button>
-          )}
-        </div>
-        )}
-
-        {formSchema.showAdditionalDiscount && (
-          <div className="sm:col-span-2 space-y-1">
-            <CurrencyInput
-              label="خصم إضافي (اختياري)"
-              value={additionalDiscountAmount}
-              onChange={setAdditionalDiscountAmount}
-              placeholder="0"
-            />
-            {additionalDiscountNum > 0 && (
-              <p className="text-xs text-amber-800 tabular-nums">
-                يُخصم {formatCurrency(additionalDiscountNum)} من الذمة — السعر النهائي:{" "}
-                {formatCurrency(finalPriceLive)} — المتبقي: {formatCurrency(remaining)}
-              </p>
-            )}
           </div>
         )}
 
@@ -2399,11 +2448,11 @@ export function QuickEntryForm({
 
         {formSchema.showNotes && (
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-slate-text">
+          <label className="mc-entry-field-label">
             ملاحظات
           </label>
           <textarea
-            className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm text-slate-text outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+            className="mc-entry-input min-h-[5.5rem] resize-none"
             rows={3}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -2424,20 +2473,20 @@ export function QuickEntryForm({
         />
         )}
 
-        <div className="sm:col-span-2 rounded-lg border border-slate-border bg-surface p-4">
-          <p className="text-sm text-slate-muted">
+        <div className="sm:col-span-2 mc-entry-remaining">
+          <p className="text-base font-bold text-slate-700">
             {isFollowUpSession
-              ? "الذمة المالية (بعد الخصم الإضافي والدفعة)"
-              : "المتبقي على المريض (ذمة)"}
+              ? "الذمة المتبقية على المراجع"
+              : "المتبقي على المراجع (ذمة)"}
           </p>
           {isFollowUpSession && (
-            <p className="text-[11px] text-slate-muted mt-0.5 tabular-nums">
-              السعر النهائي: {formatCurrency(finalPriceLive)} = السعر الكلي − الخصومات
+            <p className="mt-1 text-sm font-medium text-slate-500 tabular-nums">
+              السعر النهائي: {formatCurrency(finalPriceLive)}
             </p>
           )}
           <p
-            className={`text-2xl font-bold tabular-nums ${
-              remaining > 0 ? "text-debt-text" : "text-primary"
+            className={`mt-2 text-4xl font-black tabular-nums ${
+              remaining > 0 ? "text-debt-text" : "text-emerald-700"
             }`}
           >
             {formatCurrency(remaining)}
