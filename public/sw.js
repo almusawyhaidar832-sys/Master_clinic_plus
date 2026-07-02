@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v19-exam-autosave";
+const CACHE_NAME = "mcp-app-v20-queue-screen-tv";
 
 const NOTIFICATION_ICON = "/icons/icon-192.png";
 
@@ -14,6 +14,8 @@ const APP_SHELL_URLS = [
   "/manifest.json",
   "/manifest-doctor.json",
   "/manifest-assistant.json",
+  "/manifest-queue-screen.json",
+  "/queue-screen",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
 ];
@@ -81,6 +83,7 @@ function isNavigationRequest(request) {
 }
 
 function navigationFallback(url) {
+  if (url.pathname.startsWith("/queue-screen")) return "/queue-screen";
   if (url.pathname.startsWith("/doctor")) return "/doctor";
   if (url.pathname.startsWith("/dashboard")) return "/dashboard";
   if (url.pathname.startsWith("/assistant")) return "/assistant";

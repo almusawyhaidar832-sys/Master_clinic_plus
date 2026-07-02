@@ -26,8 +26,10 @@ export const viewport: Viewport = {
   themeColor: "#060a12",
   width: "device-width",
   initialScale: 1,
+  minimumScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function QueueScreenLayout({

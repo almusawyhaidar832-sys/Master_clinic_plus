@@ -1,5 +1,32 @@
 /* ─── Master Clinic Plus — شاشة الانتظار (ثيم فاتح احترافي) ─── */
 
+/* وضع التلفاز — بدون تمرير، ملء الشاشة */
+html.qs-tv-mode,
+html.qs-tv-mode body {
+  overflow: hidden !important;
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+.qs-tv-viewport {
+  height: 100dvh;
+  height: 100svh;
+  width: 100vw;
+  overflow: hidden;
+  position: relative;
+  background-color: #f0f9ff;
+}
+
+.qs-tv-fit-inner {
+  transform-origin: top center;
+  will-change: transform;
+  max-width: 1920px;
+}
+
 @keyframes qs-glow-pulse {
   0%, 100% {
     box-shadow:
@@ -125,6 +152,24 @@
   box-shadow:
     0 8px 32px rgba(8, 145, 178, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+@media (max-height: 900px) {
+  .qs-clinic-hero {
+    font-size: clamp(1.25rem, 3.2vw, 2.5rem);
+  }
+
+  .qs-patient-hero {
+    font-size: clamp(1.75rem, 5vw, 3.5rem);
+  }
+
+  .qs-ticket-hero {
+    font-size: clamp(2rem, 6vw, 4rem);
+  }
+
+  .qs-doctor-name {
+    font-size: clamp(1rem, 2.2vw, 1.5rem);
+  }
 }
 
 .qs-clinic-hero {

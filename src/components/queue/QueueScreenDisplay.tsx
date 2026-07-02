@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { QueueScreenPwaInstall } from "@/components/queue/QueueScreenPwaInstall";
 import {
   CheckCircle2,
   Clock,
@@ -34,11 +35,14 @@ interface QueueScreenDisplayProps {
   liveCallTick?: number;
   liveCallRecall?: boolean;
   installedApp: boolean;
+  audioUnlocked?: boolean;
+  audioUnlockHint?: string;
   screenUrl?: string;
   resolvePatientName: (entry: QueueScreenEntry) => string;
   resolveDoctorName: (entry: QueueScreenEntry) => string;
   onRepeatCall: (entry: QueueScreenEntry) => void;
   onTestSound: () => void;
+  onInstalled?: () => void;
 }
 
 function CalledCard({
@@ -66,7 +70,7 @@ function CalledCard({
     <div
       key={animationKey}
       className={cn(
-        "qs-enter qs-call-card relative overflow-hidden rounded-[2rem] border-[3px] px-8 py-10 lg:px-12 lg:py-14",
+        "qs-enter qs-call-card relative overflow-hidden rounded-[2rem] border-[3px] px-5 py-6 lg:px-8 lg:py-8",
         isInProgress
           ? "qs-call-card-progress"
           : isRecall
@@ -180,18 +184,21 @@ export function QueueScreenDisplay({
   liveCallTick = 0,
   liveCallRecall,
   installedApp,
+  audioUnlocked = false,
+  audioUnlockHint = "اضغط أي مكان لتفعيل الصوت",
   screenUrl,
   resolvePatientName,
   resolveDoctorName,
   onRepeatCall,
   onTestSound,
+  onInstalled,
 }: QueueScreenDisplayProps) {
   return (
-    <div className="qs-bg-mesh relative flex min-h-screen flex-col overflow-hidden">
+    <div className="qs-bg-mesh relative flex h-full min-h-0 flex-col overflow-hidden">
       <div className="qs-grid-overlay pointer-events-none absolute inset-0 opacity-60" />
 
       {/* بانر العيادة */}
-      <div className="qs-clinic-banner relative z-20 px-6 py-5 text-white lg:px-10 lg:py-6">
+      <div className="qs-clinic-banner relative z-20 shrink-0 px-4 py-3 text-white lg:px-8 lg:py-4">
         <div className="flex flex-col items-center gap-4 lg:flex-row lg:justify-between">
           <div className="w-full flex-1 text-center lg:text-right">
             <p className="mb-1 text-sm font-semibold tracking-widest text-cyan-100 lg:text-base">
@@ -204,13 +211,34 @@ export function QueueScreenDisplay({
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center justify-center gap-4 lg:gap-6">
-            <div className="flex items-center gap-2 rounded-2xl border border-white/30 bg-white/15 px-5 py-3 backdrop-blur-sm">
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-2xl border px-5 py-3 backdrop-blur-sm",
+                audioUnlocked
+                  ? "border-white/30 bg-white/15"
+                  : "border-amber-200/50 bg-amber-500/25 animate-pulse"
+              )}
+            >
               <span className="relative flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-70" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-white" />
+                <span
+                  className={cn(
+                    "absolute inline-flex h-full w-full rounded-full",
+                    audioUnlocked
+                      ? "animate-ping bg-white opacity-70"
+                      : "bg-amber-200 opacity-90"
+                  )}
+                />
+                <span
+                  className={cn(
+                    "relative inline-flex h-3 w-3 rounded-full",
+                    audioUnlocked ? "bg-white" : "bg-amber-300"
+                  )}
+                />
               </span>
-              <Volume2 className="h-5 w-5 text-white" />
-              <span className="text-base font-bold">الصوت مفعّل</span>
+              <Volume2 className={cn("h-5 w-5", audioUnlocked ? "text-white" : "text-amber-100")} />
+              <span className="text-base font-bold">
+                {audioUnlocked ? "الصوت مفعّل" : audioUnlockHint}
+              </span>
             </div>
             <div className="text-center lg:text-left">
               <p className="text-5xl font-black tabular-nums leading-none lg:text-6xl">
@@ -231,8 +259,8 @@ export function QueueScreenDisplay({
         </div>
       </div>
 
-      <div className="relative z-10 flex flex-1 flex-col gap-5 p-5 lg:flex-row lg:gap-6 lg:p-6">
-        <section className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row lg:gap-4 lg:p-4">
+        <section className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
           <h2 className="text-center text-2xl font-black text-slate-800 lg:text-3xl">
             المراجع المطلوب الآن
           </h2>
@@ -250,7 +278,7 @@ export function QueueScreenDisplay({
               </p>
             </div>
           ) : (
-            <div className="flex flex-col gap-5">
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
               {called.map((entry) => (
                 <CalledCard
                   key={`${entry.id}-${entry.id === liveCallEntryId ? liveCallTick : 0}`}
@@ -267,8 +295,8 @@ export function QueueScreenDisplay({
           )}
         </section>
 
-        <aside className="flex w-full flex-col lg:w-[min(32vw,28rem)]">
-          <div className="qs-glass h-full rounded-[2rem] p-5 lg:p-6">
+        <aside className="flex min-h-0 w-full shrink-0 flex-col lg:w-[min(28vw,24rem)]">
+          <div className="qs-glass flex h-full min-h-0 flex-col rounded-[2rem] p-4 lg:p-5">
             <div className="mb-5 flex items-center justify-between border-b border-sky-100 pb-4">
               <div>
                 <h2 className="text-2xl font-black text-slate-800">قائمة الانتظار</h2>
@@ -281,7 +309,7 @@ export function QueueScreenDisplay({
               )}
             </div>
 
-            <div className="flex max-h-[min(58vh,560px)] flex-col gap-3 overflow-y-auto pr-1">
+            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pr-1">
               {waiting.length === 0 ? (
                 <div className="rounded-2xl border-2 border-dashed border-sky-200 bg-sky-50/50 py-16 text-center">
                   <p className="text-lg font-medium text-slate-500">لا يوجد أحد في الانتظار</p>
@@ -353,12 +381,17 @@ export function QueueScreenDisplay({
         </aside>
       </div>
 
-      <footer className="qs-glass relative z-10 border-t border-sky-100 px-6 py-4 text-center">
+      <footer className="qs-glass relative z-10 shrink-0 border-t border-sky-100 px-4 py-2 text-center">
         <p className="text-xl font-bold text-teal-800">{clinicName}</p>
         <p className="mt-1 text-sm text-slate-500">
           Master Clinic Plus
           {installedApp ? " · مثبّتة على هذا الجهاز" : ""}
         </p>
+        {!installedApp && (
+          <div className="mt-2">
+            <QueueScreenPwaInstall variant="compact" onInstalled={onInstalled} />
+          </div>
+        )}
       </footer>
     </div>
   );

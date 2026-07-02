@@ -10,6 +10,11 @@ import {
   speakViaCloudTtsParts,
   speakViaCloudTtsText,
 } from "@/lib/queue/cloud-speech";
+import {
+  isTvAudioUnlocked,
+  playBeepViaAudioElement,
+  unlockTvAudio,
+} from "@/lib/queue/tv-audio";
 
 export type SpeechPlayOptions = {
   useCloud?: boolean;
@@ -18,10 +23,33 @@ export type SpeechPlayOptions = {
 
 let audioCtx: AudioContext | null = null;
 let autoPrepared = false;
+let speechGestureUnlocked = false;
 let cachedArabicVoice: SpeechSynthesisVoice | null = null;
 let browserSpeechChain: Promise<void> = Promise.resolve();
 
 const BROWSER_SPEECH_RATE = 0.95;
+const AUDIO_UNLOCK_KEY = "mcp-queue-screen-audio-unlocked";
+
+type AudioContextCtor = typeof AudioContext;
+
+function getAudioContextClass(): AudioContextCtor | null {
+  if (typeof window === "undefined") return null;
+  return (
+    window.AudioContext ??
+    (window as Window & { webkitAudioContext?: AudioContextCtor }).webkitAudioContext ??
+    null
+  );
+}
+
+function createAudioContext(): AudioContext | null {
+  const Ctx = getAudioContextClass();
+  if (!Ctx) return null;
+  try {
+    return new Ctx();
+  } catch {
+    return null;
+  }
+}
 
 function getSynth(): SpeechSynthesis | null {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
@@ -48,8 +76,8 @@ export function prepareSpeechAuto(): void {
     const voices = getSynth()?.getVoices() ?? [];
     cachedArabicVoice = pickArabicVoice(voices);
     try {
-      if (!audioCtx) audioCtx = new AudioContext();
-      if (audioCtx.state === "suspended") await audioCtx.resume();
+      if (!audioCtx) audioCtx = createAudioContext();
+      if (audioCtx?.state === "suspended") await audioCtx.resume();
     } catch {
       // ignore
     }
@@ -62,7 +90,63 @@ export function prepareSpeechAuto(): void {
 }
 
 export function isSpeechGestureUnlocked(): boolean {
-  return true;
+  return speechGestureUnlocked || isTvAudioUnlocked();
+}
+
+/**
+ * تفعيل الصوت — يجب استدعاؤها داخل حدث لمس/ضغطة/زر ريموت مباشرة.
+ * تفتح كل مسارات التشغيل الممكنة معاً: عنصر <audio> الثابت (أعلى توافق
+ * مع شاشات التلفاز)، AudioContext، و speechSynthesis — أي مسار ينجح
+ * يكفي لاعتبار الصوت مفعّلاً.
+ */
+export async function unlockSpeechAudio(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+
+  const tvAudioOk = await unlockTvAudio().catch(() => false);
+
+  let audioCtxOk = false;
+  try {
+    if (!audioCtx) audioCtx = createAudioContext();
+    if (audioCtx) {
+      if (audioCtx.state === "suspended") await audioCtx.resume();
+      const buffer = audioCtx.createBuffer(1, 1, 22050);
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioCtx.destination);
+      source.start(0);
+      audioCtxOk = audioCtx.state === "running";
+    }
+  } catch {
+    // ignore — قد لا يدعم المتصفح Web Audio API إطلاقاً
+  }
+
+  prepareSpeechAuto();
+  await waitForVoices(5000);
+  try {
+    getSynth()?.resume();
+    getSynth()?.getVoices();
+  } catch {
+    // ignore
+  }
+
+  speechGestureUnlocked = tvAudioOk || audioCtxOk;
+  if (speechGestureUnlocked) {
+    try {
+      localStorage.setItem(AUDIO_UNLOCK_KEY, "1");
+    } catch {
+      // private mode
+    }
+  }
+  return speechGestureUnlocked;
+}
+
+export function hasPersistedSpeechUnlock(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(AUDIO_UNLOCK_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 export async function waitForVoices(timeoutMs = 2000): Promise<SpeechSynthesisVoice[]> {
@@ -134,8 +218,18 @@ export async function playAttentionBeep(): Promise<void> {
 
   prepareSpeechAuto();
 
+  // المحاولة الأولى: عنصر <audio> ثابت — يعمل على كل شاشات التلفاز
+  // تقريباً حتى لو كان Web Audio API غير مدعوم أو معطّلاً.
   try {
-    if (!audioCtx) audioCtx = new AudioContext();
+    await playBeepViaAudioElement();
+    return;
+  } catch {
+    // fallback إلى Web Audio API
+  }
+
+  try {
+    if (!audioCtx) audioCtx = createAudioContext();
+    if (!audioCtx) return;
     if (audioCtx.state === "suspended") await audioCtx.resume();
 
     const osc = audioCtx.createOscillator();
@@ -296,19 +390,41 @@ export async function announceSpeechPartsWithBeep(
   await speakPatientCallParts(parts, options);
 }
 
-export function installSpeechGestureUnlock(): () => void {
+export function installSpeechGestureUnlock(onUnlocked?: () => void): () => void {
   if (typeof window === "undefined") return () => {};
 
+  const events = [
+    "pointerdown",
+    "touchstart",
+    "touchend",
+    "click",
+    "keydown",
+    "keyup",
+  ] as const;
+
   const unlock = () => {
-    prepareSpeechAuto();
+    void unlockSpeechAudio().then(async (ok) => {
+      if (!ok) return;
+      onUnlocked?.();
+      try {
+        await playAttentionBeep();
+      } catch {
+        // ignore
+      }
+      for (const event of events) {
+        window.removeEventListener(event, unlock, true);
+      }
+    });
   };
 
-  window.addEventListener("pointerdown", unlock, { capture: true });
-  window.addEventListener("keydown", unlock, { capture: true });
+  for (const event of events) {
+    window.addEventListener(event, unlock, { capture: true, passive: true });
+  }
 
   return () => {
-    window.removeEventListener("pointerdown", unlock, { capture: true });
-    window.removeEventListener("keydown", unlock, { capture: true });
+    for (const event of events) {
+      window.removeEventListener(event, unlock, true);
+    }
   };
 }
 
@@ -325,6 +441,6 @@ export function getSpeechSupport(): {
   return {
     supported: true,
     arabicVoice: voice?.name ?? null,
-    unlocked: true,
+    unlocked: isSpeechGestureUnlocked(),
   };
 }

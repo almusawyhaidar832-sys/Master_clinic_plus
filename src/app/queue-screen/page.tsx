@@ -16,7 +16,8 @@ import {
   warmUpSpeechVoices,
 } from "@/lib/queue/queue-screen-voice";
 import { isStandalonePwa } from "@/lib/pwa/platform";
-import { playAttentionBeep } from "@/lib/queue/web-speech";
+import { isQueueScreenInstalled } from "@/lib/pwa/tv-platform";
+import { hasPersistedSpeechUnlock, playAttentionBeep } from "@/lib/queue/web-speech";
 import {
   resolveDoctorSpeechName,
   resolvePatientSpeechName,
@@ -31,8 +32,9 @@ import {
   loadSavedQueueScreenClinicRef,
   saveQueueScreenClinicRef,
 } from "@/lib/queue/queue-screen-storage";
-import { PwaInstallButton } from "@/components/pwa/PwaInstallButton";
 import { QueueScreenDisplay } from "@/components/queue/QueueScreenDisplay";
+import { QueueScreenPwaInstall } from "@/components/queue/QueueScreenPwaInstall";
+import { QueueScreenTvFit } from "@/components/queue/QueueScreenTvFit";
 import { Monitor, Sparkles } from "lucide-react";
 
 interface QueueEntry {
@@ -125,19 +127,7 @@ function ClinicCodeTvSetup({
           من قائمة Chrome.
         </p>
 
-        <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-right text-xs text-slate-600">
-          <p className="mb-2 font-bold text-slate-800">تثبيت كتطبيق على التلفاز</p>
-          <p className="mb-3 leading-relaxed">
-            Android TV / شاشة ذكية: من Chrome اختر القائمة ⋮ →{" "}
-            <strong className="text-teal-800">إضافة إلى الشاشة الرئيسية</strong> أو{" "}
-            <strong className="text-teal-800">تثبيت التطبيق</strong>.
-          </p>
-          <PwaInstallButton
-            label="تثبيت شاشة الانتظار"
-            installingLabel="جاري التثبيت..."
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-l from-cyan-600 to-teal-600 px-4 py-2 text-sm font-bold text-white"
-          />
-        </div>
+        <QueueScreenPwaInstall />
       </div>
     </div>
   );
@@ -214,6 +204,8 @@ function QueueScreenContent() {
   const [liveCallTick, setLiveCallTick] = useState(0);
   const [bootstrapping, setBootstrapping] = useState(!clinicRefParam);
   const [installedApp, setInstalledApp] = useState(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const [audioUnlockHint, setAudioUnlockHint] = useState("اضغط أي مكان لتفعيل الصوت");
 
   const voiceEnabledRef = useRef(true);
   const prevCalledRef = useRef<Set<string>>(new Set());
@@ -222,12 +214,15 @@ function QueueScreenContent() {
   const queueReadyRef = useRef(false);
 
   useEffect(() => {
-    return warmUpSpeechVoices();
+    if (hasPersistedSpeechUnlock()) {
+      setAudioUnlockHint("اضغط OK على الريموت لتفعيل الصوت");
+    }
+    return warmUpSpeechVoices(undefined, () => setAudioUnlocked(true));
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setInstalledApp(isStandalonePwa());
+    setInstalledApp(isQueueScreenInstalled() || isStandalonePwa());
   }, []);
 
   useEffect(() => {
@@ -507,7 +502,8 @@ function QueueScreenContent() {
       : called;
 
   return (
-    <QueueScreenDisplay
+    <QueueScreenTvFit>
+      <QueueScreenDisplay
       clinicName={clinicName}
       currentTime={currentTime}
       currentDate={currentDate}
@@ -517,6 +513,8 @@ function QueueScreenContent() {
       liveCallTick={liveCallTick}
       liveCallRecall={liveCall?.recall}
       installedApp={installedApp}
+      audioUnlocked={audioUnlocked}
+      audioUnlockHint={audioUnlocked ? undefined : audioUnlockHint}
       screenUrl={screenUrl}
       resolvePatientName={resolvePatientName}
       resolveDoctorName={resolveDoctorName}
@@ -538,7 +536,9 @@ function QueueScreenContent() {
           );
         }
       }}
+      onInstalled={() => setInstalledApp(true)}
     />
+    </QueueScreenTvFit>
   );
 }
 

@@ -45,6 +45,16 @@ export function clearCloudSpeechQueue(): void {
 }
 
 async function playAudioBlob(blob: Blob): Promise<void> {
+  // عنصر <audio> ثابت مُفعَّل مسبقاً — أعلى توافق مع متصفحات شاشات التلفاز
+  // (Tizen / webOS / متصفحات عامة لا تدعم Chrome أو Web Audio API)
+  try {
+    const { playBlobViaAudioElement } = await import("@/lib/queue/tv-audio");
+    await playBlobViaAudioElement(blob);
+    return;
+  } catch {
+    // fallback إذا فشل العنصر الثابت
+  }
+
   try {
     const { playBlobViaQueueAudio } = await import("@/lib/queue/audio-alerts");
     await playBlobViaQueueAudio(blob);

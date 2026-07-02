@@ -3,6 +3,7 @@
 import { splitPatientCallSpeech } from "@/lib/queue/arabic-speech-text";
 import {
   installSpeechGestureUnlock,
+  isSpeechGestureUnlocked,
   playAttentionBeep,
   prepareSpeechAuto,
   speakPatientCallParts,
@@ -52,6 +53,7 @@ function shouldSkipDuplicateAnnouncement(job: AnnouncementJob): boolean {
 
 async function drainQueue() {
   if (speaking || pendingJobs.length === 0) return;
+  if (!isSpeechGestureUnlocked()) return;
   speaking = true;
 
   while (pendingJobs.length > 0) {
@@ -64,7 +66,11 @@ async function drainQueue() {
     );
 
     await playAttentionBeep();
-    await speakPatientCallParts(parts, { useCloud: false });
+    // Cloud TTS أولاً دائماً — أعلى توافق مع متصفحات شاشات التلفاز التي
+    // غالباً لا تملك speechSynthesis أو أصواتاً عربية موثوقة. النطق
+    // المحلي يُستخدم تلقائياً كخط رجوع إذا فشلت السحابة (انظر داخل
+    // speakPatientCallParts).
+    await speakPatientCallParts(parts, { useCloud: true });
     await new Promise((r) => setTimeout(r, 400));
   }
 
@@ -78,7 +84,7 @@ function enqueue(job: AnnouncementJob) {
 }
 
 export function isQueueScreenSpeechUnlocked(): boolean {
-  return true;
+  return isSpeechGestureUnlocked();
 }
 
 export function speakQueueScreenAnnouncement(
@@ -119,7 +125,7 @@ export function repeatQueueScreenAnnouncement(
   );
   void (async () => {
     await playAttentionBeep();
-    await speakPatientCallParts(parts, { clearQueue: true, useCloud: false });
+    await speakPatientCallParts(parts, { clearQueue: true, useCloud: true });
   })();
 }
 
@@ -141,17 +147,20 @@ export function saveQueueScreenVoiceEnabled(_enabled: boolean): void {
   // الصوت دائماً مفعّل
 }
 
-export function warmUpSpeechVoices(onReady?: () => void): () => void {
+export function warmUpSpeechVoices(onReady?: () => void, onUnlocked?: () => void): () => void {
   if (typeof window === "undefined") return () => {};
 
   prepareSpeechAuto();
 
   void waitForVoices(4000).then(() => {
     onReady?.();
-    void drainQueue();
+    if (isSpeechGestureUnlocked()) void drainQueue();
   });
 
-  const removeGestureUnlock = installSpeechGestureUnlock();
+  const removeGestureUnlock = installSpeechGestureUnlock(() => {
+    onUnlocked?.();
+    void drainQueue();
+  });
 
   const keepAlive = setInterval(() => {
     try {
