@@ -8,6 +8,7 @@ import {
   prepareSpeechAuto,
   speakPatientCallParts,
   stopAllSpeech,
+  unlockSpeechAudio,
   waitForVoices,
 } from "@/lib/queue/web-speech";
 
@@ -157,6 +158,30 @@ export function warmUpSpeechVoices(onReady?: () => void, onUnlocked?: () => void
     if (isSpeechGestureUnlocked()) void drainQueue();
   });
 
+  // شاشات التلفاز (خصوصاً Tizen/webOS/Android TV) غالباً تسمح بتشغيل
+  // الصوت تلقائياً بدون أي تفاعل من المستخدم لأنها أجهزة عرض سلبية —
+  // نحاول التفعيل فوراً عند التحميل دون انتظار لمسة/ضغطة. إذا رفض
+  // المتصفح ذلك (سياسات التشغيل التلقائي الصارمة)، تبقى آلية تفعيل
+  // اللمسة/الريموت أدناه تعمل كخط رجوع طبيعي.
+  let cancelled = false;
+  const tryAutoUnlock = () => {
+    void unlockSpeechAudio().then((ok) => {
+      if (cancelled || !ok) return;
+      onUnlocked?.();
+      void drainQueue();
+    });
+  };
+  tryAutoUnlock();
+  // إعادة محاولة دورية — بعض شاشات التلفاز تحتاج وقتاً حتى يصبح عنصر
+  // <audio> جاهزاً للتشغيل بعد التحميل مباشرة
+  const autoUnlockRetry = setInterval(() => {
+    if (isSpeechGestureUnlocked()) {
+      clearInterval(autoUnlockRetry);
+      return;
+    }
+    tryAutoUnlock();
+  }, 4000);
+
   const removeGestureUnlock = installSpeechGestureUnlock(() => {
     onUnlocked?.();
     void drainQueue();
@@ -172,8 +197,10 @@ export function warmUpSpeechVoices(onReady?: () => void, onUnlocked?: () => void
   }, 5000);
 
   return () => {
+    cancelled = true;
     removeGestureUnlock();
     clearInterval(keepAlive);
+    clearInterval(autoUnlockRetry);
   };
 }
 

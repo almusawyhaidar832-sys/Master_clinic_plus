@@ -33,6 +33,11 @@ function ttsRequestHeaders(): Record<string, string> {
   ) {
     return authPortalHeaders("accountant");
   }
+  if (path.startsWith("/queue-screen")) {
+    // بعض متصفحات شاشات التلفاز الرخيصة/القديمة لا ترسل ترويسة Referer —
+    // هذه الترويسة المخصّصة تضمن وصول الصوت حتى بدونها.
+    return { "X-Queue-Screen-Request": "1" };
+  }
   return {};
 }
 

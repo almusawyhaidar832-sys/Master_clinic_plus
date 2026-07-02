@@ -17,6 +17,10 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 function isQueueScreenCaller(req: NextRequest): boolean {
+  // ترويسة مخصّصة يضبطها العميل صراحةً — تعمل حتى إذا لم يُرسل متصفح
+  // شاشة التلفاز ترويسة Referer (شائع في متصفحات Tizen/webOS القديمة).
+  if (req.headers.get("x-queue-screen-request") === "1") return true;
+
   const referer = req.headers.get("referer") ?? "";
   try {
     return new URL(referer).pathname.startsWith("/queue-screen");

@@ -114,6 +114,11 @@ export function playBeepViaAudioElement(): Promise<void> {
   });
 }
 
+/** أقصى مدة يُسمح بانتظارها لعنصر الصوت — حماية من تعليق طابور النداءات
+ *  إلى الأبد إذا لم يُطلق حدث ended/error على متصفح تلفاز معيّن */
+const SPEECH_ELEMENT_MAX_MS = 15_000;
+const SPEECH_STALL_TIMEOUT_MS = 6_000;
+
 /** تشغيل MP3/Blob (Cloud TTS) عبر <audio> ثابت — أعلى توافق ممكن مع شاشات التلفاز */
 export function playBlobViaAudioElement(blob: Blob): Promise<void> {
   const els = ensureElements();
@@ -122,10 +127,16 @@ export function playBlobViaAudioElement(blob: Blob): Promise<void> {
   const url = URL.createObjectURL(blob);
   return new Promise((resolve, reject) => {
     let settled = false;
+    let maxTimer: ReturnType<typeof setTimeout> | undefined;
+    let stallTimer: ReturnType<typeof setTimeout> | undefined;
+
     const cleanup = () => {
       URL.revokeObjectURL(url);
       els.speech.onended = null;
       els.speech.onerror = null;
+      els.speech.ontimeupdate = null;
+      if (maxTimer) clearTimeout(maxTimer);
+      if (stallTimer) clearTimeout(stallTimer);
     };
     const finish = () => {
       if (settled) return;
@@ -139,6 +150,15 @@ export function playBlobViaAudioElement(blob: Blob): Promise<void> {
       cleanup();
       reject(err instanceof Error ? err : new Error("audio playback failed"));
     };
+    // إعادة ضبط مهلة التوقف كلما تقدّم التشغيل فعلياً — تحمي من التعليق
+    // بدون قطع الصوت الطويل قبل انتهائه
+    const resetStallTimer = () => {
+      if (stallTimer) clearTimeout(stallTimer);
+      stallTimer = setTimeout(
+        () => fail(new Error("speech playback stalled")),
+        SPEECH_STALL_TIMEOUT_MS
+      );
+    };
 
     try {
       els.speech.pause();
@@ -147,7 +167,10 @@ export function playBlobViaAudioElement(blob: Blob): Promise<void> {
       els.speech.volume = 1;
       els.speech.onended = finish;
       els.speech.onerror = () => fail(new Error("speech element error"));
+      els.speech.ontimeupdate = resetStallTimer;
       void els.speech.play().catch(fail);
+      resetStallTimer();
+      maxTimer = setTimeout(finish, SPEECH_ELEMENT_MAX_MS);
     } catch (err) {
       fail(err);
     }
