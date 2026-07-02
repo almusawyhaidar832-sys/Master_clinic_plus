@@ -99,7 +99,18 @@ async function fetchClinicMonthWithdrawalLines(
 ): Promise<DoctorWithdrawalLine[]> {
   if (!clinicId) return [];
 
-  let res = await supabase
+  type WithdrawalWithSourceRow = {
+    id: string;
+    doctor_id: string;
+    amount: number;
+    status: string;
+    source?: string | null;
+    requested_at: string;
+    processed_at?: string | null;
+    doctor?: { full_name_ar: string } | { full_name_ar: string }[] | null;
+  };
+
+  const withSource = await supabase
     .from("doctor_withdrawals")
     .select(
       "id, doctor_id, amount, status, source, requested_at, processed_at, doctor:doctors!doctor_id(full_name_ar)"
@@ -108,8 +119,11 @@ async function fetchClinicMonthWithdrawalLines(
     .neq("status", "rejected")
     .order("requested_at", { ascending: false });
 
-  if (res.error?.message?.includes("source")) {
-    res = await supabase
+  let data: WithdrawalWithSourceRow[] | null = withSource.data;
+  let error = withSource.error;
+
+  if (error?.message?.includes("source")) {
+    const fallback = await supabase
       .from("doctor_withdrawals")
       .select(
         "id, doctor_id, amount, status, requested_at, processed_at, doctor:doctors!doctor_id(full_name_ar)"
@@ -117,11 +131,13 @@ async function fetchClinicMonthWithdrawalLines(
       .eq("clinic_id", clinicId)
       .neq("status", "rejected")
       .order("requested_at", { ascending: false });
+    data = fallback.data;
+    error = fallback.error;
   }
 
-  if (res.error) return [];
+  if (error) return [];
 
-  return filterWithdrawalsInPeriod(res.data ?? [], { from, to }).map((row) =>
+  return filterWithdrawalsInPeriod(data ?? [], { from, to }).map((row) =>
     mapWithdrawalLine(row as Parameters<typeof mapWithdrawalLine>[0])
   );
 }
@@ -769,15 +785,15 @@ export async function fetchMasterClinicReport(
       );
   const clinicId = explicitClinicId ?? active?.clinicId;
 
-  const monthOpsQuery = (select: string) => {
+  function monthOpsQuery<T = Record<string, unknown>>(select: string) {
     let q = supabase
       .from("patient_operations")
-      .select(select)
+      .select<string, T>(select)
       .gte("operation_date", start)
       .lte("operation_date", end);
     if (clinicId) q = q.eq("clinic_id", clinicId);
     return q;
-  };
+  }
 
   const monthOpsDetailSelect =
     "operation_date, operation_type, operation_name_ar, total_amount, paid_amount, remaining_debt, materials_cost, lab_notes, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)";
@@ -881,7 +897,11 @@ export async function fetchMasterClinicReport(
           .order("entry_date", { ascending: false })
       : Promise.resolve({ data: [], error: null }),
     fetchMonthOperationsDetail(),
-    monthOpsQuery("paid_amount, remaining_debt, total_amount"),
+    monthOpsQuery<{
+      paid_amount: number | string | null;
+      remaining_debt: number | string | null;
+      total_amount: number | string | null;
+    }>("paid_amount, remaining_debt, total_amount"),
     fetchRefundsForReport(supabase, start, end, clinicId ?? undefined),
     clinicId
       ? fetchTotalRefundsAmount(supabase, {

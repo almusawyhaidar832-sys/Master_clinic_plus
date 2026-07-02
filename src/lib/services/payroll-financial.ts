@@ -10,18 +10,25 @@ function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function confirmReference(parentId: string): string {
-  return `${parentId}:${Date.now()}`;
+/**
+ * مرجع مالي ثابت (بدون طابع زمني) مبني على معرّف الأب + المبلغ المدفوع
+ * *قبل* هذا التأكيد. هذا يجعل استدعاءين متزامنين (ضغطة مزدوجة/إعادة محاولة)
+ * لنفس عملية التأكيد ينتجان نفس المرجع تماماً — فيمنعهما قيد التفرّد
+ * بقاعدة البيانات (clinic_id, reference_type, reference_id) من التسبب
+ * بخصم مضاعف. أي تأكيد لاحق حقيقي (زيادة جديدة بالمستحقات) يُنتج مرجعاً
+ * مختلفاً لأن "المدفوع سابقاً" يتغيّر بعد كل تأكيد ناجح.
+ */
+function confirmReference(parentId: string, fromAmount: number): string {
+  return `${parentId}:from:${roundMoney(fromAmount)}`;
 }
 
-function parseAssistantBatchTimestamp(
-  referenceId: string,
-  parentId: string
-): number | null {
-  const prefix = `${parentId}:`;
-  if (!referenceId.startsWith(prefix)) return null;
-  const ts = Number(referenceId.slice(prefix.length));
-  return Number.isFinite(ts) ? ts : null;
+/** نفس فكرة confirmReference لكن لجلسة مساعد بساقين (طبيب + عيادة) معاً */
+function confirmBatchReference(
+  parentId: string,
+  fromDoctor: number,
+  fromClinic: number
+): string {
+  return `${parentId}:from:${roundMoney(fromDoctor)}:${roundMoney(fromClinic)}`;
 }
 
 type PayrollConfirmRow = {
@@ -29,25 +36,26 @@ type PayrollConfirmRow = {
   amount: number;
   reference_id: string;
   transaction_date: string;
+  created_at: string;
 };
 
-/** تجميع حركات تأكيد المساعد حسب جلسة التأكيد (reference_id) */
+/** تجميع حركات تأكيد المساعد حسب جلسة التأكيد (reference_id) — الساقان
+ * (طبيب/عيادة) لنفس الجلسة تتشاركان نفس reference_id بالضبط (النوعان
+ * مختلفان: payroll_record_paid / payroll_record_clinic_paid) */
 function groupAssistantConfirmBatches(
   doctorRows: PayrollConfirmRow[],
-  clinicRows: PayrollConfirmRow[],
-  parentId: string
-): Map<number, { doctor?: PayrollConfirmRow; clinic?: PayrollConfirmRow }> {
+  clinicRows: PayrollConfirmRow[]
+): Map<string, { doctor?: PayrollConfirmRow; clinic?: PayrollConfirmRow }> {
   const batches = new Map<
-    number,
+    string,
     { doctor?: PayrollConfirmRow; clinic?: PayrollConfirmRow }
   >();
 
   const add = (row: PayrollConfirmRow, leg: "doctor" | "clinic") => {
-    const ts = parseAssistantBatchTimestamp(String(row.reference_id), parentId);
-    if (ts == null) return;
-    const batch = batches.get(ts) ?? {};
+    const key = String(row.reference_id);
+    const batch = batches.get(key) ?? {};
     batch[leg] = row;
-    batches.set(ts, batch);
+    batches.set(key, batch);
   };
 
   for (const row of doctorRows) add(row, "doctor");
@@ -63,18 +71,13 @@ async function listPayrollConfirmTransactions(
 ) {
   const { data, error } = await admin
     .from("transactions")
-    .select("id, amount, reference_id, transaction_date")
+    .select("id, amount, reference_id, transaction_date, created_at")
     .eq("clinic_id", clinicId)
     .eq("reference_type", referenceType);
 
   if (error) {
     return {
-      rows: [] as {
-        id: string;
-        amount: number;
-        reference_id: string;
-        transaction_date: string;
-      }[],
+      rows: [] as PayrollConfirmRow[],
       error: error.message,
     };
   }
@@ -83,10 +86,10 @@ async function listPayrollConfirmTransactions(
   const rows = (data ?? []).filter((r) => {
     const ref = String(r.reference_id ?? "");
     return ref === parentId || ref.startsWith(prefix);
-  });
-  rows.sort((a, b) =>
-    String(a.reference_id).localeCompare(String(b.reference_id))
-  );
+  }) as PayrollConfirmRow[];
+  // الترتيب الزمني الحقيقي (created_at) — لا يمكن الاعتماد على ترتيب نص
+  // reference_id أبجدياً بعد أن أصبح مبنياً على قيمة المبلغ لا الوقت
+  rows.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
   return { rows, error: undefined };
 }
 
@@ -130,7 +133,7 @@ export async function recordDoctorSalarySlipPaidTransaction(
     transactionDate: todayISO(),
     doctorId,
     referenceType: "salary_slip_doctor_paid",
-    referenceId: confirmReference(slip.id),
+    referenceId: confirmReference(slip.id, paid),
   });
   return res.ok
     ? { ok: true, amount: pending }
@@ -161,7 +164,7 @@ export async function recordStaffSlipPaidTransaction(
     descriptionAr: `صرف راتب موظف — ${slip.month_year}`,
     transactionDate: todayISO(),
     referenceType: "salary_slip_paid",
-    referenceId: confirmReference(slip.id),
+    referenceId: confirmReference(slip.id, paid),
   });
   return res.ok
     ? { ok: true, amount: pending }
@@ -190,7 +193,11 @@ export async function recordAssistantPayrollPaidTransaction(
     return { ok: true, doctorAmount: 0, clinicAmount: 0 };
   }
 
-  const batchReferenceId = confirmReference(record.id);
+  const batchReferenceId = confirmBatchReference(
+    record.id,
+    paidDoctor,
+    paidClinic
+  );
 
   if (deltaDoctor > 0) {
     const doctorTx = await recordFinancialTransaction(admin, {
@@ -334,11 +341,7 @@ export async function reverseLastAssistantPayrollPaidTransaction(
     return { ok: false, error: clinicRows.error };
   }
 
-  const batches = groupAssistantConfirmBatches(
-    doctorRows.rows,
-    clinicRows.rows,
-    record.id
-  );
+  const batches = groupAssistantConfirmBatches(doctorRows.rows, clinicRows.rows);
 
   if (batches.size === 0) {
     const legacy = await deleteFinancialTransactionsByReference(
@@ -352,8 +355,17 @@ export async function reverseLastAssistantPayrollPaidTransaction(
       : { ok: false, error: legacy.error };
   }
 
-  const lastBatchTs = Math.max(...batches.keys());
-  const batch = batches.get(lastBatchTs);
+  // آخر جلسة تأكيد فعلياً — بترتيب created_at الحقيقي، ليس نص المرجع
+  let lastKey: string | null = null;
+  let lastCreatedAt = "";
+  for (const [key, entry] of batches) {
+    const createdAt = entry.doctor?.created_at ?? entry.clinic?.created_at ?? "";
+    if (createdAt >= lastCreatedAt) {
+      lastCreatedAt = createdAt;
+      lastKey = key;
+    }
+  }
+  const batch = lastKey ? batches.get(lastKey) : undefined;
   if (!batch) {
     return { ok: false, error: "تعذر تحديد جلسة الإلغاء" };
   }

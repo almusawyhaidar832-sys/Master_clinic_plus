@@ -97,7 +97,7 @@ export function TreatmentCasePicker({
         </div>
       )}
 
-      <Button type="button" variant="outline" className="w-full" onClick={onNewCase}>
+      <Button type="button" variant="outline" className="w-full" onClick={() => onNewCase()}>
         + حالة علاج جديدة (مثلاً حشوة جذر — سعر جديد)
       </Button>
     </div>

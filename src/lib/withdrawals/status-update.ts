@@ -2,6 +2,25 @@ import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 
 export type WithdrawalStatusUpdate = "approved" | "paid" | "rejected";
 
+/**
+ * الانتقالات الشرعية الوحيدة لحالة السحب — يجب أن تطابق تماماً القائمة
+ * البيضاء بدالة validate_withdrawal_amount() (قاعدة البيانات) في
+ * supabase/migrations/20260706100000_fix_withdrawal_race_and_transitions.sql.
+ * هذا الفحص هنا فقط لإعطاء رسالة عربية واضحة قبل وصول الطلب لقاعدة البيانات؛
+ * الفحص الحقيقي الملزم يبقى بالـ trigger.
+ */
+const LEGAL_WITHDRAWAL_TRANSITIONS: Record<string, WithdrawalStatusUpdate[]> = {
+  pending: ["approved", "paid", "rejected"],
+  approved: ["paid", "rejected"],
+};
+
+export function isLegalWithdrawalTransition(
+  currentStatus: string,
+  nextStatus: WithdrawalStatusUpdate
+): boolean {
+  return LEGAL_WITHDRAWAL_TRANSITIONS[currentStatus]?.includes(nextStatus) ?? false;
+}
+
 export function buildWithdrawalStatusUpdate(
   status: WithdrawalStatusUpdate,
   processedBy: string

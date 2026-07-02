@@ -110,6 +110,9 @@ function LedgerPageContent() {
 
   useEffect(() => {
     if (clinicLoading || !clinicId) return;
+    // Narrow to a local const — TS narrowing of outer variables doesn't
+    // carry into the nested async function below.
+    const activeClinicId = clinicId;
 
     let cancelled = false;
 
@@ -184,7 +187,7 @@ function LedgerPageContent() {
           const apptCtx = await ensureAppointmentPatientClient(
             supabase,
             appointmentIdParam,
-            clinicId
+            activeClinicId
           );
           resolvedPatientId = resolvedPatientId ?? apptCtx.patientId;
           patientName = patientName || apptCtx.patientName;
@@ -263,7 +266,7 @@ function LedgerPageContent() {
         const cases = await fetchPatientTreatmentCases(
           supabase,
           resolvedPatientId,
-          clinicId
+          activeClinicId
         );
 
         if (cancelled) return;

@@ -645,7 +645,7 @@ export async function insertQueueEntry(input: {
 export async function updateQueueStatus(
   queueEntryId: string,
   status: QueueStatus,
-  opts?: { clinicId?: string; doctorId?: string }
+  opts?: { clinicId?: string; doctorId?: string; fromStatus?: QueueStatus }
 ) {
   const admin = getAdminClient();
 
@@ -656,6 +656,9 @@ export async function updateQueueStatus(
 
   if (opts?.clinicId) query = query.eq("clinic_id", opts.clinicId);
   if (opts?.doctorId) query = query.eq("doctor_id", opts.doctorId);
+  // شرط الحالة الحالية مباشرة على الـ UPDATE (وليس فحصاً منفصلاً قبله) —
+  // يمنع تحوّلاً غير متوقع لو تغيّرت حالة الدور بين الفحص والتحديث
+  if (opts?.fromStatus) query = query.eq("status", opts.fromStatus);
 
   const { data, error } = await query.select("id").maybeSingle();
   if (error) {
@@ -834,7 +837,9 @@ export async function confirmQueueTransferByAccountant(
   const patientName = resolveQueuePatientName(entry);
   const now = new Date().toISOString();
 
-  const { error } = await admin
+  // شرط الحالة الحالية مباشرة على الـ UPDATE — يمنع تحويل دور غيّر الطبيب
+  // حالته بنفس اللحظة (مثلاً ضغط "دخول") من المرور بصمت وفقدان بيانات الكشف
+  const { data: updated, error } = await admin
     .from("patient_queue")
     .update({
       doctor_id: toDoctorId,
@@ -846,9 +851,17 @@ export async function confirmQueueTransferByAccountant(
       transfer_requested_at: null,
     })
     .eq("id", queueEntryId)
-    .eq("clinic_id", clinicId);
+    .eq("clinic_id", clinicId)
+    .eq("doctor_id", fromDoctorId)
+    .eq("transfer_to_doctor_id", toDoctorId)
+    .in("status", DOCTOR_QUEUE_ACTION_STATUSES)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!updated) {
+    throw new Error("تعذر إتمام التحويل — تغيّرت حالة الدور قبل التأكيد");
+  }
 
   if (entry.appointment_id) {
     await admin
@@ -883,8 +896,14 @@ export async function finalizeQueueCancellationByAccountant(
   if (entry.clinic_id !== clinicId) {
     throw new Error("غير مصرح");
   }
+  if (!entry.cancellation_requested_at) {
+    throw new Error("لا يوجد طلب إلغاء لهذا الدور");
+  }
 
-  const { error } = await admin
+  // requestQueueCancellationByStaff تضبط الحالة دوماً على "waiting" عند
+  // الطلب — هذا الشرط يمنع إلغاء دور "قيد الكشف" أو "مكتمل" تغيّرت حالته
+  // بعد الطلب (كان بدون أي شرط حالة إطلاقاً بالكود القديم)
+  const { data: updated, error } = await admin
     .from("patient_queue")
     .update({
       status: "cancelled",
@@ -896,9 +915,16 @@ export async function finalizeQueueCancellationByAccountant(
       transfer_requested_at: null,
     })
     .eq("id", queueEntryId)
-    .eq("clinic_id", clinicId);
+    .eq("clinic_id", clinicId)
+    .eq("status", "waiting")
+    .not("cancellation_requested_at", "is", null)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!updated) {
+    throw new Error("تعذر إلغاء الحجز — تغيّرت حالة الدور قبل الإلغاء");
+  }
 }
 
 /** المحاسب — تحويل مراجع بعد طلب إلغاء من الطبيب/المساعد */
@@ -935,7 +961,9 @@ export async function accountantTransferAfterCancellation(
   const patientName = resolveQueuePatientName(entry);
   const now = new Date().toISOString();
 
-  const { error } = await admin
+  // نفس شرط finalizeQueueCancellationByAccountant — لا نحوّل دوراً تغيّرت
+  // حالته أو طبيبه بعد طلب الإلغاء
+  const { data: updated, error } = await admin
     .from("patient_queue")
     .update({
       doctor_id: targetDoctorId,
@@ -950,9 +978,17 @@ export async function accountantTransferAfterCancellation(
       transfer_requested_at: null,
     })
     .eq("id", queueEntryId)
-    .eq("clinic_id", clinicId);
+    .eq("clinic_id", clinicId)
+    .eq("doctor_id", fromDoctorId)
+    .eq("status", "waiting")
+    .not("cancellation_requested_at", "is", null)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!updated) {
+    throw new Error("تعذر التحويل — تغيّرت حالة الدور قبل الإتمام");
+  }
 
   if (entry.appointment_id) {
     await admin

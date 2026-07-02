@@ -270,7 +270,7 @@ export default function RefundsDashboardPage() {
                   }))}
                 />
               </div>
-              <Button onClick={searchSessions} disabled={loading}>
+              <Button onClick={() => searchSessions()} disabled={loading}>
                 <Search className="h-4 w-4" />
                 عرض الجلسات
               </Button>

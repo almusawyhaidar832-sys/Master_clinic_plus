@@ -1,4 +1,5 @@
-import { authPortalHeaders, type AuthPortalId } from "@/lib/auth/api-portal";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
+import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { notifyClinicSync } from "@/lib/sync/clinic-events";
 
 /** أعمدة أساسية — link_path قد يكون غير موجود في بعض قواعد البيانات */

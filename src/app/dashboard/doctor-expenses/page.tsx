@@ -59,6 +59,18 @@ interface DoctorExpenseRow {
   doctor?: { full_name_ar: string } | null;
 }
 
+/** شكل الصف كما يصل من Supabase — علاقة (doctor:doctors) قد تُرجع مصفوفة
+ * بدل كائن واحد حسب كيفية استنتاج PostgREST للعلاقة */
+type RawDoctorExpenseRow = Omit<DoctorExpenseRow, "doctor"> & {
+  doctor?: { full_name_ar: string } | { full_name_ar: string }[] | null;
+};
+
+/** بدون هذا التطبيع يظهر اسم الطبيب دائماً "طبيب" العام بدل الاسم الفعلي */
+function normalizeExpenseDoctor(row: RawDoctorExpenseRow): DoctorExpenseRow {
+  const doctor = Array.isArray(row.doctor) ? row.doctor[0] : row.doctor;
+  return { ...row, doctor: doctor ?? null };
+}
+
 const TAB_ITEMS: {
   id: ExpensesTab;
   label: string;
@@ -194,7 +206,9 @@ export default function DoctorExpensesPage() {
     }
 
     setDoctors((docsRes.data as DoctorOption[]) ?? []);
-    setExpenses((expRes.data as DoctorExpenseRow[]) ?? []);
+    setExpenses(
+      ((expRes.data as RawDoctorExpenseRow[]) ?? []).map(normalizeExpenseDoctor)
+    );
     setDeductedIds(
       new Set(
         (txRes.data ?? [])

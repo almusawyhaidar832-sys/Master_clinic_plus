@@ -2,6 +2,7 @@ import "server-only";
 
 import { getAdminClient } from "@/lib/supabase/admin";
 import { validatePatientPhone } from "@/lib/phone";
+import { translateDbError } from "@/lib/db-errors";
 import { notifyStaffBarcodeBooking } from "@/lib/notifications/server";
 import { sendAppointmentUpdate } from "@/lib/services/appointment-updates";
 import type { SendAppointmentUpdateResult } from "@/lib/services/appointment-updates";
@@ -229,7 +230,9 @@ export async function createPublicBooking(
     .select("id, clinic_id, patient_name_ar, patient_phone, appointment_date, start_time, end_time")
     .single();
 
-  if (error) throw new Error(error.message);
+  // قيد appointments_no_doctor_overlap بقاعدة البيانات هو خط الدفاع
+  // الحقيقي ضد الحجز المزدوج المتزامن — فحص SELECT أعلاه فقط لتجربة أسرع
+  if (error) throw new Error(translateDbError(error.message));
 
   const whatsapp = await sendAppointmentUpdate(admin, {
     clinicId,

@@ -5,7 +5,10 @@ import {
 } from "@/lib/auth/staff-access";
 import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { notifyWithdrawalStatus } from "@/lib/notifications/server";
-import { applyWithdrawalStatusUpdate } from "@/lib/withdrawals/status-update";
+import {
+  applyWithdrawalStatusUpdate,
+  isLegalWithdrawalTransition,
+} from "@/lib/withdrawals/status-update";
 
 /** POST — accountant approves / pays / rejects a withdrawal request */
 export async function POST(req: NextRequest) {
@@ -26,6 +29,19 @@ export async function POST(req: NextRequest) {
       .select("id, clinic_id, amount, status, doctor_id, source")
       .eq("id", id)
       .maybeSingle();
+
+    if (!beforeRow) {
+      return NextResponse.json({ error: "الطلب غير موجود" }, { status: 404 });
+    }
+
+    if (!isLegalWithdrawalTransition(beforeRow.status, status)) {
+      return NextResponse.json(
+        {
+          error: `لا يمكن تغيير حالة الطلب من "${beforeRow.status}" إلى "${status}" — الحالة الحالية لا تسمح بهذا الإجراء`,
+        },
+        { status: 409 }
+      );
+    }
 
     const { error: updateErr } = await applyWithdrawalStatusUpdate(
       admin,

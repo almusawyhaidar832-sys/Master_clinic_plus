@@ -149,9 +149,9 @@ export async function POST(req: NextRequest) {
     if (!result.ok && result.configured) {
       return NextResponse.json(
         {
+          ...result,
           error: result.errors.join(" — ") || "تعذر إرسال الحزمة",
           configured: true,
-          ...result,
         },
         { status: 502 }
       );

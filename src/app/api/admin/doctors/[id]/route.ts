@@ -58,7 +58,7 @@ async function loadDoctorForCaller(
 
   const doctor = doctorRow as Doctor;
 
-  if (ctx.clinicId && doctor.clinic_id !== ctx.clinicId) {
+  if (!ctx.clinicId || doctor.clinic_id !== ctx.clinicId) {
     return {
       error: "الطبيب غير موجود أو لا تملك صلاحية الوصول إليه",
       status: 404,

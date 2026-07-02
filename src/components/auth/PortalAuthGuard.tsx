@@ -26,13 +26,16 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
   const portalIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const portal = getAuthPortalForPath(pathname);
-    if (!portal) {
+    const resolvedPortal = getAuthPortalForPath(pathname);
+    if (!resolvedPortal) {
       sessionOkRef.current = false;
       portalIdRef.current = null;
       setReady(true);
       return;
     }
+    // Narrow to a local const — TS narrowing of outer variables doesn't
+    // carry into the nested async function below.
+    const portal = resolvedPortal;
 
     const supabase = createClient();
     let cancelled = false;

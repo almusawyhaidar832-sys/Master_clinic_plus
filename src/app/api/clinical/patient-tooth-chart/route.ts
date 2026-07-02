@@ -93,7 +93,10 @@ export async function GET(req: NextRequest) {
     const teeth = (data ?? []).map((row) =>
       normalizePatientToothState({
         tooth_number: Number(row.tooth_number),
-        status: String(row.status ?? "healthy"),
+        status:
+          typeof row.status === "string" && isToothStatus(row.status)
+            ? row.status
+            : "healthy",
         procedure_ar: row.procedure_ar as string | null,
         note: row.note as string | null,
         updated_at: row.updated_at as string | null,
@@ -226,7 +229,10 @@ export async function PUT(req: NextRequest) {
     const teeth = (refreshed ?? []).map((row) =>
       normalizePatientToothState({
         tooth_number: Number(row.tooth_number),
-        status: String(row.status ?? "healthy"),
+        status:
+          typeof row.status === "string" && isToothStatus(row.status)
+            ? row.status
+            : "healthy",
         procedure_ar: row.procedure_ar as string | null,
         note: row.note as string | null,
         updated_at: row.updated_at as string | null,

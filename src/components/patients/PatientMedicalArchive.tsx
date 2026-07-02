@@ -213,7 +213,7 @@ export function PatientMedicalArchive({
                 key={log.id}
                 className="rounded-lg border border-slate-border bg-white px-3 py-2"
               >
-                <p className="text-slate-text">{log.content}</p>
+                <p className="text-slate-text">{log.content_ar}</p>
                 <p className="mt-1 text-xs text-slate-muted">
                   {formatDate(log.log_date)}
                   {log.doctor?.full_name_ar &&

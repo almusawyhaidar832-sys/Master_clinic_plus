@@ -47,7 +47,7 @@ async function updateQueueAndSync(
   admin: ReturnType<typeof getAdminClient>,
   queueEntryId: string,
   status: QueueStatus,
-  opts?: { clinicId?: string; doctorId?: string }
+  opts?: { clinicId?: string; doctorId?: string; fromStatus?: QueueStatus }
 ) {
   await updateQueueStatus(queueEntryId, status, opts);
   await syncAppointmentFromQueueStatus(admin, queueEntryId, status).catch((err) => {
@@ -242,15 +242,24 @@ export async function PATCH(
 
       const { data: entryCheck } = await admin
         .from("patient_queue")
-        .select("doctor_id")
+        .select("doctor_id, status")
         .eq("id", id)
         .maybeSingle();
 
       if (!entryCheck || entryCheck.doctor_id !== doctorId) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
+      if (entryCheck.status !== "called") {
+        return NextResponse.json(
+          { error: "لا يمكن الدخول — الحالة الحالية لا تسمح بذلك" },
+          { status: 400 }
+        );
+      }
 
-      await updateQueueAndSync(admin, id, "in_progress", { doctorId });
+      await updateQueueAndSync(admin, id, "in_progress", {
+        doctorId,
+        fromStatus: "called",
+      });
 
       let visitSession: Awaited<ReturnType<typeof ensureVisitSessionOperation>> | null =
         null;
@@ -440,6 +449,7 @@ export async function PATCH(
     await updateQueueAndSync(admin, id, next, {
       clinicId: profile.clinic_id,
       doctorId: role === "doctor" ? entry.doctor_id : undefined,
+      fromStatus: current,
     });
 
     if (next === "called") {

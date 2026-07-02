@@ -138,7 +138,7 @@ async function registerWebPushForPortal(
       try {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+          applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
         });
       } catch (err) {
         console.error("[push] subscribe failed:", err);
@@ -293,6 +293,7 @@ export async function showAppNotification(
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
       tag: payload.tag ?? "mcp-doctor",
+      // renotify is standard but missing from the current TS DOM lib typings
       renotify: payload.renotify !== false,
       requireInteraction: payload.requireInteraction !== false,
       silent: payload.silent !== false,
@@ -302,7 +303,7 @@ export async function showAppNotification(
         kind: payload.kind ?? "custom",
         patientName: payload.patientName ?? null,
       },
-    });
+    } as NotificationOptions & { renotify?: boolean });
     return true;
   } catch (err) {
     console.error("[notification] showAppNotification failed:", err);

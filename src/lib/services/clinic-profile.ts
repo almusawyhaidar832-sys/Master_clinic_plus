@@ -9,7 +9,7 @@ import {
 
 /** Arabic display name for reports, WhatsApp, headers */
 export function getClinicDisplayName(
-  profile: ClinicProfile | null | undefined
+  profile: Pick<ClinicProfile, "name" | "name_ar"> | null | undefined
 ): string {
   if (!profile) return "العيادة";
   return profile.name_ar?.trim() || profile.name?.trim() || "العيادة";

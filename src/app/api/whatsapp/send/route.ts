@@ -46,10 +46,10 @@ export async function POST(request: NextRequest) {
 
   if (type === "appointment_confirmation") {
     messageBody = appointmentConfirmationMessage({
-      patientName: payload.patientName,
-      date: payload.date,
-      time: payload.time,
-      doctorName: payload.doctorName,
+      patientName: String(payload.patientName ?? ""),
+      date: String(payload.date ?? ""),
+      time: String(payload.time ?? ""),
+      doctorName: String(payload.doctorName ?? ""),
       clinic,
     });
   } else if (type === "payment_receipt") {

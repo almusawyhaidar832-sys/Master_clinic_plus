@@ -46,6 +46,7 @@ function StatementContent() {
 
   useEffect(() => {
     if (!preselectedId) return;
+    const activePatientId = preselectedId;
 
     async function loadPreselected() {
       const supabase = createClient();
@@ -56,7 +57,7 @@ function StatementContent() {
       }
       const allowed = await patientBelongsToDoctor(
         supabase,
-        preselectedId,
+        activePatientId,
         doctor.id
       );
       if (!allowed) {

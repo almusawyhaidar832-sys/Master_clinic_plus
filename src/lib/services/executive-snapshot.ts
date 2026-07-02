@@ -106,15 +106,15 @@ async function collectPeriodVisitorPatientIds(
 }
 
 /**
- * ذمة المراجعين الذين زاروا خلال الفترة (وليس جمع remaining_debt لجلسات اليوم فقط).
+ * ذمة مجموعة مرضى مُحدَّدة (بغض النظر عن سبب اختيارهم — زوار فترة أو كل مرضى العيادة).
  * يطابق get_clinic_financial_snapshot + حالات العلاج.
  */
-async function sumVisitorOutstandingDebt(
+async function sumOutstandingDebtForPatients(
   supabase: SupabaseClient,
   clinicId: string,
   patientIds: string[]
-): Promise<number> {
-  if (patientIds.length === 0) return 0;
+): Promise<{ total: number; debtorCount: number }> {
+  if (patientIds.length === 0) return { total: 0, debtorCount: 0 };
 
   const [patientsRes, casesRes, opsRes] = await Promise.all([
     supabase
@@ -157,13 +157,16 @@ async function sumVisitorOutstandingDebt(
   }
 
   let total = 0;
+  let debtorCount = 0;
   const needsPlan: string[] = [];
 
   for (const pid of patientIds) {
     const p = patientById.get(pid);
     const agreed = num(p?.agreed_total);
     if (agreed > 0) {
-      total += Math.max(0, agreed - num(p?.total_paid));
+      const owed = Math.max(0, agreed - num(p?.total_paid));
+      total += owed;
+      if (owed > 0.001) debtorCount += 1;
       continue;
     }
 
@@ -174,6 +177,7 @@ async function sumVisitorOutstandingDebt(
     }
     if (caseDebt > 0.001) {
       total += caseDebt;
+      debtorCount += 1;
       continue;
     }
 
@@ -182,11 +186,13 @@ async function sumVisitorOutstandingDebt(
       const inferred = computeOutstandingDebtFromOperations(ops, pid);
       if (inferred > 0.001) {
         total += inferred;
+        debtorCount += 1;
         continue;
       }
       const maxOp = ops.reduce((m, op) => Math.max(m, opDebt(op)), 0);
       if (maxOp > 0.001) {
         total += maxOp;
+        debtorCount += 1;
         continue;
       }
     }
@@ -200,11 +206,12 @@ async function sumVisitorOutstandingDebt(
       const remaining = plans.get(pid)?.remaining_balance ?? 0;
       if (remaining > 0) {
         total += remaining;
+        debtorCount += 1;
       }
     }
   }
 
-  return Math.round(total * 100) / 100;
+  return { total: Math.round(total * 100) / 100, debtorCount };
 }
 
 /** YYYY-MM from ISO date YYYY-MM-DD */
@@ -497,6 +504,8 @@ export interface ExecutiveDashboardSupplement {
   salariesPaidLegacy: number;
   payrollAccruals: number;
   visitorDebt: { debt: number; visitorCount: number };
+  /** إجمالي الذمم الحالية على كل العيادة — لا يتصفّر ببداية فترة جديدة */
+  totalDebt: { debt: number; debtorCount: number };
 }
 
 /** أرقام الربح — نفس منطق التقرير الشامل (fetchClinicProfitStatsForPeriod) */
@@ -531,10 +540,11 @@ export async function fetchExecutiveDashboardSupplement(
   from: string,
   to: string
 ): Promise<ExecutiveDashboardSupplement> {
-  const [salaries, payrollAccruals, visitorDebt] = await Promise.all([
+  const [salaries, payrollAccruals, visitorDebt, totalDebt] = await Promise.all([
     fetchPaidSalariesBundle(supabase, clinicId, from, to),
     fetchConfirmedPayrollProfitDeduction(supabase, clinicId, from, to),
     fetchPeriodVisitorDebt(supabase, clinicId, from, to),
+    fetchClinicOutstandingDebtNow(supabase, clinicId),
   ]);
 
   return {
@@ -542,6 +552,7 @@ export async function fetchExecutiveDashboardSupplement(
     salariesPaidLegacy: salaries.profitDeduction,
     payrollAccruals,
     visitorDebt,
+    totalDebt,
   };
 }
 
@@ -686,13 +697,40 @@ export async function fetchPeriodVisitorDebt(
     return { debt: 0, visitorCount: 0 };
   }
 
-  const debt = await sumVisitorOutstandingDebt(
+  const { total } = await sumOutstandingDebtForPatients(
     supabase,
     clinicId,
     patientIds
   );
 
-  return { debt, visitorCount: patientIds.length };
+  return { debt: total, visitorCount: patientIds.length };
+}
+
+/**
+ * إجمالي الذمم المستحقة على كل مرضى العيادة الآن — بغض النظر عن الفترة المختارة
+ * باللوحة (الديون لا تتبع فترة زمنية، فتصفيرها في بداية شهر جديد مضلِّل).
+ */
+export async function fetchClinicOutstandingDebtNow(
+  supabase: SupabaseClient,
+  clinicId: string
+): Promise<{ debt: number; debtorCount: number }> {
+  const { data } = await supabase
+    .from("patients")
+    .select("id")
+    .eq("clinic_id", clinicId);
+  const patientIds = (data ?? []).map((p) => p.id as string);
+
+  if (patientIds.length === 0) {
+    return { debt: 0, debtorCount: 0 };
+  }
+
+  const { total, debtorCount } = await sumOutstandingDebtForPatients(
+    supabase,
+    clinicId,
+    patientIds
+  );
+
+  return { debt: total, debtorCount };
 }
 
 export interface ExecutiveSnapshotCore {

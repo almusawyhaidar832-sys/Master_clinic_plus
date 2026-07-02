@@ -125,7 +125,7 @@ export async function fetchPatientsForDoctor(
     .in("id", ids)
     .order("updated_at", { ascending: false });
 
-  return (merged as Patient[]) ?? [];
+  return (merged as unknown as Patient[]) ?? [];
 }
 
 export async function fetchPatientsForCurrentDoctor(

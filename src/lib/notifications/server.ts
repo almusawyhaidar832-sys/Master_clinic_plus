@@ -772,20 +772,25 @@ export async function fetchNotificationsForRecipient(
 ): Promise<NotificationInboxRow[]> {
   const admin = adminClient();
 
-  let { data, error } = await admin
+  const withLinkPath = await admin
     .from("notifications")
     .select(`${NOTIFICATION_INBOX_BASE}, link_path`)
     .eq("recipient_profile_id", profileId)
     .order("created_at", { ascending: false })
     .limit(limit);
 
+  let data: NotificationInboxRow[] | null = withLinkPath.data;
+  let error = withLinkPath.error;
+
   if (error && isMissingLinkPathColumn(error.message)) {
-    ({ data, error } = await admin
+    const fallback = await admin
       .from("notifications")
       .select(NOTIFICATION_INBOX_BASE)
       .eq("recipient_profile_id", profileId)
       .order("created_at", { ascending: false })
-      .limit(limit));
+      .limit(limit);
+    data = fallback.data;
+    error = fallback.error;
   }
 
   if (error) throw new Error(error.message);

@@ -123,7 +123,7 @@ function PaidSplitColumns({
               {formatCurrency(paidPreview.paidAmount)}
             </span>
           </div>
-          {!isSalaryDoctor(doctor) && doctor && (
+          {doctor && !isSalaryDoctor(doctor) && (
             <div className="flex justify-between gap-2 text-slate-muted">
               <span>نسبة من الدفعة</span>
               <span className="tabular-nums">

@@ -44,6 +44,13 @@ const ERROR_MAP: Array<{
     en: "Refund failed — amount exceeds recorded patient payments",
   },
   {
+    match: (m) =>
+      m.includes("appointments_no_doctor_overlap") ||
+      (m.includes("exclusion constraint") && m.includes("appointments")),
+    ar: "هذا الموعد محجوز مسبقاً — اختر وقتاً آخر",
+    en: "This time slot is already booked — choose another time",
+  },
+  {
     match: (m) => m.includes("failed to fetch") || m.includes("networkerror"),
     ar: "تعذر الاتصال بالخادم — تحقق من الإنترنت أو إعدادات Supabase في .env.local",
     en: "Cannot connect to server — check internet or Supabase settings in .env.local",

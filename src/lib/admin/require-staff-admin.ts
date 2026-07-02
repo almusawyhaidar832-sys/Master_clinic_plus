@@ -1,12 +1,13 @@
 import "server-only";
 
-import { createClient as createServiceClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { isApiStaffRole } from "@/lib/auth/api-portal";
 import { normalizeRole } from "@/lib/auth/portal-access";
+import { getAdminClient } from "@/lib/supabase/admin";
 
 export type StaffAdminContext = {
-  admin: ReturnType<typeof createServiceClient>;
+  admin: SupabaseClient;
   callerId: string;
   role: "accountant" | "super_admin";
   clinicId: string | null;
@@ -28,19 +29,15 @@ export async function requireStaffAdmin(
   const staffRole: StaffAdminContext["role"] =
     normalizedRole === "super_admin" ? "super_admin" : "accountant";
 
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!serviceKey) {
+  let admin: SupabaseClient;
+  try {
+    admin = getAdminClient();
+  } catch (err) {
     return {
-      error: "SUPABASE_SERVICE_ROLE_KEY غير مضبوط في .env.local",
+      error: err instanceof Error ? err.message : "SUPABASE_SERVICE_ROLE_KEY غير مضبوط في .env.local",
       status: 500,
     };
   }
-
-  const admin = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    serviceKey,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
 
   return {
     admin,

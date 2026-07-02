@@ -285,7 +285,7 @@ async function fetchDoctorPaidOperations(
       fallback = fallback.lte("operation_date", filters.dateTo);
     }
 
-    res = await fallback;
+    res = (await fallback) as typeof res;
   }
 
   if (
@@ -352,7 +352,7 @@ async function fetchDoctorPaidOperations(
       minimal = minimal.lte("operation_date", filters.dateTo);
     }
 
-    res = await minimal;
+    res = (await minimal) as typeof res;
   }
 
   return res;
@@ -668,20 +668,20 @@ export async function fetchDoctorLedgerFinancialOps(
 
   let withdrawalsRes = await withdrawalsQuery;
   if (withdrawalsRes.error?.message?.includes("notes")) {
-    withdrawalsRes = await admin
+    withdrawalsRes = (await admin
       .from("doctor_withdrawals")
       .select(withdrawalSelectBase)
       .eq("doctor_id", doctorId)
       .order("requested_at", { ascending: false })
-      .limit(200);
+      .limit(200)) as typeof withdrawalsRes;
   }
   if (withdrawalsRes.error?.message?.includes("source")) {
-    withdrawalsRes = await admin
+    withdrawalsRes = (await admin
       .from("doctor_withdrawals")
       .select("id, amount, status, requested_at, processed_at")
       .eq("doctor_id", doctorId)
       .order("requested_at", { ascending: false })
-      .limit(200);
+      .limit(200)) as typeof withdrawalsRes;
   }
 
   const period =
@@ -736,7 +736,7 @@ export async function fetchDoctorLedgerFinancialOps(
       fallback = fallback.lte("transaction_date", filters.dateTo);
     }
 
-    txRes = await fallback;
+    txRes = (await fallback) as typeof txRes;
   }
 
   let salaryEntriesQuery = admin

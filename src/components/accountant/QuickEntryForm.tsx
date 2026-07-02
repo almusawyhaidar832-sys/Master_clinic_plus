@@ -853,9 +853,9 @@ export function QuickEntryForm({
 
   useEffect(() => {
     if (lockDoctorId || !selectedPatientId) return;
-    const caseRow =
-      selectedCaseId &&
-      treatmentCases.find((c) => c.id === selectedCaseId);
+    const caseRow = selectedCaseId
+      ? treatmentCases.find((c) => c.id === selectedCaseId)
+      : undefined;
     if (caseRow?.primary_doctor_id && caseRow.primary_doctor_name) {
       setAssignedDoctor({
         id: caseRow.primary_doctor_id,

@@ -60,7 +60,7 @@ export async function assertCanManageWithdrawal(
   }
 
   if (
-    profile.clinic_id &&
+    !profile.clinic_id ||
     String(profile.clinic_id) !== String(withdrawal.clinic_id)
   ) {
     throw new StaffAccessError(403, "غير مصرح — طلب من عيادة أخرى");
@@ -93,7 +93,7 @@ export async function assertCanRecordCashWithdrawal(
   }
 
   if (
-    profile.clinic_id &&
+    !profile.clinic_id ||
     String(profile.clinic_id) !== String(doctor.clinic_id)
   ) {
     throw new StaffAccessError(403, "غير مصرح — طبيب من عيادة أخرى");

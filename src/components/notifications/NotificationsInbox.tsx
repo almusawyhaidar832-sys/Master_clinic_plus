@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { AuthPortalId } from "@/lib/auth/api-portal";
+import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import {

@@ -85,6 +85,13 @@ export async function recordFinancialTransaction(
   });
 
   if (error) {
+    // 23505 = unique_violation — طلبان متزامنان مرّا كلاهما من فحص الوجود
+    // أعلاه (TOCTOU)؛ قيد التفرّد بقاعدة البيانات
+    // (transactions_clinic_reference_unique) يوقف التكرار الفعلي، ونتعامل
+    // معه هنا كنجاح "متجاوَز" بدل خطأ — نفس سلوك الفحص المسبق تماماً.
+    if (error.code === "23505") {
+      return { ok: true, skipped: true };
+    }
     return { ok: false, error: error.message };
   }
 

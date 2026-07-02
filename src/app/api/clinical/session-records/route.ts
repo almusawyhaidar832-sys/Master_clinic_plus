@@ -34,7 +34,7 @@ async function loadClinicalByOperationIds(
   admin: ReturnType<typeof getAdminClient>,
   operationIds: string[]
 ): Promise<
-  | { byOperation: Record<string, ClinicalPayload> }
+  | { byOperation: Record<string, ClinicalPayload>; tablesMissing?: boolean }
   | { error: string; tablesMissing?: boolean }
 > {
   const byOperation: Record<string, ClinicalPayload> = {};
@@ -211,7 +211,7 @@ export async function GET(req: NextRequest) {
       }
 
       const loaded = await loadClinicalByOperationIds(admin, [operationIdParam]);
-      if ("error" in loaded && loaded.error) {
+      if ("error" in loaded) {
         return NextResponse.json({ error: loaded.error }, { status: 500 });
       }
       const clinical =
@@ -253,7 +253,7 @@ export async function GET(req: NextRequest) {
     }
 
     const loaded = await loadClinicalByOperationIds(admin, operationIds);
-    if ("error" in loaded && loaded.error) {
+    if ("error" in loaded) {
       return NextResponse.json({ error: loaded.error }, { status: 500 });
     }
 

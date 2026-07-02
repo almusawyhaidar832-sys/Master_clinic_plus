@@ -176,8 +176,8 @@ export function invoiceFromOperation(
 ): SessionInvoiceData {
   return buildSessionInvoiceData({
     operation: op,
-    procedureLabel: extras.procedureLabel || opName(op),
     ...extras,
+    procedureLabel: extras.procedureLabel || opName(op),
   });
 }
 

@@ -160,10 +160,11 @@ export function VisitSessionClinicalPanel({
   const isExamPortal = portal === "doctor" || portal === "assistant";
   const effectiveQueueStatus =
     session?.queueStatus ?? queueStatusOverride ?? null;
-  const canSend =
+  const canSend = Boolean(
     session?.queueEntryId &&
-    (effectiveQueueStatus === "in_progress" ||
-      effectiveQueueStatus === "called");
+      (effectiveQueueStatus === "in_progress" ||
+        effectiveQueueStatus === "called")
+  );
 
   return (
     <div className={className}>

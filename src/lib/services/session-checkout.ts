@@ -260,6 +260,16 @@ export async function processSessionCheckout(
     throw new Error("أدخل مبلغ الدفع");
   }
 
+  // مبلغ الدفع محسوب بالسيرفر (summary.totalDue) — لا نثق بأي شيء أكبر
+  // منه قادم من العميل. تجاوزه (خطأ كتابة أو تلاعب) يضخّم حصة الطبيب مباشرة
+  // عبر trigger حساب الحصص، فيرفع رصيد سحبه فعلياً بدون مقابل حقيقي.
+  const CHECKOUT_OVERPAY_MARGIN = 1;
+  if (paid > summary.totalDue + CHECKOUT_OVERPAY_MARGIN) {
+    throw new Error(
+      `المبلغ المدخل (${paid}) أكبر من المستحق الفعلي (${summary.totalDue}) — تحقق من المبلغ`
+    );
+  }
+
   let operationId: string | null = null;
 
   if (paid > 0) {

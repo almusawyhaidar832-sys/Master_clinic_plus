@@ -22,7 +22,7 @@ export function normalizeAppointmentRow(
   row: Record<string, unknown>
 ): AppointmentWithDoctor {
   return {
-    ...(row as AppointmentWithDoctor),
+    ...(row as unknown as AppointmentWithDoctor),
     appointment_date: String(row.appointment_date ?? ""),
     start_time: String(row.start_time ?? ""),
     end_time: String(row.end_time ?? ""),

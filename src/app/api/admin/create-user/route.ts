@@ -64,7 +64,6 @@ export async function POST(req: NextRequest) {
       role,
       phone       = null,
       username    = null,
-      clinic_id: bodyClinicId = null,
       specialty_ar = null,
       percentage   = "50",
       materials_share = "0",
@@ -81,7 +80,6 @@ export async function POST(req: NextRequest) {
       role:       "accountant" | "doctor" | "assistant";
       phone?:     string | null;
       username?:  string | null;
-      clinic_id?: string | null;
       specialty_ar?: string | null;
       percentage?: string;
       materials_share?: string;
@@ -148,23 +146,18 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Step 6: resolve clinic_id ──────────────────────────────────────────
-    let clinic_id: string | null = callerProfile.clinic_id ?? bodyClinicId;
-
-    // super_admin with no clinic_id: fall back to first clinic in DB
-    if (!clinic_id) {
-      const { data: firstClinic } = await admin
-        .from("clinics")
-        .select("id")
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      clinic_id = firstClinic?.id ?? null;
-    }
+    // العيادة تُشتق حصراً من عيادة المستدعي — لا نثق بأي clinic_id قادم من
+    // جسم الطلب. حساب بلا عيادة (مالك منصة) يجب أن يستخدم لوحة المطوّر
+    // (/api/developer/clinics/[id]/users) لإدارة حسابات عيادات أخرى.
+    const clinic_id = callerProfile.clinic_id;
 
     if (!clinic_id) {
       return NextResponse.json(
-        { error: "لا توجد عيادة في النظام — أنشئ عيادة أولاً" },
-        { status: 400 }
+        {
+          error:
+            "حسابك غير مرتبط بعيادة — استخدم لوحة المطوّر لإدارة الحسابات عبر العيادات",
+        },
+        { status: 403 }
       );
     }
 

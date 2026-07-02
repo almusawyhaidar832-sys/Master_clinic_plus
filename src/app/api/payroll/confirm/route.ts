@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { isMonthClosed } from "@/lib/services/salary-payroll";
 import {
   recordAssistantPayrollPaidTransaction,
   recordDoctorSalarySlipPaidTransaction,
@@ -87,6 +88,14 @@ export async function POST(req: NextRequest) {
           activeSlip = synced.slip;
         }
         isDailyStaff = synced.isDailyWage ?? false;
+      }
+
+      const monthYear = activeSlip.month_year as string;
+      if (await isMonthClosed(admin, clinicId, monthYear)) {
+        return NextResponse.json(
+          { error: "الشهر مُغلق — لا يمكن تأكيد الصرف" },
+          { status: 400 }
+        );
       }
 
       if (slipIsFullyPaid(activeSlip, { dailyWage: isDailyStaff })) {
@@ -227,6 +236,14 @@ export async function POST(req: NextRequest) {
 
     const activeRecord = (freshRecord ?? record) as PayrollRecord;
     const dailyWageResolved = dailyWage ?? false;
+
+    const assistantMonthYear = activeRecord.month_year as string;
+    if (await isMonthClosed(admin, clinicId, assistantMonthYear)) {
+      return NextResponse.json(
+        { error: "الشهر مُغلق — لا يمكن تأكيد الصرف" },
+        { status: 400 }
+      );
+    }
 
     if (assistantIsFullyPaid(activeRecord, { dailyWage: dailyWageResolved })) {
       return NextResponse.json({ success: true, already_paid: true });

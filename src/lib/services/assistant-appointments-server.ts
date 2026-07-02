@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { validatePatientPhone } from "@/lib/phone";
+import { translateDbError } from "@/lib/db-errors";
 import {
   sendAppointmentUpdate,
   type SendAppointmentUpdateResult,
@@ -137,7 +138,8 @@ export async function createAssistantAppointment(
     .select("*")
     .single();
 
-  if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء الموعد");
+  if (error) throw new Error(translateDbError(error.message));
+  if (!data) throw new Error("تعذر إنشاء الموعد");
 
   const doctorName = await fetchDoctorName(admin, ctx.doctorId);
   const whatsapp = await sendAppointmentUpdate(admin, {
@@ -210,7 +212,8 @@ export async function updateAssistantAppointment(
     .select("*")
     .single();
 
-  if (error || !data) throw new Error(error?.message ?? "تعذر تحديث الموعد");
+  if (error) throw new Error(translateDbError(error.message));
+  if (!data) throw new Error("تعذر تحديث الموعد");
 
   const doctorName = await fetchDoctorName(admin, ctx.doctorId);
   await sendAppointmentUpdate(admin, {

@@ -35,6 +35,8 @@ interface Snapshot {
   revenue: number;
   collected: number;
   debt: number;
+  /** عدد المرضى الذين لديهم ذمم مستحقة الآن — لا يتبع الفترة المختارة */
+  debtors_count: number;
   doctor_shares: number;
   clinic_shares: number;
   materials_cost: number;
@@ -398,6 +400,7 @@ export function ExecutiveDashboard() {
           salariesPaidLegacy?: number;
           payrollAccruals?: number;
           visitorDebt?: { debt: number; visitorCount: number };
+          totalDebt?: { debt: number; debtorCount: number };
           reportAligned?: ReportAlignedProfitMetrics;
           error?: string;
         })
@@ -408,6 +411,7 @@ export function ExecutiveDashboard() {
       salariesPaidLegacy = 0,
       payrollAccruals = 0,
       visitorDebt = { debt: 0, visitorCount: 0 },
+      totalDebt = { debt: 0, debtorCount: 0 },
       reportAligned,
     } = supplementJson ?? {};
 
@@ -444,6 +448,7 @@ export function ExecutiveDashboard() {
           revenue: 0,
           collected: 0,
           debt: 0,
+          debtors_count: 0,
           doctor_shares: 0,
           clinic_shares: 0,
           materials_cost: 0,
@@ -467,7 +472,9 @@ export function ExecutiveDashboard() {
     setSnap({
       ...baseSnap,
       salaries_deducted_from_profit: salariesDeducted,
-      debt: visitorDebt.debt,
+      // الذمم إجمالي حالي — لا يتصفّر ببداية فترة/شهر جديد (منفصل عن مراجعي الفترة)
+      debt: totalDebt.debt,
+      debtors_count: totalDebt.debtorCount,
       patient_count:
         visitorDebt.visitorCount > 0
           ? visitorDebt.visitorCount
@@ -568,7 +575,7 @@ export function ExecutiveDashboard() {
               value={formatMoney(snap.debt)}
               sub={
                 snap.debt > 0
-                  ? `${t("execDebtSub")} ${snap.patient_count} ${t("execPatientsInPeriod")}`
+                  ? `${t("execDebtSub")} ${snap.debtors_count} ${t("execPatientsInPeriod")}`
                   : t("execNoDebtSub")
               }
               icon={Receipt}

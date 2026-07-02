@@ -25,6 +25,7 @@ export function DoctorHomeDashboard() {
     totalEarnings: number;
     totalWithdrawn: number;
     pendingAmount: number;
+    approvedAmount: number;
   } | null>(null);
   const [todayOps, setTodayOps] = useState(0);
   const [notifications, setNotifications] = useState(0);

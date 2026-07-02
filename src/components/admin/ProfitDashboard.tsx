@@ -5,10 +5,31 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
 import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 import { currentMonthYear, formatCurrency, monthDateRange } from "@/lib/utils";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { TrendingDown, TrendingUp, Wallet, AlertCircle } from "lucide-react";
 
 interface ProfitDashboardProps {
   mobile?: boolean;
+}
+
+/** إجمالي الذمم الحالية على كل مرضى العيادة — عبر نفس مصدر اللوحة التنفيذية */
+async function fetchTotalOutstandingDebt(
+  from: string,
+  to: string
+): Promise<number | null> {
+  try {
+    const res = await fetch(
+      `/api/executive/supplement?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      { credentials: "include", headers: authPortalHeaders("admin") }
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      totalDebt?: { debt: number; debtorCount: number };
+    };
+    return json.totalDebt?.debt ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
@@ -20,8 +41,15 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
     async function load() {
       try {
         const { from, to } = monthDateRange(currentMonthYear());
-        const data = await fetchClinicProfitStatsForPeriodViaApi(from, to, "admin");
-        setStats(data);
+        const [data, totalDebt] = await Promise.all([
+          fetchClinicProfitStatsForPeriodViaApi(from, to, "admin"),
+          fetchTotalOutstandingDebt(from, to),
+        ]);
+        // الذمم رصيد حالي مستمر — لا تتبع فترة الشهر المختار، فتصفيرها
+        // ببداية شهر جديد (لعدم وجود زوار بعد) مضلِّل لصاحب العيادة.
+        setStats(
+          totalDebt !== null ? { ...data, outstandingDebts: totalDebt } : data
+        );
       } catch {
         setError("تعذر تحميل بيانات الأرباح");
       }

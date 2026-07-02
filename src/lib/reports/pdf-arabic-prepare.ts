@@ -38,7 +38,7 @@ export function preparePdfElementForArabicCapture(
 
     // html2canvas يُنتج صفحة سوداء مع هذه الخصائص
     el.style.backdropFilter = "none";
-    el.style.webkitBackdropFilter = "none";
+    el.style.setProperty("-webkit-backdrop-filter", "none");
 
     const font = doc.defaultView?.getComputedStyle(el).fontFamily ?? "";
     if (!font || font.includes("var(")) {

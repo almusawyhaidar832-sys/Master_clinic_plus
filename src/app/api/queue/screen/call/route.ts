@@ -75,13 +75,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: updateErr.message }, { status: 400 });
     }
 
+    // علاقة Supabase (doctor:doctors / patient:patients) قد تُرجع مصفوفة
+    // بدل كائن واحد حسب كيفية استنتاج PostgREST للعلاقة — بدون هذا التطبيع
+    // يفشل النطق الصوتي صامتاً (undefined.full_name_ar)
+    const patientRow = Array.isArray(entry.patient) ? entry.patient[0] : entry.patient;
+    const doctorRow = Array.isArray(entry.doctor) ? entry.doctor[0] : entry.doctor;
+
     const patientName = resolvePatientSpeechName({
-      patient: entry.patient as { full_name_ar: string; speech_name_ar?: string | null } | null,
+      patient: patientRow as { full_name_ar: string; speech_name_ar?: string | null } | null,
       patient_name: entry.patient_name as string | null,
       ticket_number: entry.ticket_number as number,
     });
     const doctorName = resolveDoctorSpeechName(
-      entry.doctor as { full_name_ar: string } | null
+      doctorRow as { full_name_ar: string } | null
     );
 
     void emitQueueScreenCall(entryId, { recall: true }).catch(console.error);

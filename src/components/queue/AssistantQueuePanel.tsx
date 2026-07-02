@@ -756,7 +756,7 @@ export function AssistantQueuePanel() {
           doctorId={assistant.doctor_id}
           doctorName={doctorName}
           onClose={() => setShowAdd(false)}
-          onAdd={(data) => void addToQueue(data)}
+          onAdd={(data) => addToQueue(data)}
         />
       )}
 

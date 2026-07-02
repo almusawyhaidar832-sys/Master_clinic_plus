@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { validatePatientPhone } from "@/lib/phone";
+import { translateDbError } from "@/lib/db-errors";
 import {
   sendAppointmentUpdate,
   type SendAppointmentUpdateResult,
@@ -115,14 +116,20 @@ export async function approvePendingAppointment(
     updatePayload.assistant_id = opts.assistantId;
   }
 
+  // شرط الحالة الحالية مباشرة على الـ UPDATE — يمنع قبول ورفض متزامنين لنفس
+  // الموعد من المرور كليهما (كان الفحص أعلاه SELECT منفصلاً بدون قفل)
   const { data, error } = await admin
     .from("appointments")
     .update(updatePayload)
     .eq("id", appointmentId)
+    .eq("status", "pending")
     .select("*")
-    .single();
+    .maybeSingle();
 
-  if (error || !data) throw new Error(error?.message ?? "تعذر الموافقة على الموعد");
+  if (error) throw new Error(error.message);
+  if (!data) {
+    throw new Error("تعذّر الموافقة — تغيّرت حالة الموعد قبل الحفظ (رُفض أو عولج مسبقاً)");
+  }
 
   let queueId: string | null = null;
   if (isToday) {
@@ -184,14 +191,19 @@ export async function rejectPendingAppointment(
     updatePayload.assistant_id = opts.assistantId;
   }
 
+  // نفس شرط approvePendingAppointment — يمنع قبول ورفض متزامنين لنفس الموعد
   const { data, error } = await admin
     .from("appointments")
     .update(updatePayload)
     .eq("id", appointmentId)
+    .eq("status", "pending")
     .select("*")
-    .single();
+    .maybeSingle();
 
-  if (error || !data) throw new Error(error?.message ?? "تعذر رفض الموعد");
+  if (error) throw new Error(error.message);
+  if (!data) {
+    throw new Error("تعذّر الرفض — تغيّرت حالة الموعد قبل الحفظ (قُبل أو عولج مسبقاً)");
+  }
 
   const doctorName = await fetchDoctorName(admin, data.doctor_id as string);
   await sendAppointmentUpdate(admin, {
@@ -266,7 +278,8 @@ export async function updateStaffAppointment(
     .select("*")
     .single();
 
-  if (error || !data) throw new Error(error?.message ?? "تعذر تحديث الموعد");
+  if (error) throw new Error(translateDbError(error.message));
+  if (!data) throw new Error("تعذر تحديث الموعد");
 
   if (audit) {
     await writeAuditLog(admin, {
@@ -367,7 +380,8 @@ export async function createStaffAppointment(
     .select("*")
     .single();
 
-  if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء الموعد");
+  if (error) throw new Error(translateDbError(error.message));
+  if (!data) throw new Error("تعذر إنشاء الموعد");
 
   if (audit) {
     await writeAuditLog(admin, {
@@ -457,7 +471,8 @@ export async function createDoctorAppointment(
     .select("*")
     .single();
 
-  if (error || !data) throw new Error(error?.message ?? "تعذر إنشاء الموعد");
+  if (error) throw new Error(translateDbError(error.message));
+  if (!data) throw new Error("تعذر إنشاء الموعد");
 
   const doctorName = await fetchDoctorName(admin, doctorId);
   const whatsapp = await sendAppointmentUpdate(admin, {
