@@ -22,6 +22,12 @@ export function QueueScreenTvFit({ children }: { children: ReactNode }) {
 
     let raf = 0;
 
+    const reveal = () => {
+      inner.classList.add("qs-tv-fit-ready");
+    };
+    /** شبكة أمان — لا تبقي المحتوى مخفياً للأبد إن فشل fit() لأي سبب */
+    const revealSafetyTimer = setTimeout(reveal, 1200);
+
     const fit = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
@@ -53,6 +59,8 @@ export function QueueScreenTvFit({ children }: { children: ReactNode }) {
         } else {
           inner.style.marginTop = "0";
         }
+
+        reveal();
       });
     };
 
@@ -85,6 +93,7 @@ export function QueueScreenTvFit({ children }: { children: ReactNode }) {
 
     return () => {
       cancelAnimationFrame(raf);
+      clearTimeout(revealSafetyTimer);
       ro?.disconnect();
       mo?.disconnect();
       clearInterval(poll);

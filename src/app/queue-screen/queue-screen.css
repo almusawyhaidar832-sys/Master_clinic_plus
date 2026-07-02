@@ -21,10 +21,24 @@ html.qs-tv-mode body {
   background-color: #f0f9ff;
 }
 
+/*
+ * العرض يُثبَّت هنا أيضاً (مو بس عبر JS) حتى لا تظهر أي لمحة من التصميم
+ * غير المُقاس (1920px كاملة تفيض خارج شاشات أصغر) قبل أن يُنفَّذ حساب
+ * القياس أول مرة. opacity:0 تمنع أي "فلاش" لتخطيط غير صحيح على الإطلاق —
+ * تنكشف فقط بعد أن يضيف JS كلاس qs-tv-fit-ready.
+ */
 .qs-tv-fit-inner {
+  width: 1920px;
+  max-width: 1920px;
+  margin: 0 auto;
   transform-origin: top center;
   will-change: transform;
-  max-width: 1920px;
+  opacity: 0;
+}
+
+.qs-tv-fit-inner.qs-tv-fit-ready {
+  opacity: 1;
+  transition: opacity 0.2s ease-out;
 }
 
 @keyframes qs-glow-pulse {

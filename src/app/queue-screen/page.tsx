@@ -35,6 +35,7 @@ import {
 import { QueueScreenDisplay } from "@/components/queue/QueueScreenDisplay";
 import { QueueScreenPwaInstall } from "@/components/queue/QueueScreenPwaInstall";
 import { QueueScreenTvFit } from "@/components/queue/QueueScreenTvFit";
+import { useAutoReloadOnNewDeploy } from "@/lib/queue/auto-reload";
 import { Monitor, Sparkles } from "lucide-react";
 
 interface QueueEntry {
@@ -219,6 +220,8 @@ function QueueScreenContent() {
     }
     return warmUpSpeechVoices(undefined, () => setAudioUnlocked(true));
   }, []);
+
+  useAutoReloadOnNewDeploy(called.length === 0);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
