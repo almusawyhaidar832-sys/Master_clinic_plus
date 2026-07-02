@@ -134,7 +134,7 @@ export function PatientMedicalArchive({
             {sortedOps.map((op) => (
               <li
                 key={op.id}
-                className="rounded-lg border border-slate-border bg-white px-3 py-2 text-sm"
+                className="mc-hover-lift rounded-lg border border-slate-border bg-surface-card px-3 py-2 text-sm"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="font-medium">{opName(op)}</span>
@@ -182,9 +182,9 @@ export function PatientMedicalArchive({
                 href={x.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group overflow-hidden rounded-lg border border-slate-border bg-white"
+                className="mc-hover-lift group overflow-hidden rounded-lg border border-slate-border bg-surface-card"
               >
-                <div className="relative aspect-square bg-slate-100">
+                <div className="relative aspect-square bg-surface">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={x.url}
@@ -211,7 +211,7 @@ export function PatientMedicalArchive({
             {medicalLogs.map((log) => (
               <li
                 key={log.id}
-                className="rounded-lg border border-slate-border bg-white px-3 py-2"
+                className="rounded-lg border border-slate-border bg-surface-card px-3 py-2"
               >
                 <p className="text-slate-text">{log.content_ar}</p>
                 <p className="mt-1 text-xs text-slate-muted">

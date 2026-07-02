@@ -262,28 +262,18 @@ export default function PatientProfilePage() {
         </Button>
       </Link>
 
-      <div className="flex gap-2 border-b border-slate-border pb-1">
+      <div className="mc-tab-group">
         <button
           type="button"
           onClick={() => setActiveTab("file")}
-          className={cn(
-            "rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
-            activeTab === "file"
-              ? "bg-primary text-white"
-              : "text-slate-muted hover:bg-surface"
-          )}
+          className={cn("mc-tab", activeTab === "file" && "mc-tab--active")}
         >
           الملف المالي
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("archive")}
-          className={cn(
-            "rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
-            activeTab === "archive"
-              ? "bg-primary text-white"
-              : "text-slate-muted hover:bg-surface"
-          )}
+          className={cn("mc-tab", activeTab === "archive" && "mc-tab--active")}
         >
           الأرشيف الطبي
         </button>
@@ -307,22 +297,27 @@ export default function PatientProfilePage() {
         </div>
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <CardTitle>{patient.full_name_ar}</CardTitle>
-              {getPatientDisplayPhone(patient) && (
-                <p className="text-sm text-slate-muted" dir="ltr">
-                  📱 {getPatientDisplayPhone(patient)}
-                </p>
-              )}
-              {patient.notes && (
-                <p className="mt-1 text-xs text-slate-muted">{patient.notes}</p>
-              )}
-              <div className="mt-3 max-w-md">
-                <PatientSpeechNameEditor
-                  patientId={patient.id}
-                  fullNameAr={patient.full_name_ar}
-                  initialSpeechName={patient.speech_name_ar}
-                />
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-700 text-base font-bold text-white shadow-sm">
+                {patient.full_name_ar.slice(0, 2)}
+              </div>
+              <div>
+                <CardTitle>{patient.full_name_ar}</CardTitle>
+                {getPatientDisplayPhone(patient) && (
+                  <p className="text-sm text-slate-muted" dir="ltr">
+                    📱 {getPatientDisplayPhone(patient)}
+                  </p>
+                )}
+                {patient.notes && (
+                  <p className="mt-1 text-xs text-slate-muted">{patient.notes}</p>
+                )}
+                <div className="mt-3 max-w-md">
+                  <PatientSpeechNameEditor
+                    patientId={patient.id}
+                    fullNameAr={patient.full_name_ar}
+                    initialSpeechName={patient.speech_name_ar}
+                  />
+                </div>
               </div>
             </div>
             <Button
@@ -353,27 +348,17 @@ export default function PatientProfilePage() {
         </CardHeader>
 
         <div className="grid grid-cols-3 gap-3 px-4 pb-4">
-          <div className="rounded-lg bg-surface p-3 text-center">
-            <p className="text-lg font-bold text-slate-text">
-              {operations.length}
-            </p>
-            <p className="text-xs text-slate-muted">إجمالي الجلسات (كل الحالات)</p>
+          <div className="mc-stat-neutral">
+            <p className="mc-stat-value">{operations.length}</p>
+            <p className="mc-stat-label">إجمالي الجلسات (كل الحالات)</p>
           </div>
-          <div className="rounded-lg bg-surface p-3 text-center">
-            <p className="text-lg font-bold text-primary">
-              {formatCurrency(totalPaid)}
-            </p>
-            <p className="text-xs text-slate-muted">مدفوع</p>
+          <div className="mc-stat-primary">
+            <p className="mc-stat-value">{formatCurrency(totalPaid)}</p>
+            <p className="mc-stat-label">مدفوع</p>
           </div>
-          <div
-            className={`rounded-lg p-3 text-center ${totalDebt > 0 ? "bg-debt/40" : "bg-emerald-50"}`}
-          >
-            <p
-              className={`text-lg font-bold ${totalDebt > 0 ? "text-debt-text" : "text-emerald-700"}`}
-            >
-              {formatCurrency(totalDebt)}
-            </p>
-            <p className="text-xs text-slate-muted">
+          <div className={totalDebt > 0 ? "mc-stat-debt" : "mc-stat-success"}>
+            <p className="mc-stat-value">{formatCurrency(totalDebt)}</p>
+            <p className="mc-stat-label">
               {totalDebt > 0 ? "ذمة متبقية" : "لا ذمة"}
             </p>
           </div>

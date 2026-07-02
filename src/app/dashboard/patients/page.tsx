@@ -146,14 +146,14 @@ export default function PatientsSearchPage() {
 
       {!loading && results.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-medium text-primary">
+          <p className="text-xs font-semibold text-primary">
             {results.length} نتيجة
           </p>
           {results.map((p) => (
             <Link key={p.id} href={`/dashboard/patients/${p.id}`}>
-              <Card className="flex cursor-pointer items-center justify-between gap-4 transition-shadow hover:shadow-premium active:scale-[0.99]">
+              <Card className="mc-hover-lift flex cursor-pointer items-center justify-between gap-4 py-4 active:scale-[0.99]">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-sm">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-700 text-sm font-bold text-white shadow-sm">
                     {p.full_name_ar.slice(0, 2)}
                   </div>
                   <div>
@@ -167,7 +167,7 @@ export default function PatientsSearchPage() {
                 </div>
                 <div className="flex items-center gap-3 text-left">
                   {(p.total_debt ?? 0) > 0 && (
-                    <span className="rounded-full bg-debt/40 px-2 py-0.5 text-xs font-semibold text-debt-text">
+                    <span className="rounded-full bg-debt/40 px-2.5 py-1 text-xs font-semibold text-debt-text">
                       ذمة: {formatCurrency(p.total_debt ?? 0)}
                     </span>
                   )}

@@ -230,36 +230,35 @@ export default function DoctorPatientDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{patient.full_name_ar}</CardTitle>
-          {getPatientDisplayPhone(patient) && (
-            <p dir="ltr" className="text-sm text-slate-muted">
-              {getPatientDisplayPhone(patient)}
-            </p>
-          )}
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-700 text-base font-bold text-white shadow-sm">
+              {patient.full_name_ar.slice(0, 2)}
+            </div>
+            <div>
+              <CardTitle>{patient.full_name_ar}</CardTitle>
+              {getPatientDisplayPhone(patient) && (
+                <p dir="ltr" className="text-sm text-slate-muted">
+                  {getPatientDisplayPhone(patient)}
+                </p>
+              )}
+            </div>
+          </div>
         </CardHeader>
 
         <div className="grid grid-cols-3 gap-3 px-4 pb-4">
-          <div className="rounded-lg bg-surface p-3 text-center">
-            <p className="text-lg font-bold text-slate-text">
-              {clinicalSessionCount}
-            </p>
-            <p className="text-xs text-slate-muted">{t("docTreatmentSessions")}</p>
+          <div className="mc-stat-neutral">
+            <p className="mc-stat-value">{clinicalSessionCount}</p>
+            <p className="mc-stat-label">{t("docTreatmentSessions")}</p>
           </div>
-          <div className="rounded-lg bg-surface p-3 text-center">
-            <p className="text-lg font-bold text-primary">
-              {formatMoney(totalPaid)}
-            </p>
-            <p className="text-xs text-slate-muted">{t("paid")}</p>
+          <div className="mc-stat-primary">
+            <p className="mc-stat-value">{formatMoney(totalPaid)}</p>
+            <p className="mc-stat-label">{t("paid")}</p>
           </div>
           <div
-            className={`rounded-lg p-3 text-center ${totalDebt > FINANCIAL_EPSILON ? "bg-debt/40" : "bg-emerald-50"}`}
+            className={totalDebt > FINANCIAL_EPSILON ? "mc-stat-debt" : "mc-stat-success"}
           >
-            <p
-              className={`text-lg font-bold ${totalDebt > FINANCIAL_EPSILON ? "text-debt-text" : "text-emerald-700"}`}
-            >
-              {formatMoney(totalDebt)}
-            </p>
-            <p className="text-xs text-slate-muted">
+            <p className="mc-stat-value">{formatMoney(totalDebt)}</p>
+            <p className="mc-stat-label">
               {totalDebt > FINANCIAL_EPSILON ? t("docRemainingDebt") : t("docNoDebt")}
             </p>
           </div>

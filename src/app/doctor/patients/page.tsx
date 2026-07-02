@@ -49,24 +49,35 @@ export default function DoctorPatientsPage() {
         placeholder={t("docSearchPatientPlaceholder")}
       />
       {loading ? (
-        <p className="text-sm text-slate-muted">{t("loading")}</p>
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded-xl bg-surface" />
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
         <p className="text-sm text-slate-muted">{t("docNoPatientsRegistered")}</p>
       ) : (
-        filtered.map((p) => (
-          <Link
-            key={p.id}
-            href={`/doctor/patients/${p.id}`}
-            className="block rounded-xl border border-slate-border bg-surface-card p-4 shadow-card"
-          >
-            <p className="font-semibold text-slate-text">{p.full_name_ar}</p>
-            {p.phone && (
-              <p className="text-sm text-slate-muted" dir="ltr">
-                {p.phone}
-              </p>
-            )}
-          </Link>
-        ))
+        <div className="space-y-2">
+          {filtered.map((p) => (
+            <Link
+              key={p.id}
+              href={`/doctor/patients/${p.id}`}
+              className="mc-hover-lift flex items-center gap-3 rounded-xl border border-slate-border bg-surface-card p-3.5 shadow-card"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-700 text-sm font-bold text-white shadow-sm">
+                {p.full_name_ar.slice(0, 2)}
+              </div>
+              <div>
+                <p className="font-semibold text-slate-text">{p.full_name_ar}</p>
+                {p.phone && (
+                  <p className="text-sm text-slate-muted" dir="ltr">
+                    {p.phone}
+                  </p>
+                )}
+              </div>
+            </Link>
+          ))}
+        </div>
       )}
     </div>
   );
