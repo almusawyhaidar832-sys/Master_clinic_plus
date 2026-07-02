@@ -15,6 +15,21 @@ const primary = {
   900: "rgb(var(--color-primary-900-rgb) / <alpha-value>)",
 };
 
+/** Premium gold/brass — rgb channels for opacity modifiers (bg-premium/10, etc.) */
+const premium = {
+  DEFAULT: "rgb(var(--color-premium-500-rgb) / <alpha-value>)",
+  50:  "rgb(var(--color-premium-50-rgb) / <alpha-value>)",
+  100: "rgb(var(--color-premium-100-rgb) / <alpha-value>)",
+  200: "rgb(var(--color-premium-200-rgb) / <alpha-value>)",
+  300: "rgb(var(--color-premium-300-rgb) / <alpha-value>)",
+  400: "rgb(var(--color-premium-400-rgb) / <alpha-value>)",
+  500: "rgb(var(--color-premium-500-rgb) / <alpha-value>)",
+  600: "rgb(var(--color-premium-600-rgb) / <alpha-value>)",
+  700: "rgb(var(--color-premium-700-rgb) / <alpha-value>)",
+  800: "rgb(var(--color-premium-800-rgb) / <alpha-value>)",
+  900: "rgb(var(--color-premium-900-rgb) / <alpha-value>)",
+};
+
 const config: Config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -26,6 +41,7 @@ const config: Config = {
     extend: {
       colors: {
         primary,
+        premium,
         /** كل teal-* القديمة → نفس الأزرق الطبي */
         teal: primary,
         slate: {
@@ -102,10 +118,22 @@ const config: Config = {
         card:     "var(--shadow-card)",
         elevated: "var(--shadow-elevated)",
         premium:  "var(--shadow-premium)",
+        glass:    "var(--shadow-glass)",
+        gold:     "var(--shadow-gold)",
       },
       ringColor: {
         DEFAULT: "var(--color-ring)",
         strong:  "var(--color-ring-strong)",
+      },
+      backgroundImage: {
+        "mc-navy": "linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-600) 45%, var(--color-primary-800) 100%)",
+        "mc-gold": "linear-gradient(135deg, var(--color-premium-400) 0%, var(--color-premium-500) 50%, var(--color-premium-600) 100%)",
+      },
+      letterSpacing: {
+        tightest2: "-0.03em",
+      },
+      transitionTimingFunction: {
+        "mc-out": "cubic-bezier(0.16, 1, 0.3, 1)",
       },
     },
   },

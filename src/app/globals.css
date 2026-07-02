@@ -65,11 +65,21 @@
 
 @layer components {
   .mc-card {
-    @apply rounded-xl border border-slate-border bg-surface-card shadow-card;
+    @apply rounded-xl border border-slate-border bg-surface-card shadow-card transition-shadow duration-200;
   }
 
   .mc-card-elevated {
-    @apply rounded-xl border border-slate-border bg-surface-card shadow-elevated;
+    @apply rounded-xl border border-slate-border bg-surface-card shadow-elevated transition-shadow duration-200;
+  }
+
+  /* ── Premium card — sparing use for VIP/owner highlights (profit summary, top doctor, wallet hero) ── */
+  .mc-card-premium {
+    @apply relative overflow-hidden rounded-2xl border border-premium-300/40 bg-surface-card shadow-gold;
+  }
+
+  .mc-card-premium::before {
+    content: "";
+    @apply absolute inset-x-0 top-0 h-1 bg-mc-gold;
   }
 
   .mc-gradient-header {
@@ -81,9 +91,28 @@
     );
   }
 
+  /* ── Deeper hero gradient — shells & feature cards that need extra gravitas ── */
+  .mc-gradient-hero {
+    background: linear-gradient(
+      145deg,
+      var(--color-primary-700) 0%,
+      var(--color-primary-500) 55%,
+      var(--color-primary-800) 100%
+    );
+  }
+
+  /* ── Sticky glass header — backdrop blur over content scroll ── */
+  .mc-glass-header {
+    @apply border-b border-slate-border/70 bg-surface-card/75 backdrop-blur-md;
+  }
+
+  html.dark .mc-glass-header {
+    @apply bg-surface-card/60;
+  }
+
   /* ── Page titles (auto via .mc-app-main) ── */
   .mc-page-heading {
-    @apply relative flex items-center gap-2.5 ps-3.5 text-2xl font-bold text-slate-text;
+    @apply relative flex items-center gap-2.5 ps-3.5 text-2xl font-bold tracking-tight text-slate-text;
   }
 
   .mc-page-heading::before {
@@ -261,6 +290,39 @@
     @apply inline-flex rounded-lg bg-warning p-2.5 text-warning-text;
   }
 
+  .mc-icon-badge-premium {
+    @apply inline-flex rounded-lg bg-premium-50 p-2.5 text-premium-600;
+  }
+
+  html.dark .mc-icon-badge-premium {
+    @apply bg-premium-100 text-premium-500;
+  }
+
+  /* ── Premium pill badge — "VIP" / top performer / featured labels ── */
+  .mc-badge-premium {
+    @apply inline-flex items-center gap-1 rounded-full bg-mc-gold px-2.5 py-1 text-xs font-bold text-white shadow-gold;
+  }
+
+  /* ── Section divider with optional centered label ── */
+  .mc-section-divider {
+    @apply relative my-2 flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-slate-muted;
+  }
+
+  .mc-section-divider::before,
+  .mc-section-divider::after {
+    content: "";
+    @apply h-px flex-1 bg-slate-border;
+  }
+
+  /* ── Hover-lift — subtle elevation on interactive cards/tiles ── */
+  .mc-hover-lift {
+    @apply transition-all duration-300 ease-mc-out;
+  }
+
+  .mc-hover-lift:hover {
+    @apply -translate-y-0.5 shadow-elevated;
+  }
+
   /* ── Clinical exam room (doctor + assistant) ── */
   .mc-exam-page {
     @apply space-y-4 rounded-xl bg-gradient-to-b from-slate-300/40 via-slate-100 to-slate-200/60 p-3 sm:p-4;
@@ -345,6 +407,7 @@
   font-size: 1.5rem;
   line-height: 2rem;
   font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--color-text);
 }
 

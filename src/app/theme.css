@@ -48,6 +48,31 @@
   --shadow-card:    0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
   --shadow-elevated: 0 4px 6px -1px rgb(15 23 42 / 0.06), 0 10px 24px -4px rgb(0 86 179 / 0.08);
   --shadow-premium: 0 8px 30px -6px rgb(0 86 179 / 0.14), 0 2px 8px -2px rgb(15 23 42 / 0.06);
+  --shadow-glass:   0 1px 0 rgb(255 255 255 / 0.6) inset, 0 8px 24px -8px rgb(15 23 42 / 0.12);
+  --shadow-gold:    0 6px 20px -6px rgb(184 134 46 / 0.35), 0 2px 6px -2px rgb(15 23 42 / 0.08);
+
+  /* Premium gold/brass accent — used sparingly for VIP/owner highlights & badges */
+  --color-premium-50:  #fbf6ea;
+  --color-premium-100: #f5ead0;
+  --color-premium-200: #ecd9a8;
+  --color-premium-300: #e0c179;
+  --color-premium-400: #d1a94f;
+  --color-premium-500: #b8862e;
+  --color-premium-600: #9c6f22;
+  --color-premium-700: #7d581a;
+  --color-premium-800: #614313;
+  --color-premium-900: #47300d;
+
+  --color-premium-50-rgb:  251 246 234;
+  --color-premium-100-rgb: 245 234 208;
+  --color-premium-200-rgb: 236 217 168;
+  --color-premium-300-rgb: 224 193 121;
+  --color-premium-400-rgb: 209 169 79;
+  --color-premium-500-rgb: 184 134 46;
+  --color-premium-600-rgb: 156 111 34;
+  --color-premium-700-rgb: 125 88 26;
+  --color-premium-800-rgb: 97 67 19;
+  --color-premium-900-rgb: 71 48 13;
 
   /* Section accents — harmonized, not rainbow */
   --accent-history-bg:     #eef4fb;
@@ -120,6 +145,30 @@ html.dark {
   --shadow-card:    0 1px 3px rgb(0 0 0 / 0.35);
   --shadow-elevated: 0 4px 16px rgb(0 0 0 / 0.4);
   --shadow-premium: 0 8px 32px rgb(0 0 0 / 0.45);
+  --shadow-glass:   0 1px 0 rgb(255 255 255 / 0.05) inset, 0 8px 24px -8px rgb(0 0 0 / 0.5);
+  --shadow-gold:    0 6px 20px -6px rgb(224 193 121 / 0.3), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+
+  --color-premium-50:  #2a2110;
+  --color-premium-100: #3a2e14;
+  --color-premium-200: #59461c;
+  --color-premium-300: #7d581a;
+  --color-premium-400: #d1a94f;
+  --color-premium-500: #e0c179;
+  --color-premium-600: #ecd9a8;
+  --color-premium-700: #f5ead0;
+  --color-premium-800: #fbf6ea;
+  --color-premium-900: #fffdf7;
+
+  --color-premium-50-rgb:  42 33 16;
+  --color-premium-100-rgb: 58 46 20;
+  --color-premium-200-rgb: 89 70 28;
+  --color-premium-300-rgb: 125 88 26;
+  --color-premium-400-rgb: 209 169 79;
+  --color-premium-500-rgb: 224 193 121;
+  --color-premium-600-rgb: 236 217 168;
+  --color-premium-700-rgb: 245 234 208;
+  --color-premium-800-rgb: 251 246 234;
+  --color-premium-900-rgb: 255 253 247;
 
   --accent-history-bg:     #0f2744;
   --accent-history-text:   #93c5fd;
