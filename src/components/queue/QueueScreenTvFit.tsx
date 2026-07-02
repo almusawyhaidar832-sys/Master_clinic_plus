@@ -34,7 +34,6 @@ export function QueueScreenTvFit({ children }: { children: ReactNode }) {
         inner.style.transform = "none";
         inner.style.width = `${DESIGN_W}px`;
         inner.style.height = "auto";
-        inner.style.margin = "0 auto";
 
         const vv = window.visualViewport;
         const availableW = vv?.width ?? viewport.clientWidth ?? window.innerWidth;
@@ -47,18 +46,18 @@ export function QueueScreenTvFit({ children }: { children: ReactNode }) {
         const scaleY = availableH / neededH;
         const scale = Math.max(MIN_SCALE, Math.min(scaleX, scaleY, 1));
 
-        inner.style.transform = `scale(${scale})`;
-        inner.style.transformOrigin = "top center";
-
+        const scaledW = neededW * scale;
         const scaledH = neededH * scale;
+
+        // إزاحة صريحة بالبكسل بدل الاعتماد على margin:auto — تعمل بشكل
+        // صحيح دائماً بغض النظر عن اتجاه الكتابة (RTL) أو فيض الصندوق
+        const offsetX = Math.max(0, (availableW - scaledW) / 2);
+        const offsetY = scaledH < availableH ? Math.max(0, (availableH - scaledH) / 2) : 0;
+
+        inner.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+
         viewport.style.height = `${availableH}px`;
         viewport.style.overflow = "hidden";
-
-        if (scaledH < availableH) {
-          inner.style.marginTop = `${Math.max(0, (availableH - scaledH) / 2)}px`;
-        } else {
-          inner.style.marginTop = "0";
-        }
 
         reveal();
       });
