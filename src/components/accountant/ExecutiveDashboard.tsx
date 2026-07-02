@@ -89,9 +89,9 @@ function GrowthBadge({ pct }: { pct: number | null }) {
   return (
     <span className={cn(
       "flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-bold",
-      zero ? "bg-slate-100 text-slate-500"
-           : pos ? "bg-emerald-100 text-emerald-700"
-                 : "bg-red-100 text-red-600"
+      zero ? "bg-surface text-slate-muted"
+           : pos ? "bg-success text-success-text"
+                 : "bg-debt text-debt-text"
     )}>
       {zero ? <Minus className="h-3 w-3" />
              : pos ? <TrendingUp className="h-3 w-3" />
@@ -117,11 +117,11 @@ function KpiCard({
 }) {
   return (
     <div className={cn(
-      "relative overflow-hidden rounded-2xl border bg-white p-5 shadow-sm transition-shadow hover:shadow-md",
-      highlight ? "border-primary/30 ring-2 ring-primary/10" : "border-slate-100"
+      "mc-hover-lift relative overflow-hidden rounded-2xl border bg-surface-card p-5 shadow-card",
+      highlight ? "border-premium-300/50 shadow-gold" : "border-slate-border"
     )}>
       {highlight && (
-        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary to-emerald-400" />
+        <div className="absolute inset-x-0 top-0 h-1 bg-mc-gold" />
       )}
       <div className="flex items-start justify-between gap-2">
         <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl", color)}>
@@ -130,9 +130,9 @@ function KpiCard({
         {growth !== undefined && <GrowthBadge pct={growth ?? null} />}
       </div>
       <div className="mt-3">
-        <p className="text-2xl font-black tabular-nums text-slate-800">{value}</p>
-        <p className="text-sm font-medium text-slate-600">{label}</p>
-        {sub && <p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
+        <p className="text-2xl font-black tabular-nums text-slate-text">{value}</p>
+        <p className="text-sm font-medium text-slate-muted">{label}</p>
+        {sub && <p className="mt-0.5 text-xs text-slate-muted/80">{sub}</p>}
       </div>
     </div>
   );
@@ -144,34 +144,34 @@ function KpiCard({
 function NetProfitCard({ snap }: { snap: Snapshot }) {
   const { t } = useLanguage();
   const rows = [
-    { label: t("execClinicShareOps"), amount: snap.clinic_shares, color: "text-emerald-600", sign: "+" },
+    { label: t("execClinicShareOps"), amount: snap.clinic_shares, color: "text-success-text", sign: "+" },
     ...(snap.review_fees > 0
       ? [{
           label: t("execReviewFeesProfit"),
           amount: snap.review_fees,
-          color: "text-emerald-600",
+          color: "text-success-text",
           sign: "+",
         }]
       : []),
-    { label: t("execGeneralExpenses"), amount: -snap.expenses, color: "text-red-500", sign: "−" },
-    { label: t("execSalariesDeduct"), amount: -(snap.salaries_deducted_from_profit ?? snap.salaries_paid ?? 0), color: "text-red-500", sign: "−" },
-    { label: t("execTotalRevenueRef"), amount: snap.revenue, color: "text-slate-500", sign: "" },
-    { label: t("execDoctorSharesRef"), amount: -snap.doctor_shares, color: "text-slate-400", sign: "−" },
+    { label: t("execGeneralExpenses"), amount: -snap.expenses, color: "text-debt-text", sign: "−" },
+    { label: t("execSalariesDeduct"), amount: -(snap.salaries_deducted_from_profit ?? snap.salaries_paid ?? 0), color: "text-debt-text", sign: "−" },
+    { label: t("execTotalRevenueRef"), amount: snap.revenue, color: "text-slate-muted", sign: "" },
+    { label: t("execDoctorSharesRef"), amount: -snap.doctor_shares, color: "text-slate-muted/70", sign: "−" },
   ];
 
-  const profitColor = snap.net_profit >= 0 ? "text-emerald-600" : "text-red-600";
-  const profitBg    = snap.net_profit >= 0 ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200";
+  const profitColor = snap.net_profit >= 0 ? "text-success-text" : "text-debt-text";
+  const profitBg    = snap.net_profit >= 0 ? "bg-success border-success-border" : "bg-debt border-debt-border";
 
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-700">
+    <div className="rounded-2xl border border-slate-border bg-surface-card p-5 shadow-card">
+      <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-text">
         <DollarSign className="h-5 w-5 text-primary" />
         {t("profitBreakdown")}
       </h3>
       <div className="space-y-2">
         {rows.map((row) => (
           <div key={row.label} className="flex items-center justify-between text-sm">
-            <span className="text-slate-600">{row.label}</span>
+            <span className="text-slate-muted">{row.label}</span>
             <span className={cn("font-semibold tabular-nums", row.color)}>
               {row.sign} {fmt(Math.abs(row.amount))}
             </span>
@@ -244,15 +244,15 @@ function SmartAlerts({ snap }: { snap: Snapshot }) {
   if (alerts.length === 0) return null;
 
   const typeStyle = {
-    warn:   "border-amber-200 bg-amber-50 text-amber-700",
-    danger: "border-red-200 bg-red-50 text-red-700",
-    info:   "border-blue-200 bg-blue-50 text-blue-700",
+    warn:   "border-warning-border bg-warning text-warning-text",
+    danger: "border-debt-border bg-debt text-debt-text",
+    info:   "border-primary-200 bg-primary-50 text-primary-800",
   };
 
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <h3 className="mb-3 flex items-center gap-2 font-bold text-slate-700">
-        <AlertCircle className="h-5 w-5 text-amber-500" />
+    <div className="rounded-2xl border border-slate-border bg-surface-card p-5 shadow-card">
+      <h3 className="mb-3 flex items-center gap-2 font-bold text-slate-text">
+        <AlertCircle className="h-5 w-5 text-warning-text" />
         {t("smartAlerts")}
       </h3>
       <div className="space-y-2">
@@ -274,31 +274,31 @@ function TopDoctorsCard({ doctors }: { doctors: TopPerformers["top_doctors"] }) 
   if (!doctors.length) return null;
   const max = doctors[0].revenue;
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-700">
-        <Star className="h-5 w-5 text-amber-500" />
+    <div className="rounded-2xl border border-slate-border bg-surface-card p-5 shadow-card">
+      <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-text">
+        <Star className="h-5 w-5 text-premium-500" />
         {t("topDoctors")}
       </h3>
       <div className="space-y-3">
         {doctors.map((d, i) => (
           <div key={d.full_name_ar}>
             <div className="mb-1 flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2 font-medium text-slate-700">
+              <span className="flex items-center gap-2 font-medium text-slate-text">
                 {i === 0 && <span className="text-base">🥇</span>}
                 {i === 1 && <span className="text-base">🥈</span>}
                 {i === 2 && <span className="text-base">🥉</span>}
-                {i > 2 && <span className="w-5 text-center text-xs text-slate-400">{i + 1}</span>}
+                {i > 2 && <span className="w-5 text-center text-xs text-slate-muted">{i + 1}</span>}
                 {d.full_name_ar}
               </span>
-              <span className="font-bold text-slate-800 tabular-nums">{fmt(d.revenue)}</span>
+              <span className="font-bold text-slate-text tabular-nums">{fmt(d.revenue)}</span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-2 overflow-hidden rounded-full bg-surface">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-400"
+                className="h-full rounded-full bg-mc-gold"
                 style={{ width: `${(d.revenue / max) * 100}%` }}
               />
             </div>
-            <p className="mt-0.5 text-xs text-slate-400">
+            <p className="mt-0.5 text-xs text-slate-muted">
               {d.op_count} {t("execTopDoctorOps")} ·{" "}
               {formatMoney(d.clinic_share ?? 0)} {t("clinicNetShare")}
             </p>
@@ -316,21 +316,21 @@ function TopServicesCard({ services }: { services: TopPerformers["top_services"]
   const { t } = useLanguage();
   if (!services.length) return null;
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-700">
+    <div className="rounded-2xl border border-slate-border bg-surface-card p-5 shadow-card">
+      <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-text">
         <Package className="h-5 w-5 text-primary" />
         {t("topServices")}
       </h3>
       <div className="space-y-2">
         {services.map((s) => (
-          <div key={s.service_name} className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+          <div key={s.service_name} className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2.5">
             <div className="flex-1 min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-700">{s.service_name}</p>
-              <p className="text-xs text-slate-400">{s.count} {t("execServiceTimes")} {fmt(s.avg_price)}</p>
+              <p className="truncate text-sm font-semibold text-slate-text">{s.service_name}</p>
+              <p className="text-xs text-slate-muted">{s.count} {t("execServiceTimes")} {fmt(s.avg_price)}</p>
             </div>
             <div className="text-left">
-              <p className="text-sm font-bold text-slate-800 tabular-nums">{fmt(s.revenue)}</p>
-              <p className="text-xs text-emerald-600">{t("execMarginPct")} {s.clinic_margin_pct}%</p>
+              <p className="text-sm font-bold text-slate-text tabular-nums">{fmt(s.revenue)}</p>
+              <p className="text-xs text-success-text">{t("execMarginPct")} {s.clinic_margin_pct}%</p>
             </div>
           </div>
         ))}
@@ -518,17 +518,17 @@ export function ExecutiveDashboard() {
 
       {/* Period selector */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-bold text-slate-800">{t("executiveDashboard")}</h2>
-        <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+        <h2 className="text-xl font-bold tracking-tight text-slate-text">{t("executiveDashboard")}</h2>
+        <div className="flex gap-1 rounded-xl border border-slate-border bg-surface-card p-1 shadow-card">
           {PERIODS.map((p) => (
             <button
               key={p.key}
               onClick={() => setPeriod(p.key)}
               className={cn(
-                "rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
+                "rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-200 ease-mc-out",
                 period === p.key
-                  ? "bg-primary text-white shadow-sm"
-                  : "text-slate-600 hover:bg-slate-50"
+                  ? "bg-mc-navy text-white shadow-elevated"
+                  : "text-slate-muted hover:bg-surface"
               )}
             >
               {p.label}
@@ -547,7 +547,7 @@ export function ExecutiveDashboard() {
       {loading || !snap ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="h-28 animate-pulse rounded-2xl bg-slate-100" />
+            <div key={i} className="h-28 animate-pulse rounded-2xl bg-surface" />
           ))}
         </div>
       ) : (

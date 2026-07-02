@@ -71,21 +71,21 @@ export function Sidebar({
     >
       {/* Logo */}
       <div className="border-b border-slate-border px-6 py-5">
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2.5">
           {clinicLogoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={clinicLogoUrl}
               alt=""
-              className="h-9 w-9 rounded-lg border border-slate-border object-contain bg-white p-0.5"
+              className="h-10 w-10 rounded-xl border border-slate-border object-contain bg-white p-0.5 shadow-sm"
             />
           ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white font-bold text-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-mc-navy text-sm font-bold tracking-tight text-white shadow-elevated ring-1 ring-white/10">
               MC
             </div>
           )}
           <div className="min-w-0">
-            <p className="truncate font-semibold text-slate-text leading-tight">
+            <p className="truncate font-bold tracking-tight text-slate-text leading-tight">
               {clinicName || t("appName")}
             </p>
             {staffName ? (
@@ -111,13 +111,21 @@ export function Sidebar({
               href={item.href}
               onClick={onNavigate}
               className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
+                "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ease-mc-out",
                 active
-                  ? "bg-primary text-white shadow-sm ring-1 ring-primary/20"
-                  : "text-slate-muted hover:bg-primary/5 hover:text-primary-700"
+                  ? "bg-mc-navy text-white shadow-elevated"
+                  : "text-slate-muted hover:bg-primary/[0.06] hover:text-primary-700"
               )}
             >
-              <Icon className="h-4.5 w-4.5 flex-shrink-0" />
+              {active && (
+                <span className="absolute inset-y-1.5 start-0 w-1 rounded-full bg-premium-400" />
+              )}
+              <Icon
+                className={cn(
+                  "h-4.5 w-4.5 flex-shrink-0 transition-transform duration-200",
+                  !active && "group-hover:scale-110"
+                )}
+              />
               {item.label}
             </Link>
           );

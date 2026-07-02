@@ -8,6 +8,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Users, Stethoscope, Wallet, Receipt,
   FileText, ListOrdered, QrCode, CalendarClock,
+  ChevronLeft,
 } from "lucide-react";
 
 export function DashboardHomeContent() {
@@ -75,18 +76,19 @@ export function DashboardHomeContent() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="mb-4 text-lg font-bold text-primary-700">
+        <h2 className="mb-4 text-lg font-bold tracking-tight text-primary-700">
           {t("quickActionsTitle")}
         </h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {quickLinks.map(({ href, title, desc, icon: Icon, color }) => (
             <Link key={href} href={href}>
-              <Card className="h-full cursor-pointer transition-shadow hover:shadow-premium">
-                <div className={`mb-3 inline-flex rounded-lg p-2.5 ${color}`}>
+              <Card hoverable className="group relative h-full cursor-pointer">
+                <div className={`mb-3 inline-flex rounded-lg p-2.5 transition-transform duration-200 group-hover:scale-110 ${color}`}>
                   <Icon className="h-5 w-5" />
                 </div>
                 <CardTitle className="text-base">{title}</CardTitle>
                 <p className="mt-1 text-sm text-slate-muted">{desc}</p>
+                <ChevronLeft className="absolute end-4 top-6 h-4 w-4 text-slate-muted/40 transition-transform group-hover:-translate-x-0.5" />
               </Card>
             </Link>
           ))}

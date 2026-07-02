@@ -170,8 +170,10 @@ export default function RefundsDashboardPage() {
     <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold text-slate-text sm:text-2xl">
-            <Undo2 className="h-7 w-7 text-primary" />
+          <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-text sm:text-2xl">
+            <span className="mc-icon-badge-primary">
+              <Undo2 className="h-5 w-5" />
+            </span>
             إدارة المرتجعات
           </h1>
           <p className="mt-1 text-sm text-slate-muted">
@@ -287,7 +289,7 @@ export default function RefundsDashboardPage() {
           <div className="overflow-x-auto px-2 pb-4">
             <table className="w-full min-w-[640px] text-sm">
               <thead>
-                <tr className="border-b text-right text-xs text-slate-muted">
+                <tr className="border-b border-slate-border text-right text-xs font-bold uppercase tracking-wide text-slate-muted">
                   <th className="py-2 pr-2">التاريخ</th>
                   <th className="py-2">المراجع</th>
                   <th className="py-2">الطبيب</th>
@@ -318,7 +320,7 @@ export default function RefundsDashboardPage() {
                     <td className="py-2">{formatDoctorDisplayName(row.doctorName)}</td>
                     <td className="py-2 text-slate-muted">{row.operationName}</td>
                     <td className="py-2 tabular-nums">{formatCurrency(row.paidAmount)}</td>
-                    <td className="py-2 tabular-nums text-amber-700">
+                    <td className="py-2 tabular-nums text-warning-text">
                       {row.refundedAmount > 0
                         ? formatCurrency(row.refundedAmount)
                         : "—"}
@@ -330,7 +332,7 @@ export default function RefundsDashboardPage() {
                       <button
                         type="button"
                         onClick={() => setRefundTarget(row)}
-                        className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100"
+                        className="rounded-lg border border-warning-border bg-warning px-2.5 py-1 text-xs font-bold text-warning-text transition-colors hover:brightness-95"
                       >
                         استرجاع
                       </button>
@@ -355,7 +357,7 @@ export default function RefundsDashboardPage() {
           ) : (
             <table className="w-full min-w-[560px] text-sm">
               <thead>
-                <tr className="border-b text-right text-xs text-slate-muted">
+                <tr className="border-b border-slate-border text-right text-xs font-bold uppercase tracking-wide text-slate-muted">
                   <th className="py-2 pr-2">التاريخ</th>
                   <th className="py-2">المراجع</th>
                   <th className="py-2">الطبيب</th>
@@ -375,14 +377,14 @@ export default function RefundsDashboardPage() {
                     </td>
                     <td className="py-2 font-medium">{row.patientName}</td>
                     <td className="py-2">{formatDoctorDisplayName(row.doctorName)}</td>
-                    <td className="py-2 font-bold tabular-nums text-amber-700">
+                    <td className="py-2 font-bold tabular-nums text-warning-text">
                       {formatCurrency(row.amount)}
                     </td>
                     <td className="py-2 max-w-[200px] truncate text-slate-muted">
                       {row.reason}
                     </td>
                     <td className="py-2">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-success px-2 py-0.5 text-xs font-semibold text-success-text">
                         <CheckCircle2 className="h-3.5 w-3.5" />
                         تم الإرجاع
                       </span>

@@ -17,6 +17,7 @@ import {
   TrendingUp,
   ChevronLeft,
   Activity,
+  Crown,
 } from "lucide-react";
 import { ActivityFeed } from "@/components/admin/ActivityFeed";
 import { AdminDoctorPerformance } from "@/components/admin/AdminDoctorPerformance";
@@ -58,17 +59,24 @@ export default function AdminHomePage() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-xl font-bold text-slate-text">لوحة المالك</h2>
+        <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-text">
+          <span className="mc-icon-badge-premium">
+            <Crown className="h-4.5 w-4.5" />
+          </span>
+          لوحة المالك
+        </h2>
         <p className="text-sm text-slate-muted">متابعة مالية كاملة من الجوال</p>
       </div>
 
       {stats && (
-        <div className="rounded-2xl bg-gradient-to-br from-primary to-primary-700 p-5 text-white shadow-premium">
-          <p className="text-xs opacity-90">صافي ربح العيادة (هذا الشهر)</p>
-          <p className="mt-1 text-3xl font-bold tabular-nums">
+        <div className="relative overflow-hidden rounded-3xl bg-mc-navy p-5 text-white shadow-premium">
+          <div className="pointer-events-none absolute -end-10 -top-14 h-48 w-48 rounded-full bg-white/5 blur-2xl" />
+          <div className="pointer-events-none absolute -start-8 bottom-[-3rem] h-40 w-40 rounded-full bg-premium-400/10 blur-2xl" />
+          <p className="relative text-xs text-white/70">صافي ربح العيادة (هذا الشهر)</p>
+          <p className="relative mt-1 text-3xl font-extrabold tracking-tight tabular-nums">
             {formatCurrency(stats.netProfit)}
           </p>
-          <p className="mt-2 text-xs opacity-80">
+          <p className="relative mt-2 text-xs text-white/70">
             تدفق نقدي: {formatCurrency(stats.cashInflow)}
           </p>
         </div>
@@ -76,7 +84,7 @@ export default function AdminHomePage() {
 
       <div className="grid grid-cols-2 gap-3">
         <Link href="/admin/profits">
-          <Card className="p-3 active:scale-[0.98]">
+          <Card hoverable className="p-3 active:scale-[0.98]">
             <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
               <TrendingUp className="h-5 w-5 text-primary" />
             </div>
@@ -85,7 +93,7 @@ export default function AdminHomePage() {
           </Card>
         </Link>
         <Link href="/admin/withdrawals">
-          <Card className="p-3 active:scale-[0.98]">
+          <Card hoverable className="p-3 active:scale-[0.98]">
             <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
               <Wallet className="h-5 w-5 text-primary" />
             </div>
@@ -96,7 +104,7 @@ export default function AdminHomePage() {
           </Card>
         </Link>
         <Link href="/admin/doctors">
-          <Card className="p-3 active:scale-[0.98]">
+          <Card hoverable className="p-3 active:scale-[0.98]">
             <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
               <Stethoscope className="h-5 w-5 text-primary" />
             </div>
@@ -105,12 +113,12 @@ export default function AdminHomePage() {
           </Card>
         </Link>
         <Link href="/admin/report">
-          <Card className="p-3 active:scale-[0.98] ring-1 ring-primary/20">
-            <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-              <FileText className="h-5 w-5 text-primary" />
+          <Card hoverable premium className="p-3 active:scale-[0.98]">
+            <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-premium-50 text-premium-600">
+              <FileText className="h-5 w-5" />
             </div>
             <p className="text-xs font-semibold text-slate-text">التقرير الشامل</p>
-            <p className="text-[10px] text-primary">طباعة / مشاركة</p>
+            <p className="text-[10px] text-premium-600">طباعة / مشاركة</p>
           </Card>
         </Link>
       </div>
@@ -136,7 +144,7 @@ export default function AdminHomePage() {
       </Card>
 
       <Link href="/admin/report">
-        <Button className="w-full" size="lg">
+        <Button className="w-full" size="lg" variant="premium">
           <FileText className="h-5 w-5" />
           إنشاء التقرير المالي الشامل
         </Button>
@@ -144,18 +152,18 @@ export default function AdminHomePage() {
 
       <Link
         href="/admin/doctors"
-        className="flex items-center justify-between rounded-xl border border-slate-border bg-surface-card p-4 text-sm"
+        className="mc-hover-lift group flex items-center justify-between rounded-xl border border-slate-border bg-surface-card p-4 text-sm"
       >
         <span>عرض دفاتر الأطباء المالية</span>
-        <ChevronLeft className="h-4 w-4 text-slate-muted" />
+        <ChevronLeft className="h-4 w-4 text-slate-muted transition-transform group-hover:-translate-x-0.5" />
       </Link>
 
       <Link
         href="/dashboard/settings"
-        className="flex items-center justify-between rounded-xl border border-slate-border bg-surface-card p-4 text-sm"
+        className="mc-hover-lift group flex items-center justify-between rounded-xl border border-slate-border bg-surface-card p-4 text-sm"
       >
         <span>تعديل ملف العيادة (اسم، شعار، عنوان)</span>
-        <ChevronLeft className="h-4 w-4 text-slate-muted" />
+        <ChevronLeft className="h-4 w-4 text-slate-muted transition-transform group-hover:-translate-x-0.5" />
       </Link>
 
       {isSuperAdmin && (

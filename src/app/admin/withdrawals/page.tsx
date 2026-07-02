@@ -12,8 +12,9 @@ import {
   resolveCanManageWithdrawals,
   updateWithdrawalStatusClient,
 } from "@/lib/withdrawals/update-status-client";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { DoctorWithdrawal } from "@/types";
+import { Wallet } from "lucide-react";
 
 export default function AdminWithdrawalsPage() {
   const [items, setItems] = useState<DoctorWithdrawal[]>([]);
@@ -77,11 +78,23 @@ export default function AdminWithdrawalsPage() {
     rejected: "مرفوض",
   };
 
+  const statusStyle: Record<string, string> = {
+    pending: "bg-warning text-warning-text border-warning-border",
+    approved: "bg-primary-50 text-primary-700 border-primary-200",
+    paid: "bg-success text-success-text border-success-border",
+    rejected: "bg-debt text-debt-text border-debt-border",
+  };
+
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-xl font-bold text-slate-text">طلبات السحب النقدي</h2>
-        <p className="text-sm text-slate-muted">موافقة المالك من الجوال</p>
+        <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-text">
+          <span className="mc-icon-badge-primary">
+            <Wallet className="h-4.5 w-4.5" />
+          </span>
+          طلبات السحب النقدي
+        </h2>
+        <p className="mt-1 text-sm text-slate-muted">موافقة المالك من الجوال</p>
       </div>
 
       <div className="flex gap-2">
@@ -110,19 +123,28 @@ export default function AdminWithdrawalsPage() {
       ) : (
         <div className="space-y-3">
           {items.map((w) => (
-            <Card key={w.id} className="p-4">
-              <Link
-                href={`/admin/doctors/${w.doctor_id}`}
-                className="font-semibold text-primary text-sm"
-              >
-                {w.doctor?.full_name_ar ?? "طبيب"}
-              </Link>
-              <p className="text-2xl font-bold text-slate-text">
+            <Card key={w.id} hoverable className="p-4">
+              <div className="flex items-start justify-between gap-2">
+                <Link
+                  href={`/admin/doctors/${w.doctor_id}`}
+                  className="text-sm font-semibold text-primary hover:underline"
+                >
+                  {w.doctor?.full_name_ar ?? "طبيب"}
+                </Link>
+                <span
+                  className={cn(
+                    "rounded-full border px-2 py-0.5 text-[11px] font-bold",
+                    statusStyle[w.status]
+                  )}
+                >
+                  {statusLabel[w.status]}
+                </span>
+              </div>
+              <p className="text-2xl font-bold tabular-nums text-slate-text">
                 {formatCurrency(w.amount)}
               </p>
               <p className="text-xs text-slate-muted">
-                {new Date(w.requested_at).toLocaleString("ar-EG")} —{" "}
-                {statusLabel[w.status]}
+                {new Date(w.requested_at).toLocaleString("ar-EG")}
               </p>
               {canManage && w.status === "pending" && (
                 <div className="mt-3 flex flex-wrap gap-2">

@@ -8,7 +8,7 @@ import {
   sanitizeUsername,
 } from "@/lib/auth/credentials";
 import { syncPortalSessionClient } from "@/lib/auth/sync-portal-session-client";
-import { Eye, EyeOff, Languages } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Languages, User } from "lucide-react";
 import { DeveloperCredit } from "@/components/layout/DeveloperCredit";
 import { DeveloperFooterLink } from "@/components/layout/DeveloperFooterLink";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -90,35 +90,39 @@ function UnifiedLoginForm() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-md rounded-2xl border-2 border-primary/30 bg-white/80 p-6 shadow-sm backdrop-blur sm:p-8">
+    <div className="mx-auto w-full max-w-md rounded-3xl border border-slate-200/70 bg-white p-6 shadow-premium sm:p-8">
       <p className="mb-6 text-center text-sm leading-relaxed text-slate-600">
         {t("unifiedLoginHint")}
       </p>
 
       <form onSubmit={handleLogin} className="flex flex-col gap-4">
         {error && (
-          <p className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-center text-xs text-red-600">
+          <p className="flex items-center justify-center rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-center text-xs font-medium text-red-600">
             {error}
           </p>
         )}
 
-        <input
-          type="text"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder={t("username")}
-          disabled={loading}
-          required
-          dir="ltr"
-          autoComplete="username"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          inputMode="email"
-          className="touch-input w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-left placeholder:text-slate-400 focus:border-primary/40 focus:outline-none disabled:opacity-60"
-        />
+        <div className="relative">
+          <User className="pointer-events-none absolute start-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder={t("username")}
+            disabled={loading}
+            required
+            dir="ltr"
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            inputMode="email"
+            className="touch-input w-full rounded-xl border border-slate-200 bg-slate-50/60 py-3 text-base text-left placeholder:text-slate-400 transition-colors ps-11 pe-4 focus:border-primary/50 focus:bg-white focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
+          />
+        </div>
 
         <div className="relative">
+          <KeyRound className="pointer-events-none absolute start-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-slate-400" />
           <input
             type={showPass ? "text" : "password"}
             value={password}
@@ -131,12 +135,12 @@ function UnifiedLoginForm() {
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
-            className="touch-input w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-12 text-base text-left placeholder:text-slate-400 focus:border-primary/40 focus:outline-none disabled:opacity-60"
+            className="touch-input w-full rounded-xl border border-slate-200 bg-slate-50/60 py-3 text-base text-left placeholder:text-slate-400 transition-colors ps-11 pe-12 focus:border-primary/50 focus:bg-white focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
           />
           <button
             type="button"
             onClick={() => setShowPass(!showPass)}
-            className="touch-target absolute left-1 top-1/2 -translate-y-1/2 text-slate-400"
+            className="touch-target absolute end-1 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-primary"
           >
             {showPass ? (
               <EyeOff className="h-4 w-4" />
@@ -149,7 +153,7 @@ function UnifiedLoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className="touch-target flex w-full items-center justify-center rounded-xl bg-primary py-3.5 text-base font-bold text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+          className="touch-target group relative mt-1 flex w-full items-center justify-center overflow-hidden rounded-xl bg-mc-navy py-3.5 text-base font-bold text-white shadow-elevated transition-all duration-200 ease-mc-out hover:shadow-premium active:scale-[0.99] disabled:opacity-60"
         >
           {loading ? (
             <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -184,48 +188,56 @@ function LoginPageContent() {
 
   return (
     <div
-      className="safe-top safe-bottom relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-slate-50 p-4 sm:p-6"
+      className="safe-top safe-bottom relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-mc-navy p-4 sm:p-6"
       dir={isRTL ? "rtl" : "ltr"}
     >
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.05]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.8) 1px, transparent 1px)",
+          backgroundSize: "44px 44px",
+        }}
+      />
+      <div className="pointer-events-none absolute right-[-12%] top-[-15%] h-[560px] w-[560px] rounded-full bg-primary-300/20 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-[-15%] left-[-10%] h-[440px] w-[440px] rounded-full bg-premium-400/10 blur-3xl" />
+
       <button
         type="button"
         onClick={toggleLang}
-        className="absolute end-4 top-4 z-20 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm backdrop-blur hover:bg-white"
+        className="absolute end-4 top-4 z-20 inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white shadow-glass backdrop-blur-md transition-colors hover:bg-white/20"
       >
         <Languages className="h-4 w-4" />
         {lang === "ar" ? "EN" : "عر"}
       </button>
 
-      <div className="pointer-events-none absolute right-[-10%] top-[-10%] h-[500px] w-[500px] rounded-full bg-teal-500/5 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-[-10%] left-[-10%] h-[400px] w-[400px] rounded-full bg-cyan-500/5 blur-3xl" />
-
       <div className="z-10 w-full max-w-lg">
-        <div className="mb-8 flex flex-col items-center gap-2">
-          <div className="text-primary drop-shadow-sm">
-            <FaTooth size={60} className="animate-pulse" />
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white shadow-glass backdrop-blur-md">
+            <FaTooth size={30} />
           </div>
-          <h1 className="font-mono text-3xl font-extrabold tracking-widest text-slate-800">
+          <h1 className="font-mono text-3xl font-extrabold tracking-widest text-white">
             MASTER CLINIC PLUS
           </h1>
-          <p className="text-xs font-bold uppercase tracking-widest text-primary">
+          <p className="text-xs font-bold uppercase tracking-widest text-premium-300">
             {t("appTagline")}
           </p>
         </div>
 
         {mismatch && (
-          <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-800">
+          <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm font-medium text-amber-800 shadow-sm">
             {t("loginRoleMismatch")}
           </p>
         )}
 
         {portalHint === "assistant" && (
-          <p className="mb-4 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-center text-sm text-teal-800">
+          <p className="mb-4 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-center text-sm font-medium text-teal-800 shadow-sm">
             {t("loginAssistantHint")}
           </p>
         )}
 
         {portalHint === "doctor" && (
-          <p className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-center text-sm text-blue-800">
+          <p className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-center text-sm font-medium text-blue-800 shadow-sm">
             {t("loginDoctorHint")}
           </p>
         )}
@@ -237,7 +249,7 @@ function LoginPageContent() {
         </div>
 
         <footer className="mt-6 flex min-h-[2rem] items-center justify-center pb-6">
-          <DeveloperFooterLink />
+          <DeveloperFooterLink variant="dark" />
         </footer>
       </div>
     </div>

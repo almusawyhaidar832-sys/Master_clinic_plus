@@ -9,7 +9,7 @@ import {
   type DoctorLedgerSummary,
 } from "@/lib/services/clinic-reports";
 import { formatCurrency, currentMonthYear } from "@/lib/utils";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Stethoscope } from "lucide-react";
 
 export default function AdminDoctorsLedgerPage() {
   const [doctors, setDoctors] = useState<DoctorLedgerSummary[]>([]);
@@ -32,8 +32,13 @@ export default function AdminDoctorsLedgerPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-xl font-bold text-slate-text">حسابات الأطباء</h2>
-        <p className="text-sm text-slate-muted">
+        <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-text">
+          <span className="mc-icon-badge-primary">
+            <Stethoscope className="h-4.5 w-4.5" />
+          </span>
+          حسابات الأطباء
+        </h2>
+        <p className="mt-1 text-sm text-slate-muted">
           دفتر مالي لكل طبيب — مستحقات ومسحوبات الشهر الحالي، والرصيد القابل للسحب الآن
         </p>
       </div>
@@ -43,7 +48,7 @@ export default function AdminDoctorsLedgerPage() {
       ) : (
         doctors.map((d) => (
           <Link key={d.id} href={`/admin/doctors/${d.id}`}>
-            <Card className="flex items-center justify-between p-4 active:scale-[0.98]">
+            <Card hoverable className="group flex items-center justify-between p-4 active:scale-[0.98]">
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-slate-text">{d.full_name_ar}</p>
                 {d.specialty_ar && (
@@ -65,13 +70,13 @@ export default function AdminDoctorsLedgerPage() {
                     قابل للسحب (الآن): {formatCurrency(d.withdrawableBalance)}
                   </span>
                   {d.pendingWithdrawalAmount > 0 && (
-                    <span className="text-amber-700">
+                    <span className="text-warning-text">
                       معلّق: {formatCurrency(d.pendingWithdrawalAmount)}
                     </span>
                   )}
                 </div>
               </div>
-              <ChevronLeft className="h-5 w-5 flex-shrink-0 text-slate-muted" />
+              <ChevronLeft className="h-5 w-5 flex-shrink-0 text-slate-muted transition-transform group-hover:-translate-x-0.5" />
             </Card>
           </Link>
         ))

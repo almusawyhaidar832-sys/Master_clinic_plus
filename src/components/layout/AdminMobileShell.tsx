@@ -22,6 +22,7 @@ import {
   Sun,
   Moon,
   Languages,
+  Crown,
 } from "lucide-react";
 
 const adminNav: Array<{
@@ -66,24 +67,31 @@ export function AdminMobileShell({
 
   return (
     <div className="flex min-h-dvh flex-col bg-surface pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]">
-      <header className="safe-top sticky top-0 z-30 bg-primary px-4 py-3 text-white shadow-premium">
-        <div className="flex items-center gap-2">
-          {profile?.logo_url && (
+      <header className="safe-top mc-gradient-hero sticky top-0 z-30 px-4 py-3 text-white shadow-premium">
+        <div className="flex items-center gap-2.5">
+          {profile?.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={profile.logo_url}
               alt=""
-              className="h-8 w-8 shrink-0 rounded-lg border border-white/20 bg-white object-contain p-0.5"
+              className="h-9 w-9 shrink-0 rounded-xl border border-white/20 bg-white object-contain p-0.5 shadow-sm"
             />
+          ) : (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
+              <Crown className="h-5 w-5 text-premium-300" />
+            </div>
           )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs opacity-90">{t("adminOwnerView")}</p>
-            <h1 className="truncate text-base font-bold">{displayName}</h1>
+            <span className="mc-badge-premium">
+              <Crown className="h-3 w-3" />
+              {t("adminOwnerView")}
+            </span>
+            <h1 className="mt-1 truncate text-base font-bold tracking-tight">{displayName}</h1>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <Link
               href="/admin/profile"
-              className="touch-target inline-flex items-center justify-center rounded-lg text-white/90 hover:bg-white/10"
+              className="touch-target inline-flex items-center justify-center rounded-lg text-white/90 transition-colors hover:bg-white/10 active:scale-95"
               title={t("adminProfileTitle")}
               aria-label={t("adminNavAccount")}
             >
@@ -91,13 +99,13 @@ export function AdminMobileShell({
             </Link>
             <Link
               href="/admin/withdrawals"
-              className="touch-target relative inline-flex items-center justify-center rounded-lg text-white/90 hover:bg-white/10"
+              className="touch-target relative inline-flex items-center justify-center rounded-lg text-white/90 transition-colors hover:bg-white/10 active:scale-95"
               title={t("adminWithdrawalsTitle")}
               aria-label={t("adminWithdrawalsTitle")}
             >
               <Wallet className="h-5 w-5" />
               {notificationCount > 0 && (
-                <span className="absolute -left-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-bold text-primary">
+                <span className="absolute -left-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-white text-[9px] font-bold text-primary shadow-sm ring-2 ring-primary-700/50">
                   {notificationCount > 9 ? "9+" : notificationCount}
                 </span>
               )}
@@ -105,7 +113,7 @@ export function AdminMobileShell({
             <button
               type="button"
               onClick={() => void logoutFromCurrentPortal(router)}
-              className="touch-target inline-flex items-center justify-center rounded-lg text-white/90 hover:bg-white/10"
+              className="touch-target inline-flex items-center justify-center rounded-lg text-white/90 transition-colors hover:bg-white/10 active:scale-95"
               title={t("logout")}
               aria-label={t("logout")}
             >
@@ -114,7 +122,7 @@ export function AdminMobileShell({
             <button
               type="button"
               onClick={toggleLang}
-              className="touch-target inline-flex items-center justify-center rounded-lg text-white/80 hover:bg-white/10"
+              className="touch-target inline-flex items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 active:scale-95"
               title={lang === "ar" ? "EN" : "عر"}
               aria-label={t("docChangeLang")}
             >
@@ -123,7 +131,7 @@ export function AdminMobileShell({
             <button
               type="button"
               onClick={toggleTheme}
-              className="touch-target inline-flex items-center justify-center rounded-lg text-white/80 hover:bg-white/10"
+              className="touch-target inline-flex items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 active:scale-95"
               title={isDark ? t("themeDayMode") : t("themeNightMode")}
               aria-label={t("docChangeTheme")}
             >
@@ -135,7 +143,7 @@ export function AdminMobileShell({
 
       <main className="mc-app-main flex-1 px-4 py-4">{children}</main>
 
-      <nav className="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-slate-border bg-surface-card px-1 py-2">
+      <nav className="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-slate-border/70 bg-surface-card/90 px-1 py-1.5 shadow-[0_-6px_20px_-4px_rgb(15_23_42/0.08)] backdrop-blur-md">
         <div className="flex justify-around">
           {adminNav.map(({ href, labelKey, icon: Icon }) => {
             const active =
@@ -146,11 +154,11 @@ export function AdminMobileShell({
                 key={href}
                 href={href}
                 className={cn(
-                  "touch-target flex min-w-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-2 text-[9px] font-medium transition-colors sm:text-[10px]",
-                  active ? "text-primary" : "text-slate-muted"
+                  "touch-target flex min-w-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1.5 text-[9px] font-medium transition-all duration-200 ease-mc-out active:scale-95 sm:text-[10px]",
+                  active ? "bg-primary/10 text-primary" : "text-slate-muted hover:text-primary/70"
                 )}
               >
-                <Icon className={cn("h-5 w-5", active && "stroke-[2.5]")} />
+                <Icon className={cn("h-5 w-5 transition-transform", active && "scale-110 stroke-[2.5]")} />
                 {t(labelKey)}
               </Link>
             );

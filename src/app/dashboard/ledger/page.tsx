@@ -29,7 +29,7 @@ import { fetchPatientTreatmentCases } from "@/lib/services/patient-treatment-cas
 import { getPatientDisplayPhone } from "@/lib/phone";
 import { opName, type PatientOperation } from "@/types";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, NotebookPen } from "lucide-react";
 import { VisualMedicalRecord } from "@/components/clinical/VisualMedicalRecord";
 
 type RowWithJoins = TodayOperationRow;
@@ -343,7 +343,7 @@ function LedgerPageContent() {
       key: "session_kind",
       header: "نوع السجل",
       render: (row) => (
-        <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+        <span className="inline-flex rounded-full border border-slate-border bg-surface px-2 py-0.5 text-xs font-medium text-slate-text">
           {sessionKindLabel(row.session_kind)}
         </span>
       ),
@@ -357,7 +357,7 @@ function LedgerPageContent() {
           <span
             className={
               paid > 0
-                ? "font-bold tabular-nums text-emerald-700"
+                ? "font-bold tabular-nums text-success-text"
                 : "tabular-nums text-slate-muted"
             }
           >
@@ -383,7 +383,7 @@ function LedgerPageContent() {
               className={
                 debt > 0
                   ? "font-bold tabular-nums text-debt-text"
-                  : "font-semibold tabular-nums text-emerald-700"
+                  : "font-semibold tabular-nums text-success-text"
               }
             >
               {formatCurrency(debt)}
@@ -432,7 +432,12 @@ function LedgerPageContent() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-slate-text">إدخال جلسة</h2>
+        <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-text">
+          <span className="mc-icon-badge-primary">
+            <NotebookPen className="h-5 w-5" />
+          </span>
+          إدخال جلسة
+        </h2>
         <p className="mc-page-subtitle">
           إدخال سريع وعمليات اليوم — {formatDate(new Date())}
         </p>
@@ -526,7 +531,7 @@ function LedgerPageContent() {
         {loading ? (
           <div className="space-y-2">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-12 animate-pulse rounded bg-slate-100" />
+              <div key={i} className="h-12 animate-pulse rounded-xl bg-surface" />
             ))}
           </div>
         ) : (

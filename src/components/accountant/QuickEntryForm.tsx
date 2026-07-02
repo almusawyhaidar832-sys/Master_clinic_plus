@@ -2280,15 +2280,15 @@ export function QuickEntryForm({
             )}
 
             {formSchema.showCasePrice && (
-              <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2.5">
-                <p className="text-xs font-bold text-emerald-900">
+              <div className="rounded-lg border border-success-border bg-success px-3 py-2.5">
+                <p className="text-xs font-bold text-success-text">
                   السعر النهائي بعد الخصم
                 </p>
-                <p className="mt-0.5 text-xl font-bold tabular-nums text-emerald-800">
+                <p className="mt-0.5 text-xl font-bold tabular-nums text-success-text">
                   {formatCurrency(finalPriceLive)}
                 </p>
                 {discountNum > 0 && (
-                  <p className="mt-1 text-xs text-emerald-800 tabular-nums">
+                  <p className="mt-1 text-xs text-success-text tabular-nums">
                     {formatCurrency(casePriceNum)} − {formatCurrency(discountNum)}
                   </p>
                 )}
@@ -2470,17 +2470,17 @@ export function QuickEntryForm({
         )}
 
         <div className="sm:col-span-2 mc-entry-remaining">
-          <p className="text-sm font-bold text-slate-700">
+          <p className="text-sm font-bold text-slate-text">
             {isFollowUpSession ? "الذمة المتبقية" : "المتبقي (ذمة)"}
           </p>
           {isFollowUpSession && (
-            <p className="mt-0.5 text-xs text-slate-500 tabular-nums">
+            <p className="mt-0.5 text-xs text-slate-muted tabular-nums">
               السعر النهائي: {formatCurrency(finalPriceLive)}
             </p>
           )}
           <p
             className={`mt-1 text-2xl font-bold tabular-nums ${
-              remaining > 0 ? "text-debt-text" : "text-emerald-700"
+              remaining > 0 ? "text-debt-text" : "text-success-text"
             }`}
           >
             {formatCurrency(remaining)}
@@ -2490,7 +2490,7 @@ export function QuickEntryForm({
             newPayment: paid,
           }) &&
             finalPriceLive > 0 && (
-            <p className="text-xs font-semibold text-emerald-700 mt-1">
+            <p className="text-xs font-semibold text-success-text mt-1">
               ✓ بعد الحفظ: تم إكمال العلاج — لا ذمة متبقية على هذه الحالة
             </p>
           )}

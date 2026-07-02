@@ -109,7 +109,8 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
         {cards.map((c) => (
           <Card
             key={c.label}
-            className={c.highlight ? "ring-2 ring-primary shadow-premium" : ""}
+            hoverable
+            premium={c.highlight}
           >
             <CardHeader>
               <div className={`mb-2 inline-flex rounded-lg p-2 ${c.bg}`}>
@@ -117,7 +118,7 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
               </div>
               <p className="text-sm text-slate-muted">{c.label}</p>
               <p
-                className={`font-bold ${c.color} ${mobile ? "text-2xl" : "text-3xl"}`}
+                className={`font-bold tabular-nums ${c.color} ${mobile ? "text-2xl" : "text-3xl"}`}
               >
                 {formatCurrency(c.value)}
               </p>
@@ -159,18 +160,18 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
           mobile ? "grid grid-cols-1 gap-3" : "grid gap-4 sm:grid-cols-2"
         }
       >
-        <Card>
+        <Card hoverable>
           <CardHeader>
             <p className="text-sm text-slate-muted">حصة العيادة (الشهر)</p>
-            <p className="text-xl font-bold text-slate-text">
+            <p className="text-xl font-bold tabular-nums text-slate-text">
               {formatCurrency(stats.clinicShareTotal)}
             </p>
           </CardHeader>
         </Card>
-        <Card>
+        <Card hoverable>
           <CardHeader>
             <p className="text-sm text-slate-muted">مصروفات + رواتب مدفوعة</p>
-            <p className="text-xl font-bold text-debt-text">
+            <p className="text-xl font-bold tabular-nums text-debt-text">
               {formatCurrency(stats.totalExpenses + stats.totalSalariesPaid)}
             </p>
           </CardHeader>

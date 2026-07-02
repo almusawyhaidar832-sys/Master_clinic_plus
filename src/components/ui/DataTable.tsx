@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Inbox } from "lucide-react";
 import { ReactNode } from "react";
 
 export interface Column<T> {
@@ -23,8 +24,9 @@ export function DataTable<T extends { id: string }>({
 }: DataTableProps<T>) {
   if (data.length === 0) {
     return (
-      <div className="rounded-xl border border-slate-border bg-surface-card py-12 text-center text-slate-muted">
-        {emptyMessage}
+      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-border bg-surface-card py-14 text-center text-slate-muted">
+        <Inbox className="h-8 w-8 text-slate-muted/50" strokeWidth={1.5} />
+        <span className="text-sm">{emptyMessage}</span>
       </div>
     );
   }
@@ -39,7 +41,7 @@ export function DataTable<T extends { id: string }>({
                 <th
                   key={col.key}
                   className={cn(
-                    "px-4 py-3 text-right font-semibold text-slate-text",
+                    "px-4 py-3.5 text-right text-xs font-bold uppercase tracking-wide text-slate-muted",
                     col.className
                   )}
                 >
@@ -55,8 +57,8 @@ export function DataTable<T extends { id: string }>({
                 <tr
                   key={row.id}
                   className={cn(
-                    "border-b border-slate-border/60 transition-colors",
-                    index % 2 === 0 ? "bg-surface-card" : "bg-surface",
+                    "border-b border-slate-border/60 transition-colors last:border-b-0 hover:bg-primary-50/50",
+                    index % 2 === 0 ? "bg-surface-card" : "bg-surface/50",
                     hasDebt && "bg-debt/40 hover:bg-debt/60"
                   )}
                 >

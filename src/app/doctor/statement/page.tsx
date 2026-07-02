@@ -21,6 +21,8 @@ import {
 } from "@/lib/services/patient-treatment-cases";
 import type { Patient, PatientOperation, MedicalLog } from "@/types";
 import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
+import { Alert } from "@/components/ui/Alert";
+import { FileText } from "lucide-react";
 
 function StatementContent() {
   const searchParams = useSearchParams();
@@ -126,14 +128,17 @@ function StatementContent() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-bold text-slate-text no-print">
+      <h2 className="no-print flex items-center gap-2 text-lg font-bold tracking-tight text-slate-text">
+        <span className="mc-icon-badge-primary">
+          <FileText className="h-4.5 w-4.5" />
+        </span>
         {t("docStatementTitle")}
       </h2>
 
       {accessDenied && accessError && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 no-print">
+        <Alert variant="error" className="no-print">
           {accessError}
-        </p>
+        </Alert>
       )}
 
       <div className="no-print space-y-3">
@@ -168,7 +173,7 @@ function StatementContent() {
       </div>
 
       {patientId && (
-        <div className="no-print rounded-2xl border border-teal-100 bg-white p-4 shadow-sm">
+        <div className="no-print rounded-2xl border border-primary/15 bg-surface-card p-4 shadow-card">
           <VisitSessionClinicalPanel
             patientId={patientId}
             queueEntryId={queueEntryId}

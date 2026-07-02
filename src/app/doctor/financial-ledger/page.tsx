@@ -99,21 +99,24 @@ export default function DoctorFinancialLedgerPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="flex items-center gap-2 text-lg font-bold text-slate-text">
-          <ScrollText className="h-5 w-5 text-primary" />
+        <h1 className="flex items-center gap-2 text-lg font-bold tracking-tight text-slate-text">
+          <span className="mc-icon-badge-primary">
+            <ScrollText className="h-4.5 w-4.5" />
+          </span>
           {t("docFinancialLedgerTitle")}
         </h1>
-        <p className="text-sm text-slate-muted">{t("docFinancialLedgerSubtitle")}</p>
+        <p className="mt-1 text-sm text-slate-muted">{t("docFinancialLedgerSubtitle")}</p>
       </div>
 
       {balance !== null && (
-        <div className="rounded-xl bg-gradient-to-br from-primary to-primary-700 p-4 text-white">
-          <p className="text-xs opacity-90">
+        <div className="relative overflow-hidden rounded-2xl bg-mc-navy p-4 text-white shadow-premium">
+          <div className="pointer-events-none absolute -end-8 -top-10 h-32 w-32 rounded-full bg-white/5 blur-2xl" />
+          <p className="relative text-xs text-white/70">
             {salaryDoctor ? t("docRemainingSalary") : t("docWithdrawableBalanceLabel")}
           </p>
           <DoctorPrivateBalance
             amount={balance}
-            className="mt-1 text-xl font-bold"
+            className="relative mt-1 text-xl font-extrabold tracking-tight"
             isDebtor={balance < 0}
             showDebtLabel
           />
@@ -122,17 +125,15 @@ export default function DoctorFinancialLedgerPage() {
 
       <DoctorFinancialReportPanel />
 
-      <div className="flex gap-1 rounded-xl border border-slate-border bg-surface-card p-1">
+      <div className="mc-tab-group">
         {TAB_ITEMS.map(({ id, labelKey, icon: Icon }) => (
           <button
             key={id}
             type="button"
             onClick={() => selectTab(id)}
             className={cn(
-              "flex flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-2 text-[10px] font-medium transition-colors sm:flex-row sm:gap-1.5 sm:px-2 sm:text-xs",
-              activeTab === id
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate-muted hover:text-slate-text"
+              "mc-tab",
+              activeTab === id && "mc-tab--active"
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />

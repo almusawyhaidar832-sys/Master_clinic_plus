@@ -4,11 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveClinicId } from "@/lib/clinic-context";
+import { Button } from "@/components/ui/Button";
 import { AddDoctorExpenseModal } from "@/components/doctor-expenses/AddDoctorExpenseModal";
 import { InvoiceHistoryPanel } from "@/components/doctor-expenses/InvoiceHistoryPanel";
 import { DoctorSalaryAdjustmentsPanel } from "@/components/expenses/DoctorSalaryAdjustmentsPanel";
 import { DoctorSalaryPayoutPanel } from "@/components/expenses/DoctorSalaryPayoutPanel";
 import { GeneralExpensesPanel } from "@/components/expenses/GeneralExpensesPanel";
+import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
@@ -292,8 +294,10 @@ export default function DoctorExpensesPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800">
-            <Receipt className="h-7 w-7 text-primary" />
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-text">
+            <span className="mc-icon-badge-primary">
+              <Receipt className="h-5 w-5" />
+            </span>
             صرفيات عامة
           </h1>
           <p className="mc-page-subtitle">
@@ -301,15 +305,13 @@ export default function DoctorExpensesPage() {
           </p>
         </div>
         {activeTab === "clinic_expenses" && (
-          <button
-            type="button"
+          <Button
             onClick={() => setShowAdd(true)}
             disabled={!clinicId || doctors.length === 0}
-            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
           >
             <Plus className="h-4 w-4" />
             إضافة فاتورة صرف
-          </button>
+          </Button>
         )}
       </div>
 
@@ -387,9 +389,7 @@ export default function DoctorExpensesPage() {
           </div>
 
           {actionError && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-              {actionError}
-            </p>
+            <Alert variant="error">{actionError}</Alert>
           )}
 
           {loading ? (
@@ -397,7 +397,7 @@ export default function DoctorExpensesPage() {
               <RefreshCw className="h-6 w-6 animate-spin text-primary" />
             </div>
           ) : expenses.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-400">
+            <div className="rounded-2xl border border-dashed border-slate-border p-10 text-center text-sm text-slate-muted">
               لا توجد صرفيات نشطة — الصرفيات الجديدة تنتقل تلقائياً إلى السجل
               التاريخي
             </div>
@@ -413,44 +413,44 @@ export default function DoctorExpensesPage() {
                   <div
                     key={e.id}
                     className={cn(
-                      "rounded-2xl border bg-white p-4",
+                      "mc-hover-lift rounded-2xl border bg-surface-card p-4",
                       isDeducted
-                        ? "border-slate-200"
-                        : "border-amber-300 bg-amber-50/30"
+                        ? "border-slate-border"
+                        : "border-warning-border bg-warning/30"
                     )}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="flex items-center gap-1 font-bold text-slate-800">
+                        <p className="flex items-center gap-1 font-bold text-slate-text">
                           <Stethoscope className="h-4 w-4 text-primary" />
                           {e.doctor?.full_name_ar ?? "طبيب"}
                         </p>
-                        <p className="text-lg font-black text-red-700">
+                        <p className="text-lg font-black text-debt-text">
                           خصم الطبيب: {formatCurrency(doctorPart)}
                         </p>
-                        <p className="text-sm text-slate-600">
+                        <p className="text-sm text-slate-muted">
                           إجمالي الفاتورة {formatCurrency(Number(e.amount))} —
                           نسبة الطبيب {e.percentage_split}% · العيادة{" "}
                           {formatCurrency(clinicPart)}
                         </p>
                         {!isDeducted && (
-                          <p className="mt-1 text-xs font-medium text-amber-800">
+                          <p className="mt-1 text-xs font-medium text-warning-text">
                             لم يُخصم من محفظة الطبيب بعد
                           </p>
                         )}
                         {e.description_ar && (
-                          <p className="mt-1 text-sm text-slate-600">
+                          <p className="mt-1 text-sm text-slate-muted">
                             {e.description_ar}
                           </p>
                         )}
                         {e.invoice_file_name && (
-                          <p className="mt-1 text-xs text-slate-400">
+                          <p className="mt-1 text-xs text-slate-muted">
                             📎 {e.invoice_file_name}
                           </p>
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-2">
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-slate-muted">
                           {formatDate(e.expense_date)}
                         </span>
                         {!isDeducted && (
@@ -459,7 +459,7 @@ export default function DoctorExpensesPage() {
                               type="button"
                               disabled={busy}
                               onClick={() => void applyDeduction(e.id)}
-                              className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+                              className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-600 disabled:opacity-60"
                             >
                               {busy ? (
                                 <RefreshCw className="h-3 w-3 animate-spin" />
@@ -472,7 +472,7 @@ export default function DoctorExpensesPage() {
                               type="button"
                               disabled={busy}
                               onClick={() => void deleteOrphan(e.id)}
-                              className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs text-red-600 disabled:opacity-60"
+                              className="flex items-center gap-1 rounded-lg border border-debt-border px-2.5 py-1.5 text-xs text-debt-text transition-colors hover:bg-debt disabled:opacity-60"
                             >
                               <Trash2 className="h-3 w-3" />
                               حذف

@@ -101,13 +101,19 @@
     );
   }
 
-  /* ── Sticky glass header — backdrop blur over content scroll ── */
+  /* ── Sticky glass header — backdrop blur over content scroll ──
+     Note: uses color-mix() directly instead of Tailwind opacity modifiers
+     because `border-slate-border` / `bg-surface-card` resolve to plain
+     `var(--color-*)` values (not the rgb(...) / <alpha-value> pattern),
+     which `@apply` cannot generate an opacity variant for. */
   .mc-glass-header {
-    @apply border-b border-slate-border/70 bg-surface-card/75 backdrop-blur-md;
+    @apply backdrop-blur-md;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+    background-color: color-mix(in srgb, var(--color-surface-card) 75%, transparent);
   }
 
   html.dark .mc-glass-header {
-    @apply bg-surface-card/60;
+    background-color: color-mix(in srgb, var(--color-surface-card) 60%, transparent);
   }
 
   /* ── Page titles (auto via .mc-app-main) ── */

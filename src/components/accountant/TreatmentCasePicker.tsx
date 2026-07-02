@@ -38,7 +38,7 @@ export function TreatmentCasePicker({
 
       <div className="grid gap-2">
         {active.length === 0 && completed.length > 0 && (
-          <p className="text-xs text-amber-800">
+          <p className="text-xs text-warning-text">
             كل الحالات مسددة — يمكنك فتح حالة جديدة أدناه.
           </p>
         )}
@@ -52,7 +52,7 @@ export function TreatmentCasePicker({
             key={c.id}
             type="button"
             onClick={() => onSelect(c)}
-            className="flex w-full items-center justify-between gap-3 rounded-xl border-2 border-primary/30 bg-white px-4 py-3 text-right transition hover:border-primary hover:bg-primary/5"
+            className="mc-hover-lift flex w-full items-center justify-between gap-3 rounded-xl border-2 border-primary/30 bg-surface-card px-4 py-3 text-right shadow-sm transition-colors hover:border-primary hover:bg-primary/5"
           >
             <div>
               <p className="font-semibold text-slate-text">{c.treatment_name_ar}</p>
@@ -87,7 +87,7 @@ export function TreatmentCasePicker({
                 key={c.id}
                 type="button"
                 onClick={() => onNewCase(c.treatment_name_ar)}
-                className="rounded-full border border-slate-border bg-white px-3 py-1 text-xs text-slate-muted hover:border-primary hover:text-primary"
+                className="rounded-full border border-slate-border bg-surface-card px-3 py-1 text-xs text-slate-muted transition-colors hover:border-primary hover:text-primary"
                 title="بدء حالة جديدة بنفس نوع العلاج — سعر كلي جديد"
               >
                 {c.treatment_name_ar} — ✓ مكتمل — إجمالي كلي جديد

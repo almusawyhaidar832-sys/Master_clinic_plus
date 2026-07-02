@@ -96,27 +96,31 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-dvh flex-col bg-surface pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]">
       <ClinicDataSyncBridge />
       <QueueRealtimeBridge portal="doctor" enablePolling />
-      <header className="safe-top sticky top-0 z-30 bg-primary px-4 py-3 text-white shadow-premium">
-        <div className="flex items-center gap-2">
-          {profile?.logo_url && (
+      <header className="safe-top mc-gradient-hero sticky top-0 z-30 px-4 py-3 text-white shadow-premium">
+        <div className="flex items-center gap-2.5">
+          {profile?.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={profile.logo_url}
               alt=""
-              className="h-8 w-8 rounded-lg border border-white/20 bg-white object-contain p-0.5"
+              className="h-9 w-9 rounded-xl border border-white/20 bg-white object-contain p-0.5 shadow-sm"
             />
+          ) : (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
+              <Smile className="h-5 w-5 text-white/90" />
+            </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="truncate text-xs opacity-90">
+            <p className="truncate text-xs text-white/75">
               {doctorSpecialty} — {displayName}
             </p>
-            <h1 className="truncate text-base font-bold">{doctorName}</h1>
+            <h1 className="truncate text-base font-bold tracking-tight">{doctorName}</h1>
           </div>
           {/* Controls */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <Link
               href="/doctor/profile"
-              className="touch-target inline-flex items-center justify-center rounded-lg text-white/90 hover:bg-white/10"
+              className="touch-target inline-flex items-center justify-center rounded-lg text-white/90 transition-colors hover:bg-white/10 active:scale-95"
               title={t("docProfileTitle")}
               aria-label={t("navMyAccount")}
             >
@@ -125,7 +129,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => void logoutFromCurrentPortal(router)}
-              className="touch-target inline-flex items-center justify-center rounded-lg text-white/90 hover:bg-white/10"
+              className="touch-target inline-flex items-center justify-center rounded-lg text-white/90 transition-colors hover:bg-white/10 active:scale-95"
               title={t("logout")}
               aria-label={t("logout")}
             >
@@ -133,7 +137,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
             </button>
             <button
               onClick={toggleLang}
-              className="touch-target inline-flex items-center justify-center rounded-lg text-white/80 hover:bg-white/10"
+              className="touch-target inline-flex items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 active:scale-95"
               title={lang === "ar" ? "EN" : "عر"}
               aria-label={t("docChangeLang")}
             >
@@ -141,7 +145,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
             </button>
             <button
               onClick={toggleTheme}
-              className="touch-target inline-flex items-center justify-center rounded-lg text-white/80 hover:bg-white/10"
+              className="touch-target inline-flex items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 active:scale-95"
               title={isDark ? t("themeDayMode") : t("themeNightMode")}
               aria-label={t("docChangeTheme")}
             >
@@ -158,7 +162,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      <nav className="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-slate-border bg-surface-card px-2 py-2">
+      <nav className="safe-bottom fixed bottom-0 left-0 right-0 z-40 border-t border-slate-border/70 bg-surface-card/90 px-2 py-1.5 shadow-[0_-6px_20px_-4px_rgb(15_23_42/0.08)] backdrop-blur-md">
         <div className="flex justify-around">
           {filteredNav.map(({ href, labelKey, icon }) => {
             const active = pathname === href;
@@ -168,11 +172,13 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
                 key={href}
                 href={href}
                 className={cn(
-                  "touch-target flex min-w-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg px-2 py-2 text-[10px] font-medium transition-colors",
-                  active ? "text-primary" : "text-slate-muted"
+                  "touch-target flex min-w-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-xl px-2.5 py-1.5 text-[10px] font-medium transition-all duration-200 ease-mc-out active:scale-95",
+                  active
+                    ? "bg-primary/10 text-primary"
+                    : "text-slate-muted hover:text-primary/70"
                 )}
               >
-                <Icon className="h-5 w-5" />
+                <Icon className={cn("h-5 w-5 transition-transform", active && "scale-110")} />
                 {t(labelKey)}
               </Link>
             );

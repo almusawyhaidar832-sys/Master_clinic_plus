@@ -11,7 +11,7 @@ import { doctorQuickActions, QUICK_ACTION_ICON_MAP } from "@/components/layout/D
 import { useModuleNav } from "@/hooks/useModuleNav";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
-import { Bell, TrendingUp, Wallet, ArrowDownToLine } from "lucide-react";
+import { Bell, TrendingUp, Wallet, ArrowDownToLine, ChevronLeft } from "lucide-react";
 import { DoctorPrivateBalance } from "@/components/doctor/DoctorPrivateBalance";
 import { useClinicSync } from "@/hooks/useClinicSync";
 
@@ -74,41 +74,50 @@ export function DoctorHomeDashboard() {
   return (
     <div className="space-y-5 animate-fade-in">
       {doctorName && (
-        <div className="rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
-          <p className="text-xs text-slate-500">{t("welcome")}</p>
-          <p className="text-lg font-bold text-slate-text">{doctorName}</p>
-          {specialty && (
-            <p className="text-xs text-primary">{specialty}</p>
-          )}
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-border bg-surface-card px-4 py-3.5 shadow-card">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-base font-bold text-primary">
+            {doctorName.trim().charAt(0)}
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-slate-muted">{t("welcome")}</p>
+            <p className="truncate text-lg font-bold tracking-tight text-slate-text">{doctorName}</p>
+            {specialty && (
+              <p className="text-xs font-medium text-primary">{specialty}</p>
+            )}
+          </div>
         </div>
       )}
 
-      <div className="rounded-2xl bg-gradient-to-br from-primary to-primary-700 p-5 text-white shadow-premium">
-        <div className="flex items-start justify-between">
+      <div className="relative overflow-hidden rounded-3xl bg-mc-navy p-5 text-white shadow-premium">
+        <div className="pointer-events-none absolute -end-10 -top-14 h-48 w-48 rounded-full bg-white/5 blur-2xl" />
+        <div className="pointer-events-none absolute -start-8 bottom-[-3rem] h-40 w-40 rounded-full bg-premium-400/10 blur-2xl" />
+        <div className="relative flex items-start justify-between">
           <div className="min-w-0 flex-1">
-            <p className="text-xs opacity-90">{t("currentBalance")}</p>
+            <p className="text-xs text-white/70">{t("currentBalance")}</p>
             <DoctorPrivateBalance
               amount={wallet?.availableBalance ?? null}
-              className="mt-1 text-3xl font-bold"
+              className="mt-1 text-3xl font-extrabold tracking-tight"
               isDebtor={(wallet?.availableBalance ?? 0) < 0}
               showDebtLabel
             />
           </div>
-          <Wallet className="h-8 w-8 shrink-0 opacity-80" />
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
+            <Wallet className="h-5 w-5" />
+          </div>
         </div>
-        <div className="mt-4 grid gap-2 text-center text-[10px]">
+        <div className="relative mt-4 grid gap-2 text-center text-[10px]">
           {(wallet?.pendingAmount ?? 0) > 0 && (
-            <div className="rounded-lg bg-white/10 p-2">
-              <p className="opacity-80">{t("pendingShort")}</p>
-              <p className="font-semibold">
+            <div className="rounded-xl border border-white/10 bg-white/10 p-2 backdrop-blur-sm">
+              <p className="text-white/70">{t("pendingShort")}</p>
+              <p className="font-bold tabular-nums">
                 {formatMoney(wallet?.pendingAmount ?? 0)}
               </p>
             </div>
           )}
           {(wallet?.approvedAmount ?? 0) > 0 && (
-            <div className="rounded-lg bg-white/10 p-2">
-              <p className="opacity-80">{t("docApprovedUnpaid")}</p>
-              <p className="font-semibold">
+            <div className="rounded-xl border border-white/10 bg-white/10 p-2 backdrop-blur-sm">
+              <p className="text-white/70">{t("docApprovedUnpaid")}</p>
+              <p className="font-bold tabular-nums">
                 {formatMoney(wallet?.approvedAmount ?? 0)}
               </p>
             </div>
@@ -119,32 +128,36 @@ export function DoctorHomeDashboard() {
       <div className="grid grid-cols-2 gap-3">
         <Link
           href="/doctor/withdraw"
-          className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3 transition active:scale-[0.98]"
+          className="mc-hover-lift flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/[0.06] p-3 active:scale-[0.98]"
         >
-          <ArrowDownToLine className="h-5 w-5 text-primary" />
+          <span className="mc-icon-badge-primary">
+            <ArrowDownToLine className="h-5 w-5" />
+          </span>
           <span className="text-sm font-semibold text-slate-text">{t("navWithdrawRequest")}</span>
         </Link>
         <Link
           href="/doctor/wallet"
-          className="flex items-center gap-3 rounded-xl border border-slate-border bg-surface-card p-3 transition active:scale-[0.98]"
+          className="mc-hover-lift flex items-center gap-3 rounded-xl border border-slate-border bg-surface-card p-3 active:scale-[0.98]"
         >
-          <TrendingUp className="h-5 w-5 text-primary" />
+          <span className="mc-icon-badge-soft">
+            <TrendingUp className="h-5 w-5" />
+          </span>
           <span className="text-sm font-semibold text-slate-text">{t("walletDetails")}</span>
         </Link>
       </div>
 
       <div className="flex gap-3 text-sm">
-        <div className="flex-1 rounded-xl border border-slate-border bg-surface-card p-3 text-center">
-          <p className="text-2xl font-bold text-primary">{todayOps}</p>
-          <p className="text-xs text-slate-muted">{t("todayOperations")}</p>
+        <div className="mc-stat-primary flex-1">
+          <p className="mc-stat-value">{todayOps}</p>
+          <p className="mc-stat-label">{t("todayOperations")}</p>
         </div>
         <Link
           href="/doctor/notifications"
-          className="relative flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-border bg-surface-card p-3"
+          className="mc-stat-neutral relative flex flex-1 items-center justify-center gap-2"
         >
           <Bell className="h-5 w-5 text-primary" />
           {notifications > 0 ? (
-            <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white">
+            <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-debt-text px-1 text-[10px] font-bold text-white">
               {notifications > 9 ? "9+" : notifications}
             </span>
           ) : null}
@@ -152,7 +165,7 @@ export function DoctorHomeDashboard() {
         </Link>
       </div>
 
-      <p className="text-sm text-slate-muted">{t("tasks")}</p>
+      <p className="text-sm font-semibold text-slate-muted">{t("tasks")}</p>
       <div className="grid gap-3">
         {quickActions.map(({ href, labelKey, icon }) => {
           const Icon = QUICK_ACTION_ICON_MAP[icon] ?? Wallet;
@@ -161,15 +174,16 @@ export function DoctorHomeDashboard() {
             key={href}
             href={href}
             className={cn(
-              "flex items-center gap-4 rounded-xl border border-slate-border bg-surface-card p-4 shadow-card transition-shadow active:scale-[0.98]"
+              "mc-hover-lift group flex items-center gap-4 rounded-xl border border-slate-border bg-surface-card p-4 shadow-card active:scale-[0.98]"
             )}
           >
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
               <Icon className="h-6 w-6" />
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="font-semibold text-slate-text">{t(labelKey)}</p>
             </div>
+            <ChevronLeft className="h-4 w-4 shrink-0 text-slate-muted/50 transition-transform group-hover:-translate-x-0.5" />
           </Link>
           );
         })}

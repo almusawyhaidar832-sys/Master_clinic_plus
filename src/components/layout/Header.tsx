@@ -29,21 +29,21 @@ export function Header({
   const { lang, toggleLang, t } = useLanguage();
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-border bg-surface-card/95 px-4 backdrop-blur sm:px-6">
+    <header className="mc-glass-header sticky top-0 z-30 flex h-16 items-center justify-between px-4 shadow-sm sm:px-6">
       {/* Left: menu + title */}
       <div className="flex items-center gap-3">
         {onMenuClick && (
           <button
             type="button"
             onClick={onMenuClick}
-            className="rounded-lg p-2 text-slate-muted hover:bg-surface lg:hidden"
+            className="rounded-lg p-2 text-slate-muted transition-colors hover:bg-surface lg:hidden"
             aria-label={t("ariaMenu")}
           >
             <Menu className="h-5 w-5" />
           </button>
         )}
         <div>
-          <h1 className="border-s-[3px] border-primary/80 ps-2.5 text-lg font-semibold text-slate-text">
+          <h1 className="border-s-[3px] border-primary/80 ps-2.5 text-lg font-bold tracking-tight text-slate-text">
             {title}
           </h1>
           {subtitle && (
@@ -103,12 +103,12 @@ export function Header({
         {/* Notifications */}
         <Link
           href="/dashboard/notifications"
-          className="relative rounded-lg p-2 text-slate-muted hover:bg-surface"
+          className="relative rounded-lg p-2 text-slate-muted transition-colors hover:bg-surface hover:text-primary"
           aria-label={t("ariaNotifications")}
         >
           <Bell className="h-5 w-5" />
           {notificationCount > 0 && (
-            <span className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
+            <span className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-debt-text text-[10px] font-bold text-white shadow-sm ring-2 ring-surface-card">
               {notificationCount > 9 ? "9+" : notificationCount}
             </span>
           )}
