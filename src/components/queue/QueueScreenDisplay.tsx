@@ -44,6 +44,7 @@ interface QueueScreenDisplayProps {
   onRepeatCall: (entry: QueueScreenEntry) => void;
   onTestSound: () => void;
   onInstalled?: () => void;
+  onCopyDiagnostics?: () => void;
 }
 
 function CalledCard({
@@ -194,6 +195,7 @@ export function QueueScreenDisplay({
   onRepeatCall,
   onTestSound,
   onInstalled,
+  onCopyDiagnostics,
 }: QueueScreenDisplayProps) {
   return (
     <div className="qs-bg-mesh relative flex h-full min-h-0 flex-col overflow-hidden">
@@ -371,16 +373,30 @@ export function QueueScreenDisplay({
             </div>
           </div>
 
-          {screenUrl && (
-            <button
-              type="button"
-              onClick={() => void navigator.clipboard?.writeText(screenUrl)}
-              className="mt-2 flex items-center justify-center gap-2 py-2 text-[10px] text-slate-400 hover:text-teal-600"
-            >
-              <Copy className="h-3 w-3" />
-              نسخ رابط الشاشة
-            </button>
-          )}
+        {(screenUrl || onCopyDiagnostics) && (
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+            {screenUrl && (
+              <button
+                type="button"
+                onClick={() => void navigator.clipboard?.writeText(screenUrl)}
+                className="flex items-center justify-center gap-2 py-2 text-[10px] text-slate-400 hover:text-teal-600"
+              >
+                <Copy className="h-3 w-3" />
+                نسخ رابط الشاشة
+              </button>
+            )}
+            {onCopyDiagnostics && (
+              <button
+                type="button"
+                onClick={onCopyDiagnostics}
+                className="flex items-center justify-center gap-2 py-2 text-[10px] text-slate-400 hover:text-teal-600"
+              >
+                <Copy className="h-3 w-3" />
+                نسخ معلومات التشخيص لإرسالها للدعم الفني
+              </button>
+            )}
+          </div>
+        )}
         </aside>
       </div>
 

@@ -213,6 +213,12 @@ function QueueScreenContent() {
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [audioUnlockHint, setAudioUnlockHint] = useState("اضغط أي مكان لتفعيل الصوت");
   const [audioDiagnosticMessage, setAudioDiagnosticMessage] = useState<string | null>(null);
+  const lastAudioDiagRef = useRef<{
+    unlocked: boolean;
+    htmlAudioOk: boolean;
+    webAudioOk: boolean;
+    speechSynthOk: boolean;
+  } | null>(null);
 
   const voiceEnabledRef = useRef(true);
   const prevCalledRef = useRef<Set<string>>(new Set());
@@ -510,6 +516,23 @@ function QueueScreenContent() {
         ]
       : called;
 
+  function buildDiagnosticsReport(): string {
+    const diag = lastAudioDiagRef.current;
+    const w = typeof window !== "undefined" ? window : null;
+    const lines = [
+      `الرابط: ${typeof window !== "undefined" ? window.location.href : ""}`,
+      `المتصفح (User-Agent): ${w?.navigator.userAgent ?? "غير متوفر"}`,
+      `دعم speechSynthesis: ${w && "speechSynthesis" in w ? "نعم" : "لا"}`,
+      `دعم AudioContext: ${w && (w.AudioContext || (w as unknown as { webkitAudioContext?: unknown }).webkitAudioContext) ? "نعم" : "لا"}`,
+      `دعم Service Worker: ${w && "serviceWorker" in w.navigator ? "نعم" : "لا"}`,
+      `عرض الشاشة: ${w ? `${w.innerWidth}x${w.innerHeight}` : "غير متوفر"}`,
+      diag
+        ? `آخر نتيجة اختبار صوت: ${diag.unlocked ? "نجح" : "فشل"} (مشغّل الصوت: ${diag.htmlAudioOk ? "نعم" : "لا"} / الصوت الرقمي: ${diag.webAudioOk ? "نعم" : "لا"} / تحويل النص لصوت: ${diag.speechSynthOk ? "نعم" : "لا"})`
+        : "لم يُجرَ اختبار صوت بعد",
+    ];
+    return lines.join("\n");
+  }
+
   return (
     <QueueScreenTvFit>
       <QueueScreenDisplay
@@ -540,6 +563,7 @@ function QueueScreenContent() {
         setAudioDiagnosticMessage("جارٍ اختبار الصوت...");
         void (async () => {
           const diag = await unlockSpeechAudioDiagnostics().catch(() => null);
+          lastAudioDiagRef.current = diag;
           if (diag?.unlocked) setAudioUnlocked(true);
 
           if (displayCalled[0]) {
@@ -576,6 +600,9 @@ function QueueScreenContent() {
         })();
       }}
       onInstalled={() => setInstalledApp(true)}
+      onCopyDiagnostics={() =>
+        void navigator.clipboard?.writeText(buildDiagnosticsReport())
+      }
     />
     </QueueScreenTvFit>
   );
