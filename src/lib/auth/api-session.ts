@@ -6,6 +6,11 @@ import {
 import { getAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 import { resolvePortalFromRequest } from "@/lib/auth/api-portal";
+import {
+  loadPlatformAdminProfile,
+  overlayActingClinic,
+  resolveDeveloperActingClinicId,
+} from "@/lib/auth/developer-impersonation";
 
 type CookieStore = {
   getAll: () => { name: string; value: string }[];
@@ -53,11 +58,31 @@ export async function getApiSessionUser(req?: Request) {
   return getCurrentUser(supabase);
 }
 
-export async function getApiCallerProfile(req?: Request) {
-  const user = await getApiSessionUser(req);
-  if (!user) return null;
+export async function getApiActiveClinicId(req?: Request): Promise<string | null> {
+  const actingClinicId = await resolveDeveloperActingClinicId(req);
+  if (actingClinicId) return actingClinicId;
 
+  const caller = await getApiCallerProfile(req);
+  return caller?.clinic_id ?? null;
+}
+
+export async function getApiCallerProfile(req?: Request) {
+  const actingClinicId = await resolveDeveloperActingClinicId(req);
   const profileSelect = "id, role, clinic_id, full_name";
+  const user = await getApiSessionUser(req);
+
+  if (!user) {
+    if (!actingClinicId) return null;
+    try {
+      const admin = getAdminClient();
+      const platformProfile = await loadPlatformAdminProfile(admin);
+      if (!platformProfile) return null;
+      return overlayActingClinic(platformProfile, actingClinicId);
+    } catch (err) {
+      console.error("[getApiCallerProfile] impersonation profile failed:", err);
+      return null;
+    }
+  }
 
   try {
     const supabase = await createApiSessionClient(req);
@@ -67,7 +92,9 @@ export async function getApiCallerProfile(req?: Request) {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (rlsProfile) return rlsProfile;
+    if (rlsProfile) {
+      return overlayActingClinic(rlsProfile, actingClinicId);
+    }
   } catch (err) {
     console.error("[getApiCallerProfile] RLS profile read failed:", err);
   }
@@ -85,7 +112,8 @@ export async function getApiCallerProfile(req?: Request) {
       return null;
     }
 
-    return profile;
+    if (!profile) return null;
+    return overlayActingClinic(profile, actingClinicId);
   } catch (err) {
     console.error("[getApiCallerProfile] admin client failed:", err);
     return null;

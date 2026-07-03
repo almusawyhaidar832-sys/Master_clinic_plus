@@ -81,12 +81,16 @@ export default function DeveloperClinicDetailPage() {
     const res = await fetch("/api/developer/enter-clinic", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clinicId: id, linkProfile: false }),
+      body: JSON.stringify({ clinicId: id, linkProfile: true }),
     });
     const data = await res.json();
     setEntering(false);
     if (!res.ok) {
       setMsg({ ok: false, text: data.error });
+      return;
+    }
+    if (data.sessionWarning) {
+      setMsg({ ok: false, text: data.sessionWarning });
       return;
     }
     window.location.href = "/dashboard";

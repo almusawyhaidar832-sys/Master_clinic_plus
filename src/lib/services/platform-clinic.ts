@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   isValidSanitizedUsername,
   sanitizeUsername,
+  usernameHasInvalidEmailChars,
   usernameToAuthEmail,
 } from "@/lib/auth/credentials";
 import { getAuthAdmin, verifyPasswordSignIn } from "@/lib/supabase/auth-helpers";
@@ -67,6 +68,14 @@ export async function createPlatformClinic(
   }
 
   const safeUsername = sanitizeUsername(admin_username);
+  if (usernameHasInvalidEmailChars(admin_username)) {
+    return {
+      ok: false,
+      error:
+        "لا تستخدم @ أو بريد إلكتروني — اسم الدخول إنجليزي فقط مثل owner1 أو clinic_admin",
+      status: 400,
+    };
+  }
   if (!isValidSanitizedUsername(safeUsername)) {
     return {
       ok: false,
@@ -84,6 +93,27 @@ export async function createPlatformClinic(
 
   if (existing) {
     return { ok: false, error: "اسم المستخدم محجوز", status: 409 };
+  }
+
+  const authEmail = usernameToAuthEmail(safeUsername);
+
+  const { data: authList } = await admin.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
+  const orphanAuth = authList?.users?.find(
+    (u) => u.email?.toLowerCase() === authEmail.toLowerCase()
+  );
+  if (orphanAuth) {
+    const { data: orphanProfile } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("id", orphanAuth.id)
+      .maybeSingle();
+    if (orphanProfile) {
+      return { ok: false, error: "اسم المستخدم محجوز", status: 409 };
+    }
+    await getAuthAdmin(admin).deleteUser(orphanAuth.id);
   }
 
   const { data: clinic, error: clinicErr } = await admin
@@ -127,7 +157,6 @@ export async function createPlatformClinic(
       .eq("id", clinic.id);
   }
 
-  const authEmail = usernameToAuthEmail(safeUsername);
   const { data: authData, error: authErr } = await getAuthAdmin(admin).createUser(
     {
       email: authEmail,

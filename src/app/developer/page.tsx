@@ -11,6 +11,11 @@ import {
   MessageCircle,
   Activity,
 } from "lucide-react";
+import {
+  isValidSanitizedUsername,
+  sanitizeUsername,
+  usernameHasInvalidEmailChars,
+} from "@/lib/auth/credentials";
 import { SPECIALTY_LABELS } from "@/types/modules";
 import type { ClinicSpecialty } from "@/types/modules";
 import {
@@ -76,6 +81,10 @@ export default function DeveloperDashboardPage() {
   const [adminName, setAdminName] = useState("");
   const [adminUsername, setAdminUsername] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  const [adminPasswordConfirm, setAdminPasswordConfirm] = useState("");
+
+  const previewUsername = sanitizeUsername(adminUsername);
+  const usernamePreviewValid = isValidSanitizedUsername(previewUsername);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,6 +156,29 @@ export default function DeveloperDashboardPage() {
     e.preventDefault();
     setSaving(true);
     setMsg(null);
+
+    if (usernameHasInvalidEmailChars(adminUsername)) {
+      setMsg({
+        ok: false,
+        text: "لا تستخدم @ أو بريد — اسم الدخول إنجليزي فقط مثل owner1",
+      });
+      setSaving(false);
+      return;
+    }
+    if (!usernamePreviewValid) {
+      setMsg({
+        ok: false,
+        text: "اسم المستخدم: 3–32 حرفاً إنجليزياً (a-z، أرقام، . _ -)",
+      });
+      setSaving(false);
+      return;
+    }
+    if (adminPassword !== adminPasswordConfirm) {
+      setMsg({ ok: false, text: "كلمة المرور وتأكيدها غير متطابقين" });
+      setSaving(false);
+      return;
+    }
+
     const res = await fetch("/api/developer/clinics", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -167,7 +199,11 @@ export default function DeveloperDashboardPage() {
       setMsg({ ok: false, text: json.error ?? "فشل الإنشاء" });
       return;
     }
-    setMsg({ ok: true, text: json.message ?? "تم إنشاء العيادة" });
+    const loginUser = String(json.admin_username ?? previewUsername);
+    setMsg({
+      ok: true,
+      text: `تم إنشاء العيادة. سجّل الدخول من /login باليوزر: ${loginUser} — انسخه بالضبط مع كلمة المرور التي أدخلتها.`,
+    });
     setShowForm(false);
     setClinicName("");
     setClinicNameAr("");
@@ -175,6 +211,7 @@ export default function DeveloperDashboardPage() {
     setAdminName("");
     setAdminUsername("");
     setAdminPassword("");
+    setAdminPasswordConfirm("");
     void load();
   }
 
@@ -333,15 +370,27 @@ export default function DeveloperDashboardPage() {
                 required
               />
               <p className="text-xs text-slate-500">
-                إنجليزي فقط (مو عربي) — يُستخدم لتسجيل دخول مالك العيادة
+                إنجليزي فقط — بدون @ أو بريد. اسم الدخول الفعلي:{" "}
+                <code className="text-amber-400" dir="ltr">
+                  {usernamePreviewValid ? previewUsername : "—"}
+                </code>
               </p>
             </div>
             <input
               type="password"
-              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white sm:col-span-2"
+              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
               placeholder="كلمة مرور المدير (6+)"
               value={adminPassword}
               onChange={(e) => setAdminPassword(e.target.value)}
+              required
+              minLength={6}
+            />
+            <input
+              type="password"
+              className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white"
+              placeholder="تأكيد كلمة المرور"
+              value={adminPasswordConfirm}
+              onChange={(e) => setAdminPasswordConfirm(e.target.value)}
               required
               minLength={6}
             />

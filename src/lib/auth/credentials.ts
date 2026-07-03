@@ -33,6 +33,11 @@ export function isValidSanitizedUsername(safe: string): boolean {
   return safe.length >= 3 && safe.length <= 32;
 }
 
+/** يمنع إدخال بريد كاسم مستخدم — @ يُحذف عند التنظيف فيصبح الاسم مربكاً */
+export function usernameHasInvalidEmailChars(raw: string): boolean {
+  return raw.includes("@");
+}
+
 /** Internal auth email for username-only accounts */
 export function usernameToAuthEmail(username: string): string {
   const safe = sanitizeUsername(username);

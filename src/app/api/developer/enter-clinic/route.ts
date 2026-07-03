@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   DEVELOPER_COOKIE,
   developerCookieOptions,
-  getPlatformDeveloperEmail,
   requireDeveloperSession,
   signDeveloperToken,
 } from "@/lib/auth/developer-gate";
+import { establishImpersonationDashboardSession } from "@/lib/auth/developer-impersonation";
 import { getAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(request: NextRequest) {
@@ -19,7 +19,6 @@ export async function POST(request: NextRequest) {
     linkProfile?: boolean;
   };
   const clinicId = body.clinicId?.trim();
-  /** ربط profiles.clinic_id ضروري ليعمل الداشبورد بالعيادة المختارة */
   const linkProfile = body.linkProfile !== false;
 
   if (!clinicId) {
@@ -44,23 +43,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (linkProfile) {
-    const devEmail = getPlatformDeveloperEmail();
-    const { data: authList } = await admin.auth.admin.listUsers({
-      page: 1,
-      perPage: 200,
-    });
-    const authUser = authList?.users?.find(
-      (u) => u.email?.toLowerCase() === devEmail
-    );
-    if (authUser) {
-      await admin
-        .from("profiles")
-        .update({ clinic_id: clinicId })
-        .eq("id", authUser.id);
-    }
-  }
-
   const token = await signDeveloperToken({
     email: session.email,
     actingClinicId: clinicId,
@@ -70,14 +52,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "تعذر تحديث الجلسة" }, { status: 500 });
   }
 
+  const clinicName =
+    (clinic as { name_ar?: string; name?: string }).name_ar ||
+    (clinic as { name?: string }).name;
+
+  let sessionWarning: string | undefined;
+  let authCookies: { name: string; value: string; options?: object }[] = [];
+
+  if (linkProfile) {
+    const sessionResult = await establishImpersonationDashboardSession(
+      request,
+      clinicId
+    );
+    if (!sessionResult.ok) {
+      sessionWarning = sessionResult.error;
+    } else {
+      authCookies = sessionResult.cookies;
+    }
+  }
+
   const res = NextResponse.json({
     ok: true,
     clinicId,
-    clinicName: (clinic as { name_ar?: string; name?: string }).name_ar ||
-      (clinic as { name?: string }).name,
+    clinicName,
     redirect: "/dashboard",
     impersonation: true,
+    sessionWarning,
   });
   res.cookies.set(DEVELOPER_COOKIE, token, developerCookieOptions());
+  for (const { name, value, options } of authCookies) {
+    res.cookies.set(name, value, options);
+  }
+
   return res;
 }

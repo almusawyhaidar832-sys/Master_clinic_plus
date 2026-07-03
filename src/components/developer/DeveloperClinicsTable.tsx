@@ -201,6 +201,10 @@ export function DeveloperClinicsTable({
       onMessage({ ok: false, text: data.error ?? "تعذر الدخول" });
       return;
     }
+    if (data.sessionWarning) {
+      onMessage({ ok: false, text: data.sessionWarning });
+      return;
+    }
     window.location.href = data.redirect ?? "/dashboard";
   }
 
