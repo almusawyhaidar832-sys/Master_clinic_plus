@@ -1,6 +1,7 @@
 "use client";
 
 import { splitPatientCallSpeech } from "@/lib/queue/arabic-speech-text";
+import { prefetchCloudTts } from "@/lib/queue/cloud-speech";
 import {
   installSpeechGestureUnlock,
   isSpeechGestureUnlocked,
@@ -28,28 +29,52 @@ let speaking = false;
 /** منع تكرار نفس النداء عند وصول بثّين أو استطلاع متزامن */
 let lastAnnouncedKey = "";
 let lastAnnouncedAt = 0;
-const CALL_DEDUP_MS = 8_000;
-const RECALL_DEDUP_MS = 2_500;
+const CALL_DEDUP_MS = 4_000;
+
+function jobParts(job: AnnouncementJob) {
+  return splitPatientCallSpeech(
+    job.patientName,
+    job.doctorName,
+    "queue_screen",
+    job.gender
+  );
+}
 
 function announcementDedupeKey(job: AnnouncementJob): string {
   const base =
     job.entryId?.trim() || `${job.patientName.trim()}\0${job.doctorName.trim()}`;
-  if (job.recall) {
-    return `${base}:recall:${Math.floor(Date.now() / RECALL_DEDUP_MS)}`;
-  }
   return `${base}:call`;
 }
 
 function shouldSkipDuplicateAnnouncement(job: AnnouncementJob): boolean {
+  if (job.recall) return false;
   const key = announcementDedupeKey(job);
   const now = Date.now();
-  const windowMs = job.recall ? RECALL_DEDUP_MS : CALL_DEDUP_MS;
-  if (key === lastAnnouncedKey && now - lastAnnouncedAt < windowMs) {
+  if (key === lastAnnouncedKey && now - lastAnnouncedAt < CALL_DEDUP_MS) {
     return true;
   }
   lastAnnouncedKey = key;
   lastAnnouncedAt = now;
   return false;
+}
+
+/** بيب + نداء معاً — لا ننتظر انتهاء البيب قبل طلب/تشغيل TTS */
+async function playAnnouncement(job: AnnouncementJob, interrupt = false): Promise<void> {
+  const parts = jobParts(job);
+  prefetchCloudTts(parts);
+
+  if (interrupt) {
+    stopAllSpeech();
+  }
+
+  await Promise.all([
+    playAttentionBeep(),
+    speakPatientCallParts(parts, {
+      useCloud: true,
+      skipCloudQueue: true,
+      clearQueue: interrupt,
+    }),
+  ]);
 }
 
 async function drainQueue() {
@@ -59,27 +84,27 @@ async function drainQueue() {
 
   while (pendingJobs.length > 0) {
     const job = pendingJobs.shift()!;
-    const parts = splitPatientCallSpeech(
-      job.patientName,
-      job.doctorName,
-      "queue_screen",
-      job.gender
-    );
-
-    await playAttentionBeep();
-    // Cloud TTS أولاً دائماً — أعلى توافق مع متصفحات شاشات التلفاز التي
-    // غالباً لا تملك speechSynthesis أو أصواتاً عربية موثوقة. النطق
-    // المحلي يُستخدم تلقائياً كخط رجوع إذا فشلت السحابة (انظر داخل
-    // speakPatientCallParts).
-    await speakPatientCallParts(parts, { useCloud: true });
-    await new Promise((r) => setTimeout(r, 400));
+    await playAnnouncement(job);
   }
 
   speaking = false;
 }
 
+function enqueueImmediate(job: AnnouncementJob) {
+  pendingJobs.length = 0;
+  speaking = false;
+  lastAnnouncedKey = "";
+  lastAnnouncedAt = 0;
+  void playAnnouncement(job, true);
+}
+
 function enqueue(job: AnnouncementJob) {
+  if (job.recall) {
+    enqueueImmediate(job);
+    return;
+  }
   if (shouldSkipDuplicateAnnouncement(job)) return;
+  prefetchCloudTts(jobParts(job));
   pendingJobs.push(job);
   void drainQueue();
 }
@@ -113,21 +138,12 @@ export function repeatQueueScreenAnnouncement(
   gender?: AnnouncementJob["gender"]
 ): void {
   if (!enabled || typeof window === "undefined") return;
-  stopAllSpeech();
-  pendingJobs.length = 0;
-  speaking = false;
-  lastAnnouncedKey = "";
-  lastAnnouncedAt = 0;
-  const parts = splitPatientCallSpeech(
+  enqueueImmediate({
     patientName,
     doctorName,
-    "queue_screen",
-    gender
-  );
-  void (async () => {
-    await playAttentionBeep();
-    await speakPatientCallParts(parts, { clearQueue: true, useCloud: true });
-  })();
+    gender,
+    recall: true,
+  });
 }
 
 export function stopQueueScreenSpeech(): void {
@@ -153,16 +169,11 @@ export function warmUpSpeechVoices(onReady?: () => void, onUnlocked?: () => void
 
   prepareSpeechAuto();
 
-  void waitForVoices(4000).then(() => {
+  void waitForVoices(800).then(() => {
     onReady?.();
     if (isSpeechGestureUnlocked()) void drainQueue();
   });
 
-  // شاشات التلفاز (خصوصاً Tizen/webOS/Android TV) غالباً تسمح بتشغيل
-  // الصوت تلقائياً بدون أي تفاعل من المستخدم لأنها أجهزة عرض سلبية —
-  // نحاول التفعيل فوراً عند التحميل دون انتظار لمسة/ضغطة. إذا رفض
-  // المتصفح ذلك (سياسات التشغيل التلقائي الصارمة)، تبقى آلية تفعيل
-  // اللمسة/الريموت أدناه تعمل كخط رجوع طبيعي.
   let cancelled = false;
   const tryAutoUnlock = () => {
     void unlockSpeechAudio().then((ok) => {
@@ -172,15 +183,13 @@ export function warmUpSpeechVoices(onReady?: () => void, onUnlocked?: () => void
     });
   };
   tryAutoUnlock();
-  // إعادة محاولة دورية — بعض شاشات التلفاز تحتاج وقتاً حتى يصبح عنصر
-  // <audio> جاهزاً للتشغيل بعد التحميل مباشرة
   const autoUnlockRetry = setInterval(() => {
     if (isSpeechGestureUnlocked()) {
       clearInterval(autoUnlockRetry);
       return;
     }
     tryAutoUnlock();
-  }, 4000);
+  }, 1500);
 
   const removeGestureUnlock = installSpeechGestureUnlock(() => {
     onUnlocked?.();

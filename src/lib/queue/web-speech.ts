@@ -19,7 +19,16 @@ import {
 export type SpeechPlayOptions = {
   useCloud?: boolean;
   clearQueue?: boolean;
+  /** تشغيل فوري دون انتظار طابور السحابة أو المتصفح — لشاشة الانتظار */
+  skipCloudQueue?: boolean;
 };
+
+function isQueueScreenPath(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/queue-screen")
+  );
+}
 
 let audioCtx: AudioContext | null = null;
 let autoPrepared = false;
@@ -160,7 +169,7 @@ export async function unlockSpeechAudioDiagnostics(): Promise<AudioUnlockDiagnos
   }
 
   prepareSpeechAuto();
-  await waitForVoices(5000);
+  await waitForVoices(isQueueScreenPath() ? 300 : 5000);
   try {
     getSynth()?.resume();
     getSynth()?.getVoices();
@@ -247,7 +256,7 @@ function pickArabicVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice |
 
 async function resolveArabicVoice(): Promise<SpeechSynthesisVoice | null> {
   if (cachedArabicVoice) return cachedArabicVoice;
-  const voices = await waitForVoices();
+  const voices = await waitForVoices(isQueueScreenPath() ? 400 : 2000);
   cachedArabicVoice = pickArabicVoice(voices);
   return cachedArabicVoice;
 }
@@ -372,18 +381,26 @@ export async function speakPatientCallParts(
   parts: PatientCallSpeechParts,
   options?: SpeechPlayOptions
 ): Promise<void> {
-  return enqueueBrowserSpeech(async () => {
+  const run = async () => {
     if (options?.clearQueue) stopAllSpeech();
     prepareSpeechAuto();
 
     if (options?.useCloud !== false) {
-      const usedCloud = await speakViaCloudTtsParts(parts);
+      const usedCloud = await speakViaCloudTtsParts(parts, {
+        skipQueue: options?.skipCloudQueue,
+      });
       if (usedCloud) return;
     }
 
     const voice = await resolveArabicVoice();
     await speakPart(joinPatientCallSpeech(parts), voice, BROWSER_SPEECH_RATE, true);
-  }, options);
+  };
+
+  if (options?.skipCloudQueue) {
+    return run();
+  }
+
+  return enqueueBrowserSpeech(run, options);
 }
 
 export async function speakPatientCallImmediate(

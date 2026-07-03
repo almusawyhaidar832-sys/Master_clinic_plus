@@ -10,6 +10,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { clinicQueueChannelName, clinicQueueScreenChannelName } from "@/lib/queue/realtime-client";
+import { prefetchCloudTts } from "@/lib/queue/cloud-speech";
+import { splitPatientCallSpeech } from "@/lib/queue/arabic-speech-text";
 import {
   repeatQueueScreenAnnouncement,
   speakQueueScreenAnnouncement,
@@ -414,6 +416,14 @@ function QueueScreenContent() {
         recall?: boolean;
       };
       if (p.name && p.doctorName) {
+        prefetchCloudTts(
+          splitPatientCallSpeech(
+            p.name,
+            p.doctorName,
+            "queue_screen",
+            p.gender ?? null
+          )
+        );
         if (p.entryId) {
           prevCalledRef.current.add(p.entryId);
         }

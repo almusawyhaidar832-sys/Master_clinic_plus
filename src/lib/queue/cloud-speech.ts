@@ -12,6 +12,45 @@ const CLOUD_TTS_TIMEOUT_MS = 18_000;
 const CLOUD_TTS_ATTEMPTS = 3;
 const DOCTOR_CLOUD_TTS_TIMEOUT_MS = 8_000;
 const DOCTOR_CLOUD_TTS_ATTEMPTS = 1;
+/** شاشة الانتظار — نداء فوري: مهلة قصيرة ومحاولة واحدة */
+const QUEUE_SCREEN_TTS_TIMEOUT_MS = 4_500;
+const QUEUE_SCREEN_TTS_ATTEMPTS = 1;
+
+const ttsBlobCache = new Map<string, Blob>();
+const TTS_CACHE_MAX = 24;
+
+function isQueueScreen(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/queue-screen")
+  );
+}
+
+function ttsCacheKey(body: Record<string, unknown>): string {
+  if (body.parts && typeof body.parts === "object") {
+    return joinPatientCallSpeech(body.parts as PatientCallSpeechParts);
+  }
+  return String(body.text ?? "").trim();
+}
+
+function storeTtsBlob(key: string, blob: Blob): void {
+  if (!key) return;
+  if (ttsBlobCache.size >= TTS_CACHE_MAX) {
+    const oldest = ttsBlobCache.keys().next().value;
+    if (oldest) ttsBlobCache.delete(oldest);
+  }
+  ttsBlobCache.set(key, blob);
+}
+
+/** يحمّل الصوت مسبقاً — يُستدعى عند وصول النداء قبل التشغيل */
+export function prefetchCloudTts(parts: PatientCallSpeechParts): void {
+  if (typeof window === "undefined") return;
+  const key = joinPatientCallSpeech(parts);
+  if (!key || ttsBlobCache.has(key)) return;
+  void fetchCloudAudio({ parts }).then((blob) => {
+    if (blob) storeTtsBlob(key, blob);
+  });
+}
 
 function isDoctorPortal(): boolean {
   return (
@@ -111,8 +150,16 @@ async function fetchCloudAudioOnce(
 }
 
 async function fetchCloudAudio(body: Record<string, unknown>): Promise<Blob | null> {
-  const attempts = isDoctorPortal() ? DOCTOR_CLOUD_TTS_ATTEMPTS : CLOUD_TTS_ATTEMPTS;
-  const timeoutMs = isDoctorPortal() ? DOCTOR_CLOUD_TTS_TIMEOUT_MS : CLOUD_TTS_TIMEOUT_MS;
+  const attempts = isDoctorPortal()
+    ? DOCTOR_CLOUD_TTS_ATTEMPTS
+    : isQueueScreen()
+      ? QUEUE_SCREEN_TTS_ATTEMPTS
+      : CLOUD_TTS_ATTEMPTS;
+  const timeoutMs = isDoctorPortal()
+    ? DOCTOR_CLOUD_TTS_TIMEOUT_MS
+    : isQueueScreen()
+      ? QUEUE_SCREEN_TTS_TIMEOUT_MS
+      : CLOUD_TTS_TIMEOUT_MS;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const controller = new AbortController();
@@ -130,7 +177,7 @@ async function fetchCloudAudio(body: Record<string, unknown>): Promise<Blob | nu
       window.clearTimeout(timer);
     }
 
-    if (attempt < attempts - 1) {
+    if (attempt < attempts - 1 && !isQueueScreen()) {
       await new Promise((r) => window.setTimeout(r, 400 * (attempt + 1)));
     }
   }
@@ -139,8 +186,20 @@ async function fetchCloudAudio(body: Record<string, unknown>): Promise<Blob | nu
 }
 
 async function playCloudBody(body: Record<string, unknown>): Promise<boolean> {
+  const key = ttsCacheKey(body);
+  const cached = key ? ttsBlobCache.get(key) : undefined;
+  if (cached) {
+    try {
+      await playAudioBlob(cached);
+      return true;
+    } catch {
+      ttsBlobCache.delete(key);
+    }
+  }
+
   const blob = await fetchCloudAudio(body);
   if (!blob) return false;
+  if (key) storeTtsBlob(key, blob);
   try {
     await playAudioBlob(blob);
     return true;
@@ -159,18 +218,25 @@ export function speakViaCloudTtsText(text: string): Promise<boolean> {
 
 /** نداء مراجع — SSML مشكّل (نفس إعدادات المحاسب / شاشة الانتظار) */
 export function speakViaCloudTtsParts(
-  parts: PatientCallSpeechParts
+  parts: PatientCallSpeechParts,
+  options?: { skipQueue?: boolean }
 ): Promise<boolean> {
+  const run = async (): Promise<boolean> => {
+    const usedParts = await playCloudBody({ parts });
+    if (usedParts) return true;
+    // على شاشة الانتظار لا نعيد الطلب بنص مختلف — ننتقل فوراً للنطق المحلي
+    if (isQueueScreen()) return false;
+    const text = joinPatientCallSpeech(parts);
+    return playCloudBody({ text });
+  };
+
+  if (options?.skipQueue) {
+    return run();
+  }
+
   return new Promise((resolve) => {
     enqueueSpeech(async () => {
-      const usedParts = await playCloudBody({ parts });
-      if (usedParts) {
-        resolve(true);
-        return;
-      }
-
-      const text = joinPatientCallSpeech(parts);
-      resolve(await playCloudBody({ text }));
+      resolve(await run());
     });
   });
 }
