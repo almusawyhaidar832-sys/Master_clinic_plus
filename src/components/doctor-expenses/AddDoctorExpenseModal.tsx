@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { X, Upload, RefreshCw } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
 import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
@@ -19,7 +18,6 @@ interface AddDoctorExpenseModalProps {
   onSaved: () => void;
 }
 
-const BUCKET = "doctor-expense-invoices";
 const MAX_BYTES = 10 * 1024 * 1024;
 
 export function AddDoctorExpenseModal({
@@ -55,66 +53,34 @@ export function AddDoctorExpenseModal({
       return;
     }
 
-    setSaving(true);
-    const supabase = createClient();
+    if (file && file.size > MAX_BYTES) {
+      setError("حجم الملف أكبر من 10 ميجابايت");
+      return;
+    }
 
-    let storagePath: string | null = null;
-    let fileName: string | null = null;
-    let mimeType: string | null = null;
+    setSaving(true);
 
     try {
+      const form = new FormData();
+      form.append("doctor_id", doctorId);
+      form.append("amount", String(amt));
+      form.append("percentage_split", String(split));
+      if (description.trim()) {
+        form.append("description_ar", description.trim());
+      }
       if (file && file.size > 0) {
-        if (file.size > MAX_BYTES) {
-          setError("حجم الملف أكبر من 10 ميجابايت");
-          setSaving(false);
-          return;
-        }
-        const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-        storagePath = `${clinicId}/${doctorId}/${crypto.randomUUID()}.${ext}`;
-        fileName = file.name;
-        mimeType = file.type || null;
-
-        const { error: uploadErr } = await supabase.storage
-          .from(BUCKET)
-          .upload(storagePath, file, {
-            contentType: file.type || "image/jpeg",
-            upsert: false,
-          });
-
-        if (uploadErr) {
-          setError(
-            uploadErr.message.includes("Bucket not found")
-              ? "أنشئ bucket باسم doctor-expense-invoices في Storage"
-              : uploadErr.message
-          );
-          setSaving(false);
-          return;
-        }
+        form.append("file", file);
       }
 
       const res = await fetch("/api/doctor-expenses", {
         method: "POST",
         credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          ...authPortalHeaders("accountant"),
-        },
-        body: JSON.stringify({
-          doctor_id: doctorId,
-          amount: amt,
-          percentage_split: split,
-          description_ar: description.trim() || null,
-          invoice_storage_path: storagePath,
-          invoice_file_name: fileName,
-          invoice_mime_type: mimeType,
-        }),
+        headers: authPortalHeaders("accountant"),
+        body: form,
       });
       const json = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        if (storagePath) {
-          await supabase.storage.from(BUCKET).remove([storagePath]);
-        }
         setError((json as { error?: string }).error ?? "تعذر حفظ الفاتورة");
         setSaving(false);
         return;

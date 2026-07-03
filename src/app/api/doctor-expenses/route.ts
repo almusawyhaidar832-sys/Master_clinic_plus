@@ -11,11 +11,50 @@ import {
 } from "@/lib/services/doctor-expense-deduction";
 import { archiveDoctorExpenseToHistory } from "@/lib/services/invoice-archive";
 
+const BUCKET = "doctor-expense-invoices";
+const MAX_BYTES = 10 * 1024 * 1024;
+
+async function uploadInvoiceFile(
+  admin: ReturnType<typeof getAdminClient>,
+  clinicId: string,
+  doctorId: string,
+  file: File
+): Promise<{ storagePath: string; fileName: string; mimeType: string | null }> {
+  if (file.size > MAX_BYTES) {
+    throw new Error("FILE_TOO_LARGE");
+  }
+
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const storagePath = `${clinicId}/${doctorId}/${crypto.randomUUID()}.${ext}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  const { error: uploadErr } = await admin.storage.from(BUCKET).upload(storagePath, buffer, {
+    contentType: file.type || "image/jpeg",
+    upsert: false,
+  });
+
+  if (uploadErr) {
+    throw new Error(
+      uploadErr.message.includes("Bucket not found")
+        ? "أنشئ bucket باسم doctor-expense-invoices في Storage"
+        : uploadErr.message
+    );
+  }
+
+  return {
+    storagePath,
+    fileName: file.name,
+    mimeType: file.type || null,
+  };
+}
+
 /**
  * POST /api/doctor-expenses
  * تسجيل فاتورة صرفية طبيب + حركات مالية (خصم من رصيد الطبيب + حصة العيادة)
  */
 export async function POST(req: NextRequest) {
+  let uploadedPath: string | null = null;
+
   try {
     const caller = await getApiCallerProfile(req);
     if (!caller) {
@@ -31,13 +70,61 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "حسابك غير مربوط بعيادة" }, { status: 400 });
     }
 
-    const body = await req.json();
-    const doctorId = String(body.doctor_id ?? "");
-    const amount = Number(body.amount);
-    const percentageSplit = Number(body.percentage_split ?? 50);
-    const descriptionAr = String(body.description_ar ?? "").trim() || null;
-    const expenseDate =
-      String(body.expense_date ?? "") || new Date().toISOString().slice(0, 10);
+    const contentType = req.headers.get("content-type") ?? "";
+    const isMultipart = contentType.includes("multipart/form-data");
+
+    let doctorId: string;
+    let amount: number;
+    let percentageSplit: number;
+    let descriptionAr: string | null;
+    let expenseDate: string;
+    let invoiceStoragePath: string | null = null;
+    let invoiceFileName: string | null = null;
+    let invoiceMimeType: string | null = null;
+
+    const admin = getAdminClient();
+
+    if (isMultipart) {
+      const form = await req.formData();
+      const file = form.get("file");
+      doctorId = String(form.get("doctor_id") ?? "");
+      amount = Number(form.get("amount"));
+      percentageSplit = Number(form.get("percentage_split") ?? 50);
+      descriptionAr = String(form.get("description_ar") ?? "").trim() || null;
+      expenseDate =
+        String(form.get("expense_date") ?? "") || new Date().toISOString().slice(0, 10);
+
+      if (file instanceof File && file.size > 0) {
+        try {
+          const uploaded = await uploadInvoiceFile(admin, clinicId, doctorId, file);
+          uploadedPath = uploaded.storagePath;
+          invoiceStoragePath = uploaded.storagePath;
+          invoiceFileName = uploaded.fileName;
+          invoiceMimeType = uploaded.mimeType;
+        } catch (uploadErr) {
+          const msg =
+            uploadErr instanceof Error ? uploadErr.message : "تعذر رفع صورة الفاتورة";
+          if (msg === "FILE_TOO_LARGE") {
+            return NextResponse.json(
+              { error: "حجم الملف أكبر من 10 ميجابايت" },
+              { status: 400 }
+            );
+          }
+          return NextResponse.json({ error: msg }, { status: 500 });
+        }
+      }
+    } else {
+      const body = await req.json();
+      doctorId = String(body.doctor_id ?? "");
+      amount = Number(body.amount);
+      percentageSplit = Number(body.percentage_split ?? 50);
+      descriptionAr = String(body.description_ar ?? "").trim() || null;
+      expenseDate =
+        String(body.expense_date ?? "") || new Date().toISOString().slice(0, 10);
+      invoiceStoragePath = body.invoice_storage_path ?? null;
+      invoiceFileName = body.invoice_file_name ?? null;
+      invoiceMimeType = body.invoice_mime_type ?? null;
+    }
 
     if (!doctorId) {
       return NextResponse.json({ error: "الطبيب مطلوب" }, { status: 400 });
@@ -53,8 +140,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "نسبة الطبيب بين 0 و 100" }, { status: 400 });
     }
 
-    const admin = getAdminClient();
-
     const { data: doctor } = await admin
       .from("doctors")
       .select("id, full_name_ar")
@@ -63,6 +148,9 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (!doctor) {
+      if (uploadedPath) {
+        await admin.storage.from(BUCKET).remove([uploadedPath]);
+      }
       return NextResponse.json({ error: "الطبيب غير موجود في العيادة" }, { status: 404 });
     }
 
@@ -78,15 +166,18 @@ export async function POST(req: NextRequest) {
         percentage_split: percentageSplit,
         description_ar: descriptionAr,
         expense_date: expenseDate,
-        invoice_storage_path: body.invoice_storage_path ?? null,
-        invoice_file_name: body.invoice_file_name ?? null,
-        invoice_mime_type: body.invoice_mime_type ?? null,
+        invoice_storage_path: invoiceStoragePath,
+        invoice_file_name: invoiceFileName,
+        invoice_mime_type: invoiceMimeType,
         created_by: caller.id,
       })
       .select("id")
       .single();
 
     if (insertErr || !expense?.id) {
+      if (uploadedPath) {
+        await admin.storage.from(BUCKET).remove([uploadedPath]);
+      }
       return NextResponse.json(
         { error: insertErr?.message ?? "تعذر حفظ الفاتورة" },
         { status: 500 }
@@ -106,6 +197,9 @@ export async function POST(req: NextRequest) {
 
     if (!deduction.ok) {
       await rollbackDoctorExpenseInsert(admin, expense.id);
+      if (uploadedPath) {
+        await admin.storage.from(BUCKET).remove([uploadedPath]);
+      }
       return NextResponse.json(
         {
           error: `تعذر حفظ الفاتورة: فشل خصم الطبيب — ${deduction.error}`,
@@ -140,6 +234,14 @@ export async function POST(req: NextRequest) {
       archived_to_history: true,
     });
   } catch (e) {
+    if (uploadedPath) {
+      try {
+        const admin = getAdminClient();
+        await admin.storage.from(BUCKET).remove([uploadedPath]);
+      } catch {
+        /* ignore cleanup errors */
+      }
+    }
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
