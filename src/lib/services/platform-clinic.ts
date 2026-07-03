@@ -4,7 +4,7 @@ import {
   sanitizeUsername,
   usernameToAuthEmail,
 } from "@/lib/auth/credentials";
-import { getAuthAdmin } from "@/lib/supabase/auth-helpers";
+import { getAuthAdmin, verifyPasswordSignIn } from "@/lib/supabase/auth-helpers";
 import { ensureEvolutionInstanceNamed } from "@/lib/whatsapp/evolution-client";
 
 export function buildClinicInstanceName(
@@ -35,6 +35,7 @@ export type CreatePlatformClinicInput = {
 export type CreatePlatformClinicResult = {
   clinic_id: string;
   clinic_name: string;
+  admin_username: string;
   instance_name: string | null;
   evolution_ok: boolean;
   evolution_error?: string;
@@ -160,11 +161,34 @@ export async function createPlatformClinic(
     return { ok: false, error: profileErr.message, status: 500 };
   }
 
+  const loginCheck = await verifyPasswordSignIn(authEmail, admin_password);
+  if (!loginCheck.ok) {
+    const reason = loginCheck.reason.toLowerCase();
+    await getAuthAdmin(admin).deleteUser(authData.user.id);
+    await admin.from("clinics").delete().eq("id", clinic.id);
+
+    if (reason.includes("email_not_confirmed") || reason.includes("not confirmed")) {
+      return {
+        ok: false,
+        error:
+          "تم إنشاء الحساب لكن Supabase يمنع الدخول (البريد غير مؤكّد). فعّل email_confirm أو عطّل تأكيد البريد من لوحة Supabase.",
+        status: 500,
+      };
+    }
+
+    return {
+      ok: false,
+      error: `تم إنشاء العيادة لكن فشل اختبار تسجيل الدخول: ${loginCheck.reason}`,
+      status: 500,
+    };
+  }
+
   return {
     ok: true,
     data: {
       clinic_id: clinic.id,
       clinic_name: (clinic.name_ar || clinic.name) as string,
+      admin_username: safeUsername,
       instance_name: provision_evolution ? instanceName : null,
       evolution_ok: evolutionOk,
       evolution_error: evolutionError,

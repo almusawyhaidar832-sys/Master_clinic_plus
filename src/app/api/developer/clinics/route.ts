@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       ...result.data,
-      message: `تم إنشاء عيادة «${result.data.clinic_name}»${
+      message: `تم إنشاء عيادة «${result.data.clinic_name}» — دخول المالك: ${result.data.admin_username}${
         result.data.instance_name
           ? ` — Evolution: ${result.data.instance_name}`
           : ""

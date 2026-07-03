@@ -14,6 +14,36 @@ import {
 import { createServerAuthClient } from "@/lib/supabase/create-auth-client";
 import { signInWithPassword, signOutUser } from "@/lib/supabase/auth-helpers";
 
+async function loginFailureMessage(
+  supabase: SupabaseClient,
+  username: string,
+  rawMessage: string
+): Promise<string> {
+  const msg = rawMessage ?? "";
+  if (
+    msg.includes("email_not_confirmed") ||
+    msg.toLowerCase().includes("email not confirmed")
+  ) {
+    return "حسابك غير مفعّل بعد — تواصل مع مدير العيادة أو المطور لإعادة تعيين كلمة المرور.";
+  }
+
+  if (!msg.includes("Invalid login credentials")) {
+    return msg || "تعذر تسجيل الدخول";
+  }
+
+  const safe = sanitizeUsername(username);
+  if (safe.length >= 3) {
+    const { data: rpcEmail } = await supabase.rpc("get_email_for_username", {
+      p_username: safe,
+    });
+    if (!rpcEmail) {
+      return `اسم المستخدم «${safe}» غير موجود. استخدم الاسم الإنجليزي كما سُجّل (حروف صغيرة، بدون مسافات أو عربي).`;
+    }
+  }
+
+  return "كلمة المرور غير صحيحة. إذا كان حسابك قديماً، جرّب إدخال بريدك في حقل اسم المستخدم.";
+}
+
 type LoginCookieStore = {
   getAll: () => { name: string; value: string }[];
   setAll: (
@@ -89,16 +119,11 @@ export async function performPortalLogin(
 
   const { data, error } = await signInWithPassword(supabase, email, password);
   if (error || !data.user) {
-    const msg = error?.message ?? "";
-    if (msg.includes("Invalid login credentials")) {
-      return {
-        ok: false,
-        status: 401,
-        error:
-          "اسم المستخدم أو كلمة المرور غير صحيحة. إذا كان حسابك قديماً، جرّب إدخال بريدك في حقل اسم المستخدم.",
-      };
-    }
-    return { ok: false, status: 401, error: msg || "تعذر تسجيل الدخول" };
+    return {
+      ok: false,
+      status: 401,
+      error: await loginFailureMessage(supabase, username, error?.message ?? ""),
+    };
   }
 
   const role = await resolveRoleAfterSignIn(supabase, data.user.id);
@@ -161,16 +186,15 @@ export async function performUnifiedLogin(
 
   const { data, error } = await signInWithPassword(probeClient, email, password);
   if (error || !data.user) {
-    const msg = error?.message ?? "";
-    if (msg.includes("Invalid login credentials")) {
-      return {
-        ok: false,
-        status: 401,
-        error:
-          "اسم المستخدم أو كلمة المرور غير صحيحة. إذا كان حسابك قديماً، جرّب إدخال بريدك في حقل اسم المستخدم.",
-      };
-    }
-    return { ok: false, status: 401, error: msg || "تعذر تسجيل الدخول" };
+    return {
+      ok: false,
+      status: 401,
+      error: await loginFailureMessage(
+        probeClient,
+        username,
+        error?.message ?? ""
+      ),
+    };
   }
 
   const role = await resolveRoleAfterSignIn(probeClient, data.user.id);

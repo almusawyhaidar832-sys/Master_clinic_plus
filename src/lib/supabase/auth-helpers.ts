@@ -1,3 +1,4 @@
+import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type AuthUser = { id: string; email?: string };
@@ -90,6 +91,28 @@ export async function signInWithPassword(
 }
 
 /** Service-role admin API (createUser, deleteUser, …) */
+/** Verify credentials the same way the login page does (anon signInWithPassword). */
+export async function verifyPasswordSignIn(
+  email: string,
+  password: string
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) {
+    return { ok: false, reason: "Supabase غير مضبوط" };
+  }
+
+  const client = createClient(url, anon, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { error } = await client.auth.signInWithPassword({ email, password });
+  if (error) {
+    return { ok: false, reason: error.message };
+  }
+  await client.auth.signOut();
+  return { ok: true };
+}
+
 export function getAuthAdmin(supabase: SupabaseClient) {
   return (
     supabase.auth as {
