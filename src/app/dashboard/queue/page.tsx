@@ -59,6 +59,7 @@ interface QueueEntry {
   transfer_requested_at: string | null;
   cancellation_requested_at: string | null;
   cancellation_actor_label: string | null;
+  notes: string | null;
   doctor: { full_name_ar: string } | null;
   transfer_to_doctor?: { full_name_ar: string } | null;
   patient: { full_name_ar: string; speech_name_ar?: string | null } | null;
@@ -108,12 +109,14 @@ function AddToQueueModal({
     patient_phone: string;
     patient_id?: string | null;
     send_to_doctor: boolean;
+    notes?: string;
   }) => Promise<boolean>;
 }) {
   const { t } = useLanguage();
   const [doctorId, setDoctorId] = useState(doctors[0]?.id ?? "");
   const [name, setName]   = useState("");
   const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [sendNow, setSendNow] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -142,6 +145,7 @@ function AddToQueueModal({
         patient_phone: phone.trim(),
         patient_id: selectedPatientId,
         send_to_doctor: sendNow,
+        notes: notes.trim() || undefined,
       });
       if (ok) {
         onClose();
@@ -200,6 +204,17 @@ function AddToQueueModal({
               placeholder="07xxxxxxxx"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
             />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600">{t("queueIntakeNotes")}</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder={t("queueIntakeNotesPlaceholder")}
+              rows={3}
+              className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-slate-500">{t("queueIntakeNotesHint")}</p>
           </div>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
             <input
@@ -636,6 +651,7 @@ export default function QueuePage() {
     patient_phone: string;
     patient_id?: string | null;
     send_to_doctor: boolean;
+    notes?: string;
   }): Promise<boolean> => {
     setPageSuccess(null);
     const offlineAttempt = await tryEnqueueQueueAddOffline({
@@ -645,6 +661,7 @@ export default function QueuePage() {
       patientPhone: data.patient_phone,
       patientId: data.patient_id,
       sendToDoctor: data.send_to_doctor !== false,
+      notes: data.notes,
     });
     if (offlineAttempt.handled) {
       if (offlineAttempt.ok) {
@@ -666,6 +683,7 @@ export default function QueuePage() {
           patient_phone: data.patient_phone,
           patient_id: data.patient_id ?? undefined,
           send_to_doctor: data.send_to_doctor !== false,
+          notes: data.notes?.trim() || undefined,
         }),
       });
       setShowAdd(false);
@@ -681,6 +699,7 @@ export default function QueuePage() {
       void broadcastPatientSentToDoctor(supabase, targetDoctorId, {
         name,
         entryId: result.id,
+        notes: data.notes?.trim() || undefined,
       });
       notifyQueueRefresh({ scope: "doctor", doctorId: targetDoctorId });
       notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
@@ -917,6 +936,12 @@ export default function QueuePage() {
                           <Phone className="h-3 w-3" />
                           {entry.patient_phone}
                         </a>
+                      </>
+                    )}
+                    {entry.notes?.trim() && (
+                      <>
+                        <span>•</span>
+                        <span className="text-slate-600">{entry.notes.trim()}</span>
                       </>
                     )}
                   </div>

@@ -10,6 +10,7 @@ import {
   doctorQueueChannelName,
 } from "@/lib/queue/realtime-client";
 import { buildDoctorQueueClinicalUrl } from "@/lib/queue/navigation";
+import { formatDoctorQueueAlertMessage } from "@/lib/queue/intake-notes";
 import { resolvePatientSpeechName } from "@/lib/queue/utils";
 import { resolvePatientGender, type PatientGender } from "@/lib/queue/patient-gender";
 import { formatNameForSpeech } from "@/lib/queue/arabic-speech-text";
@@ -23,6 +24,7 @@ interface QueuePayload {
   patient_id: string | null;
   ticket_number: number;
   sent_to_doctor_at: string | null;
+  notes?: string | null;
   patient?: {
     full_name_ar: string;
     speech_name_ar?: string | null;
@@ -51,9 +53,10 @@ function alertDoctorNewPatient(
 
   const name = resolvePatientSpeechName(row);
   const gender = resolvePatientGender(row);
-  const msg = recall
-    ? `تذكير: المراجع ${name} بانتظارك — يرجى استقباله`
-    : `لديك مراجع جديد في الانتظار: ${name}`;
+  const msg = formatDoctorQueueAlertMessage(name, {
+    recall,
+    notes: row.notes,
+  });
   void triggerQueueAlert({
     kind: "doctor_new",
     title: recall ? "تذكير — مراجع 🔔" : "مراجع جديد 🔔",
@@ -180,7 +183,7 @@ function alertDoctorExamStart(row: QueuePayload, dedupeKey: string, seen: Set<st
 }
 
 function alertDoctorFromBroadcast(
-  payload: { name?: string; entryId?: string; recall?: boolean; sentAt?: string },
+  payload: { name?: string; entryId?: string; recall?: boolean; sentAt?: string; notes?: string },
   seen: Set<string>
 ) {
   const entryId = payload.entryId;
@@ -203,9 +206,10 @@ function alertDoctorFromBroadcast(
   void triggerQueueAlert({
     kind: "doctor_new",
     title: recall ? "تذكير — مراجع 🔔" : "مراجع جديد 🔔",
-    message: recall
-      ? `تذكير: المراجع ${name} بانتظارك — يرجى استقباله`
-      : `لديك مراجع جديد في الانتظار: ${name}`,
+    message: formatDoctorQueueAlertMessage(name, {
+      recall,
+      notes: payload.notes,
+    }),
     linkPath: "/doctor/queue",
     patientName: name,
   });

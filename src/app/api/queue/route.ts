@@ -111,6 +111,7 @@ export async function POST(req: NextRequest) {
       patient_id?: string;
       send_to_doctor?: boolean;
       queue_entry_id?: string;
+      notes?: string;
     };
 
     if (body.action === "admit") {
@@ -264,6 +265,7 @@ export async function POST(req: NextRequest) {
       patient_phone: body.patient_phone,
       patient_id: body.patient_id,
       send_to_doctor: sendToDoctor,
+      notes: body.notes,
     });
 
     return NextResponse.json({ success: true, id, doctor_id: doctorId });

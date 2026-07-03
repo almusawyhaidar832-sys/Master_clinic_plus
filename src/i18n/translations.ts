@@ -325,6 +325,9 @@ const translations = {
     queueFinishShort:             "إنهاء وتحويل",
     queueDoneTodaySection:        "منتهية اليوم",
     queueClinicSetupHint:         "تأكد من تسجيل الدخول كمحاسب وأن جدول patient_queue موجود في Supabase.",
+    queueIntakeNotes:             "ملاحظات",
+    queueIntakeNotesPlaceholder:  "مثال: ألم بالأسنان، كسر، التهاب لثة...",
+    queueIntakeNotesHint:         "تصل هذه الملاحظة للطبيب عند الإرسال ليتمكن من تقييم الحالة",
 
     // ── Today appointments ──
     todayBookingsTitle:           "حجوزات اليوم",
@@ -439,6 +442,7 @@ const translations = {
     docQueueTransferLine:         "طلب تحويل إلى",
     docQueueAwaitAccountant:      "بانتظار المحاسب",
     docQueueOtherDoctor:          "طبيب آخر",
+    docQueueAccountantNotes:      "ملاحظة المحاسب",
     docAdmitPatient:              "موافقة — ادخل المراجع",
     docTransferToOther:           "تحويل لطبيب آخر",
     docStartExamChart:            "بدء الكشف + المخطط",
@@ -1018,6 +1022,9 @@ const translations = {
     queueFinishShort:             "Finish & bill",
     queueDoneTodaySection:        "Done today",
     queueClinicSetupHint:         "Sign in as accountant and ensure the patient_queue table exists in Supabase.",
+    queueIntakeNotes:             "Notes",
+    queueIntakeNotesPlaceholder:  "e.g. tooth pain, fracture, gum inflammation...",
+    queueIntakeNotesHint:         "This note is sent to the doctor so they can assess the case",
 
     // ── Today appointments ──
     todayBookingsTitle:           "Today's Bookings",
@@ -1132,6 +1139,7 @@ const translations = {
     docQueueTransferLine:         "Transfer request to",
     docQueueAwaitAccountant:      "awaiting accountant",
     docQueueOtherDoctor:          "another doctor",
+    docQueueAccountantNotes:      "Accountant note",
     docAdmitPatient:              "Approve — admit patient",
     docTransferToOther:           "Transfer to another doctor",
     docStartExamChart:            "Start exam + chart",

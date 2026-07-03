@@ -45,7 +45,7 @@ function sendBroadcast(
 export function broadcastPatientSentToDoctor(
   supabase: AppSupabaseClient,
   doctorId: string,
-  payload: { name: string; entryId?: string; recall?: boolean }
+  payload: { name: string; entryId?: string; recall?: boolean; notes?: string }
 ) {
   return sendBroadcast(
     supabase,

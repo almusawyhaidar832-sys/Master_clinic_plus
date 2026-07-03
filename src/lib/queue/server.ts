@@ -9,6 +9,10 @@ import {
 } from "@/lib/queue/broadcast-server";
 import { resolvePatientGender } from "@/lib/queue/patient-gender";
 import {
+  formatDoctorQueueAlertMessage,
+  trimQueueIntakeNotes,
+} from "@/lib/queue/intake-notes";
+import {
   resolvePatientDisplayName,
   resolveDoctorSpeechName,
   resolvePatientSpeechName,
@@ -43,6 +47,7 @@ export interface QueueEntryRow {
   cancellation_requested_at: string | null;
   cancellation_requested_by: string | null;
   cancellation_actor_label: string | null;
+  notes: string | null;
   doctor: { full_name_ar: string } | null;
   transfer_to_doctor?: { full_name_ar: string } | null;
   patient: { full_name_ar: string; speech_name_ar?: string | null; gender?: string | null } | null;
@@ -54,6 +59,7 @@ const QUEUE_ENTRY_SELECT = `
   sent_to_doctor_at, appointment_id,
   transfer_to_doctor_id, transfer_from_doctor_id, transfer_requested_at,
   cancellation_requested_at, cancellation_requested_by, cancellation_actor_label,
+  notes,
   doctor:doctors!doctor_id(full_name_ar),
   transfer_to_doctor:doctors!transfer_to_doctor_id(full_name_ar),
   patient:patients(full_name_ar, speech_name_ar, gender)
@@ -241,7 +247,7 @@ export async function notifyDoctorNewQueuePatient(
   const { data: entry, error } = await admin
     .from("patient_queue")
     .select(
-      "id, clinic_id, doctor_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar, speech_name_ar, gender)"
+      "id, clinic_id, doctor_id, patient_name, ticket_number, patient_id, notes, patient:patients(full_name_ar, speech_name_ar, gender)"
     )
     .eq("id", queueEntryId)
     .maybeSingle();
@@ -276,12 +282,14 @@ export async function notifyDoctorNewQueuePatient(
   });
 
   const recall = options?.recall === true;
+  const intakeNotes = trimQueueIntakeNotes(entry.notes as string | null);
   const titleAr = recall
     ? "تذكير — مراجع في الانتظار"
     : "مراجع جديد في الانتظار";
-  const bodyAr = recall
-    ? `تذكير: المراجع ${displayName} بانتظارك — يرجى استقباله`
-    : `لديك مراجع جديد في الانتظار: ${displayName}`;
+  const bodyAr = formatDoctorQueueAlertMessage(displayName, {
+    recall,
+    notes: intakeNotes,
+  });
 
   if (profileId) {
     await insertNotifications([
@@ -323,6 +331,7 @@ export async function notifyDoctorNewQueuePatient(
       entryId: entry.id as string,
       recall,
       sentAt: recall ? new Date().toISOString() : undefined,
+      notes: intakeNotes ?? undefined,
     }),
   ]).catch((err) => {
     console.error("[queue] doctor broadcast failed:", err);
@@ -595,6 +604,7 @@ export async function insertQueueEntry(input: {
   source?: "walk_in" | "appointment" | "online";
   send_to_doctor?: boolean;
   queue_date?: string;
+  notes?: string | null;
 }) {
   const admin = getAdminClient();
   const queueDate = input.queue_date ?? todayIsoDate();
@@ -612,6 +622,7 @@ export async function insertQueueEntry(input: {
       status: "waiting",
       source: input.source ?? "walk_in",
       sent_to_doctor_at: input.send_to_doctor ? new Date().toISOString() : null,
+      notes: trimQueueIntakeNotes(input.notes),
     })
     .select("id")
     .single();

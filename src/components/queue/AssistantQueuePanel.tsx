@@ -133,11 +133,13 @@ function AddToQueueModal({
     patient_phone: string;
     patient_id?: string | null;
     send_to_doctor: boolean;
+    notes?: string;
   }) => Promise<boolean>;
 }) {
   const { t } = useLanguage();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [sendNow, setSendNow] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -166,6 +168,7 @@ function AddToQueueModal({
         patient_phone: phone.trim(),
         patient_id: selectedPatientId,
         send_to_doctor: sendNow,
+        notes: notes.trim() || undefined,
       });
       if (ok) {
         onClose();
@@ -213,6 +216,17 @@ function AddToQueueModal({
               placeholder="07xxxxxxxx"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
             />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-600">{t("queueIntakeNotes")}</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder={t("queueIntakeNotesPlaceholder")}
+              rows={3}
+              className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-slate-500">{t("queueIntakeNotesHint")}</p>
           </div>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
             <input
@@ -485,6 +499,7 @@ export function AssistantQueuePanel() {
     patient_phone: string;
     patient_id?: string | null;
     send_to_doctor: boolean;
+    notes?: string;
   }): Promise<boolean> => {
     try {
       const result = await apiJson<{ id: string; doctor_id?: string }>(
@@ -499,6 +514,7 @@ export function AssistantQueuePanel() {
             patient_id: data.patient_id ?? undefined,
             doctor_id: data.doctor_id,
             send_to_doctor: data.send_to_doctor !== false,
+            notes: data.notes?.trim() || undefined,
           }),
         }
       );
@@ -509,6 +525,7 @@ export function AssistantQueuePanel() {
       void broadcastPatientSentToDoctor(supabase, targetDoctorId, {
         name,
         entryId: result.id,
+        notes: data.notes?.trim() || undefined,
       });
       notifyQueueRefresh({ scope: "doctor", doctorId: targetDoctorId });
       notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });

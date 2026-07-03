@@ -5,6 +5,7 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { shouldFireQueueAlert } from "@/lib/queue/alert-dedupe";
 import { triggerQueueAlert } from "@/lib/queue/audio-alerts";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
+import { formatDoctorQueueAlertMessage } from "@/lib/queue/intake-notes";
 import { resolvePatientSpeechName } from "@/lib/queue/utils";
 
 const POLL_MS = 3_000;
@@ -25,6 +26,7 @@ interface QueueRow {
   sent_to_doctor_at: string | null;
   patient_name: string | null;
   ticket_number: number;
+  notes?: string | null;
   doctor_id?: string;
   patient?: { full_name_ar: string; speech_name_ar?: string | null } | null;
 }
@@ -105,9 +107,10 @@ export function useDoctorQueuePolling(
           void triggerQueueAlert({
             kind: "doctor_new",
             title: isRecall ? "تذكير — مراجع 🔔" : "مراجع جديد 🔔",
-            message: isRecall
-              ? `تذكير: المراجع ${name} بانتظارك — يرجى استقباله`
-              : `لديك مراجع جديد في الانتظار: ${name}`,
+            message: formatDoctorQueueAlertMessage(name, {
+              recall: isRecall,
+              notes: entry.notes,
+            }),
             linkPath: "/doctor/queue",
             patientName: name,
           });

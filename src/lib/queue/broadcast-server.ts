@@ -22,6 +22,7 @@ export type QueuePatientSentPayload = {
   entryId?: string;
   recall?: boolean;
   sentAt?: string;
+  notes?: string;
 };
 
 export type QueueAdmitPayload = {

@@ -64,6 +64,7 @@ interface QueueEntry {
   transfer_to_doctor_id: string | null;
   transfer_requested_at: string | null;
   transfer_to_doctor?: { full_name_ar: string } | null;
+  notes: string | null;
   patient: { full_name_ar: string; speech_name_ar?: string | null } | null;
   doctor?: { full_name_ar: string } | null;
 }
@@ -469,6 +470,12 @@ function DoctorQueuePageContent() {
                           {t("docQueueTransferLine")}{" "}
                           {entry.transfer_to_doctor?.full_name_ar ?? t("docQueueOtherDoctor")} — {t("docQueueAwaitAccountant")}
                         </p>
+                      )}
+                      {entry.notes?.trim() && (
+                        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          <span className="font-semibold">{t("docQueueAccountantNotes")}: </span>
+                          {entry.notes.trim()}
+                        </div>
                       )}
                     </div>
                   </div>

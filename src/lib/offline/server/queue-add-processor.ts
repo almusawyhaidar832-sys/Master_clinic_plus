@@ -36,6 +36,7 @@ export async function processQueueAddOfflinePayload(
       patient_phone: payload.patientPhone?.trim() || null,
       patient_id: payload.patientId,
       send_to_doctor: payload.sendToDoctor,
+      notes: payload.notes,
     });
 
     return { ok: true, queueEntryId };

@@ -1,3 +1,4 @@
+import { trimQueueIntakeNotes } from "@/lib/queue/intake-notes";
 import { validatePatientPhone } from "@/lib/phone";
 import { isOfflinePatientRef, type QueueAddOfflinePayload } from "@/lib/offline/types";
 import { getCachedOfflineDoctors } from "@/lib/offline/reference-cache";
@@ -9,6 +10,7 @@ export interface QueueAddOfflineInput {
   patientPhone: string;
   patientId?: string | null;
   sendToDoctor: boolean;
+  notes?: string | null;
 }
 
 export function validateQueueAddOffline(
@@ -61,6 +63,7 @@ export function validateQueueAddOffline(
       patientPhone: normalizedPhone,
       patientId,
       sendToDoctor: input.sendToDoctor,
+      notes: trimQueueIntakeNotes(input.notes),
     },
   };
 }

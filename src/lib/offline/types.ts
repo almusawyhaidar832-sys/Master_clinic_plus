@@ -68,6 +68,7 @@ export interface QueueAddOfflinePayload {
   patientPhone: string;
   patientId: string | null;
   sendToDoctor: boolean;
+  notes?: string | null;
   clientId: string;
   enqueuedAt: string;
 }
