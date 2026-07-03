@@ -67,7 +67,7 @@ export function AdminMobileShell({
 
   return (
     <div className="flex min-h-dvh flex-col bg-surface pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]">
-      <header className="safe-top mc-gradient-hero sticky top-0 z-30 px-4 py-3 text-white shadow-premium">
+      <header className="safe-top mc-gradient-hero sticky top-0 z-30 border-b border-white/10 px-4 py-3 text-white shadow-premium backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
           {profile?.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -154,8 +154,10 @@ export function AdminMobileShell({
                 key={href}
                 href={href}
                 className={cn(
-                  "touch-target flex min-w-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1.5 text-[9px] font-medium transition-all duration-200 ease-mc-out active:scale-95 sm:text-[10px]",
-                  active ? "bg-primary/10 text-primary" : "text-slate-muted hover:text-primary/70"
+                  "touch-target flex min-w-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-2xl px-2 py-1.5 text-[9px] font-medium transition-all duration-200 ease-mc-out mc-press sm:text-[10px]",
+                  active
+                    ? "bg-white text-primary shadow-soft ring-1 ring-primary/10"
+                    : "text-slate-muted hover:bg-primary/[0.06] hover:text-primary"
                 )}
               >
                 <Icon className={cn("h-5 w-5 transition-transform", active && "scale-110 stroke-[2.5]")} />

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile, getActiveClinicId } from "@/lib/clinic-context";
 import { fetchDoctorLedgers } from "@/lib/services/clinic-reports";
@@ -57,19 +59,20 @@ export default function AdminHomePage() {
   }, []);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-text">
-          <span className="mc-icon-badge-premium">
-            <Crown className="h-4.5 w-4.5" />
+    <div className="space-y-5 animate-fade-in">
+      <PageHeader
+        title="لوحة المالك"
+        subtitle="متابعة مالية كاملة من الجوال"
+        actions={
+          <span className="mc-badge-premium">
+            <Crown className="h-3 w-3" />
+            المالك
           </span>
-          لوحة المالك
-        </h2>
-        <p className="text-sm text-slate-muted">متابعة مالية كاملة من الجوال</p>
-      </div>
+        }
+      />
 
       {stats && (
-        <div className="relative overflow-hidden rounded-3xl bg-mc-navy p-5 text-white shadow-premium">
+        <div className="relative overflow-hidden rounded-mc-2xl bg-mc-navy p-5 text-white shadow-premium">
           <div className="pointer-events-none absolute -end-10 -top-14 h-48 w-48 rounded-full bg-white/5 blur-2xl" />
           <div className="pointer-events-none absolute -start-8 bottom-[-3rem] h-40 w-40 rounded-full bg-premium-400/10 blur-2xl" />
           <p className="relative text-xs text-white/70">صافي ربح العيادة (هذا الشهر)</p>
@@ -98,8 +101,12 @@ export default function AdminHomePage() {
               <Wallet className="h-5 w-5 text-primary" />
             </div>
             <p className="text-xs font-semibold text-slate-text">طلبات السحب</p>
-            <p className="text-[10px] text-primary">
-              {pendingCount} معلّق
+            <p className="text-[10px] text-slate-muted">
+              {pendingCount > 0 ? (
+                <Badge variant="warning">{pendingCount} معلّق</Badge>
+              ) : (
+                "لا طلبات معلّقة"
+              )}
             </p>
           </Card>
         </Link>

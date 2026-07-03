@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Inbox } from "lucide-react";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ReactNode } from "react";
 
 export interface Column<T> {
@@ -23,12 +23,7 @@ export function DataTable<T extends { id: string }>({
   highlightDebt,
 }: DataTableProps<T>) {
   if (data.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-border bg-surface-card py-14 text-center text-slate-muted">
-        <Inbox className="h-8 w-8 text-slate-muted/50" strokeWidth={1.5} />
-        <span className="text-sm">{emptyMessage}</span>
-      </div>
-    );
+    return <EmptyState message={emptyMessage} />;
   }
 
   return (

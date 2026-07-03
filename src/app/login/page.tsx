@@ -11,6 +11,7 @@ import { syncPortalSessionClient } from "@/lib/auth/sync-portal-session-client";
 import { Eye, EyeOff, KeyRound, Languages, User } from "lucide-react";
 import { DeveloperCredit } from "@/components/layout/DeveloperCredit";
 import { DeveloperFooterLink } from "@/components/layout/DeveloperFooterLink";
+import { Alert } from "@/components/ui/Alert";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 function UnifiedLoginForm() {
@@ -90,17 +91,13 @@ function UnifiedLoginForm() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-md rounded-3xl border border-slate-200/70 bg-white p-6 shadow-premium sm:p-8">
-      <p className="mb-6 text-center text-sm leading-relaxed text-slate-600">
+    <div className="mx-auto w-full max-w-md rounded-mc-2xl border border-slate-border/70 bg-surface-card p-6 shadow-premium sm:p-8">
+      <p className="mb-6 text-center text-sm leading-relaxed text-slate-muted">
         {t("unifiedLoginHint")}
       </p>
 
       <form onSubmit={handleLogin} className="flex flex-col gap-4">
-        {error && (
-          <p className="flex items-center justify-center rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 text-center text-xs font-medium text-red-600">
-            {error}
-          </p>
-        )}
+        {error && <Alert variant="error">{error}</Alert>}
 
         <div className="relative">
           <User className="pointer-events-none absolute start-4 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-slate-400" />
@@ -117,7 +114,7 @@ function UnifiedLoginForm() {
             autoCorrect="off"
             spellCheck={false}
             inputMode="email"
-            className="touch-input w-full rounded-xl border border-slate-200 bg-slate-50/60 py-3 text-base text-left placeholder:text-slate-400 transition-colors ps-11 pe-4 focus:border-primary/50 focus:bg-white focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
+            className="touch-input w-full rounded-xl border border-slate-border bg-surface py-3 text-base text-left text-slate-text placeholder:text-slate-muted transition-colors ps-11 pe-4 focus:border-primary/50 focus:bg-surface-card focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
           />
         </div>
 
@@ -135,7 +132,7 @@ function UnifiedLoginForm() {
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
-            className="touch-input w-full rounded-xl border border-slate-200 bg-slate-50/60 py-3 text-base text-left placeholder:text-slate-400 transition-colors ps-11 pe-12 focus:border-primary/50 focus:bg-white focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
+            className="touch-input w-full rounded-xl border border-slate-border bg-surface py-3 text-base text-left text-slate-text placeholder:text-slate-muted transition-colors ps-11 pe-12 focus:border-primary/50 focus:bg-surface-card focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
           />
           <button
             type="button"
@@ -153,7 +150,7 @@ function UnifiedLoginForm() {
         <button
           type="submit"
           disabled={loading}
-          className="touch-target group relative mt-1 flex w-full items-center justify-center overflow-hidden rounded-xl bg-mc-navy py-3.5 text-base font-bold text-white shadow-elevated transition-all duration-200 ease-mc-out hover:shadow-premium active:scale-[0.99] disabled:opacity-60"
+          className="touch-target group relative mt-1 flex w-full items-center justify-center overflow-hidden rounded-xl bg-mc-navy py-3.5 text-base font-bold text-white shadow-elevated transition-all duration-200 ease-mc-out hover:shadow-glow mc-press disabled:opacity-60"
         >
           {loading ? (
             <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -225,21 +222,21 @@ function LoginPageContent() {
         </div>
 
         {mismatch && (
-          <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm font-medium text-amber-800 shadow-sm">
+          <Alert variant="warning" className="mb-4">
             {t("loginRoleMismatch")}
-          </p>
+          </Alert>
         )}
 
         {portalHint === "assistant" && (
-          <p className="mb-4 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-center text-sm font-medium text-teal-800 shadow-sm">
+          <Alert variant="info" className="mb-4">
             {t("loginAssistantHint")}
-          </p>
+          </Alert>
         )}
 
         {portalHint === "doctor" && (
-          <p className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-center text-sm font-medium text-blue-800 shadow-sm">
+          <Alert variant="info" className="mb-4">
             {t("loginDoctorHint")}
-          </p>
+          </Alert>
         )}
 
         <UnifiedLoginForm />

@@ -76,7 +76,7 @@ export function DashboardHomeContent() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="mb-4 text-lg font-bold tracking-tight text-primary-700">
+        <h2 className="mc-section-title mb-4 text-lg">
           {t("quickActionsTitle")}
         </h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

@@ -52,9 +52,9 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
     const isLarge = size === "large";
 
     const toneClasses = {
-      default: "border-slate-200 bg-white focus:border-primary",
+      default: "border-slate-border bg-surface-card focus:border-primary",
       total: "border-primary/50 bg-primary/[0.04] focus:border-primary",
-      paid: "border-emerald-500/50 bg-emerald-50/80 focus:border-emerald-600",
+      paid: "border-success-border bg-success/50 focus:border-success-text",
     }[tone];
 
     return (
@@ -62,8 +62,8 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
         {label && (
           <label
             className={cn(
-              "block font-bold text-slate-800",
-              isLarge ? "text-sm" : "text-sm font-medium text-slate-text"
+              "mc-label",
+              isLarge && "font-bold"
             )}
           >
             {label}
@@ -95,17 +95,17 @@ export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
             }
           }}
           className={cn(
-            "tabular-nums flex w-full rounded-lg border-2 text-left text-slate-900 shadow-sm outline-none transition-colors placeholder:text-slate-400 focus:ring-2",
+            "tabular-nums flex w-full rounded-lg border-2 text-left text-slate-text shadow-sm outline-none transition-colors placeholder:text-slate-muted focus:ring-2",
             isLarge
               ? "h-11 px-3 text-lg font-bold focus:ring-primary/15"
               : "h-10 px-3 text-sm font-semibold focus:ring-primary/20",
-            tone === "paid" && isLarge && "focus:ring-emerald-500/20",
+            tone === "paid" && isLarge && "focus:ring-success-text/20",
             toneClasses,
             locked && "cursor-default bg-surface text-slate-muted",
             className
           )}
         />
-        {hint && <p className="text-xs text-slate-500">{hint}</p>}
+        {hint && <p className="text-xs text-slate-muted">{hint}</p>}
         {min > 0 && value && Number(value) < min && (
           <p className="text-xs text-debt-text">الحد الأدنى {min}</p>
         )}

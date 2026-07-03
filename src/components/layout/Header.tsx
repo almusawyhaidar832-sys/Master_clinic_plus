@@ -29,7 +29,7 @@ export function Header({
   const { lang, toggleLang, t } = useLanguage();
 
   return (
-    <header className="mc-glass-header sticky top-0 z-30 flex h-16 items-center justify-between px-4 shadow-sm sm:px-6">
+    <header className="mc-glass-header sticky top-0 z-30 flex h-16 items-center justify-between px-4 shadow-soft sm:px-6">
       {/* Left: menu + title */}
       <div className="flex items-center gap-3">
         {onMenuClick && (
@@ -43,7 +43,7 @@ export function Header({
           </button>
         )}
         <div>
-          <h1 className="border-s-[3px] border-primary/80 ps-2.5 text-lg font-bold tracking-tight text-slate-text">
+          <h1 className="border-s-[3px] border-primary/80 ps-2.5 text-lg font-bold tracking-tightest2 text-slate-text">
             {title}
           </h1>
           {subtitle && (

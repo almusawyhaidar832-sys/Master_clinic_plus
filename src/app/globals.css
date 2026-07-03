@@ -89,6 +89,21 @@
       var(--color-primary-500) 50%,
       var(--color-primary-700) 100%
     );
+    box-shadow: var(--shadow-glass);
+  }
+
+  .mc-page-title {
+    @apply relative flex items-center gap-2.5 ps-3.5 text-2xl font-bold tracking-tight text-slate-text;
+  }
+
+  .mc-page-title::before {
+    content: "";
+    @apply absolute inset-y-1 start-0 w-1 rounded-full;
+    background: linear-gradient(
+      180deg,
+      var(--color-primary-400),
+      var(--color-primary-700)
+    );
   }
 
   /* ── Deeper hero gradient — shells & feature cards that need extra gravitas ── */
@@ -327,6 +342,46 @@
 
   .mc-hover-lift:hover {
     @apply -translate-y-0.5 shadow-elevated;
+  }
+
+  .mc-press {
+    @apply transition-transform duration-150 ease-mc-out active:scale-[0.98];
+  }
+
+  .mc-skeleton {
+    @apply relative overflow-hidden rounded-mc;
+    background-color: color-mix(in srgb, var(--color-border) 50%, transparent);
+  }
+
+  .mc-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 0.45),
+      transparent
+    );
+    animation: mc-skeleton-shimmer 1.4s ease-in-out infinite;
+  }
+
+  html.dark .mc-skeleton::after {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 0.08),
+      transparent
+    );
+  }
+
+  @keyframes mc-skeleton-shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
   }
 
   /* ── Clinical exam room (doctor + assistant) ── */

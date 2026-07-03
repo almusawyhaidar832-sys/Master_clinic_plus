@@ -114,10 +114,20 @@ const config: Config = {
       fontFamily: {
         arabic: ["var(--font-noto-arabic)", "Tahoma", "Arial", "sans-serif"],
       },
+      borderRadius: {
+        mc:    "var(--radius-lg)",
+        "mc-sm": "var(--radius-sm)",
+        "mc-md": "var(--radius-md)",
+        "mc-lg": "var(--radius-xl)",
+        "mc-xl": "var(--radius-2xl)",
+        "mc-2xl": "var(--radius-3xl)",
+      },
       boxShadow: {
         card:     "var(--shadow-card)",
+        soft:     "var(--shadow-soft)",
         elevated: "var(--shadow-elevated)",
         premium:  "var(--shadow-premium)",
+        glow:     "var(--shadow-glow)",
         glass:    "var(--shadow-glass)",
         gold:     "var(--shadow-gold)",
       },

@@ -74,7 +74,7 @@ export function DoctorHomeDashboard() {
   return (
     <div className="space-y-5 animate-fade-in">
       {doctorName && (
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-border bg-surface-card px-4 py-3.5 shadow-card">
+        <div className="flex items-center gap-3 rounded-mc-xl border border-slate-border bg-surface-card px-4 py-3.5 shadow-card mc-hover-lift">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-base font-bold text-primary">
             {doctorName.trim().charAt(0)}
           </div>
@@ -88,7 +88,7 @@ export function DoctorHomeDashboard() {
         </div>
       )}
 
-      <div className="relative overflow-hidden rounded-3xl bg-mc-navy p-5 text-white shadow-premium">
+      <div className="relative overflow-hidden rounded-mc-2xl bg-mc-navy p-5 text-white shadow-premium ring-1 ring-primary/20">
         <div className="pointer-events-none absolute -end-10 -top-14 h-48 w-48 rounded-full bg-white/5 blur-2xl" />
         <div className="pointer-events-none absolute -start-8 bottom-[-3rem] h-40 w-40 rounded-full bg-premium-400/10 blur-2xl" />
         <div className="relative flex items-start justify-between">

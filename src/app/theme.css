@@ -46,10 +46,19 @@
   --color-ring-strong:   rgb(0 86 179 / 0.35);
 
   --shadow-card:    0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
+  --shadow-soft:    0 2px 8px -2px rgb(15 23 42 / 0.06), 0 1px 2px rgb(15 23 42 / 0.04);
   --shadow-elevated: 0 4px 6px -1px rgb(15 23 42 / 0.06), 0 10px 24px -4px rgb(0 86 179 / 0.08);
   --shadow-premium: 0 8px 30px -6px rgb(0 86 179 / 0.14), 0 2px 8px -2px rgb(15 23 42 / 0.06);
+  --shadow-glow:    0 0 0 1px rgb(0 86 179 / 0.08), 0 4px 20px -4px rgb(0 86 179 / 0.18);
   --shadow-glass:   0 1px 0 rgb(255 255 255 / 0.6) inset, 0 8px 24px -8px rgb(15 23 42 / 0.12);
   --shadow-gold:    0 6px 20px -6px rgb(184 134 46 / 0.35), 0 2px 6px -2px rgb(15 23 42 / 0.08);
+
+  --radius-sm:  0.5rem;
+  --radius-md:  0.75rem;
+  --radius-lg:  1rem;
+  --radius-xl:  1.25rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 1.875rem;
 
   /* Premium gold/brass accent — used sparingly for VIP/owner highlights & badges */
   --color-premium-50:  #fbf6ea;
@@ -143,8 +152,10 @@ html.dark {
   --color-ring-strong:   rgb(59 130 246 / 0.5);
 
   --shadow-card:    0 1px 3px rgb(0 0 0 / 0.35);
+  --shadow-soft:    0 2px 10px -2px rgb(0 0 0 / 0.35);
   --shadow-elevated: 0 4px 16px rgb(0 0 0 / 0.4);
   --shadow-premium: 0 8px 32px rgb(0 0 0 / 0.45);
+  --shadow-glow:    0 0 0 1px rgb(59 130 246 / 0.15), 0 4px 24px -4px rgb(59 130 246 / 0.25);
   --shadow-glass:   0 1px 0 rgb(255 255 255 / 0.05) inset, 0 8px 24px -8px rgb(0 0 0 / 0.5);
   --shadow-gold:    0 6px 20px -6px rgb(224 193 121 / 0.3), 0 2px 8px -2px rgb(0 0 0 / 0.4);
 

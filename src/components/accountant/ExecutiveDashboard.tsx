@@ -20,6 +20,7 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
 import { cn, localDateISO, monthDateRange, todayISO, currentMonthYear } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, Minus,
@@ -87,17 +88,15 @@ function GrowthBadge({ pct }: { pct: number | null }) {
   const pos = pct > 0;
   const zero = pct === 0;
   return (
-    <span className={cn(
-      "flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-bold",
-      zero ? "bg-surface text-slate-muted"
-           : pos ? "bg-success text-success-text"
-                 : "bg-debt text-debt-text"
-    )}>
+    <Badge
+      variant={zero ? "default" : pos ? "success" : "error"}
+      className="gap-0.5 px-2 py-0.5 text-xs font-bold"
+    >
       {zero ? <Minus className="h-3 w-3" />
              : pos ? <TrendingUp className="h-3 w-3" />
                    : <TrendingDown className="h-3 w-3" />}
       {Math.abs(pct)}%
-    </span>
+    </Badge>
   );
 }
 
@@ -163,9 +162,12 @@ function NetProfitCard({ snap }: { snap: Snapshot }) {
   const profitBg    = snap.net_profit >= 0 ? "bg-success border-success-border" : "bg-debt border-debt-border";
 
   return (
-    <div className="rounded-2xl border border-slate-border bg-surface-card p-5 shadow-card">
+    <div className={cn(
+      "mc-card-premium mc-hover-lift p-5",
+      snap.net_profit < 0 && "border-debt-border"
+    )}>
       <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-text">
-        <DollarSign className="h-5 w-5 text-primary" />
+        <DollarSign className="h-5 w-5 text-premium-500" />
         {t("profitBreakdown")}
       </h3>
       <div className="space-y-2">
@@ -178,7 +180,7 @@ function NetProfitCard({ snap }: { snap: Snapshot }) {
           </div>
         ))}
         <div className={cn("mt-3 flex items-center justify-between rounded-xl border p-3", profitBg)}>
-          <span className="font-bold text-slate-700">{t("execNetClinicProfit")}</span>
+          <span className="font-bold text-slate-text">{t("execNetClinicProfit")}</span>
           <span className={cn("text-xl font-black tabular-nums", profitColor)}>
             {snap.net_profit >= 0 ? "+" : ""}{fmt(snap.net_profit)}
           </span>

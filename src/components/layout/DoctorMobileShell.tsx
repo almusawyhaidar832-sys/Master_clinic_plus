@@ -25,7 +25,6 @@ import {
   UserCog, LogOut, ListOrdered, ScrollText,
 } from "lucide-react";
 
-/** Maps icon string keys → Lucide components for the bottom nav */
 const NAV_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   home:            Home,
   wallet:          Wallet,
@@ -42,6 +41,14 @@ const NAV_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> 
   userCog:         UserCog,
   listOrdered:     ListOrdered,
 };
+
+function doctorInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0].charAt(0)}${parts[1].charAt(0)}`;
+  }
+  return parts[0]?.charAt(0) ?? "?";
+}
 
 /** Maps icon string keys for quick actions */
 export const QUICK_ACTION_ICON_MAP = NAV_ICON_MAP;
@@ -96,21 +103,24 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-dvh flex-col bg-surface pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]">
       <ClinicDataSyncBridge />
       <QueueRealtimeBridge portal="doctor" enablePolling />
-      <header className="safe-top mc-gradient-hero sticky top-0 z-30 px-4 py-3 text-white shadow-premium">
+      <header className="safe-top mc-gradient-hero sticky top-0 z-30 border-b border-white/10 px-4 py-3 text-white shadow-premium backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
           {profile?.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={profile.logo_url}
               alt=""
-              className="h-9 w-9 rounded-xl border border-white/20 bg-white object-contain p-0.5 shadow-sm"
+              className="h-10 w-10 rounded-xl border border-white/20 bg-surface-card object-contain p-0.5 shadow-sm"
             />
           ) : (
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
-              <Smile className="h-5 w-5 text-white/90" />
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 text-sm font-bold text-white ring-2 ring-white/20 shadow-glass"
+              aria-hidden
+            >
+              {doctorInitials(doctorName)}
             </div>
           )}
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-xs text-white/75">
               {doctorSpecialty} — {displayName}
             </p>
@@ -172,10 +182,10 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
                 key={href}
                 href={href}
                 className={cn(
-                  "touch-target flex min-w-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-xl px-2.5 py-1.5 text-[10px] font-medium transition-all duration-200 ease-mc-out active:scale-95",
+                  "touch-target flex min-w-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-2xl px-2.5 py-1.5 text-[10px] font-medium transition-all duration-200 ease-mc-out mc-press",
                   active
-                    ? "bg-primary/10 text-primary"
-                    : "text-slate-muted hover:text-primary/70"
+                    ? "bg-white text-primary shadow-soft ring-1 ring-primary/10"
+                    : "text-slate-muted hover:bg-primary/[0.06] hover:text-primary"
                 )}
               >
                 <Icon className={cn("h-5 w-5 transition-transform", active && "scale-110")} />
