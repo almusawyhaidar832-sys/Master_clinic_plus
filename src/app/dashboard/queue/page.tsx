@@ -23,6 +23,7 @@ import { resolveAppointmentPaymentUrl } from "@/lib/ledger/open-appointment-paym
 import { PatientSearchField } from "@/components/patients/PatientSearchField";
 import { getPatientDisplayPhone } from "@/lib/phone";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { getQueueStatusLabel, type QueueStatusKey } from "@/i18n/localized-labels";
 import type { Language, TranslationKey } from "@/i18n/translations";
 import type { PatientSearchResult } from "@/lib/services/patient-search";
@@ -313,6 +314,7 @@ export default function QueuePage() {
   const router = useRouter();
   const supabase = createClient();
   const { t, lang, bi, dateLocale } = useLanguage();
+  const { profile: clinicProfile } = useClinicProfile();
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [queue, setQueue]     = useState<QueueEntry[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -372,7 +374,9 @@ export default function QueuePage() {
     fetchQueue();
   }, [fetchQueue]);
 
-  useQueueListRefresh("clinic", clinicId, fetchQueue);
+  useQueueListRefresh("clinic", clinicId ?? clinicProfile?.id ?? null, fetchQueue);
+
+  const effectiveClinicId = clinicId ?? clinicProfile?.id ?? null;
 
   const advanceStatus = async (entry: QueueEntry) => {
     setUpdating(entry.id);
@@ -727,21 +731,17 @@ export default function QueuePage() {
     );
   }
 
-  if (!clinicId && pageError) {
-    return (
-      <Alert variant="error">
-        {pageError}
-        <p className="mt-2 text-sm">{t("queueClinicSetupHint")}</p>
-      </Alert>
-    );
-  }
-
   return (
     <>
     <div className="mx-auto max-w-6xl space-y-6">
 
       {pageError && (
-        <Alert variant="error">{pageError}</Alert>
+        <Alert variant="error">
+          {pageError}
+          {pageError.includes("تسجيل الدخول") && (
+            <p className="mt-2 text-sm">{t("queueClinicSetupHint")}</p>
+          )}
+        </Alert>
       )}
       {pageSuccess && (
         <Alert variant="success">{pageSuccess}</Alert>
@@ -762,7 +762,7 @@ export default function QueuePage() {
             label="ربط التلفاز"
           />
           <a
-            href={clinicId ? `/queue-screen?clinic=${clinicId}` : "/queue-screen"}
+            href={effectiveClinicId ? `/queue-screen?clinic=${effectiveClinicId}` : "/queue-screen"}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"

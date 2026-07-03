@@ -38,6 +38,11 @@ export async function createApiSessionClient(req?: Request) {
     const client = createServerAuthClient(store, portalId);
     const user = await getCurrentUser(client);
     if (user) return client;
+
+    // Legacy: session stored under default cookie before portal-scoped keys
+    const legacy = createServerAuthClient(store, "default");
+    const legacyUser = await getCurrentUser(legacy);
+    if (legacyUser) return legacy;
   }
 
   return createServerAuthClientFromAnySession(store);
@@ -52,16 +57,39 @@ export async function getApiCallerProfile(req?: Request) {
   const user = await getApiSessionUser(req);
   if (!user) return null;
 
-  const supabase = await createApiSessionClient(req);
-  const admin = getAdminClient();
+  const profileSelect = "id, role, clinic_id, full_name";
 
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("id, role, clinic_id, full_name")
-    .eq("id", user.id)
-    .maybeSingle();
+  try {
+    const supabase = await createApiSessionClient(req);
+    const { data: rlsProfile } = await supabase
+      .from("profiles")
+      .select(profileSelect)
+      .eq("id", user.id)
+      .maybeSingle();
 
-  return profile;
+    if (rlsProfile) return rlsProfile;
+  } catch (err) {
+    console.error("[getApiCallerProfile] RLS profile read failed:", err);
+  }
+
+  try {
+    const admin = getAdminClient();
+    const { data: profile, error } = await admin
+      .from("profiles")
+      .select(profileSelect)
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[getApiCallerProfile] admin profile read failed:", error.message);
+      return null;
+    }
+
+    return profile;
+  } catch (err) {
+    console.error("[getApiCallerProfile] admin client failed:", err);
+    return null;
+  }
 }
 
 export {

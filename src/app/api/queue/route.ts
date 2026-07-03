@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getApiCallerProfile,
   isApiAssistantRole,
   isApiDoctorRole,
   isApiStaffRole,
@@ -19,6 +18,7 @@ import {
   assertAssistantOwnsQueueEntry,
   resolveAssistantApiContext,
 } from "@/lib/auth/resolve-assistant-api";
+import { resolveQueueApiAccess } from "@/lib/queue/api-access";
 
 function staffRolesOk(role: string) {
   return isApiStaffRole(role) || isApiAssistantRole(role);
@@ -27,11 +27,12 @@ function staffRolesOk(role: string) {
 /** GET — today's queue + doctors list for accountant dashboard */
 export async function GET(req: NextRequest) {
   try {
-    const profile = await getApiCallerProfile(req);
-    if (!profile?.clinic_id) {
-      return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+    const access = await resolveQueueApiAccess(req);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
+    const profile = access.profile;
     const role = String(profile.role ?? "");
     if (
       !isApiStaffRole(role) &&
@@ -68,21 +69,21 @@ export async function GET(req: NextRequest) {
     }
 
     const [queue, doctorsRes] = await Promise.all([
-      fetchClinicQueue(profile.clinic_id, {
+      fetchClinicQueue(access.clinicId, {
         doctorId,
         includeDone: true,
       }),
       admin
         .from("doctors")
         .select("id, full_name_ar, specialty_ar")
-        .eq("clinic_id", profile.clinic_id)
+        .eq("clinic_id", access.clinicId)
         .eq("is_active", true),
     ]);
 
     return NextResponse.json({
       queue,
       doctors: doctorsRes.data ?? [],
-      clinicId: profile.clinic_id,
+      clinicId: access.clinicId,
       doctorId: doctorId ?? null,
     });
   } catch (err) {
@@ -97,12 +98,6 @@ export async function GET(req: NextRequest) {
 /** POST — add to queue or send to doctor */
 export async function POST(req: NextRequest) {
   try {
-    const profile = await getApiCallerProfile(req);
-    if (!profile?.clinic_id) {
-      return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
-    }
-
-    const role = String(profile.role ?? "");
     const body = (await req.json()) as {
       action?: string;
       doctor_id?: string;
@@ -114,11 +109,19 @@ export async function POST(req: NextRequest) {
       notes?: string;
     };
 
+    const access = await resolveQueueApiAccess(req);
+    const profile = access.ok ? access.profile : null;
+    const role = String(profile?.role ?? "");
+
     if (body.action === "admit") {
+      if (!access.ok) {
+        return NextResponse.json({ error: access.error }, { status: access.status });
+      }
+      const caller = access.profile;
       if (!isApiDoctorRole(role)) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
-      const doctor = await getDoctorByProfileId(profile.id);
+      const doctor = await getDoctorByProfileId(caller.id);
       if (!doctor) {
         return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
       }
@@ -147,9 +150,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.action === "send_to_doctor") {
+      if (!access.ok) {
+        return NextResponse.json({ error: access.error }, { status: access.status });
+      }
+      const caller = access.profile;
       if (!staffRolesOk(role)) {
         return NextResponse.json(
-          { error: `غير مصرح — دورك "${profile.role ?? "?"}" لا يسمح` },
+          { error: `غير مصرح — دورك "${caller.role ?? "?"}" لا يسمح` },
           { status: 403 }
         );
       }
@@ -160,7 +167,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (isApiAssistantRole(role)) {
-        const ctx = await resolveAssistantApiContext(profile);
+        const ctx = await resolveAssistantApiContext(caller);
         if (!ctx) {
           return NextResponse.json({ error: "حساب المساعد غير مربوط" }, { status: 403 });
         }
@@ -175,6 +182,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.action === "recall") {
+      if (!access.ok) {
+        return NextResponse.json({ error: access.error }, { status: access.status });
+      }
+      const caller = access.profile;
+
       const entryId = String(body.queue_entry_id ?? "").trim();
       if (!entryId) {
         return NextResponse.json({ error: "معرّف الدور مطلوب" }, { status: 400 });
@@ -183,7 +195,7 @@ export async function POST(req: NextRequest) {
       const admin = getAdminClient();
 
       if (isApiDoctorRole(role)) {
-        const doctor = await getDoctorByProfileId(profile!.id);
+        const doctor = await getDoctorByProfileId(caller.id);
         if (!doctor) {
           return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
         }
@@ -205,7 +217,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (isApiAssistantRole(role)) {
-        const ctx = await resolveAssistantApiContext(profile);
+        const ctx = await resolveAssistantApiContext(caller);
         if (!ctx) {
           return NextResponse.json({ error: "حساب المساعد غير مربوط" }, { status: 403 });
         }
@@ -219,7 +231,7 @@ export async function POST(req: NextRequest) {
         .from("patient_queue")
         .select("id, status, doctor_id, clinic_id")
         .eq("id", entryId)
-        .eq("clinic_id", profile!.clinic_id)
+        .eq("clinic_id", access.clinicId)
         .maybeSingle();
 
       if (!entry) {
@@ -233,9 +245,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+
+    const caller = access.profile;
+
     if (!staffRolesOk(role)) {
       return NextResponse.json(
-        { error: `غير مصرح — دورك "${profile.role ?? "?"}" لا يسمح بإضافة مراجع` },
+        { error: `غير مصرح — دورك "${caller.role ?? "?"}" لا يسمح بإضافة مراجع` },
         { status: 403 }
       );
     }
@@ -246,7 +264,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (isApiAssistantRole(role)) {
-      const ctx = await resolveAssistantApiContext(profile);
+      const ctx = await resolveAssistantApiContext(caller);
       if (!ctx) {
         return NextResponse.json({ error: "حساب المساعد غير مربوط" }, { status: 403 });
       }
@@ -259,7 +277,7 @@ export async function POST(req: NextRequest) {
       body.send_to_doctor !== false;
 
     const id = await insertQueueEntry({
-      clinic_id: profile.clinic_id,
+      clinic_id: access.clinicId,
       doctor_id: doctorId,
       patient_name: body.patient_name,
       patient_phone: body.patient_phone,
