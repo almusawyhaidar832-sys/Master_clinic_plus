@@ -25,6 +25,8 @@ import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { createClient } from "@/lib/supabase/client";
 import { getPatientDisplayPhone } from "@/lib/phone";
 import { History, MessageCircle, RefreshCw } from "lucide-react";
+import { DoctorExpenseInvoiceViewer } from "@/components/doctor-expenses/DoctorExpenseInvoiceViewer";
+import { doctorExpenseHasAttachmentHint } from "@/lib/services/doctor-expense-invoice-file";
 
 function historyPatientLabel(row: InvoiceHistoryRow): string {
   if (row.record_kind === "doctor_expense" || row.doctor_expense_id) {
@@ -277,6 +279,33 @@ export function InvoiceHistoryPanel({
             <MessageCircle className="h-3.5 w-3.5" />
             واتساب
           </button>
+        );
+      },
+    },
+    {
+      key: "attachment",
+      header: "مرفق الفاتورة",
+      render: (row) => {
+        const expenseId = row.doctor_expense_id;
+        if (
+          !expenseId ||
+          !doctorExpenseHasAttachmentHint({
+            recordKind: row.record_kind,
+            doctorExpenseId: expenseId,
+            snapshot: row.snapshot_json as Record<string, unknown>,
+          })
+        ) {
+          return <span className="text-slate-400">—</span>;
+        }
+        const fileName = (
+          row.snapshot_json as { invoice_file_name?: string | null } | null
+        )?.invoice_file_name;
+        return (
+          <DoctorExpenseInvoiceViewer
+            expenseId={expenseId}
+            fileName={fileName}
+            portal="accountant"
+          />
         );
       },
     },

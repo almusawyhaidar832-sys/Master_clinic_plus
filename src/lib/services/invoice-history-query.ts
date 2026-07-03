@@ -80,6 +80,55 @@ async function enrichHistoryRowsWithLabSplit(
   });
 }
 
+async function enrichHistoryRowsWithExpenseAttachments(
+  admin: SupabaseClient,
+  rows: InvoiceHistoryRow[]
+): Promise<InvoiceHistoryRow[]> {
+  const expenseIds = [
+    ...new Set(
+      rows
+        .map((row) => row.doctor_expense_id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+
+  if (expenseIds.length === 0) return rows;
+
+  const { data: expenses } = await admin
+    .from("doctor_expenses")
+    .select("id, invoice_storage_path, invoice_file_name, invoice_mime_type")
+    .in("id", expenseIds);
+
+  const byId = new Map(
+    (expenses ?? []).map((row) => [row.id as string, row])
+  );
+
+  return rows.map((row) => {
+    const expenseId = row.doctor_expense_id;
+    if (!expenseId) return row;
+
+    const expense = byId.get(expenseId);
+    if (!expense?.invoice_storage_path) return row;
+
+    const baseSnapshot =
+      row.snapshot_json && typeof row.snapshot_json === "object"
+        ? (row.snapshot_json as Record<string, unknown>)
+        : {};
+
+    return {
+      ...row,
+      snapshot_json: {
+        ...baseSnapshot,
+        invoice_storage_path: expense.invoice_storage_path,
+        invoice_file_name:
+          expense.invoice_file_name ?? baseSnapshot.invoice_file_name,
+        invoice_mime_type:
+          expense.invoice_mime_type ?? baseSnapshot.invoice_mime_type,
+      },
+    };
+  });
+}
+
 export async function fetchInvoiceHistory(
   admin: SupabaseClient,
   filters: InvoiceHistoryFilters
@@ -122,7 +171,8 @@ export async function fetchInvoiceHistory(
     snapshot_json: row.snapshot_json as InvoiceHistoryRow["snapshot_json"],
   })) as InvoiceHistoryRow[];
 
-  const enriched = await enrichHistoryRowsWithLabSplit(admin, rows);
+  const enrichedLab = await enrichHistoryRowsWithLabSplit(admin, rows);
+  const enriched = await enrichHistoryRowsWithExpenseAttachments(admin, enrichedLab);
 
   return { rows: enriched, total: count ?? enriched.length };
 }

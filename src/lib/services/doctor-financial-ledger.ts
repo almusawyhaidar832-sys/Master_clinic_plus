@@ -18,6 +18,7 @@ import { SALARY_ENTRY_TYPE_LABELS } from "@/lib/services/salary-entry-display";
 import type { SalaryEntryType } from "@/types";
 import type { InvoiceHistoryRow } from "@/lib/services/invoice-archive";
 import { fetchInvoiceHistory } from "@/lib/services/invoice-history-query";
+import { doctorExpenseHasAttachmentHint } from "@/lib/services/doctor-expense-invoice-file";
 import { opName, type PatientOperation } from "@/types";
 import type { WithdrawalStatus } from "@/types";
 
@@ -41,6 +42,9 @@ export interface DoctorLedgerInvoiceRow {
   total_amount: number;
   materials_cost: number;
   lab_notes: string | null;
+  doctor_expense_id?: string | null;
+  invoice_file_name?: string | null;
+  has_invoice_attachment?: boolean;
 }
 
 export interface DoctorLedgerPatientRow {
@@ -400,6 +404,17 @@ function mapHistoryToInvoiceRow(row: InvoiceHistoryRow): DoctorLedgerInvoiceRow 
     total_amount: row.total_amount,
     materials_cost: lab.materialsCost,
     lab_notes: lab.labNotes,
+    doctor_expense_id: row.doctor_expense_id ?? null,
+    invoice_file_name:
+      (row.snapshot_json as { invoice_file_name?: string | null } | null)
+        ?.invoice_file_name ?? null,
+    has_invoice_attachment: isExpense
+      ? doctorExpenseHasAttachmentHint({
+          recordKind: "doctor_expense",
+          doctorExpenseId: row.doctor_expense_id,
+          snapshot: row.snapshot_json as Record<string, unknown>,
+        })
+      : false,
   };
 }
 

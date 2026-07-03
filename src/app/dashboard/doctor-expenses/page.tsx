@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getActiveClinicId } from "@/lib/clinic-context";
 import { Button } from "@/components/ui/Button";
 import { AddDoctorExpenseModal } from "@/components/doctor-expenses/AddDoctorExpenseModal";
+import { DoctorExpenseInvoiceViewer } from "@/components/doctor-expenses/DoctorExpenseInvoiceViewer";
 import { InvoiceHistoryPanel } from "@/components/doctor-expenses/InvoiceHistoryPanel";
 import { DoctorSalaryAdjustmentsPanel } from "@/components/expenses/DoctorSalaryAdjustmentsPanel";
 import { DoctorSalaryPayoutPanel } from "@/components/expenses/DoctorSalaryPayoutPanel";
@@ -443,7 +444,16 @@ export default function DoctorExpensesPage() {
                             {e.description_ar}
                           </p>
                         )}
-                        {e.invoice_file_name && (
+                        {e.invoice_file_name && e.invoice_storage_path && (
+                          <div className="mt-2">
+                            <DoctorExpenseInvoiceViewer
+                              expenseId={e.id}
+                              fileName={e.invoice_file_name}
+                              portal="accountant"
+                            />
+                          </div>
+                        )}
+                        {e.invoice_file_name && !e.invoice_storage_path && (
                           <p className="mt-1 text-xs text-slate-muted">
                             📎 {e.invoice_file_name}
                           </p>

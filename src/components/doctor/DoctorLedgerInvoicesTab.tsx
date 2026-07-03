@@ -9,6 +9,7 @@ import { cn, formatDate } from "@/lib/utils";
 import type { DoctorLedgerInvoiceRow } from "@/lib/services/doctor-financial-ledger";
 import { truncateLabNotes } from "@/lib/invoices/lab-session-details";
 import { RefreshCw } from "lucide-react";
+import { DoctorExpenseInvoiceViewer } from "@/components/doctor-expenses/DoctorExpenseInvoiceViewer";
 
 function invoiceStatement(
   row: DoctorLedgerInvoiceRow,
@@ -149,6 +150,22 @@ export function DoctorLedgerInvoicesTab({
           )}
         </span>
       ),
+    },
+    {
+      key: "attachment",
+      header: t("docColAttachment"),
+      render: (row) => {
+        if (!row.has_invoice_attachment || !row.doctor_expense_id) {
+          return <span className="text-slate-400">—</span>;
+        }
+        return (
+          <DoctorExpenseInvoiceViewer
+            expenseId={row.doctor_expense_id}
+            fileName={row.invoice_file_name}
+            portal="doctor"
+          />
+        );
+      },
     },
     {
       key: "share",

@@ -570,7 +570,7 @@ export async function archiveDoctorExpenseToHistory(
   const { data: expense, error: expErr } = await admin
     .from("doctor_expenses")
     .select(
-      "id, clinic_id, doctor_id, amount, percentage_split, description_ar, expense_date, created_by, invoice_file_name"
+      "id, clinic_id, doctor_id, amount, percentage_split, description_ar, expense_date, created_by, invoice_file_name, invoice_storage_path, invoice_mime_type"
     )
     .eq("id", input.expenseId)
     .maybeSingle();
@@ -603,6 +603,8 @@ export async function archiveDoctorExpenseToHistory(
     percentage_split: split,
     description_ar: expense.description_ar,
     invoice_file_name: expense.invoice_file_name,
+    invoice_storage_path: expense.invoice_storage_path,
+    invoice_mime_type: expense.invoice_mime_type,
   };
 
   const expensePayload = {
