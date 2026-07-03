@@ -17,7 +17,12 @@ import {
 } from "@/lib/queue/queue-screen-voice";
 import { isStandalonePwa } from "@/lib/pwa/platform";
 import { isQueueScreenInstalled } from "@/lib/pwa/tv-platform";
-import { hasPersistedSpeechUnlock, playAttentionBeep } from "@/lib/queue/web-speech";
+import {
+  announceArabicWithBeep,
+  hasPersistedSpeechUnlock,
+  playAttentionBeep,
+  unlockSpeechAudioDiagnostics,
+} from "@/lib/queue/web-speech";
 import {
   resolveDoctorSpeechName,
   resolvePatientSpeechName,
@@ -207,6 +212,7 @@ function QueueScreenContent() {
   const [installedApp, setInstalledApp] = useState(false);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [audioUnlockHint, setAudioUnlockHint] = useState("اضغط أي مكان لتفعيل الصوت");
+  const [audioDiagnosticMessage, setAudioDiagnosticMessage] = useState<string | null>(null);
 
   const voiceEnabledRef = useRef(true);
   const prevCalledRef = useRef<Set<string>>(new Set());
@@ -529,15 +535,45 @@ function QueueScreenContent() {
           resolvePatientGender(entry)
         )
       }
+      audioDiagnosticMessage={audioDiagnosticMessage}
       onTestSound={() => {
-        if (displayCalled[0]) {
-          repeatQueueScreenAnnouncement(
-            resolvePatientName(displayCalled[0]),
-            resolveDoctorName(displayCalled[0]),
-            true,
-            resolvePatientGender(displayCalled[0])
-          );
-        }
+        setAudioDiagnosticMessage("جارٍ اختبار الصوت...");
+        void (async () => {
+          const diag = await unlockSpeechAudioDiagnostics().catch(() => null);
+          if (diag?.unlocked) setAudioUnlocked(true);
+
+          if (displayCalled[0]) {
+            repeatQueueScreenAnnouncement(
+              resolvePatientName(displayCalled[0]),
+              resolveDoctorName(displayCalled[0]),
+              true,
+              resolvePatientGender(displayCalled[0])
+            );
+          } else {
+            await announceArabicWithBeep("هذا اختبار لصوت شاشة الانتظار", {
+              clearQueue: true,
+              useCloud: true,
+            });
+          }
+
+          if (!diag) {
+            setAudioDiagnosticMessage("تعذّر تشغيل الصوت — تحقّق من صوت التلفاز");
+          } else if (diag.unlocked) {
+            setAudioDiagnosticMessage(
+              `الصوت يعمل (${[
+                diag.htmlAudioOk && "مشغّل الصوت",
+                diag.webAudioOk && "الصوت الرقمي",
+                diag.speechSynthOk && "تحويل النص لصوت",
+              ]
+                .filter(Boolean)
+                .join(" / ")})`
+            );
+          } else {
+            setAudioDiagnosticMessage(
+              "لم يستطع هذا المتصفح تشغيل أي صوت — تأكد أن صوت التلفاز غير مكتوم، أو جرّب تثبيت الشاشة كتطبيق (PWA) بدل المتصفح العادي"
+            );
+          }
+        })();
       }}
       onInstalled={() => setInstalledApp(true)}
     />

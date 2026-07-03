@@ -37,6 +37,7 @@ interface QueueScreenDisplayProps {
   installedApp: boolean;
   audioUnlocked?: boolean;
   audioUnlockHint?: string;
+  audioDiagnosticMessage?: string | null;
   screenUrl?: string;
   resolvePatientName: (entry: QueueScreenEntry) => string;
   resolveDoctorName: (entry: QueueScreenEntry) => string;
@@ -186,6 +187,7 @@ export function QueueScreenDisplay({
   installedApp,
   audioUnlocked = false,
   audioUnlockHint = "اضغط أي مكان لتفعيل الصوت",
+  audioDiagnosticMessage,
   screenUrl,
   resolvePatientName,
   resolveDoctorName,
@@ -211,12 +213,15 @@ export function QueueScreenDisplay({
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center justify-center gap-4 lg:gap-6">
-            <div
+            <button
+              type="button"
+              onClick={onTestSound}
+              autoFocus
               className={cn(
-                "flex items-center gap-2 rounded-2xl border px-5 py-3 backdrop-blur-sm",
+                "flex items-center gap-2 rounded-2xl border px-5 py-3 backdrop-blur-sm transition-colors focus:outline-none focus-visible:ring-4 focus-visible:ring-white/60",
                 audioUnlocked
-                  ? "border-white/30 bg-white/15"
-                  : "border-amber-200/50 bg-amber-500/25 animate-pulse"
+                  ? "border-white/30 bg-white/15 hover:bg-white/20"
+                  : "border-amber-200/50 bg-amber-500/25 hover:bg-amber-500/35 animate-pulse"
               )}
             >
               <span className="relative flex h-3 w-3">
@@ -237,9 +242,9 @@ export function QueueScreenDisplay({
               </span>
               <Volume2 className={cn("h-5 w-5", audioUnlocked ? "text-white" : "text-amber-100")} />
               <span className="text-base font-bold">
-                {audioUnlocked ? "الصوت مفعّل" : audioUnlockHint}
+                {audioUnlocked ? "الصوت مفعّل — اضغط للاختبار" : audioUnlockHint}
               </span>
-            </div>
+            </button>
             <div className="text-center lg:text-left">
               <p className="text-5xl font-black tabular-nums leading-none lg:text-6xl">
                 {currentTime}
@@ -248,15 +253,13 @@ export function QueueScreenDisplay({
                 {currentDate}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={onTestSound}
-              className="hidden rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-xs text-white/80 hover:bg-white/20 xl:block"
-            >
-              اختبار الصوت
-            </button>
           </div>
         </div>
+        {audioDiagnosticMessage && (
+          <p className="mt-2 text-center text-xs font-medium text-white/85 lg:text-right">
+            {audioDiagnosticMessage}
+          </p>
+        )}
       </div>
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row lg:gap-4 lg:p-4">

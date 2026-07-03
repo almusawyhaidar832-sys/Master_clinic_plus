@@ -93,14 +93,53 @@ export function isSpeechGestureUnlocked(): boolean {
   return speechGestureUnlocked || isTvAudioUnlocked();
 }
 
+/** يحاول نطق مقطع شبه صامت — يكشف إن كان speechSynthesis يعمل فعلياً
+ *  حتى لو فشل عنصر <audio> و AudioContext تماماً على هذا الجهاز */
+function trySpeechSynthesisUnlock(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const synth = getSynth();
+    if (!synth) {
+      resolve(false);
+      return;
+    }
+    try {
+      const utterance = new SpeechSynthesisUtterance(" ");
+      utterance.volume = 0.01;
+      utterance.rate = 10;
+      let settled = false;
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(ok);
+      };
+      utterance.onstart = () => finish(true);
+      utterance.onend = () => finish(true);
+      utterance.onerror = () => finish(false);
+      synth.speak(utterance);
+      setTimeout(() => finish(false), 1500);
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+export interface AudioUnlockDiagnostics {
+  unlocked: boolean;
+  htmlAudioOk: boolean;
+  webAudioOk: boolean;
+  speechSynthOk: boolean;
+}
+
 /**
- * تفعيل الصوت — يجب استدعاؤها داخل حدث لمس/ضغطة/زر ريموت مباشرة.
- * تفتح كل مسارات التشغيل الممكنة معاً: عنصر <audio> الثابت (أعلى توافق
- * مع شاشات التلفاز)، AudioContext، و speechSynthesis — أي مسار ينجح
- * يكفي لاعتبار الصوت مفعّلاً.
+ * تفعيل الصوت — يجب استدعاؤها داخل حدث لمس/ضغطة/زر ريموت مباشرة (أو
+ * محاولة تلقائية عند التحميل). تفتح كل مسارات التشغيل الممكنة معاً:
+ * عنصر <audio> الثابت (أعلى توافق مع شاشات التلفاز)، AudioContext،
+ * و speechSynthesis — أي مسار ينجح يكفي لاعتبار الصوت مفعّلاً.
  */
-export async function unlockSpeechAudio(): Promise<boolean> {
-  if (typeof window === "undefined") return false;
+export async function unlockSpeechAudioDiagnostics(): Promise<AudioUnlockDiagnostics> {
+  if (typeof window === "undefined") {
+    return { unlocked: false, htmlAudioOk: false, webAudioOk: false, speechSynthOk: false };
+  }
 
   const tvAudioOk = await unlockTvAudio().catch(() => false);
 
@@ -129,7 +168,9 @@ export async function unlockSpeechAudio(): Promise<boolean> {
     // ignore
   }
 
-  speechGestureUnlocked = tvAudioOk || audioCtxOk;
+  const speechSynthOk = await trySpeechSynthesisUnlock().catch(() => false);
+
+  speechGestureUnlocked = tvAudioOk || audioCtxOk || speechSynthOk;
   if (speechGestureUnlocked) {
     try {
       localStorage.setItem(AUDIO_UNLOCK_KEY, "1");
@@ -137,7 +178,17 @@ export async function unlockSpeechAudio(): Promise<boolean> {
       // private mode
     }
   }
-  return speechGestureUnlocked;
+  return {
+    unlocked: speechGestureUnlocked,
+    htmlAudioOk: tvAudioOk,
+    webAudioOk: audioCtxOk,
+    speechSynthOk,
+  };
+}
+
+export async function unlockSpeechAudio(): Promise<boolean> {
+  const { unlocked } = await unlockSpeechAudioDiagnostics();
+  return unlocked;
 }
 
 export function hasPersistedSpeechUnlock(): boolean {
