@@ -28,6 +28,33 @@ export function calculateDoctorShare(
 }
 
 /**
+ * خصم تكلفة المختبر من حصص جلسة الدفع حسب materials_share (0–100).
+ * يُطبَّق على أي جلسة متابعة وليس الجلسة الأولى فقط.
+ */
+export function deductLabCostFromSessionShares(
+  baseDoctorShare: number,
+  baseClinicShare: number,
+  materialsCost: number,
+  materialsSharePct: number
+): {
+  doctorShare: number;
+  clinicShare: number;
+  labDoctorShare: number;
+  labClinicShare: number;
+} {
+  const materials = Math.max(0, materialsCost);
+  const pct = Math.min(100, Math.max(0, Number(materialsSharePct) || 0)) / 100;
+  const labDoctorShare = Math.round(materials * pct * 100) / 100;
+  const labClinicShare = Math.round((materials - labDoctorShare) * 100) / 100;
+  return {
+    doctorShare: Math.round((baseDoctorShare - labDoctorShare) * 100) / 100,
+    clinicShare: Math.round((baseClinicShare - labClinicShare) * 100) / 100,
+    labDoctorShare,
+    labClinicShare,
+  };
+}
+
+/**
  * تقسيم المبلغ حسب اتفاق الطبيب المالي.
  * salary → حصة الطبيب 0 والمبلغ كاملاً للعيادة.
  */

@@ -108,10 +108,26 @@ function SplitColumns({
 function PaidSplitColumns({
   paidPreview,
   doctor,
+  materialsCost = 0,
 }: {
-  paidPreview: { doctorShare: number; clinicShare: number; paidAmount: number };
+  paidPreview: {
+    doctorShare: number;
+    clinicShare: number;
+    paidAmount: number;
+    labDoctorShare?: number;
+    labClinicShare?: number;
+  };
   doctor: Doctor | null;
+  materialsCost?: number;
 }) {
+  const labDoctor =
+    paidPreview.labDoctorShare ??
+    (materialsCost > 0 && doctor
+      ? materialsCost * (Number(doctor.materials_share ?? 0) / 100)
+      : 0);
+  const labClinic =
+    paidPreview.labClinicShare ?? Math.max(0, materialsCost - labDoctor);
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="rounded-lg border border-emerald-300/60 bg-emerald-50/60 p-3 space-y-2">
@@ -133,6 +149,12 @@ function PaidSplitColumns({
               </span>
             </div>
           )}
+          {labDoctor > 0 && (
+            <div className="flex justify-between gap-2 text-amber-700">
+              <span>تحمل المختبر (طبيب)</span>
+              <span className="tabular-nums">−{formatCurrency(labDoctor)}</span>
+            </div>
+          )}
           <div className="flex justify-between gap-2 border-t border-emerald-300/50 pt-2 font-bold text-emerald-800">
             <span>يُضاف للمحفظة</span>
             <span className="tabular-nums">{formatCurrency(paidPreview.doctorShare)}</span>
@@ -149,14 +171,12 @@ function PaidSplitColumns({
               {formatCurrency(paidPreview.paidAmount)}
             </span>
           </div>
-          <div className="flex justify-between gap-2 text-slate-muted">
-            <span>نسبة من الدفعة</span>
-            <span className="tabular-nums">
-              {paidPreview.paidAmount > 0
-                ? `${Math.round((paidPreview.clinicShare / paidPreview.paidAmount) * 100)}%`
-                : "—"}
-            </span>
-          </div>
+          {labClinic > 0 && (
+            <div className="flex justify-between gap-2 text-amber-700">
+              <span>تحمل المختبر (عيادة)</span>
+              <span className="tabular-nums">−{formatCurrency(labClinic)}</span>
+            </div>
+          )}
           <div className="flex justify-between gap-2 border-t border-slate-200 pt-2 font-bold text-slate-800">
             <span>صافي العيادة</span>
             <span className="tabular-nums">{formatCurrency(paidPreview.clinicShare)}</span>
@@ -257,7 +277,7 @@ export function FinancialPreview({
   }, [totalAmount, materialsCost, doctor, reviewFee, lockedSplit]);
 
   const paidPreview = useMemo(() => {
-    if (!doctor || paidAmount <= 0) return null;
+    if (!doctor || (paidAmount <= 0 && materialsCost <= 0)) return null;
     const caseDoc =
       caseDoctorShareTotal > 0
         ? caseDoctorShareTotal
@@ -277,6 +297,7 @@ export function FinancialPreview({
       caseDoctorShare: caseDoc,
       caseClinicShare: caseClinic,
       doctor,
+      materialsCost: isPaymentSession ? materialsCost : 0,
     });
   }, [
     doctor,
@@ -286,6 +307,8 @@ export function FinancialPreview({
     caseClinicShareTotal,
     preview,
     lockedSplit,
+    isPaymentSession,
+    materialsCost,
   ]);
 
   if (!preview) {
@@ -312,10 +335,16 @@ export function FinancialPreview({
           </p>
         </div>
 
-        {preview.locked && (
+        {preview.locked && !isPaymentSession && (
           <p className="text-xs font-medium text-amber-800 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200/80">
             جلسة الدفع لا تعيد حساب حصص السعر الكلي — تُوزَّع الدفعات فقط حسب النسب
             أدناه
+          </p>
+        )}
+        {isPaymentSession && materialsCost > 0 && (
+          <p className="text-xs font-medium text-amber-800 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200/80">
+            تكلفة المختبر في هذه الجلسة تُخصم من الطبيب/العيادة حسب نسبة التحمّل (
+            {doctor?.materials_share ?? 0}% طبيب)
           </p>
         )}
 
@@ -334,11 +363,17 @@ export function FinancialPreview({
               ٢ — توزيع المبلغ المدفوع في هذه الجلسة
             </p>
             <p className="text-xs text-emerald-800/80 mt-0.5">
-              من {formatCurrency(paidPreview.paidAmount)} المدفوع اليوم — يُضاف للمحفظة
-              والعيادة حسب نفس نسب الحالة
+              من {formatCurrency(paidPreview.paidAmount)} المدفوع اليوم
+              {isPaymentSession && materialsCost > 0
+                ? ` — بعد خصم المختبر (${formatCurrency(materialsCost)})`
+                : " — يُضاف للمحفظة والعيادة حسب نفس نسب الحالة"}
             </p>
           </div>
-          <PaidSplitColumns paidPreview={paidPreview} doctor={doctor} />
+          <PaidSplitColumns
+            paidPreview={paidPreview}
+            doctor={doctor}
+            materialsCost={isPaymentSession ? materialsCost : 0}
+          />
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-2.5 text-xs text-slate-muted">

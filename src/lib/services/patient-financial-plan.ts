@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   calculateDoctorShareForDoctor,
+  deductLabCostFromSessionShares,
   splitTreatmentAndReviewFee,
   type DoctorShareInput,
 } from "@/lib/finance";
@@ -620,7 +621,7 @@ function roundMoney(n: number): number {
 
 /**
  * توزيع المبلغ المدفوع في هذه الجلسة — نفس منطق قاعدة البيانات:
- * paid × (حصة الحالة / السعر النهائي)
+ * paid × (حصة الحالة / السعر النهائي) ثم خصم المختبر حسب materials_share
  */
 export function previewPaidSessionSplit(opts: {
   paidAmount: number;
@@ -628,9 +629,17 @@ export function previewPaidSessionSplit(opts: {
   caseDoctorShare: number;
   caseClinicShare: number;
   doctor: Doctor | null;
-}): { doctorShare: number; clinicShare: number; paidAmount: number } | null {
+  materialsCost?: number;
+}): {
+  doctorShare: number;
+  clinicShare: number;
+  paidAmount: number;
+  labDoctorShare?: number;
+  labClinicShare?: number;
+} | null {
   const paid = Math.max(0, opts.paidAmount);
-  if (paid <= 0) return null;
+  const materials = Math.max(0, opts.materialsCost ?? 0);
+  if (paid <= 0 && materials <= 0) return null;
 
   const finalPrice = Math.max(0, opts.caseFinalPrice);
   let caseDoc = Math.max(0, opts.caseDoctorShare);
@@ -648,21 +657,39 @@ export function previewPaidSessionSplit(opts: {
     return { paidAmount: paid, doctorShare: 0, clinicShare: roundMoney(paid) };
   }
 
-  if (finalPrice > 0 && (caseDoc > 0 || caseClinic > 0)) {
+  let baseDoc = 0;
+  let baseClinic = 0;
+
+  if (finalPrice > 0 && (caseDoc > 0 || caseClinic > 0) && paid > 0) {
+    baseDoc = roundMoney((paid * caseDoc) / finalPrice);
+    baseClinic = roundMoney((paid * caseClinic) / finalPrice);
+  } else if (opts.doctor && finalPrice <= 0 && paid > 0) {
+    const pct = Number(opts.doctor.percentage ?? 50) / 100;
+    baseDoc = roundMoney(paid * pct);
+    baseClinic = roundMoney(Math.max(0, paid - baseDoc));
+  }
+
+  if (materials > 0 && opts.doctor && !isSalaryDoctor(opts.doctor)) {
+    const withLab = deductLabCostFromSessionShares(
+      baseDoc,
+      baseClinic,
+      materials,
+      Number(opts.doctor.materials_share ?? 0)
+    );
     return {
       paidAmount: paid,
-      doctorShare: roundMoney((paid * caseDoc) / finalPrice),
-      clinicShare: roundMoney((paid * caseClinic) / finalPrice),
+      doctorShare: withLab.doctorShare,
+      clinicShare: withLab.clinicShare,
+      labDoctorShare: withLab.labDoctorShare,
+      labClinicShare: withLab.labClinicShare,
     };
   }
 
-  if (opts.doctor && finalPrice <= 0) {
-    const pct = Number(opts.doctor.percentage ?? 50) / 100;
-    const doc = roundMoney(paid * pct);
+  if (paid > 0 && (baseDoc > 0 || baseClinic > 0 || finalPrice > 0)) {
     return {
       paidAmount: paid,
-      doctorShare: doc,
-      clinicShare: roundMoney(Math.max(0, paid - doc)),
+      doctorShare: baseDoc,
+      clinicShare: baseClinic,
     };
   }
 
