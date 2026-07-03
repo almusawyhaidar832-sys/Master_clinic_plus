@@ -20,6 +20,7 @@ import {
 import { useSessionFormDraft } from "@/hooks/useSessionFormDraft";
 import { tryEnqueueAddPatientOffline } from "@/lib/offline/add-patient/enqueue";
 import { getCachedOfflineReference } from "@/lib/offline/reference-cache";
+import { isNetworkFailure } from "@/lib/offline/network";
 import { UserPlus } from "lucide-react";
 
 export function AddPatientForm() {
@@ -68,12 +69,14 @@ export function AddPatientForm() {
 
     setLoading(true);
 
-    const offlineAttempt = await tryEnqueueAddPatientOffline({
+    const offlineInput = {
       clinicId: getCachedOfflineReference()?.clinicId ?? null,
       name: trimmedName,
       phone,
       notes,
-    });
+    };
+
+    const offlineAttempt = await tryEnqueueAddPatientOffline(offlineInput);
     if (offlineAttempt.handled) {
       setLoading(false);
       if (offlineAttempt.ok) {
@@ -88,6 +91,7 @@ export function AddPatientForm() {
       return;
     }
 
+    try {
     const supabase = createClient();
     const activeClinic = await getActiveClinicId(supabase);
     if (!activeClinic) {
@@ -107,8 +111,6 @@ export function AddPatientForm() {
       })
       .select("id")
       .single();
-
-    setLoading(false);
 
     if (insertErr || !data) {
       const msg = insertErr?.message ?? "";
@@ -135,6 +137,17 @@ export function AddPatientForm() {
         router.push(`/dashboard/patients/${retry.data.id}`);
         return;
       } else {
+        const fallback = await tryEnqueueAddPatientOffline(offlineInput, {
+          force: true,
+        });
+        if (fallback.handled && fallback.ok) {
+          setSuccess(fallback.message);
+          clearDraft();
+          setName("");
+          setPhone("");
+          setNotes("");
+          return;
+        }
         setError(insertErr?.message ?? "تعذر حفظ المراجع");
       }
       return;
@@ -142,6 +155,24 @@ export function AddPatientForm() {
 
     clearDraft();
     router.push(`/dashboard/patients/${data.id}`);
+    } catch (err) {
+      const fallback = await tryEnqueueAddPatientOffline(offlineInput, {
+        force: isNetworkFailure(err),
+      });
+      if (fallback.handled && fallback.ok) {
+        setSuccess(fallback.message);
+        clearDraft();
+        setName("");
+        setPhone("");
+        setNotes("");
+      } else {
+        setError(
+          err instanceof Error ? err.message : "تعذر حفظ المراجع — تحقق من الاتصال"
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

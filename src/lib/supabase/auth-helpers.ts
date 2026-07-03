@@ -60,6 +60,18 @@ export async function getSession(supabase: SupabaseClient) {
   return auth.getSession();
 }
 
+/** Local session only — no network validation (PWA resume / offline) */
+export async function hasLocalAuthSession(
+  supabase: SupabaseClient
+): Promise<boolean> {
+  try {
+    const { data } = await getSession(supabase);
+    return Boolean(data.session?.user);
+  } catch {
+    return false;
+  }
+}
+
 export async function signInWithPassword(
   supabase: SupabaseClient,
   email: string,

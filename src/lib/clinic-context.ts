@@ -6,8 +6,10 @@ import { getCurrentUser } from "@/lib/supabase/auth-helpers";
 import {
   cacheAuthProfile,
   getCachedAuthProfile,
+  getCachedClinicProfile,
   isBrowserOffline,
 } from "@/lib/offline-cache";
+import { getCachedOfflineReference } from "@/lib/offline/reference-cache";
 
 export type { ActiveClinicResult } from "@/lib/clinic-types";
 
@@ -21,19 +23,23 @@ export async function getAuthProfile(
     return getCachedAuthProfile(user.id);
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
 
-  if (error || !data) {
+    if (error || !data) {
+      return getCachedAuthProfile(user.id);
+    }
+
+    const profile = data as Profile;
+    cacheAuthProfile(profile);
+    return profile;
+  } catch {
     return getCachedAuthProfile(user.id);
   }
-
-  const profile = data as Profile;
-  cacheAuthProfile(profile);
-  return profile;
 }
 
 export async function getDoctorForCurrentUser(
@@ -105,20 +111,40 @@ export async function getActiveClinicId(
   if (acting) return acting;
 
   const profile = await getAuthProfile(supabase);
-  if (!profile?.clinic_id) return null;
+  const clinicId =
+    profile?.clinic_id ?? getCachedOfflineReference()?.clinicId ?? null;
+  if (!clinicId) return null;
 
-  const { data: clinic } = await supabase
+  if (isBrowserOffline()) {
+    const cached = getCachedClinicProfile(clinicId);
+    return {
+      clinicId,
+      clinicName: cached?.name_ar?.trim() || cached?.name?.trim() || "",
+      source: "profile",
+    };
+  }
+
+  const { data: clinic, error } = await supabase
     .from("clinics")
     .select("name_ar, name, is_active")
-    .eq("id", profile.clinic_id)
+    .eq("id", clinicId)
     .maybeSingle();
 
-  if (!clinic || (clinic as { is_active?: boolean }).is_active === false) {
+  if (error || !clinic) {
+    const cached = getCachedClinicProfile(clinicId);
+    return {
+      clinicId,
+      clinicName: cached?.name_ar?.trim() || cached?.name?.trim() || "",
+      source: "profile",
+    };
+  }
+
+  if ((clinic as { is_active?: boolean }).is_active === false) {
     return null;
   }
 
   return {
-    clinicId: profile.clinic_id,
+    clinicId,
     clinicName:
       (clinic as { name_ar?: string; name?: string }).name_ar ||
       (clinic as { name_ar?: string; name?: string }).name ||

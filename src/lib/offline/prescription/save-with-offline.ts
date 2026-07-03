@@ -2,7 +2,7 @@ import type { AuthPortalId } from "@/lib/auth/portal-access";
 import type { PrescriptionMedication } from "@/lib/prescriptions/types";
 import { savePrescription } from "@/lib/prescriptions/client";
 import type { PatientPrescription } from "@/lib/prescriptions/types";
-import { isBrowserOffline } from "@/lib/offline/network";
+import { isBrowserOffline, isNetworkFailure } from "@/lib/offline/network";
 import { tryEnqueuePrescriptionOffline } from "@/lib/offline/prescription/enqueue";
 
 export async function savePrescriptionWithOfflineFallback(
@@ -46,6 +46,28 @@ export async function savePrescriptionWithOfflineFallback(
     const prescription = await savePrescription(input, portal);
     return { ok: true, prescription, offline: false };
   } catch (e) {
+    if (isNetworkFailure(e)) {
+      const attempt = await tryEnqueuePrescriptionOffline(
+        {
+          clinicId,
+          operationId: input.operationId,
+          patientId: input.patientId,
+          doctorId: input.doctorId,
+          queueEntryId: input.queueEntryId,
+          portal,
+          diagnosisAr: input.diagnosisAr ?? "",
+          notesAr: input.notesAr ?? "",
+          medications: input.medications,
+        },
+        { force: true }
+      );
+      if (attempt.handled && attempt.ok) {
+        return { ok: true, offline: true, message: attempt.message };
+      }
+      if (attempt.handled) {
+        return { ok: false, error: attempt.message, offline: false };
+      }
+    }
     return {
       ok: false,
       error: e instanceof Error ? e.message : "تعذر حفظ الوصفة",

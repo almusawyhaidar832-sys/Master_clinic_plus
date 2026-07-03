@@ -4,12 +4,21 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile } from "@/lib/clinic-context";
-import { onAuthStateChange, refreshAuthSession, signOutUser } from "@/lib/supabase/auth-helpers";
+import {
+  getSession,
+  hasLocalAuthSession,
+  onAuthStateChange,
+  refreshAuthSession,
+  signOutUser,
+} from "@/lib/supabase/auth-helpers";
 import {
   getAuthPortalForPath,
   isRoleAllowedForPath,
 } from "@/lib/auth/portal-access";
-import { isBrowserOffline } from "@/lib/offline-cache";
+import {
+  getCachedAuthProfile,
+  isBrowserOffline,
+} from "@/lib/offline-cache";
 
 /**
  * Client guard: if session role does not match the current portal path,
@@ -17,6 +26,9 @@ import { isBrowserOffline } from "@/lib/offline-cache";
  *
  * Performance: after first successful check within a portal, keep the UI visible
  * while re-validating on in-portal navigation (avoids blank flash between pages).
+ *
+ * PWA: لا يُسجّل الخروج تلقائياً عند الخروج لتطبيق آخر — يعتمد على الجلسة المحلية
+ * والملف المخزّن حتى يعود النت أو يضغط المستخدم «تسجيل خروج».
  */
 export function PortalAuthGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -33,8 +45,6 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
       setReady(true);
       return;
     }
-    // Narrow to a local const — TS narrowing of outer variables doesn't
-    // carry into the nested async function below.
     const portal = resolvedPortal;
 
     const supabase = createClient();
@@ -43,17 +53,31 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
     const samePortalSession =
       sessionOkRef.current && portalIdRef.current === portal.loginPortalId;
 
+    async function acceptCachedProfile(userId: string): Promise<boolean> {
+      const cached = getCachedAuthProfile(userId);
+      if (!cached || !isRoleAllowedForPath(cached.role, pathname)) {
+        return false;
+      }
+      sessionOkRef.current = true;
+      portalIdRef.current = portal.loginPortalId;
+      setReady(true);
+      return true;
+    }
+
     async function enforce(hideWhileChecking: boolean) {
       if (
-        isBrowserOffline() &&
         sessionOkRef.current &&
-        portalIdRef.current === portal.loginPortalId
+        portalIdRef.current === portal.loginPortalId &&
+        (isBrowserOffline() || hideWhileChecking === false)
       ) {
-        setReady(true);
-        return;
+        const hasLocal = await hasLocalAuthSession(supabase);
+        if (hasLocal) {
+          setReady(true);
+          return;
+        }
       }
 
-      if (hideWhileChecking) {
+      if (hideWhileChecking && !sessionOkRef.current) {
         setReady(false);
       }
 
@@ -73,7 +97,7 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
             const dev = await devRes.json();
             if (dev.actingClinicId) {
               sessionOkRef.current = true;
-              portalIdRef.current = portal!.loginPortalId;
+              portalIdRef.current = portal.loginPortalId;
               setReady(true);
               return;
             }
@@ -81,6 +105,25 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
         } catch {
           /* ignore */
         }
+
+        const { data } = await getSession(supabase);
+        const userId = data.session?.user?.id;
+        if (userId && (await acceptCachedProfile(userId))) {
+          return;
+        }
+
+        if (sessionOkRef.current) {
+          setReady(true);
+          return;
+        }
+
+        if (!(await hasLocalAuthSession(supabase))) {
+          sessionOkRef.current = false;
+          portalIdRef.current = null;
+          router.replace(`/login?portal=${portal.loginPortalId}`);
+          return;
+        }
+
         sessionOkRef.current = false;
         setReady(true);
         return;
@@ -92,13 +135,13 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
         setReady(false);
         await signOutUser(supabase);
         router.replace(
-          `/login?portal=${portal!.loginPortalId}&reason=role_mismatch`
+          `/login?portal=${portal.loginPortalId}&reason=role_mismatch`
         );
         return;
       }
 
       sessionOkRef.current = true;
-      portalIdRef.current = portal!.loginPortalId;
+      portalIdRef.current = portal.loginPortalId;
       setReady(true);
     }
 
@@ -111,12 +154,33 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
         setReady(true);
         return;
       }
+
       if (event === "SIGNED_OUT") {
-        sessionOkRef.current = false;
-        portalIdRef.current = null;
-        void enforce(true);
+        void (async () => {
+          if (await hasLocalAuthSession(supabase)) {
+            const refreshed = await refreshAuthSession(supabase);
+            if (refreshed || sessionOkRef.current) {
+              sessionOkRef.current = true;
+              setReady(true);
+              return;
+            }
+            const { data } = await getSession(supabase);
+            const userId = data.session?.user?.id;
+            if (userId && (await acceptCachedProfile(userId))) {
+              return;
+            }
+            if (sessionOkRef.current) {
+              setReady(true);
+              return;
+            }
+          }
+          sessionOkRef.current = false;
+          portalIdRef.current = null;
+          void enforce(true);
+        })();
         return;
       }
+
       if (
         event === "SIGNED_IN" ||
         event === "TOKEN_REFRESHED" ||
@@ -130,21 +194,45 @@ export function PortalAuthGuard({ children }: { children: ReactNode }) {
 
     const onAppResume = () => {
       if (cancelled || document.visibilityState !== "visible") return;
-      void refreshAuthSession(supabase).then(() => {
-        if (!cancelled && !sessionOkRef.current) {
+      const wasOk = sessionOkRef.current;
+
+      void (async () => {
+        await refreshAuthSession(supabase);
+        if (cancelled) return;
+
+        if (wasOk || sessionOkRef.current) {
+          setReady(true);
+          return;
+        }
+
+        if (await hasLocalAuthSession(supabase)) {
+          const { data } = await getSession(supabase);
+          const userId = data.session?.user?.id;
+          if (userId && (await acceptCachedProfile(userId))) {
+            return;
+          }
+          if (wasOk) {
+            setReady(true);
+            return;
+          }
+        }
+
+        if (!sessionOkRef.current) {
           void enforce(false);
         }
-      });
+      })();
     };
 
     document.addEventListener("visibilitychange", onAppResume);
     window.addEventListener("pageshow", onAppResume);
+    window.addEventListener("focus", onAppResume);
 
     return () => {
       cancelled = true;
       subscription.unsubscribe();
       document.removeEventListener("visibilitychange", onAppResume);
       window.removeEventListener("pageshow", onAppResume);
+      window.removeEventListener("focus", onAppResume);
     };
   }, [pathname, router]);
 

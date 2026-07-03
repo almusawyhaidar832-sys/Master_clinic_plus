@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { DoctorMobileShell } from "@/components/layout/DoctorMobileShell";
 import { AppProviders } from "@/components/providers/AppProviders";
+import { DoctorPwaBootstrap } from "@/components/pwa/DoctorPwaBootstrap";
 
 export const metadata: Metadata = {
   title: "Doctor App | Master Clinic Plus",
@@ -38,6 +39,7 @@ export default function DoctorLayout({
 }) {
   return (
     <AppProviders>
+      <DoctorPwaBootstrap />
       <DoctorMobileShell>{children}</DoctorMobileShell>
     </AppProviders>
   );

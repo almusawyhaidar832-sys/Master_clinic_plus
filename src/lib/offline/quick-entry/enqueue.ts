@@ -1,4 +1,4 @@
-import { isBrowserOffline } from "@/lib/offline/network";
+import { shouldEnqueueOffline, type OfflineEnqueueOptions } from "@/lib/offline/enqueue-guard";
 import { enqueueQuickEntryOffline } from "@/lib/offline/queue-store";
 import { getCachedOfflineReference } from "@/lib/offline/reference-cache";
 import {
@@ -16,9 +16,10 @@ export type QuickEntryOfflineAttemptResult =
  * عند وجود نت يُرجع handled:false ويستمر المسار العادي دون تغيير.
  */
 export async function tryEnqueueQuickEntryOffline(
-  input: QuickEntryOfflineInput
+  input: QuickEntryOfflineInput,
+  options?: OfflineEnqueueOptions
 ): Promise<QuickEntryOfflineAttemptResult> {
-  if (!isBrowserOffline()) {
+  if (!shouldEnqueueOffline(options)) {
     return { handled: false };
   }
 

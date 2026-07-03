@@ -1,6 +1,6 @@
 import type { PrescriptionMedication } from "@/lib/prescriptions/types";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
-import { isBrowserOffline } from "@/lib/offline/network";
+import { shouldEnqueueOffline, type OfflineEnqueueOptions } from "@/lib/offline/enqueue-guard";
 import { enqueuePrescriptionOffline } from "@/lib/offline/queue-store";
 import { getCachedOfflineReference } from "@/lib/offline/reference-cache";
 
@@ -19,8 +19,8 @@ export async function tryEnqueuePrescriptionOffline(input: {
   diagnosisAr: string;
   notesAr: string;
   medications: PrescriptionMedication[];
-}): Promise<PrescriptionOfflineAttemptResult> {
-  if (!isBrowserOffline()) {
+}, options?: OfflineEnqueueOptions): Promise<PrescriptionOfflineAttemptResult> {
+  if (!shouldEnqueueOffline(options)) {
     return { handled: false };
   }
 

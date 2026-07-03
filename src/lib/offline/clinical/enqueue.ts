@@ -1,7 +1,7 @@
 import type { SessionClinicalDraft } from "@/lib/clinical/constants";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { teethFromDraft } from "@/lib/clinical/session-records";
-import { isBrowserOffline } from "@/lib/offline/network";
+import { shouldEnqueueOffline, type OfflineEnqueueOptions } from "@/lib/offline/enqueue-guard";
 import { enqueueClinicalRecordOffline } from "@/lib/offline/queue-store";
 import { getCachedOfflineReference } from "@/lib/offline/reference-cache";
 
@@ -15,8 +15,8 @@ export async function tryEnqueueClinicalRecordOffline(input: {
   operationId: string;
   portal: AuthPortalId;
   draft: SessionClinicalDraft;
-}): Promise<ClinicalOfflineAttemptResult> {
-  if (!isBrowserOffline()) {
+}, options?: OfflineEnqueueOptions): Promise<ClinicalOfflineAttemptResult> {
+  if (!shouldEnqueueOffline(options)) {
     return { handled: false };
   }
 

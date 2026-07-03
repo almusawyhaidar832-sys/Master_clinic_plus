@@ -58,52 +58,58 @@ export function isBrowserOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
-export function cacheAuthProfile(profile: Profile): void {
+function readPersistedJson<T>(key: string): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw =
+      localStorage.getItem(key) ?? sessionStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedJson(key: string, value: unknown): void {
   if (typeof window === "undefined") return;
   try {
-    sessionStorage.setItem(
-      AUTH_PROFILE_KEY,
-      JSON.stringify({ profile, userId: profile.id, at: Date.now() })
-    );
+    const serialized = JSON.stringify(value);
+    localStorage.setItem(key, serialized);
+    sessionStorage.removeItem(key);
   } catch {
     /* quota / private mode */
   }
 }
 
+export function cacheAuthProfile(profile: Profile): void {
+  writePersistedJson(AUTH_PROFILE_KEY, {
+    profile,
+    userId: profile.id,
+    at: Date.now(),
+  });
+}
+
 export function getCachedAuthProfile(userId: string): Profile | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = sessionStorage.getItem(AUTH_PROFILE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw) as { profile: Profile; userId: string };
-    return data.userId === userId ? data.profile : null;
-  } catch {
-    return null;
-  }
+  const data = readPersistedJson<{ profile: Profile; userId: string }>(
+    AUTH_PROFILE_KEY
+  );
+  return data?.userId === userId ? data.profile : null;
 }
 
 export function cacheClinicProfile(profile: ClinicProfile): void {
-  if (typeof window === "undefined") return;
-  try {
-    sessionStorage.setItem(
-      CLINIC_PROFILE_KEY,
-      JSON.stringify({ profile, clinicId: profile.id, at: Date.now() })
-    );
-  } catch {
-    /* ignore */
-  }
+  writePersistedJson(CLINIC_PROFILE_KEY, {
+    profile,
+    clinicId: profile.id,
+    at: Date.now(),
+  });
 }
 
 export function getCachedClinicProfile(clinicId: string): ClinicProfile | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = sessionStorage.getItem(CLINIC_PROFILE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw) as { profile: ClinicProfile; clinicId: string };
-    return data.clinicId === clinicId ? data.profile : null;
-  } catch {
-    return null;
-  }
+  const data = readPersistedJson<{
+    profile: ClinicProfile;
+    clinicId: string;
+  }>(CLINIC_PROFILE_KEY);
+  return data?.clinicId === clinicId ? data.profile : null;
 }
 
 export function cachePortalQueue<T>(
@@ -111,34 +117,25 @@ export function cachePortalQueue<T>(
   doctorId: string | null,
   queue: T[]
 ): void {
-  if (typeof window === "undefined") return;
-  try {
-    sessionStorage.setItem(
-      PORTAL_QUEUE_KEY,
-      JSON.stringify({ portal, doctorId, queue, at: Date.now() })
-    );
-  } catch {
-    /* ignore */
-  }
+  writePersistedJson(PORTAL_QUEUE_KEY, {
+    portal,
+    doctorId,
+    queue,
+    at: Date.now(),
+  });
 }
 
 export function getCachedPortalQueue<T>(
   portal: "doctor" | "assistant",
   doctorId: string | null
 ): T[] | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = sessionStorage.getItem(PORTAL_QUEUE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw) as {
-      portal: string;
-      doctorId: string | null;
-      queue: T[];
-    };
-    if (data.portal !== portal) return null;
-    if (doctorId && data.doctorId !== doctorId) return null;
-    return data.queue;
-  } catch {
-    return null;
-  }
+  const data = readPersistedJson<{
+    portal: string;
+    doctorId: string | null;
+    queue: T[];
+  }>(PORTAL_QUEUE_KEY);
+  if (!data) return null;
+  if (data.portal !== portal) return null;
+  if (doctorId && data.doctorId !== doctorId) return null;
+  return data.queue;
 }

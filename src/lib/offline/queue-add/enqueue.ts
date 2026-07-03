@@ -1,4 +1,4 @@
-import { isBrowserOffline } from "@/lib/offline/network";
+import { shouldEnqueueOffline, type OfflineEnqueueOptions } from "@/lib/offline/enqueue-guard";
 import { enqueueQueueAddOffline } from "@/lib/offline/queue-store";
 import { getCachedOfflineReference } from "@/lib/offline/reference-cache";
 import {
@@ -12,9 +12,10 @@ export type QueueAddOfflineAttemptResult =
   | { handled: true; ok: false; message: string };
 
 export async function tryEnqueueQueueAddOffline(
-  input: QueueAddOfflineInput
+  input: QueueAddOfflineInput,
+  options?: OfflineEnqueueOptions
 ): Promise<QueueAddOfflineAttemptResult> {
-  if (!isBrowserOffline()) {
+  if (!shouldEnqueueOffline(options)) {
     return { handled: false };
   }
 

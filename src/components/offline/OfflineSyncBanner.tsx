@@ -49,11 +49,19 @@ export function OfflineSyncBanner() {
       void syncNow();
     };
 
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && !isBrowserOffline()) {
+        void syncNow();
+      }
+    };
+
     window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisible);
     void refreshPending();
 
     return () => {
       window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [refreshPending, syncNow]);
 

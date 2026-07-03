@@ -9,6 +9,8 @@ import {
 } from "@/lib/supabase/auth-helpers";
 import { getAuthPortalForPath } from "@/lib/auth/portal-access";
 
+const RESUME_RETRY_MS = [0, 1500, 4000];
+
 /**
  * يحافظ على جلسة الدخول على iOS/Android عند الخروج للتطبيقات الأخرى —
  * يجدّد التوكن عند العودة وكل ~50 دقيقة والتطبيق مفتوح.
@@ -22,9 +24,10 @@ export function SessionKeepAlive() {
 
     const supabase = createClient();
     let busy = false;
+    const retryTimers: ReturnType<typeof setTimeout>[] = [];
 
     async function keepAlive() {
-      if (busy || document.visibilityState !== "visible") return;
+      if (busy) return;
       busy = true;
       try {
         const { data } = await getSession(supabase);
@@ -38,11 +41,25 @@ export function SessionKeepAlive() {
       }
     }
 
+    function scheduleResumeRefresh() {
+      retryTimers.forEach(clearTimeout);
+      retryTimers.length = 0;
+      RESUME_RETRY_MS.forEach((delay) => {
+        retryTimers.push(
+          setTimeout(() => {
+            if (document.visibilityState === "visible") {
+              void keepAlive();
+            }
+          }, delay)
+        );
+      });
+    }
+
     void keepAlive();
 
     const onResume = () => {
       if (document.visibilityState === "visible") {
-        void keepAlive();
+        scheduleResumeRefresh();
       }
     };
 
@@ -57,6 +74,7 @@ export function SessionKeepAlive() {
     }, 50 * 60 * 1000);
 
     return () => {
+      retryTimers.forEach(clearTimeout);
       document.removeEventListener("visibilitychange", onResume);
       window.removeEventListener("focus", onResume);
       window.removeEventListener("pageshow", onResume);

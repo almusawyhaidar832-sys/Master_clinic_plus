@@ -82,6 +82,8 @@ import {
 } from "@/lib/forms/quick-entry-draft";
 import { useSessionFormDraft } from "@/hooks/useSessionFormDraft";
 import { tryEnqueueQuickEntryOffline } from "@/lib/offline/quick-entry/enqueue";
+import type { QuickEntryOfflineInput } from "@/lib/offline/quick-entry/validate";
+import { isNetworkFailure } from "@/lib/offline/network";
 import { doctorToShareInput } from "@/lib/offline/quick-entry/doctor-share";
 import {
   buildSessionInvoiceData,
@@ -912,12 +914,11 @@ export function QuickEntryForm({
 
     setLoading(true);
 
-    try {
     const offlineCaseRow =
       selectedCaseId != null
         ? treatmentCases.find((c) => c.id === selectedCaseId)
         : undefined;
-    const offlineAttempt = await tryEnqueueQuickEntryOffline({
+    const offlineInput: QuickEntryOfflineInput = {
       clinicId: activeClinicId,
       showCasePicker,
       selectedPatientId,
@@ -946,7 +947,10 @@ export function QuickEntryForm({
       clinicalTeeth: clinical.teeth,
       treatmentCaseId:
         resolvePersistedCaseId(treatmentCases, selectedCaseId) ?? null,
-    });
+    };
+
+    try {
+    const offlineAttempt = await tryEnqueueQuickEntryOffline(offlineInput);
     if (offlineAttempt.handled) {
       if (offlineAttempt.ok) {
         setMessage({ type: "success", text: offlineAttempt.message });
@@ -1810,6 +1814,24 @@ export function QuickEntryForm({
 
     } catch (err) {
       console.error("[QuickEntryForm] handleSubmit", err);
+      if (isNetworkFailure(err)) {
+        const retry = await tryEnqueueQuickEntryOffline(offlineInput, {
+          force: true,
+        });
+        if (retry.handled && retry.ok) {
+          setMessage({ type: "success", text: retry.message });
+          clearDraft();
+          resetClinical();
+          setPaidAmount("");
+          setTotalAmount("");
+          setDiscountAmount("");
+          setAdditionalDiscountAmount("");
+          setMaterialsCost("");
+          setLabNotes("");
+          setNotes("");
+          return;
+        }
+      }
       setMessage({
         type: "error",
         text:
