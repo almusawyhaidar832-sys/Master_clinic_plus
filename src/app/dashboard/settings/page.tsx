@@ -45,7 +45,8 @@ export default function ClinicSettingsPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [userRole, setUserRole] = useState<string>("accountant");
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const isOwner = userRole === "super_admin";
+  const canEditClinic =
+    userRole === "super_admin" || userRole === "accountant";
 
   useEffect(() => {
     async function loadRole() {
@@ -82,7 +83,7 @@ export default function ClinicSettingsPage() {
   }, [clinicId]);
 
   async function handleLogoUpload(file: File) {
-    if (!isOwner) return;
+    if (!canEditClinic) return;
     setUploadingLogo(true);
     setMessage(null);
     try {
@@ -161,9 +162,9 @@ export default function ClinicSettingsPage() {
         <p className="text-slate-muted">
           الاسم والعنوان والشعار يظهران تلقائياً في التقارير وفواتير PDF
         </p>
-        {!isOwner && !loading && (
+        {!canEditClinic && !loading && (
           <p className="mt-2 text-xs text-amber-700">
-            التعديل ورفع الشعار متاح لمالك العيادة فقط — أنت تعرض الإعدادات للقراءة.
+            التعديل متاح للمحاسب أو مالك العيادة فقط — أنت تعرض الإعدادات للقراءة.
           </p>
         )}
       </div>
@@ -233,7 +234,7 @@ export default function ClinicSettingsPage() {
               onChange={(e) => setNameAr(e.target.value)}
               placeholder="مثال: عيادة الأمل للأسنان"
               required
-              disabled={!isOwner}
+              disabled={!canEditClinic}
             />
 
             <Input
@@ -242,7 +243,7 @@ export default function ClinicSettingsPage() {
               onChange={(e) => setNameEn(e.target.value)}
               placeholder="Clinic name in English"
               required
-              disabled={!isOwner}
+              disabled={!canEditClinic}
             />
 
             <Input
@@ -250,7 +251,7 @@ export default function ClinicSettingsPage() {
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder="العنوان الكامل للعيادة"
-              disabled={!isOwner}
+              disabled={!canEditClinic}
             />
 
             <Input
@@ -260,7 +261,7 @@ export default function ClinicSettingsPage() {
               dir="ltr"
               className="text-left"
               placeholder="+201xxxxxxxxx"
-              disabled={!isOwner}
+              disabled={!canEditClinic}
             />
 
             <div className="space-y-2">
@@ -275,7 +276,7 @@ export default function ClinicSettingsPage() {
                   />
                 </div>
               )}
-              {isOwner ? (
+              {canEditClinic ? (
                 <>
                   <input
                     ref={logoInputRef}
@@ -333,6 +334,7 @@ export default function ClinicSettingsPage() {
                     checked={reviewFeeEnabled}
                     onChange={(e) => setReviewFeeEnabled(e.target.checked)}
                     className="h-4 w-4 rounded text-primary"
+                    disabled={!canEditClinic}
                   />
                   تفعيل رسوم كشفية المراجع على مستوى العيادة
                 </label>
@@ -345,6 +347,7 @@ export default function ClinicSettingsPage() {
                     onChange={(e) => setReviewFeeAmount(e.target.value)}
                     dir="ltr"
                     className="text-left"
+                    disabled={!canEditClinic}
                   />
                 )}
               </div>
@@ -360,7 +363,7 @@ export default function ClinicSettingsPage() {
             <Button
               type="submit"
               className="w-full"
-              disabled={saving || !clinicId || !isOwner}
+              disabled={saving || !clinicId || !canEditClinic}
             >
               {saving ? (
                 <>

@@ -6,16 +6,16 @@ const BUCKET = "clinic-assets";
 const MAX_BYTES = 2 * 1024 * 1024;
 const ALLOWED = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
-/** POST multipart — رفع شعار العيادة (المالك فقط) */
+/** POST multipart — رفع شعار العيادة (محاسب / مالك) */
 export async function POST(req: NextRequest) {
   try {
     const profile = await getApiCallerProfile(req);
     if (!profile?.clinic_id) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
     }
-    if (String(profile.role) !== "super_admin") {
+    if (!["super_admin", "accountant"].includes(String(profile.role))) {
       return NextResponse.json(
-        { error: "رفع الشعار متاح لمالك العيادة فقط" },
+        { error: "رفع الشعار متاح للمحاسب أو مالك العيادة فقط" },
         { status: 403 }
       );
     }
