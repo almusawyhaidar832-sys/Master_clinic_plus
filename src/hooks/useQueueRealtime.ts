@@ -89,6 +89,7 @@ function alertAccountantAdmit(
     title: "طلب دخول مراجع 🔔",
     message: msg,
     linkPath,
+    entryId: row.id,
     patientName: name,
     patientGender: gender,
   });
@@ -101,6 +102,7 @@ function alertAccountantBilling(
     linkPath?: string;
     gender?: PatientGender;
     doctorNotes?: string;
+    audioUrl?: string;
   },
   seen: Set<string>
 ) {
@@ -117,8 +119,10 @@ function alertAccountantBilling(
     title: "جلسة جاهزة للمحاسبة 🔔",
     message: formatAccountantBillingAlertMessage(name, payload.doctorNotes),
     linkPath,
+    entryId: entryId ?? undefined,
     patientName: name,
     patientGender: payload.gender ?? null,
+    audioUrl: payload.audioUrl,
   });
 }
 
@@ -139,13 +143,14 @@ function alertAccountantBillingFromRow(
     title: "جلسة جاهزة للمحاسبة 🔔",
     message: formatAccountantBillingAlertMessage(name, row.doctor_notes),
     linkPath,
+    entryId: row.id,
     patientName: name,
     patientGender: gender,
   });
 }
 
 function alertAccountantFromBroadcast(
-  payload: { name?: string; entryId?: string; gender?: PatientGender },
+  payload: { name?: string; entryId?: string; gender?: PatientGender; audioUrl?: string },
   seen: Set<string>,
   linkPath = "/dashboard/queue"
 ) {
@@ -161,8 +166,10 @@ function alertAccountantFromBroadcast(
     title: "طلب دخول مراجع 🔔",
     message: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
     linkPath,
+    entryId: entryId ?? undefined,
     patientName: name,
     patientGender: payload.gender ?? null,
+    audioUrl: payload.audioUrl,
   });
 }
 
@@ -402,6 +409,7 @@ export function useAccountantQueueRealtime(
             name?: string;
             entryId?: string;
             gender?: PatientGender;
+            audioUrl?: string;
           };
           notifyQueueRefresh({ scope: "clinic", clinicId });
           if (filterDoctorId) {
@@ -420,6 +428,7 @@ export function useAccountantQueueRealtime(
             linkPath?: string;
             gender?: PatientGender;
             doctorNotes?: string;
+            audioUrl?: string;
           };
           notifyQueueRefresh({ scope: "clinic", clinicId });
           alertAccountantBilling(p, seenRef.current);

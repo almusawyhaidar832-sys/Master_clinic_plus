@@ -20,6 +20,7 @@ import {
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
 import { normalizeOptionalPatientPhone, patientPhoneColumns } from "@/lib/phone";
+import { buildQueueAnnounceAudioUrl } from "@/lib/queue/queue-announce-audio-url";
 
 export type QueueStatus =
   | "waiting"
@@ -197,6 +198,7 @@ export async function emitQueueScreenCall(
     ticketNumber: ctx.ticketNumber,
     gender: ctx.gender ?? undefined,
     recall: options?.recall === true,
+    audioUrl: buildQueueAnnounceAudioUrl(queueEntryId, "queue_screen"),
   });
 }
 
@@ -391,6 +393,11 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
   const clinicId = entry.clinic_id as string;
 
   // 1) بث فوري أولاً — يصل للمحاسب مباشرة على أي صفحة (Realtime)
+  const billingAudioUrl = buildQueueAnnounceAudioUrl(
+    entry.id as string,
+    "accountant_billing"
+  );
+
   await pushQueueBroadcasts([
     broadcastBillingReadyServer(clinicId, {
       name: speechName,
@@ -398,6 +405,7 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
       linkPath: ledgerPath,
       gender: gender ?? undefined,
       doctorNotes: doctorNotes ?? undefined,
+      audioUrl: billingAudioUrl,
     }),
   ]).catch((err) => {
     console.error("[queue] billing broadcast failed:", err);
@@ -422,6 +430,7 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
         tag: `billing-${entry.id}`,
         patientName: speechName,
         kind: "accountant_billing",
+        audioUrl: billingAudioUrl,
       })
     ),
   ]).catch((err) => {
@@ -532,6 +541,10 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
   });
 
   const clinicId = entry.clinic_id as string;
+  const admitAudioUrl = buildQueueAnnounceAudioUrl(
+    entry.id as string,
+    "accountant_admit"
+  );
 
   // بث فوري أولاً — نداء المحاسب مباشرة
   await pushQueueBroadcasts([
@@ -539,6 +552,7 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
       name: speechName,
       entryId: entry.id as string,
       gender: gender ?? undefined,
+      audioUrl: admitAudioUrl,
     }),
   ]).catch((err) => {
     console.error("[queue] admit broadcast failed:", err);
@@ -562,6 +576,7 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
         tag: `admit-${entry.id}`,
         patientName: speechName,
         kind: "accountant_admit",
+        audioUrl: admitAudioUrl,
       })
     ),
   ]).catch((err) => {

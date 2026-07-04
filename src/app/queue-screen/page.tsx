@@ -323,7 +323,12 @@ function QueueScreenContent() {
       name?: string,
       doctorName?: string,
       gender?: PatientGender | null,
-      options?: { entryId?: string; recall?: boolean }
+      options?: {
+        entryId?: string;
+        clinicRef?: string;
+        audioUrl?: string;
+        recall?: boolean;
+      }
     ) => {
       if (!name?.trim() || !doctorName?.trim()) return;
       speakQueueScreenAnnouncement(
@@ -331,10 +336,15 @@ function QueueScreenContent() {
         doctorName.trim(),
         voiceEnabledRef.current,
         gender,
-        options
+        {
+          entryId: options?.entryId,
+          clinicRef: options?.clinicRef ?? clinicRef ?? undefined,
+          audioUrl: options?.audioUrl,
+          recall: options?.recall,
+        }
       );
     },
-    []
+    [clinicRef]
   );
 
   const fetchQueue = useCallback(async () => {
@@ -448,6 +458,7 @@ function QueueScreenContent() {
         ticketNumber?: number;
         gender?: PatientGender;
         recall?: boolean;
+        audioUrl?: string;
       };
       if (p.name && p.doctorName) {
         prefetchCloudTts(
@@ -472,6 +483,7 @@ function QueueScreenContent() {
         setLiveCallTick((t) => t + 1);
         handleQueueScreenCall(p.name, p.doctorName, p.gender ?? null, {
           entryId: p.entryId,
+          audioUrl: p.audioUrl,
           recall: p.recall === true,
         });
         void fetchQueue();
@@ -605,7 +617,8 @@ function QueueScreenContent() {
           resolvePatientName(entry),
           resolveDoctorName(entry),
           true,
-          resolvePatientGender(entry)
+          resolvePatientGender(entry),
+          { entryId: entry.id, clinicRef: clinicRef ?? undefined }
         )
       }
       audioDiagnosticMessage={audioDiagnosticMessage}
@@ -621,7 +634,11 @@ function QueueScreenContent() {
               resolvePatientName(displayCalled[0]),
               resolveDoctorName(displayCalled[0]),
               true,
-              resolvePatientGender(displayCalled[0])
+              resolvePatientGender(displayCalled[0]),
+              {
+                entryId: displayCalled[0].id,
+                clinicRef: clinicRef ?? undefined,
+              }
             );
           } else {
             await announceArabicWithBeep("هذا اختبار لصوت شاشة الانتظار", {

@@ -10,6 +10,7 @@ export interface DoctorQueuePushPayload {
   tag?: string;
   patientName?: string;
   kind?: string;
+  audioUrl?: string;
 }
 
 let vapidConfigured = false;
@@ -75,6 +76,7 @@ export async function sendWebPushToProfile(
     tag: payload.tag ?? "doctor-queue",
     patientName: payload.patientName,
     kind: payload.kind ?? "doctor_queue",
+    audioUrl: payload.audioUrl,
   });
 
   const pushOptions = {

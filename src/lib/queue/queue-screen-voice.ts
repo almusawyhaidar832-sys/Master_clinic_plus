@@ -1,6 +1,7 @@
 "use client";
 
 import { splitPatientCallSpeech } from "@/lib/queue/arabic-speech-text";
+import { playDoctorCallAudioUrl } from "@/lib/queue/audio-alerts";
 import { prefetchCloudTts } from "@/lib/queue/cloud-speech";
 import {
   installSpeechGestureUnlock,
@@ -20,6 +21,8 @@ type AnnouncementJob = {
   doctorName: string;
   gender?: import("@/lib/queue/patient-gender").PatientGender | null;
   entryId?: string;
+  clinicRef?: string;
+  audioUrl?: string;
   recall?: boolean;
 };
 
@@ -48,6 +51,8 @@ function announcementDedupeKey(job: AnnouncementJob): string {
 
 function shouldSkipDuplicateAnnouncement(job: AnnouncementJob): boolean {
   if (job.recall) return false;
+  /** رابط MP3 من السيرفر — لا نتخطاه حتى لو وصل بث عميل بدون صوت قبله */
+  if (job.audioUrl?.trim()) return false;
   const key = announcementDedupeKey(job);
   const now = Date.now();
   if (key === lastAnnouncedKey && now - lastAnnouncedAt < CALL_DEDUP_MS) {
@@ -58,13 +63,49 @@ function shouldSkipDuplicateAnnouncement(job: AnnouncementJob): boolean {
   return false;
 }
 
-/** نغمة ثم نداء بالاسم — تسلسلي لأن شاشات التلفاز لا تتحمل تشغيل مسارين صوتيين معاً */
+async function fetchScreenAnnounceAudioUrl(
+  entryId: string,
+  clinicRef: string
+): Promise<string | null> {
+  try {
+    const params = new URLSearchParams({
+      clinic: clinicRef,
+      entry_id: entryId,
+    });
+    const res = await fetch(
+      `/api/queue/screen/announce-audio-url?${params.toString()}`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { audioUrl?: string };
+    return data.audioUrl?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveJobAudioUrl(job: AnnouncementJob): Promise<string | null> {
+  if (job.audioUrl?.trim()) return job.audioUrl.trim();
+  const entryId = job.entryId?.trim();
+  const clinicRef = job.clinicRef?.trim();
+  if (!entryId || !clinicRef) return null;
+  return fetchScreenAnnounceAudioUrl(entryId, clinicRef);
+}
+
+/** نغمة ثم نداء بالاسم — MP3 من السيرفر أولاً (أوثق على TV وWindows) */
 async function playAnnouncement(job: AnnouncementJob, interrupt = false): Promise<void> {
   const parts = jobParts(job);
   prefetchCloudTts(parts);
 
   if (interrupt) {
     stopAllSpeech();
+  }
+
+  const audioUrl = await resolveJobAudioUrl(job);
+  if (audioUrl) {
+    await playAttentionBeep();
+    const played = await playDoctorCallAudioUrl(audioUrl);
+    if (played) return;
   }
 
   await playAttentionBeep();
@@ -121,7 +162,12 @@ export function speakQueueScreenAnnouncement(
   doctorName: string,
   enabled = true,
   gender?: AnnouncementJob["gender"],
-  options?: { entryId?: string; recall?: boolean }
+  options?: {
+    entryId?: string;
+    clinicRef?: string;
+    audioUrl?: string;
+    recall?: boolean;
+  }
 ): void {
   if (!enabled) return;
   if (typeof window === "undefined") return;
@@ -130,6 +176,8 @@ export function speakQueueScreenAnnouncement(
     doctorName,
     gender,
     entryId: options?.entryId,
+    clinicRef: options?.clinicRef,
+    audioUrl: options?.audioUrl,
     recall: options?.recall,
   });
 }
@@ -138,13 +186,17 @@ export function repeatQueueScreenAnnouncement(
   patientName: string,
   doctorName: string,
   enabled = true,
-  gender?: AnnouncementJob["gender"]
+  gender?: AnnouncementJob["gender"],
+  options?: { entryId?: string; clinicRef?: string; audioUrl?: string }
 ): void {
   if (!enabled || typeof window === "undefined") return;
   enqueueImmediate({
     patientName,
     doctorName,
     gender,
+    entryId: options?.entryId,
+    clinicRef: options?.clinicRef,
+    audioUrl: options?.audioUrl,
     recall: true,
   });
 }

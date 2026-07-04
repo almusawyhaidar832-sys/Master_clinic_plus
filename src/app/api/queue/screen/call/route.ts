@@ -7,6 +7,7 @@ import {
 import { getAdminClient } from "@/lib/supabase/admin";
 import { resolveQueueApiAccess } from "@/lib/queue/api-access";
 import { emitQueueScreenCall } from "@/lib/queue/server";
+import { buildQueueAnnounceAudioUrl } from "@/lib/queue/queue-announce-audio-url";
 import {
   resolveDoctorSpeechName,
   resolvePatientSpeechName,
@@ -106,6 +107,7 @@ export async function POST(req: NextRequest) {
       called_at: now,
       patientName,
       doctorName,
+      audioUrl: buildQueueAnnounceAudioUrl(entryId, "queue_screen"),
       variant: status === "in_progress" ? "enter" : "called",
     });
   } catch (err) {

@@ -6,6 +6,10 @@ import {
   splitDoctorExamSpeech,
   splitDoctorNewPatientSpeech,
 } from "@/lib/queue/arabic-speech-text";
+import {
+  fetchQueueAnnounceAudioUrl,
+  type QueueAnnounceVariant,
+} from "@/lib/queue/announce-audio-client";
 import type { PatientGender } from "@/lib/queue/patient-gender";
 import { showBrowserNotification } from "@/lib/queue/realtime-client";
 import {
@@ -26,6 +30,8 @@ export interface QueueAlertDetail {
   title: string;
   message: string;
   linkPath?: string;
+  /** معرّف دور الطابور — لطلب MP3 موقّع من السيرفر */
+  entryId?: string;
   /** لنطق الاسم بمخارج أوضح */
   patientName?: string;
   /** ذكر / أنثى — يغيّر «مراجع» / «مراجعة» */
@@ -226,14 +232,34 @@ function dispatchQueueAlertUI(detail: QueueAlertDetail) {
   );
 }
 
+function queueAlertKindToAnnounceVariant(
+  kind: QueueAlertKind
+): QueueAnnounceVariant | null {
+  if (kind === "accountant_admit") return "accountant_admit";
+  if (kind === "accountant_billing") return "accountant_billing";
+  return null;
+}
+
+async function resolveAlertAudioUrl(
+  detail: QueueAlertDetail
+): Promise<string | null> {
+  if (detail.audioUrl?.trim()) return detail.audioUrl.trim();
+  const entryId = detail.entryId?.trim();
+  if (!entryId) return null;
+  const variant = queueAlertKindToAnnounceVariant(detail.kind);
+  if (!variant) return null;
+  return fetchQueueAnnounceAudioUrl(entryId, variant);
+}
+
 async function speakQueueAlertVoice(
   detail: QueueAlertDetail,
   options?: { clearQueue?: boolean }
 ): Promise<void> {
   prepareSpeechAuto();
 
-  if (detail.audioUrl) {
-    const played = await playDoctorCallAudioUrl(detail.audioUrl);
+  const audioUrl = await resolveAlertAudioUrl(detail);
+  if (audioUrl) {
+    const played = await playDoctorCallAudioUrl(audioUrl);
     if (played) return;
   }
 

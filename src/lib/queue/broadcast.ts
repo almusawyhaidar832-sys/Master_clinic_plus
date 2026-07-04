@@ -80,6 +80,7 @@ export function broadcastQueueScreenCall(
     ticketNumber?: number;
     gender?: PatientGender;
     recall?: boolean;
+    audioUrl?: string;
   }
 ) {
   return sendBroadcast(

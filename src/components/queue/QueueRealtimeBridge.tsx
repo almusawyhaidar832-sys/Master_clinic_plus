@@ -107,6 +107,7 @@ export function QueueRealtimeBridge({
         linkPath: payload.url,
         patientName: payload.patientName,
         audioUrl: payload.audioUrl,
+        entryId: payload.entryId,
       });
     });
   }, []);

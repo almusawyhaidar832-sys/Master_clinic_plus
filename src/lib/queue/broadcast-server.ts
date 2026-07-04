@@ -15,6 +15,8 @@ export type QueueScreenCallPayload = {
   ticketNumber?: number;
   gender?: PatientGender;
   recall?: boolean;
+  /** MP3 موقّع من السيرفر — يعمل على TV بدون جلسة */
+  audioUrl?: string;
 };
 
 export type QueuePatientSentPayload = {
@@ -29,6 +31,7 @@ export type QueueAdmitPayload = {
   name: string;
   entryId?: string;
   gender?: PatientGender;
+  audioUrl?: string;
 };
 
 function sendServerBroadcast(
@@ -114,6 +117,7 @@ export function broadcastBillingReadyServer(
     linkPath: string;
     gender?: PatientGender;
     doctorNotes?: string;
+    audioUrl?: string;
   }
 ): Promise<void> {
   return sendServerBroadcast(
