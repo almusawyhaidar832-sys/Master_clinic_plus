@@ -135,12 +135,22 @@ export function DoctorAlertsSetup({ showTestControls = false }: DoctorAlertsSetu
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const installed = isStandalonePwa();
-    setStandalone(installed);
-    setNeedsInstallForBackground(backgroundPushNeedsInstalledApp());
-    if (isIOS()) setPlatform("ios");
-    else if (isAndroid()) setPlatform("android");
-  }, []);
+    const refreshPlatform = () => {
+      if (document.visibilityState !== "visible") return;
+      const installed = isStandalonePwa();
+      setStandalone(installed);
+      setNeedsInstallForBackground(backgroundPushNeedsInstalledApp());
+      if (isIOS()) setPlatform("ios");
+      else if (isAndroid()) setPlatform("android");
+      if (installed && browserGranted && !pushInflightRef.current) {
+        void registerPush({ force: false });
+      }
+    };
+
+    refreshPlatform();
+    document.addEventListener("visibilitychange", refreshPlatform);
+    return () => document.removeEventListener("visibilitychange", refreshPlatform);
+  }, [browserGranted, registerPush]);
 
   useEffect(() => {
     if (!browserGranted) return;
@@ -357,6 +367,7 @@ export function DoctorAlertsSetup({ showTestControls = false }: DoctorAlertsSetu
             <div className="min-w-0 text-xs leading-relaxed text-amber-950">
               <p className="font-bold">{t("docAlertsIosInstallTitle")}</p>
               <p className="mt-1">{t("docAlertsIosInstallSteps")}</p>
+              <p className="mt-2 font-semibold">{t("docAlertsIosInstallReopen")}</p>
             </div>
           </div>
         </div>
@@ -425,7 +436,7 @@ export function DoctorAlertsSetup({ showTestControls = false }: DoctorAlertsSetu
 
       {alertsActive && !pushReady && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs leading-relaxed text-amber-950">
-          {t("docAlertsPushPendingHint")}
+          {standalone ? t("docAlertsPushPendingStandalone") : t("docAlertsPushPendingHint")}
         </div>
       )}
 

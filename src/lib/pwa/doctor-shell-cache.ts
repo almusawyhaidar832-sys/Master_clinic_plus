@@ -4,7 +4,7 @@
  */
 
 /** يجب أن يطابق CACHE_NAME في public/sw.js */
-const SERVICE_WORKER_CACHE_NAME = "mcp-app-v19-exam-autosave";
+const SERVICE_WORKER_CACHE_NAME = "mcp-app-v21-doctor-push";
 
 export const DOCTOR_OFFLINE_PAGES = [
   "/doctor",

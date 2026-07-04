@@ -206,6 +206,22 @@ export async function refreshAssistantWebPushIfGranted(): Promise<PushRegisterRe
   return registerAssistantWebPush(false);
 }
 
+/** إعادة اشتراك Push عند انتهاء الاشتراك (pushsubscriptionchange في SW) */
+export function listenForPushResubscribe(onResubscribe: () => void): () => void {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+    return () => {};
+  }
+
+  const handler = (event: MessageEvent) => {
+    const data = event.data as { type?: string } | null;
+    if (data?.type !== "PUSH_RESUBSCRIBE") return;
+    onResubscribe();
+  };
+
+  navigator.serviceWorker.addEventListener("message", handler);
+  return () => navigator.serviceWorker.removeEventListener("message", handler);
+}
+
 /** استمع لرسائل Service Worker — تشغيل النداء إذا التطبيق مفتوح بالخلفية */
 export function listenForPushAlertMessages(
   onAlert: (payload: {

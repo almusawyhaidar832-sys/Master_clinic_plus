@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v20-queue-screen-tv";
+const CACHE_NAME = "mcp-app-v21-doctor-push";
 
 const NOTIFICATION_ICON = "/icons/icon-192.png";
 
@@ -34,22 +34,28 @@ const STATIC_EXTENSIONS = new Set([
   "gif",
 ]);
 
+function absoluteIconUrl() {
+  return new URL(NOTIFICATION_ICON, self.location.origin).href;
+}
+
 /** بناء إشعار مخصص — يُستخدم من Push (السيرفر) ومن React (postMessage) */
 function buildCustomNotification(title, payload) {
   const data = payload && typeof payload === "object" ? payload : {};
   const url = data.url || "/doctor/queue";
   const tag = data.tag || "mcp-doctor";
+  const icon = absoluteIconUrl();
+  const isDoctorQueue = data.kind === "doctor_queue";
 
   return {
     title: title || "Master Clinic Plus",
     options: {
       body: data.body || "",
-      icon: NOTIFICATION_ICON,
-      badge: NOTIFICATION_ICON,
+      icon,
+      badge: icon,
       tag,
       renotify: data.renotify !== false,
-      requireInteraction: false,
-      silent: data.silent !== false,
+      requireInteraction: data.requireInteraction ?? isDoctorQueue,
+      silent: data.silent === true,
       vibrate: data.vibrate || [200, 100, 200, 100, 400],
       data: {
         url,
@@ -209,8 +215,23 @@ self.addEventListener("push", (event) => {
       tag: data.tag || "doctor-queue",
       kind: data.kind || "doctor_queue",
       patientName: data.patientName,
-      silent: true,
+      silent: false,
+      requireInteraction: true,
+      renotify: true,
     })
+  );
+});
+
+/** اشتراك Push انتهى — اطلب من التطبيق إعادة التسجيل */
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          client.postMessage({ type: "PUSH_RESUBSCRIBE" });
+        }
+      })
   );
 });
 
