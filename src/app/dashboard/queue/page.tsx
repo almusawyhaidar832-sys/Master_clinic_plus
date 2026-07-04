@@ -7,7 +7,7 @@ import { translateDbError } from "@/lib/db-errors";
 import { cn } from "@/lib/utils";
 import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import { broadcastPatientSentToDoctor } from "@/lib/queue/broadcast";
+import { broadcastPatientSentToDoctor, broadcastQueueScreenCall } from "@/lib/queue/broadcast";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { tryEnqueueQueueAddOffline } from "@/lib/offline/queue-add/enqueue";
 import { cacheOfflineDoctors } from "@/lib/offline/reference-cache";
@@ -17,6 +17,7 @@ import {
   resolveDoctorSpeechName,
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
+import { resolvePatientGender } from "@/lib/queue/patient-gender";
 import { TodayAppointmentsPanel } from "@/components/operations/TodayAppointmentsPanel";
 import { InProgressOverridePanel } from "@/components/queue/InProgressOverridePanel";
 import { resolveAppointmentPaymentUrl } from "@/lib/ledger/open-appointment-payment";
@@ -403,7 +404,20 @@ export default function QueuePage() {
         body: JSON.stringify({ action: "advance" }),
       });
 
-      if (data.status === "in_progress") {
+      if (data.status === "called") {
+        const name = resolvePatientSpeechName(entry);
+        const doctorName = resolveDoctorSpeechName(entry.doctor);
+        if (effectiveClinicId) {
+          void broadcastQueueScreenCall(supabase, effectiveClinicId, {
+            name,
+            doctorName,
+            entryId: entry.id,
+            gender: resolvePatientGender(entry) ?? undefined,
+          });
+          notifyQueueRefresh({ scope: "clinic", clinicId: effectiveClinicId });
+          notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
+        }
+      } else if (data.status === "in_progress") {
         const name = resolvePatientSpeechName(entry);
         const doctorName = resolveDoctorSpeechName(entry.doctor);
         announcePatientCall(name, doctorName, "enter");
@@ -495,6 +509,7 @@ export default function QueuePage() {
   const recallPatient = async (entry: QueueEntry) => {
     setUpdating(entry.id);
     const name = resolvePatientSpeechName(entry);
+    const doctorName = resolveDoctorSpeechName(entry.doctor);
 
     try {
       if (entry.status === "called" || entry.status === "in_progress") {
@@ -502,6 +517,16 @@ export default function QueuePage() {
           method: "POST",
           body: JSON.stringify({ entry_id: entry.id }),
         });
+        if (effectiveClinicId) {
+          void broadcastQueueScreenCall(supabase, effectiveClinicId, {
+            name,
+            doctorName,
+            entryId: entry.id,
+            gender: resolvePatientGender(entry) ?? undefined,
+            recall: true,
+          });
+          notifyQueueRefresh({ scope: "clinic", clinicId: effectiveClinicId });
+        }
         return;
       }
 

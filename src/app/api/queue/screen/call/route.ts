@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getApiCallerProfile,
   isApiAssistantRole,
   isApiDoctorRole,
   isApiStaffRole,
 } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { resolveQueueApiAccess } from "@/lib/queue/api-access";
 import { emitQueueScreenCall } from "@/lib/queue/server";
 import {
   resolveDoctorSpeechName,
@@ -16,18 +16,24 @@ function staffOk(role: string) {
   return isApiStaffRole(role) || isApiAssistantRole(role);
 }
 
+const ENTRY_SELECT = `
+  id, status, clinic_id, patient_name, ticket_number,
+  doctor:doctors!doctor_id(full_name_ar),
+  patient:patients(full_name_ar, speech_name_ar, gender)
+`;
+
 /**
  * POST /api/queue/screen/call
- * إعادة نداء على شاشة انتظار المرضى فقط — يحدّث called_at ليلتقطها الشاشة.
+ * إعادة نداء على شاشة انتظار المرضى — يحدّث called_at ليلتقطها الشاشة.
  */
 export async function POST(req: NextRequest) {
   try {
-    const profile = await getApiCallerProfile(req);
-    if (!profile?.clinic_id) {
-      return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+    const access = await resolveQueueApiAccess(req);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
-    const role = String(profile.role ?? "");
+    const role = String(access.profile.role ?? "");
     if (!staffOk(role) && !isApiDoctorRole(role)) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
@@ -38,21 +44,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "معرّف الدور مطلوب" }, { status: 400 });
     }
 
+    const clinicId = access.clinicId;
     const admin = getAdminClient();
     const { data: entry, error: fetchErr } = await admin
       .from("patient_queue")
-      .select(
-        `
-        id, status, clinic_id, patient_name, ticket_number,
-        doctor:doctors(full_name_ar),
-        patient:patients(full_name_ar, speech_name_ar, gender)
-      `
-      )
+      .select(ENTRY_SELECT)
       .eq("id", entryId)
-      .eq("clinic_id", profile.clinic_id)
+      .eq("clinic_id", clinicId)
       .maybeSingle();
 
-    if (fetchErr || !entry) {
+    if (fetchErr) {
+      console.error("[api/queue/screen/call] fetch failed:", fetchErr.message);
+      return NextResponse.json(
+        { error: "تعذر قراءة الدور — حاول مرة أخرى" },
+        { status: 500 }
+      );
+    }
+
+    if (!entry) {
       return NextResponse.json({ error: "الدور غير موجود" }, { status: 404 });
     }
 
@@ -69,20 +78,20 @@ export async function POST(req: NextRequest) {
       .from("patient_queue")
       .update({ called_at: now })
       .eq("id", entryId)
-      .eq("clinic_id", profile.clinic_id);
+      .eq("clinic_id", clinicId);
 
     if (updateErr) {
       return NextResponse.json({ error: updateErr.message }, { status: 400 });
     }
 
-    // علاقة Supabase (doctor:doctors / patient:patients) قد تُرجع مصفوفة
-    // بدل كائن واحد حسب كيفية استنتاج PostgREST للعلاقة — بدون هذا التطبيع
-    // يفشل النطق الصوتي صامتاً (undefined.full_name_ar)
     const patientRow = Array.isArray(entry.patient) ? entry.patient[0] : entry.patient;
     const doctorRow = Array.isArray(entry.doctor) ? entry.doctor[0] : entry.doctor;
 
     const patientName = resolvePatientSpeechName({
-      patient: patientRow as { full_name_ar: string; speech_name_ar?: string | null } | null,
+      patient: patientRow as {
+        full_name_ar: string;
+        speech_name_ar?: string | null;
+      } | null,
       patient_name: entry.patient_name as string | null,
       ticket_number: entry.ticket_number as number,
     });

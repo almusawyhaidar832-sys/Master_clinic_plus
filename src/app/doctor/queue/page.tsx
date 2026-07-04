@@ -19,6 +19,7 @@ import {
   resolveDoctorSpeechName,
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
+import { resolvePatientGender } from "@/lib/queue/patient-gender";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { useQueueListRefresh } from "@/hooks/useQueueListRefresh";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -225,10 +226,17 @@ function DoctorQueuePageContent() {
         body: JSON.stringify({ action: "admit", queue_entry_id: entry.id }),
       });
       const name = resolvePatientSpeechName(entry);
+      const doctorName = resolveDoctorSpeechName(entry.doctor);
       if (clinicId) {
         void broadcastAdmitRequest(supabase, clinicId, {
           name,
           entryId: entry.id,
+        });
+        void broadcastQueueScreenCall(supabase, clinicId, {
+          name,
+          doctorName,
+          entryId: entry.id,
+          gender: resolvePatientGender(entry) ?? undefined,
         });
         notifyQueueRefresh({ scope: "clinic", clinicId });
       }

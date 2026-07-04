@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
       const admin = getAdminClient();
       const { error } = await admin
         .from("patient_queue")
-        .update({ status: "called" })
+        .update({ status: "called", called_at: new Date().toISOString() })
         .eq("id", entryId)
         .eq("doctor_id", doctor.id)
         .in("status", ["waiting"]);

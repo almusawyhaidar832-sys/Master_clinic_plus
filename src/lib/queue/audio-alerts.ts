@@ -284,10 +284,9 @@ export function triggerQueueAlert(detail: QueueAlertDetail): void {
     showBrowserNotification(detail.title, detail.message, detail.linkPath);
   }
 
-  // صوت فوري — لا ننتظر فتح AudioContext قبل أول نغمة
-  void playQueueAlertSound(detail.kind);
   void (async () => {
     await unlockQueueAudio();
+    void playQueueAlertSound(detail.kind);
     void speakQueueAlertVoice(detail, { clearQueue: true });
   })();
 }

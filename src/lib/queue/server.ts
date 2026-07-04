@@ -686,9 +686,17 @@ export async function updateQueueStatus(
 ) {
   const admin = getAdminClient();
 
+  const patch: Record<string, unknown> = { status };
+  if (status === "called" && opts?.fromStatus === "waiting") {
+    patch.called_at = new Date().toISOString();
+  }
+  if (status === "in_progress" && opts?.fromStatus === "called") {
+    patch.entered_at = new Date().toISOString();
+  }
+
   let query = admin
     .from("patient_queue")
-    .update({ status })
+    .update(patch)
     .eq("id", queueEntryId);
 
   if (opts?.clinicId) query = query.eq("clinic_id", opts.clinicId);

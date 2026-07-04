@@ -6,6 +6,7 @@ import {
   clinicQueueScreenChannelName,
   doctorQueueChannelName,
 } from "@/lib/queue/realtime-channels";
+import type { PatientGender } from "@/lib/queue/patient-gender";
 
 function sendBroadcast(
   supabase: AppSupabaseClient,
@@ -76,6 +77,8 @@ export function broadcastQueueScreenCall(
     name: string;
     doctorName: string;
     entryId?: string;
+    ticketNumber?: number;
+    gender?: PatientGender;
     recall?: boolean;
   }
 ) {

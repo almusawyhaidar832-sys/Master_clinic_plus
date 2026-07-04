@@ -42,7 +42,7 @@ function sendServerBroadcast(
     const timeout = setTimeout(() => {
       void supabase.removeChannel(channel);
       resolve();
-    }, 1200);
+    }, 3500);
 
     const channel = supabase.channel(channelName, {
       config: { broadcast: { ack: false, self: false } },
