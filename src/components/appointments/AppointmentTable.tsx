@@ -226,9 +226,12 @@ export function AppointmentTable({
           portal={portal}
           clinicId={clinicId}
           onClose={() => setShowAdd(false)}
-          onSaved={() => {
+          onSaved={(notice) => {
             setMessage(
-              role === "accountant" ? "تم حجز المراجع بنجاح" : "تم إضافة الموعد"
+              notice ??
+                (role === "accountant"
+                  ? "تم حجز المراجع بنجاح"
+                  : "تم إضافة الموعد")
             );
             refresh();
           }}

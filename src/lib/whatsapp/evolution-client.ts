@@ -130,15 +130,18 @@ export function invalidateEvolutionSessionCache(instanceName?: string) {
  * حالة الجلسة الموحّدة — لا نستدعي /connect إذا كانت open (يقطع الجلسة على الهاتف).
  */
 export async function resolveEvolutionSession(
-  instanceOverride?: string
+  instanceOverride?: string,
+  options?: { skipCache?: boolean }
 ): Promise<EvolutionSessionSnapshot> {
   const instanceName =
     instanceOverride?.trim() ||
     (await resolveWhatsAppInstanceName());
 
-  const cached = sessionCache.get(instanceName);
-  if (cached && cached.expires > Date.now()) {
-    return cached.snapshot;
+  if (!options?.skipCache) {
+    const cached = sessionCache.get(instanceName);
+    if (cached && cached.expires > Date.now()) {
+      return cached.snapshot;
+    }
   }
 
   const [stateRes, listRes] = await Promise.all([

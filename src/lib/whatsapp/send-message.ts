@@ -5,6 +5,7 @@ import {
 } from "@/lib/phone";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
 import {
+  invalidateEvolutionSessionCache,
   resolveEvolutionSession,
   sendEvolutionDocument,
   sendEvolutionText,
@@ -95,7 +96,11 @@ export async function deliverWhatsAppMessage(
   try {
     if (cfg.provider === "evolution") {
       const instanceName = await resolveWhatsAppInstanceForClinic(params.clinicId);
-      const session = await resolveEvolutionSession(instanceName);
+      let session = await resolveEvolutionSession(instanceName, { skipCache: true });
+      if (!session.linked) {
+        invalidateEvolutionSessionCache(instanceName);
+        session = await resolveEvolutionSession(instanceName, { skipCache: true });
+      }
       if (!session.linked) {
         const err = "whatsapp_not_linked";
         console.error(LOG_PREFIX, params.messageType, err, { instanceName });
@@ -259,7 +264,11 @@ export async function deliverWhatsAppDocument(
   try {
     if (cfg.provider === "evolution") {
       const instanceName = await resolveWhatsAppInstanceForClinic(params.clinicId);
-      const session = await resolveEvolutionSession(instanceName);
+      let session = await resolveEvolutionSession(instanceName, { skipCache: true });
+      if (!session.linked) {
+        invalidateEvolutionSessionCache(instanceName);
+        session = await resolveEvolutionSession(instanceName, { skipCache: true });
+      }
       if (!session.linked) {
         const err = "whatsapp_not_linked";
         await logWhatsAppRow(supabase, {

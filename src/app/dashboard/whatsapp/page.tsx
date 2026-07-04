@@ -222,6 +222,11 @@ export default function WhatsAppSettingsPage() {
 
   const typeLabels: Record<string, string> = {
     appointment_confirmation: "تأكيد موعد",
+    appointment_created: "حجز موعد جديد",
+    appointment_accepted: "قبول موعد",
+    appointment_rejected: "رفض موعد",
+    appointment_modified: "تعديل موعد",
+    appointment_submitted: "طلب حجز",
     payment_receipt: "إيصال دفع",
     test_notification: "رسالة تجريبية",
   };

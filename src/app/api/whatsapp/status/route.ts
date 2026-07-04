@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createApiSessionClient, getApiCallerProfile } from "@/lib/auth/api-session";
+import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
-import { resolveEvolutionSession } from "@/lib/whatsapp/evolution-client";
+import {
+  invalidateEvolutionSessionCache,
+  resolveEvolutionSession,
+} from "@/lib/whatsapp/evolution-client";
 import { resolveWhatsAppClinic } from "@/lib/whatsapp/resolve-clinic";
 import { resolveWhatsAppInstanceName } from "@/lib/whatsapp/resolve-instance";
 import { requireWhatsAppManageAccess } from "@/lib/whatsapp/require-api-access";
+import { getAdminClient } from "@/lib/supabase/admin";
 
 /** GET /api/whatsapp/status — حالة الاتصال + تحديث whatsapp_linked في العيادة */
 export async function GET(req: NextRequest) {
@@ -58,21 +62,27 @@ export async function GET(req: NextRequest) {
 async function syncClinicLinked(linked: boolean, instanceName: string) {
   try {
     const profile = await getApiCallerProfile();
-    if (!profile) return;
+    if (!profile?.clinic_id) return;
 
-    const supabase = await createApiSessionClient();
-    const resolved = await resolveWhatsAppClinic(supabase, profile.clinic_id);
+    const admin = getAdminClient();
+    const resolved = await resolveWhatsAppClinic(admin, profile.clinic_id);
     if (!resolved) return;
 
     const { clinicId } = resolved;
 
-    await supabase
+    const { error } = await admin
       .from("clinics")
       .update({
         whatsapp_linked: linked,
         whatsapp_session_id: instanceName,
       })
       .eq("id", clinicId);
+
+    if (error) {
+      console.error("[whatsapp/status] clinic_sync_failed", error.message);
+    } else if (linked) {
+      invalidateEvolutionSessionCache(instanceName);
+    }
   } catch (e) {
     console.error("[whatsapp/status] clinic_sync_failed", e);
   }

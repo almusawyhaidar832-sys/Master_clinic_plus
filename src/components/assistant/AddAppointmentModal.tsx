@@ -16,7 +16,7 @@ import type { Doctor } from "@/types";
 
 interface AddAppointmentModalProps {
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (notice?: string) => void;
   portal?: "assistant" | "accountant";
   clinicId?: string | null;
 }
@@ -106,14 +106,13 @@ export function AddAppointmentModal({
     if ("whatsapp" in result && result.whatsapp) {
       const wa = result.whatsapp;
       if (wa.sent) {
-        onSaved();
+        onSaved("تم حفظ الموعد وأُرسلت رسالة واتساب للمراجع.");
         onClose();
         return;
       }
-      setWhatsappNotice(
-        `تم حفظ الموعد، لكن لم تصل رسالة واتساب: ${describeWhatsAppDeliveryError(wa.error)}`
-      );
-      onSaved();
+      const notice = `تم حفظ الموعد، لكن لم تصل رسالة واتساب للمراجع: ${describeWhatsAppDeliveryError(wa.error)}`;
+      setWhatsappNotice(notice);
+      onSaved(notice);
       return;
     }
 
