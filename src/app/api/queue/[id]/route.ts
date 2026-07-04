@@ -84,6 +84,7 @@ export async function PATCH(
         | "transfer_after_cancel"
         | "accountant_transfer";
       target_doctor_id?: string;
+      doctor_notes?: string;
     };
 
     const admin = getAdminClient();
@@ -326,6 +327,7 @@ export async function PATCH(
 
         const status = await markQueueReadyForBilling(admin, id, {
           doctorId: ctx.doctorId,
+          doctorNotes: body.doctor_notes,
         });
         void notifyAccountantsReadyForBilling(id).catch((err) => {
           console.error("[api/queue] billing notify failed:", err);
@@ -365,7 +367,10 @@ export async function PATCH(
           })()
         : { clinicId: profile.clinic_id as string };
 
-      const status = await markQueueReadyForBilling(admin, id, opts);
+      const status = await markQueueReadyForBilling(admin, id, {
+        ...opts,
+        doctorNotes: body.doctor_notes,
+      });
       void notifyAccountantsReadyForBilling(id).catch((err) => {
         console.error("[api/queue] billing notify failed:", err);
       });

@@ -15,3 +15,19 @@ export function trimQueueIntakeNotes(notes?: string | null): string | null {
   const trimmed = notes?.trim();
   return trimmed || null;
 }
+
+export function trimDoctorQueueNotes(notes?: string | null): string | null {
+  const trimmed = notes?.trim();
+  return trimmed || null;
+}
+
+/** نص إشعار المحاسب مع ملاحظة الطبيب (إن وُجدت) */
+export function formatAccountantBillingAlertMessage(
+  name: string,
+  doctorNotes?: string | null
+): string {
+  const base = `المراجع ${name} — أكمل الجلسة وتوجّه إليك للدفع`;
+  const notes = trimDoctorQueueNotes(doctorNotes);
+  if (!notes) return base;
+  return `${base}\nملاحظة الطبيب: ${notes}`;
+}

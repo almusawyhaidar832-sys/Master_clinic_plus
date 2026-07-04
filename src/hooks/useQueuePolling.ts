@@ -5,7 +5,10 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { shouldFireQueueAlert } from "@/lib/queue/alert-dedupe";
 import { triggerQueueAlert } from "@/lib/queue/audio-alerts";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
-import { formatDoctorQueueAlertMessage } from "@/lib/queue/intake-notes";
+import {
+  formatAccountantBillingAlertMessage,
+  formatDoctorQueueAlertMessage,
+} from "@/lib/queue/intake-notes";
 import { resolvePatientSpeechName } from "@/lib/queue/utils";
 
 const POLL_MS = 3_000;
@@ -27,6 +30,7 @@ interface QueueRow {
   patient_name: string | null;
   ticket_number: number;
   notes?: string | null;
+  doctor_notes?: string | null;
   doctor_id?: string;
   patient?: { full_name_ar: string; speech_name_ar?: string | null } | null;
 }
@@ -188,7 +192,7 @@ export function useAccountantQueuePolling(
               void triggerQueueAlert({
                 kind: "accountant_billing",
                 title: "جلسة جاهزة للمحاسبة 🔔",
-                message: `المراجع ${name} — أكمل الجلسة وتوجّه إليك للدفع`,
+                message: formatAccountantBillingAlertMessage(name, entry.doctor_notes),
                 linkPath: `/dashboard/ledger?queue_entry_id=${entry.id}`,
                 patientName: name,
               });

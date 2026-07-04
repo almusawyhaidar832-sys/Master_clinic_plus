@@ -113,6 +113,7 @@ export function broadcastBillingReadyServer(
     entryId: string;
     linkPath: string;
     gender?: PatientGender;
+    doctorNotes?: string;
   }
 ): Promise<void> {
   return sendServerBroadcast(

@@ -57,6 +57,7 @@ export function VisitSessionClinicalPanel({
   const [info, setInfo] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState<string | null>(null);
+  const [accountingNotes, setAccountingNotes] = useState("");
 
   const loadSession = useCallback(async () => {
     if (!patientId && !queueEntryId) {
@@ -130,7 +131,10 @@ export function VisitSessionClinicalPanel({
           "Content-Type": "application/json",
           ...authPortalHeaders(portal),
         },
-        body: JSON.stringify({ action: "ready_for_billing" }),
+        body: JSON.stringify({
+          action: "ready_for_billing",
+          doctor_notes: accountingNotes.trim() || undefined,
+        }),
       });
       const json = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -144,6 +148,7 @@ export function VisitSessionClinicalPanel({
       }
 
       setSendMessage(t("docSessionSentToAccounting"));
+      setAccountingNotes("");
       await loadSession();
     } catch (e) {
       setError(
@@ -258,6 +263,22 @@ export function VisitSessionClinicalPanel({
       {error && <Alert variant="error">{error}</Alert>}
       {info && !error && !isAccountantView && <Alert variant="info">{info}</Alert>}
       {sendMessage && <Alert variant="success">{sendMessage}</Alert>}
+
+      {isExamPortal && canSend && (
+        <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50/80 p-4">
+          <label className="mb-1 block text-sm font-medium text-violet-900">
+            {t("docAccountingNotes")}
+          </label>
+          <textarea
+            value={accountingNotes}
+            onChange={(e) => setAccountingNotes(e.target.value)}
+            placeholder={t("docAccountingNotesPlaceholder")}
+            rows={3}
+            className="w-full resize-none rounded-xl border border-violet-200 bg-white px-4 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none"
+          />
+          <p className="mt-1 text-xs text-violet-700">{t("docAccountingNotesHint")}</p>
+        </div>
+      )}
 
       {session?.operationId && !loading && (
         <VisualMedicalRecord

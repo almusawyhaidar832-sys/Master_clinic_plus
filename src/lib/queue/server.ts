@@ -9,7 +9,9 @@ import {
 } from "@/lib/queue/broadcast-server";
 import { resolvePatientGender } from "@/lib/queue/patient-gender";
 import {
+  formatAccountantBillingAlertMessage,
   formatDoctorQueueAlertMessage,
+  trimDoctorQueueNotes,
   trimQueueIntakeNotes,
 } from "@/lib/queue/intake-notes";
 import {
@@ -48,6 +50,7 @@ export interface QueueEntryRow {
   cancellation_requested_by: string | null;
   cancellation_actor_label: string | null;
   notes: string | null;
+  doctor_notes: string | null;
   doctor: { full_name_ar: string } | null;
   transfer_to_doctor?: { full_name_ar: string } | null;
   patient: { full_name_ar: string; speech_name_ar?: string | null; gender?: string | null } | null;
@@ -59,7 +62,7 @@ const QUEUE_ENTRY_SELECT = `
   sent_to_doctor_at, appointment_id,
   transfer_to_doctor_id, transfer_from_doctor_id, transfer_requested_at,
   cancellation_requested_at, cancellation_requested_by, cancellation_actor_label,
-  notes,
+  notes, doctor_notes,
   doctor:doctors!doctor_id(full_name_ar),
   transfer_to_doctor:doctors!transfer_to_doctor_id(full_name_ar),
   patient:patients(full_name_ar, speech_name_ar, gender)
@@ -345,7 +348,7 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
   const { data: entry, error } = await admin
     .from("patient_queue")
     .select(
-      "id, clinic_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar, speech_name_ar, gender)"
+      "id, clinic_id, patient_name, ticket_number, patient_id, doctor_notes, patient:patients(full_name_ar, speech_name_ar, gender)"
     )
     .eq("id", queueEntryId)
     .maybeSingle();
@@ -381,6 +384,8 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
     patient: patientRow,
     patient_name: entry.patient_name,
   });
+  const doctorNotes = trimDoctorQueueNotes(entry.doctor_notes as string | null);
+  const billingBody = formatAccountantBillingAlertMessage(name, doctorNotes);
 
   const clinicId = entry.clinic_id as string;
 
@@ -391,6 +396,7 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
       entryId: entry.id as string,
       linkPath: ledgerPath,
       gender: gender ?? undefined,
+      doctorNotes: doctorNotes ?? undefined,
     }),
   ]).catch((err) => {
     console.error("[queue] billing broadcast failed:", err);
@@ -403,14 +409,14 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
         clinic_id: clinicId,
         recipient_profile_id: s.id,
         title_ar: "جلسة جاهزة للمحاسبة",
-        body_ar: `المراجع ${name} — أكمل الجلسة وتوجّه إليك للدفع، افتح إدخال الجلسة`,
+        body_ar: `${billingBody}، افتح إدخال الجلسة`,
         link_path: ledgerPath,
       }))
     ),
     ...staff.map((s) =>
       sendWebPushToProfile(s.id, {
         title: "جلسة جاهزة للمحاسبة 🔔",
-        body: `المراجع ${name} — أكمل الجلسة وتوجّه إليك للدفع`,
+        body: billingBody,
         url: ledgerPath,
         tag: `billing-${entry.id}`,
         patientName: speechName,

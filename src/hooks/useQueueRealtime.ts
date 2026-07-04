@@ -10,7 +10,10 @@ import {
   doctorQueueChannelName,
 } from "@/lib/queue/realtime-client";
 import { buildDoctorQueueClinicalUrl } from "@/lib/queue/navigation";
-import { formatDoctorQueueAlertMessage } from "@/lib/queue/intake-notes";
+import {
+  formatAccountantBillingAlertMessage,
+  formatDoctorQueueAlertMessage,
+} from "@/lib/queue/intake-notes";
 import { resolvePatientSpeechName } from "@/lib/queue/utils";
 import { resolvePatientGender, type PatientGender } from "@/lib/queue/patient-gender";
 import { formatNameForSpeech } from "@/lib/queue/arabic-speech-text";
@@ -25,6 +28,7 @@ interface QueuePayload {
   ticket_number: number;
   sent_to_doctor_at: string | null;
   notes?: string | null;
+  doctor_notes?: string | null;
   patient?: {
     full_name_ar: string;
     speech_name_ar?: string | null;
@@ -96,6 +100,7 @@ function alertAccountantBilling(
     entryId?: string;
     linkPath?: string;
     gender?: PatientGender;
+    doctorNotes?: string;
   },
   seen: Set<string>
 ) {
@@ -110,7 +115,7 @@ function alertAccountantBilling(
   void triggerQueueAlert({
     kind: "accountant_billing",
     title: "جلسة جاهزة للمحاسبة 🔔",
-    message: `المراجع ${name} — أكمل الجلسة وتوجّه إليك للدفع`,
+    message: formatAccountantBillingAlertMessage(name, payload.doctorNotes),
     linkPath,
     patientName: name,
     patientGender: payload.gender ?? null,
@@ -132,7 +137,7 @@ function alertAccountantBillingFromRow(
   void triggerQueueAlert({
     kind: "accountant_billing",
     title: "جلسة جاهزة للمحاسبة 🔔",
-    message: `المراجع ${name} — أكمل الجلسة وتوجّه إليك للدفع`,
+    message: formatAccountantBillingAlertMessage(name, row.doctor_notes),
     linkPath,
     patientName: name,
     patientGender: gender,
@@ -409,6 +414,7 @@ export function useAccountantQueueRealtime(
             entryId?: string;
             linkPath?: string;
             gender?: PatientGender;
+            doctorNotes?: string;
           };
           notifyQueueRefresh({ scope: "clinic", clinicId });
           alertAccountantBilling(p, seenRef.current);

@@ -8,6 +8,7 @@ import {
   syncQueueFromAppointmentStatus,
 } from "@/lib/services/appointment-queue-sync";
 import { updateQueueStatus, type QueueStatus } from "@/lib/queue/server";
+import { trimDoctorQueueNotes } from "@/lib/queue/intake-notes";
 import {
   isPersistedTreatmentCaseId,
   linkOperationToTreatmentCase,
@@ -362,12 +363,21 @@ async function loadQueueEntryForStatusChange(
 export async function markQueueReadyForBilling(
   admin: SupabaseClient,
   queueEntryId: string,
-  opts: { doctorId?: string; clinicId?: string }
+  opts: { doctorId?: string; clinicId?: string; doctorNotes?: string | null }
 ): Promise<QueueStatus> {
   const entry = await loadQueueEntryForStatusChange(admin, queueEntryId, opts);
 
   if (entry.status !== "in_progress") {
     throw new Error("يمكن إرسال الجلسة للمحاسبة للمراجع داخل الكشف فقط");
+  }
+
+  const doctorNotes = trimDoctorQueueNotes(opts.doctorNotes);
+  if (doctorNotes) {
+    const { error } = await admin
+      .from("patient_queue")
+      .update({ doctor_notes: doctorNotes })
+      .eq("id", queueEntryId);
+    if (error) throw new Error(error.message);
   }
 
   await updateQueueStatus(queueEntryId, "ready_for_billing", {

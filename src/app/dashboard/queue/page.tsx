@@ -61,6 +61,7 @@ interface QueueEntry {
   cancellation_requested_at: string | null;
   cancellation_actor_label: string | null;
   notes: string | null;
+  doctor_notes: string | null;
   doctor: { full_name_ar: string } | null;
   transfer_to_doctor?: { full_name_ar: string } | null;
   patient: { full_name_ar: string; speech_name_ar?: string | null } | null;
@@ -995,6 +996,12 @@ export default function QueuePage() {
                       </>
                     )}
                   </div>
+                  {entry.doctor_notes?.trim() && (
+                    <div className="mt-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
+                      <span className="font-semibold">{t("queueDoctorNotes")}: </span>
+                      {entry.doctor_notes.trim()}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center justify-end gap-2">
