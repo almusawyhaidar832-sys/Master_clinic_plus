@@ -9,7 +9,6 @@ import {
 import type { PatientGender } from "@/lib/queue/patient-gender";
 import { showBrowserNotification } from "@/lib/queue/realtime-client";
 import {
-  playAttentionBeep,
   prepareSpeechAuto,
   speakArabic,
   speakPatientCallParts,
@@ -81,6 +80,25 @@ export async function unlockQueueAudio(): Promise<boolean> {
     return true;
   }
   return false;
+}
+
+/** تشغيل MP3 عبر عنصر Audio — أوثق على Windows/Chrome للمحاسب */
+export async function playBlobViaHtmlAudio(blob: Blob): Promise<void> {
+  await unlockQueueAudio();
+  const url = URL.createObjectURL(blob);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const audio = new Audio(url);
+      audio.volume = 1;
+      audio.setAttribute("playsinline", "true");
+      audio.preload = "auto";
+      audio.onended = () => resolve();
+      audio.onerror = () => reject(new Error("html audio play failed"));
+      void audio.play().catch(reject);
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 /** تشغيل MP3 عبر Web Audio (Android يمنع HTMLAudioElement بعد fetch بعيد) */
@@ -213,15 +231,18 @@ async function speakQueueAlertVoice(
   options?: { clearQueue?: boolean }
 ): Promise<void> {
   prepareSpeechAuto();
-  await playAttentionBeep().catch(() => undefined);
 
   if (detail.audioUrl) {
     const played = await playDoctorCallAudioUrl(detail.audioUrl);
     if (played) return;
   }
 
-  /** نطق فوري من المتصفح — السحابة تسبّب تأخير 3–8 ثوانٍ */
-  const speechOpts = { useCloud: false as const, clearQueue: options?.clearQueue };
+  /** TTS سحابي (Edge) — أوضح للأسماء العربية على Windows وشاشات التلفاز */
+  const speechOpts = {
+    useCloud: true as const,
+    skipCloudQueue: true,
+    clearQueue: options?.clearQueue,
+  };
   const gender = detail.patientGender ?? null;
 
   if (detail.patientName?.trim()) {
@@ -256,7 +277,7 @@ export async function playDoctorCallAudioUrl(url: string): Promise<boolean> {
     if (!res.ok) return false;
     const blob = await res.blob();
     if (blob.size < 128) return false;
-    await playBlobViaQueueAudio(blob);
+    await playBlobViaHtmlAudio(blob).catch(() => playBlobViaQueueAudio(blob));
     return true;
   } catch {
     return false;
@@ -267,8 +288,12 @@ export async function playDoctorCallAudioUrl(url: string): Promise<boolean> {
 export function replayQueueAlert(detail: QueueAlertDetail): void {
   void (async () => {
     await unlockQueueAudio();
-    void playQueueAlertSound(detail.kind);
-    void speakQueueAlertVoice(detail, { clearQueue: true });
+    if (detail.patientName?.trim()) {
+      await speakQueueAlertVoice(detail, { clearQueue: true });
+    } else {
+      void playQueueAlertSound(detail.kind);
+      await speakQueueAlertVoice(detail, { clearQueue: true });
+    }
   })();
 }
 
@@ -286,7 +311,11 @@ export function triggerQueueAlert(detail: QueueAlertDetail): void {
 
   void (async () => {
     await unlockQueueAudio();
-    void playQueueAlertSound(detail.kind);
-    void speakQueueAlertVoice(detail, { clearQueue: true });
+    if (detail.patientName?.trim()) {
+      await speakQueueAlertVoice(detail, { clearQueue: true });
+    } else {
+      void playQueueAlertSound(detail.kind);
+      await speakQueueAlertVoice(detail, { clearQueue: true });
+    }
   })();
 }

@@ -12,9 +12,9 @@ const CLOUD_TTS_TIMEOUT_MS = 18_000;
 const CLOUD_TTS_ATTEMPTS = 3;
 const DOCTOR_CLOUD_TTS_TIMEOUT_MS = 8_000;
 const DOCTOR_CLOUD_TTS_ATTEMPTS = 1;
-/** شاشة الانتظار — نداء فوري: مهلة قصيرة ومحاولة واحدة */
-const QUEUE_SCREEN_TTS_TIMEOUT_MS = 8_000;
-const QUEUE_SCREEN_TTS_ATTEMPTS = 1;
+/** شاشة الانتظار — مهلة أطول لأن Edge TTS قد يتأخر على الشبكة */
+const QUEUE_SCREEN_TTS_TIMEOUT_MS = 18_000;
+const QUEUE_SCREEN_TTS_ATTEMPTS = 2;
 
 const ttsBlobCache = new Map<string, Blob>();
 const TTS_CACHE_MAX = 24;
@@ -89,14 +89,22 @@ export function clearCloudSpeechQueue(): void {
 }
 
 async function playAudioBlob(blob: Blob): Promise<void> {
-  // عنصر <audio> ثابت مُفعَّل مسبقاً — أعلى توافق مع متصفحات شاشات التلفاز
-  // (Tizen / webOS / متصفحات عامة لا تدعم Chrome أو Web Audio API)
-  try {
-    const { playBlobViaAudioElement } = await import("@/lib/queue/tv-audio");
-    await playBlobViaAudioElement(blob);
-    return;
-  } catch {
-    // fallback إذا فشل العنصر الثابت
+  if (isQueueScreen()) {
+    try {
+      const { playBlobViaAudioElement } = await import("@/lib/queue/tv-audio");
+      await playBlobViaAudioElement(blob);
+      return;
+    } catch {
+      // fallback below
+    }
+  } else {
+    try {
+      const { playBlobViaHtmlAudio } = await import("@/lib/queue/audio-alerts");
+      await playBlobViaHtmlAudio(blob);
+      return;
+    } catch {
+      // fallback below
+    }
   }
 
   try {
@@ -104,7 +112,17 @@ async function playAudioBlob(blob: Blob): Promise<void> {
     await playBlobViaQueueAudio(blob);
     return;
   } catch {
-    // fallback for browsers without decodeAudioData on mp3
+    // fallback below
+  }
+
+  if (!isQueueScreen()) {
+    try {
+      const { playBlobViaAudioElement } = await import("@/lib/queue/tv-audio");
+      await playBlobViaAudioElement(blob);
+      return;
+    } catch {
+      // fallback below
+    }
   }
 
   const url = URL.createObjectURL(blob);
@@ -177,7 +195,7 @@ async function fetchCloudAudio(body: Record<string, unknown>): Promise<Blob | nu
       window.clearTimeout(timer);
     }
 
-    if (attempt < attempts - 1 && !isQueueScreen()) {
+    if (attempt < attempts - 1) {
       await new Promise((r) => window.setTimeout(r, 400 * (attempt + 1)));
     }
   }
@@ -224,9 +242,8 @@ export function speakViaCloudTtsParts(
   const run = async (): Promise<boolean> => {
     const usedParts = await playCloudBody({ parts });
     if (usedParts) return true;
-    // على شاشة الانتظار لا نعيد الطلب بنص مختلف — ننتقل فوراً للنطق المحلي
-    if (isQueueScreen()) return false;
     const text = joinPatientCallSpeech(parts);
+    if (!text.trim()) return false;
     return playCloudBody({ text });
   };
 

@@ -58,7 +58,7 @@ function shouldSkipDuplicateAnnouncement(job: AnnouncementJob): boolean {
   return false;
 }
 
-/** بيب + نداء معاً — لا ننتظر انتهاء البيب قبل طلب/تشغيل TTS */
+/** نغمة ثم نداء بالاسم — تسلسلي لأن شاشات التلفاز لا تتحمل تشغيل مسارين صوتيين معاً */
 async function playAnnouncement(job: AnnouncementJob, interrupt = false): Promise<void> {
   const parts = jobParts(job);
   prefetchCloudTts(parts);
@@ -67,14 +67,12 @@ async function playAnnouncement(job: AnnouncementJob, interrupt = false): Promis
     stopAllSpeech();
   }
 
-  await Promise.all([
-    playAttentionBeep(),
-    speakPatientCallParts(parts, {
-      useCloud: true,
-      skipCloudQueue: true,
-      clearQueue: interrupt,
-    }),
-  ]);
+  await playAttentionBeep();
+  await speakPatientCallParts(parts, {
+    useCloud: true,
+    skipCloudQueue: true,
+    clearQueue: false,
+  });
 }
 
 async function drainQueue() {

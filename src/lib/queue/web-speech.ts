@@ -354,7 +354,7 @@ async function speakTextNow(text: string, options?: SpeechPlayOptions): Promise<
   if (options?.clearQueue) stopAllSpeech();
   prepareSpeechAuto();
 
-  if (options?.useCloud) {
+  if (options?.useCloud !== false) {
     const usedCloud = await speakViaCloudTtsText(text);
     if (usedCloud) return;
   }
@@ -390,6 +390,8 @@ export async function speakPatientCallParts(
         skipQueue: options?.skipCloudQueue,
       });
       if (usedCloud) return;
+      const usedText = await speakViaCloudTtsText(joinPatientCallSpeech(parts));
+      if (usedText) return;
     }
 
     const voice = await resolveArabicVoice();

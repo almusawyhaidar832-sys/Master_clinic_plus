@@ -119,22 +119,16 @@ export function playBeepViaAudioElement(): Promise<void> {
 const SPEECH_ELEMENT_MAX_MS = 15_000;
 const SPEECH_STALL_TIMEOUT_MS = 6_000;
 
-/** تشغيل MP3/Blob (Cloud TTS) عبر <audio> ثابت — أعلى توافق ممكن مع شاشات التلفاز */
-export function playBlobViaAudioElement(blob: Blob): Promise<void> {
-  const els = ensureElements();
-  if (!els) return Promise.reject(new Error("no audio element"));
-
-  const url = URL.createObjectURL(blob);
+function playUrlOnElement(el: HTMLAudioElement, url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     let settled = false;
     let maxTimer: ReturnType<typeof setTimeout> | undefined;
     let stallTimer: ReturnType<typeof setTimeout> | undefined;
 
     const cleanup = () => {
-      URL.revokeObjectURL(url);
-      els.speech.onended = null;
-      els.speech.onerror = null;
-      els.speech.ontimeupdate = null;
+      el.onended = null;
+      el.onerror = null;
+      el.ontimeupdate = null;
       if (maxTimer) clearTimeout(maxTimer);
       if (stallTimer) clearTimeout(stallTimer);
     };
@@ -150,8 +144,6 @@ export function playBlobViaAudioElement(blob: Blob): Promise<void> {
       cleanup();
       reject(err instanceof Error ? err : new Error("audio playback failed"));
     };
-    // إعادة ضبط مهلة التوقف كلما تقدّم التشغيل فعلياً — تحمي من التعليق
-    // بدون قطع الصوت الطويل قبل انتهائه
     const resetStallTimer = () => {
       if (stallTimer) clearTimeout(stallTimer);
       stallTimer = setTimeout(
@@ -161,18 +153,37 @@ export function playBlobViaAudioElement(blob: Blob): Promise<void> {
     };
 
     try {
-      els.speech.pause();
-      els.speech.src = url;
-      els.speech.currentTime = 0;
-      els.speech.volume = 1;
-      els.speech.onended = finish;
-      els.speech.onerror = () => fail(new Error("speech element error"));
-      els.speech.ontimeupdate = resetStallTimer;
-      void els.speech.play().catch(fail);
+      el.pause();
+      el.src = url;
+      el.currentTime = 0;
+      el.volume = 1;
+      el.onended = finish;
+      el.onerror = () => fail(new Error("speech element error"));
+      el.ontimeupdate = resetStallTimer;
+      void el.play().catch(fail);
       resetStallTimer();
       maxTimer = setTimeout(finish, SPEECH_ELEMENT_MAX_MS);
     } catch (err) {
       fail(err);
     }
   });
+}
+
+/** تشغيل MP3/Blob (Cloud TTS) عبر <audio> ثابت — أعلى توافق ممكن مع شاشات التلفاز */
+export async function playBlobViaAudioElement(blob: Blob): Promise<void> {
+  const els = ensureElements();
+  if (!els) throw new Error("no audio element");
+
+  const url = URL.createObjectURL(blob);
+  try {
+    try {
+      await playUrlOnElement(els.speech, url);
+      return;
+    } catch {
+      // بعض شاشات التلفاز تفتح عنصر البيب فقط — جرّب نفس الملف عليه
+      await playUrlOnElement(els.beep, url);
+    }
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
