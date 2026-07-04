@@ -30,7 +30,7 @@ import {
   isBrowserOffline,
 } from "@/lib/offline-cache";
 import { PatientSearchField } from "@/components/patients/PatientSearchField";
-import { getPatientDisplayPhone } from "@/lib/phone";
+import { getPatientDisplayPhone, validatePatientPhone } from "@/lib/phone";
 import type { PatientSearchResult } from "@/lib/services/patient-search";
 import type { Assistant } from "@/types";
 import {
@@ -162,10 +162,21 @@ function AddToQueueModal({
     setFormError(null);
     setSubmitting(true);
     try {
+      const trimmedPhone = phone.trim();
+      let normalizedPhone = "";
+      if (trimmedPhone) {
+        const phoneCheck = validatePatientPhone(trimmedPhone);
+        if (!phoneCheck.ok) {
+          setFormError(phoneCheck.message);
+          return;
+        }
+        normalizedPhone = phoneCheck.normalized;
+      }
+
       const ok = await onAdd({
         doctor_id: doctorId,
         patient_name: trimmedName,
-        patient_phone: phone.trim(),
+        patient_phone: normalizedPhone,
         patient_id: selectedPatientId,
         send_to_doctor: sendNow,
         notes: notes.trim() || undefined,
@@ -213,9 +224,12 @@ function AddToQueueModal({
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="07xxxxxxxx"
+              placeholder={t("queuePhonePlaceholder")}
+              dir="ltr"
+              inputMode="tel"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
             />
+            <p className="mt-1 text-xs text-slate-500">{t("queuePhoneHint")}</p>
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-600">{t("queueIntakeNotes")}</label>

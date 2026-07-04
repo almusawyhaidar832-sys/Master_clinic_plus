@@ -19,6 +19,7 @@ import {
   resolveDoctorSpeechName,
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
+import { normalizeOptionalPatientPhone, patientPhoneColumns } from "@/lib/phone";
 
 export type QueueStatus =
   | "waiting"
@@ -615,13 +616,19 @@ export async function insertQueueEntry(input: {
   const admin = getAdminClient();
   const queueDate = input.queue_date ?? todayIsoDate();
 
+  const phoneResult = normalizeOptionalPatientPhone(input.patient_phone);
+  if (!phoneResult.ok) {
+    throw new Error(phoneResult.message);
+  }
+  const normalizedPhone = phoneResult.phone;
+
   const { data, error } = await admin
     .from("patient_queue")
     .insert({
       clinic_id: input.clinic_id,
       doctor_id: input.doctor_id,
       patient_name: input.patient_name?.trim() || null,
-      patient_phone: input.patient_phone?.trim() || null,
+      patient_phone: normalizedPhone,
       patient_id: input.patient_id ?? null,
       appointment_id: input.appointment_id ?? null,
       queue_date: queueDate,
@@ -637,9 +644,22 @@ export async function insertQueueEntry(input: {
 
   const entryId = data.id as string;
 
+  if (input.patient_id && normalizedPhone) {
+    await admin
+      .from("patients")
+      .update(patientPhoneColumns(normalizedPhone))
+      .eq("id", input.patient_id)
+      .eq("clinic_id", input.clinic_id)
+      .then(({ error: phoneErr }) => {
+        if (phoneErr) {
+          console.error("[queue] sync patient phone on insert failed:", phoneErr);
+        }
+      });
+  }
+
   if (!input.patient_id && entryId) {
     const hasIdentity =
-      Boolean(input.patient_name?.trim()) || Boolean(input.patient_phone?.trim());
+      Boolean(input.patient_name?.trim()) || Boolean(normalizedPhone);
     if (hasIdentity) {
       const { ensureQueueEntryPatient } = await import(
         "@/lib/services/ensure-queue-entry-patient"

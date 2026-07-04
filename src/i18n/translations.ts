@@ -327,7 +327,9 @@ const translations = {
     queueClinicSetupHint:         "تأكد من تسجيل الدخول كمحاسب وأن جدول patient_queue موجود في Supabase.",
     queueIntakeNotes:             "ملاحظات",
     queueIntakeNotesPlaceholder:  "مثال: ألم بالأسنان، كسر، التهاب لثة...",
-    queueIntakeNotesHint:         "تصل هذه الملاحظة للطبيب عند الإرسال ليتمكن من تقييم الحالة",
+    queueIntakeNotesHint:         "تصل هذه الملاحظة للطبيب فقط إذا كتبت شيئاً",
+    queuePhonePlaceholder:        "07XX XXX XXXX أو +9647XXXXXXXXX",
+    queuePhoneHint:               "يُحفظ تلقائياً بصيغة +964 — لرسائل الواتساب عند الدفع",
 
     // ── Today appointments ──
     todayBookingsTitle:           "حجوزات اليوم",
@@ -1028,7 +1030,9 @@ const translations = {
     queueClinicSetupHint:         "Sign in as accountant and ensure the patient_queue table exists in Supabase.",
     queueIntakeNotes:             "Notes",
     queueIntakeNotesPlaceholder:  "e.g. tooth pain, fracture, gum inflammation...",
-    queueIntakeNotesHint:         "This note is sent to the doctor so they can assess the case",
+    queueIntakeNotesHint:         "Optional — only sent if you write something",
+    queuePhonePlaceholder:        "07XX XXX XXXX or +9647XXXXXXXXX",
+    queuePhoneHint:               "Saved as +964 automatically — used for WhatsApp payment messages",
 
     // ── Today appointments ──
     todayBookingsTitle:           "Today's Bookings",

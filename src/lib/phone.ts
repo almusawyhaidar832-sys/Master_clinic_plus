@@ -75,6 +75,17 @@ export function validatePatientPhone(raw: string): {
   return { ok: true, normalized };
 }
 
+/** رقم اختياري — فارغ OK، وإلا يُ normalizes إلى +964 */
+export function normalizeOptionalPatientPhone(raw?: string | null):
+  | { ok: true; phone: string | null }
+  | { ok: false; message: string } {
+  const trimmed = raw?.trim();
+  if (!trimmed) return { ok: true, phone: null };
+  const check = validatePatientPhone(trimmed);
+  if (!check.ok) return { ok: false, message: check.message };
+  return { ok: true, phone: check.normalized };
+}
+
 /** Columns written on insert/update — keeps legacy `phone` in sync */
 export function patientPhoneColumns(normalized: string): {
   phone: string;
