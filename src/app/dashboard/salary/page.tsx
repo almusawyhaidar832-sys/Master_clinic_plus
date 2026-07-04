@@ -31,7 +31,6 @@ import type { PayrollRecord, StaffMember, SalaryEntry, SalarySlip } from "@/type
 import {
   countActiveAssistantsForPayroll,
   fetchPayrollMonthViaApi,
-  fetchPayrollRecordsForMonth,
   generateMonthlyPayrollViaApi,
   confirmPayrollViaApi,
   unconfirmPayrollViaApi,
@@ -40,7 +39,6 @@ import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
 import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
 import {
-  fetchActivePayrollPersons,
   fetchActivePayrollPersonsViaApi,
   parsePayrollPersonKey,
   payrollCategoryLabel,
@@ -229,7 +227,13 @@ function entryDisabledReason(opts: {
 }
 
 export default function SalaryPage() {
-  const { clinicId, source: clinicSource } = useActiveClinicId();
+  const {
+    clinicId,
+    clinicName,
+    source: clinicSource,
+    loading: clinicLoading,
+    missingClinic,
+  } = useActiveClinicId();
   const calendarMonth = currentMonthYear();
   const [workMonth, setWorkMonth] = useState(calendarMonth);
   const [activePayrollMonth, setActivePayrollMonth] = useState(calendarMonth);
@@ -473,27 +477,26 @@ export default function SalaryPage() {
       setStaff([]);
       return;
     }
-    try {
-      const res = await fetch("/api/payroll/staff-members", {
-        credentials: "include",
-        headers: authPortalHeaders("accountant"),
-      });
-      const json = await res.json();
-      if (res.ok) {
-        setStaff((json.staff as StaffMember[]) || []);
+    const params = new URLSearchParams({ clinic_id: clinicId });
+    const res = await fetch(`/api/payroll/staff-members?${params}`, {
+      credentials: "include",
+      headers: authPortalHeaders("accountant"),
+    });
+    const json = await res.json();
+    if (res.ok) {
+      const resolvedClinic = (json as { clinic_id?: string }).clinic_id;
+      if (resolvedClinic && resolvedClinic !== clinicId) {
+        showMessage(
+          "تعارض العيادة — حدّث الصفحة أو أعد تسجيل الدخول",
+          false
+        );
+        setStaff([]);
         return;
       }
-    } catch {
-      // fallback below
+      setStaff((json.staff as StaffMember[]) || []);
+      return;
     }
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("staff_members")
-      .select("*")
-      .eq("clinic_id", clinicId)
-      .eq("is_active", true)
-      .order("full_name_ar");
-    setStaff((data as StaffMember[]) || []);
+    setStaff([]);
   }, [clinicId]);
 
   const applyPayrollSelection = useCallback(
@@ -535,17 +538,20 @@ export default function SalaryPage() {
         return [];
       }
 
-      let persons: PayrollPerson[] = [];
       try {
-        persons = await fetchActivePayrollPersonsViaApi();
-      } catch {
-        const supabase = createClient();
-        persons = await fetchActivePayrollPersons(supabase, clinicId);
+        const persons = await fetchActivePayrollPersonsViaApi(clinicId);
+        setPayrollPersons(persons);
+        applyPayrollSelection(persons, options?.preferKey);
+        return persons;
+      } catch (e) {
+        const msg =
+          e instanceof Error ? e.message : "تعذر جلب قائمة العاملين";
+        showMessage(msg, false);
+        setPayrollPersons([]);
+        setSelectedKey("");
+        setSelectedPerson(null);
+        return [];
       }
-
-      setPayrollPersons(persons);
-      applyPayrollSelection(persons, options?.preferKey);
-      return persons;
     },
     [clinicId, applyPayrollSelection]
   );
@@ -558,24 +564,18 @@ export default function SalaryPage() {
       return;
     }
     try {
-      const { records, slips } = await fetchPayrollMonthViaApi(workMonth);
+      const { records, slips } = await fetchPayrollMonthViaApi(
+        clinicId,
+        workMonth
+      );
       setPayrollRecords(records);
       setSlips(slips);
-    } catch {
-      const supabase = createClient();
-      const [records, slipsRes] = await Promise.all([
-        fetchPayrollRecordsForMonth(supabase, clinicId, workMonth),
-        supabase
-          .from("salary_slips")
-          .select(
-            "*, staff:staff_members!staff_id(full_name_ar, job_title_ar, profile_id), doctor:doctors!doctor_id(full_name_ar)"
-          )
-          .eq("clinic_id", clinicId)
-          .eq("month_year", workMonth)
-          .order("created_at", { ascending: false }),
-      ]);
-      setPayrollRecords(records);
-      setSlips((slipsRes.data as SalarySlip[]) || []);
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "تعذر جلب رواتب الشهر";
+      showMessage(msg, false);
+      setPayrollRecords([]);
+      setSlips([]);
     }
     const supabase = createClient();
     setActiveAssistantsCount(
@@ -590,6 +590,7 @@ export default function SalaryPage() {
     }
     try {
       const params = new URLSearchParams({
+        clinic_id: clinicId,
         month_year: workMonth,
       });
       if (staffId) params.set("staff_id", staffId);
@@ -614,6 +615,7 @@ export default function SalaryPage() {
     let query = supabase
       .from("salary_entries")
       .select("*")
+      .eq("clinic_id", clinicId)
       .gte("entry_date", monthFrom)
       .lte("entry_date", monthTo)
       .order("entry_date", { ascending: false });
@@ -626,6 +628,17 @@ export default function SalaryPage() {
     setEntries((data as SalaryEntry[]) || []);
   }, [staffId, assistantId, doctorSalaryId, clinicId, workMonth, monthFrom, monthTo]);
 
+
+  useEffect(() => {
+    if (clinicId === undefined) return;
+    setPayrollPersons([]);
+    setPayrollRecords([]);
+    setSlips([]);
+    setStaff([]);
+    setEntries([]);
+    setSelectedKey("");
+    setSelectedPerson(null);
+  }, [clinicId]);
 
   useEffect(() => {
     loadStaff();
@@ -1355,7 +1368,7 @@ export default function SalaryPage() {
       return;
     }
     setGeneratingPayroll(true);
-    const result = await generateMonthlyPayrollViaApi(workMonth);
+    const result = await generateMonthlyPayrollViaApi(clinicId, workMonth);
     setGeneratingPayroll(false);
 
     if (!result.ok) {
@@ -1477,6 +1490,14 @@ export default function SalaryPage() {
           <h2 className="text-2xl font-bold text-slate-text">رواتب الموظفين</h2>
           <p className="text-slate-muted">
             عدد موظفين غير محدود — حساب منفصل لكل شهر
+            {clinicName ? (
+              <>
+                {" "}
+                · العيادة النشطة:{" "}
+                <strong className="text-slate-text">{clinicName}</strong>
+                {clinicSource === "developer" ? " (دخول نيابة)" : ""}
+              </>
+            ) : null}
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[200px]">
@@ -1666,9 +1687,10 @@ export default function SalaryPage() {
         </div>
       )}
 
-      {clinicSource === "fallback" && (
+      {!clinicLoading && (missingClinic || !clinicId) && (
         <Alert variant="warning">
-          حسابك غير مربوط بعيادة في قاعدة البيانات. نفّذ في Supabase SQL:{" "}
+          حسابك غير مربوط بعيادة — لن تظهر رواتب أي عيادة حتى الربط. نفّذ في
+          Supabase SQL:{" "}
           <code dir="ltr" className="text-xs">
             SELECT public.link_profile_to_first_clinic();
           </code>

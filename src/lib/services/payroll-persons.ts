@@ -50,7 +50,7 @@ export interface PayrollPerson {
 
 const CATEGORY_LABELS: Record<PayrollEmployeeCategory, string> = {
   assistant: "مساعد طبيب",
-  general: "خدمات",
+  general: "موظف عيادة",
   accountant: "محاسب",
   doctor_salary: "طبيب — راتب ثابت",
 };
@@ -207,8 +207,11 @@ export function parsePayrollPersonKey(key: string): {
 }
 
 /** جلب القائمة الموحدة عبر API (يتجاوز RLS — نفس مسار إضافة الموظف) */
-export async function fetchActivePayrollPersonsViaApi(): Promise<PayrollPerson[]> {
-  const res = await fetch("/api/payroll/persons", {
+export async function fetchActivePayrollPersonsViaApi(
+  clinicId: string
+): Promise<PayrollPerson[]> {
+  const params = new URLSearchParams({ clinic_id: clinicId });
+  const res = await fetch(`/api/payroll/persons?${params}`, {
     credentials: "include",
     headers: authPortalHeaders("accountant"),
   });
@@ -216,6 +219,12 @@ export async function fetchActivePayrollPersonsViaApi(): Promise<PayrollPerson[]
   if (!res.ok) {
     throw new Error(
       (json as { error?: string }).error ?? "تعذر جلب قائمة العاملين"
+    );
+  }
+  const resolvedClinic = (json as { clinic_id?: string }).clinic_id;
+  if (resolvedClinic && resolvedClinic !== clinicId) {
+    throw new Error(
+      "تعارض العيادة — حدّث الصفحة أو أعد تسجيل الدخول ثم حاول مجدداً"
     );
   }
   return (json as { persons?: PayrollPerson[] }).persons ?? [];

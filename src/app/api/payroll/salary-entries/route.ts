@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
+import {
+  payrollClinicQueryParam,
+  resolvePayrollApiClinic,
+} from "@/lib/auth/resolve-payroll-clinic";
 import {
   createSalaryEntry,
   isSalaryEntryType,
@@ -11,17 +14,17 @@ import { validateSalaryEntryReason } from "@/lib/services/salary-entry-reason";
 /** GET /api/payroll/salary-entries?staff_id=|assistant_id=&month_year= */
 export async function GET(req: NextRequest) {
   try {
-    const caller = await getApiCallerProfile(req);
-    if (!caller) {
-      return NextResponse.json({ error: "يجب تسجيل الدخول أولاً" }, { status: 401 });
+    const resolved = await resolvePayrollApiClinic(req, {
+      requestedClinicId: payrollClinicQueryParam(req),
+    });
+    if (!resolved.ok) {
+      return NextResponse.json(
+        { error: resolved.error },
+        { status: resolved.status }
+      );
     }
-    if (!["accountant", "super_admin"].includes(caller.role)) {
-      return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
-    }
-    const clinicId = caller.clinic_id;
-    if (!clinicId) {
-      return NextResponse.json({ error: "حسابك غير مربوط بعيادة" }, { status: 400 });
-    }
+
+    const { clinicId } = resolved;
 
     const staffId = req.nextUrl.searchParams.get("staff_id")?.trim() ?? "";
     const assistantId = req.nextUrl.searchParams.get("assistant_id")?.trim() ?? "";
@@ -47,7 +50,7 @@ export async function GET(req: NextRequest) {
     if (error) {
       return NextResponse.json({ error }, { status: 400 });
     }
-    return NextResponse.json({ entries });
+    return NextResponse.json({ clinic_id: clinicId, entries });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -57,19 +60,19 @@ export async function GET(req: NextRequest) {
 /** POST /api/payroll/salary-entries — تسجيل سلفة / خصم / مكافأة */
 export async function POST(req: NextRequest) {
   try {
-    const caller = await getApiCallerProfile(req);
-    if (!caller) {
-      return NextResponse.json({ error: "يجب تسجيل الدخول أولاً" }, { status: 401 });
-    }
-    if (!["accountant", "super_admin"].includes(caller.role)) {
-      return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
-    }
-    const clinicId = caller.clinic_id;
-    if (!clinicId) {
-      return NextResponse.json({ error: "حسابك غير مربوط بعيادة" }, { status: 400 });
+    const body = await req.json();
+    const resolved = await resolvePayrollApiClinic(req, {
+      requestedClinicId:
+        body.clinic_id != null ? String(body.clinic_id) : null,
+    });
+    if (!resolved.ok) {
+      return NextResponse.json(
+        { error: resolved.error },
+        { status: resolved.status }
+      );
     }
 
-    const body = await req.json();
+    const { clinicId, caller } = resolved;
     const staffId = String(body.staff_id ?? "").trim();
     const assistantId = String(body.assistant_id ?? "").trim();
     const doctorId = String(body.doctor_id ?? "").trim();

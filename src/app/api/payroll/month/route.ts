@@ -1,33 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
+import {
+  payrollClinicQueryParam,
+  resolvePayrollApiClinic,
+} from "@/lib/auth/resolve-payroll-clinic";
 import { fetchPayrollMonthAdmin } from "@/lib/services/assistant-payroll-records-server";
 
 /**
- * GET /api/payroll/month?month_year=2026-06
+ * GET /api/payroll/month?clinic_id=&month_year=2026-06
  * جلب رواتب الشهر المُولَّدة (مساعدون + قسائم الموظفين)
  */
 export async function GET(req: NextRequest) {
   try {
-    const caller = await getApiCallerProfile(req);
-    if (!caller) {
-      return NextResponse.json({ error: "يجب تسجيل الدخول أولاً" }, { status: 401 });
-    }
-
-    if (!["accountant", "super_admin"].includes(caller.role)) {
-      return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
-    }
-
-    const clinicId = caller.clinic_id;
-    if (!clinicId) {
-      return NextResponse.json({ error: "حسابك غير مربوط بعيادة" }, { status: 400 });
+    const resolved = await resolvePayrollApiClinic(req, {
+      requestedClinicId: payrollClinicQueryParam(req),
+    });
+    if (!resolved.ok) {
+      return NextResponse.json(
+        { error: resolved.error },
+        { status: resolved.status }
+      );
     }
 
     const monthYear = req.nextUrl.searchParams.get("month_year");
     if (!monthYear || !/^\d{4}-\d{2}$/.test(monthYear)) {
-      return NextResponse.json({ error: "month_year مطلوب (مثال: 2026-06)" }, { status: 400 });
+      return NextResponse.json(
+        { error: "month_year مطلوب (مثال: 2026-06)" },
+        { status: 400 }
+      );
     }
 
+    const { clinicId } = resolved;
     const admin = getAdminClient();
     const { records, slips } = await fetchPayrollMonthAdmin(
       admin,
@@ -36,6 +39,7 @@ export async function GET(req: NextRequest) {
     );
 
     return NextResponse.json({
+      clinic_id: clinicId,
       records,
       slips,
       count: records.length + slips.length,

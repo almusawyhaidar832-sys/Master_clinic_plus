@@ -24,7 +24,7 @@ const CATEGORY_STYLES = {
 };
 
 export default function EmployeesPage() {
-  const { clinicId } = useActiveClinicId();
+  const { clinicId, clinicName, source: clinicSource } = useActiveClinicId();
   const [persons, setPersons] = useState<PayrollPerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +41,7 @@ export default function EmployeesPage() {
     setLoading(true);
     setError(null);
     try {
-      const list = await fetchActivePayrollPersonsViaApi();
+      const list = await fetchActivePayrollPersonsViaApi(clinicId);
       setPersons(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر تحميل القائمة");
@@ -68,7 +68,14 @@ export default function EmployeesPage() {
         <div>
           <h2 className="text-2xl font-bold text-slate-text">إدارة رواتب الموظفين</h2>
           <p className="text-slate-muted">
-            تعديل الراتب أو إيقاف أي عامل — محاسبون، مساعدون، موظفو خدمات
+            تعديل الراتب أو إيقاف أي عامل — محاسبون، مساعدون، موظفو عيادة
+            {clinicName ? (
+              <>
+                {" "}
+                · <strong className="text-slate-text">{clinicName}</strong>
+                {clinicSource === "developer" ? " (دخول نيابة)" : ""}
+              </>
+            ) : null}
           </p>
         </div>
         <Button
@@ -222,7 +229,7 @@ export default function EmployeesPage() {
             <div className="mt-4 flex flex-wrap gap-4 border-t border-slate-border/40 px-4 pb-4 pt-4 text-xs text-slate-muted">
               <span>محاسبون: {byCategory.accountant.length}</span>
               <span>مساعدون: {byCategory.assistant.length}</span>
-              <span>خدمات: {byCategory.general.length}</span>
+              <span>موظفو عيادة: {byCategory.general.length}</span>
               <span>أطباء راتب: {byCategory.doctor_salary.length}</span>
             </div>
           </Card>

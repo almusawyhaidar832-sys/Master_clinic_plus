@@ -29,6 +29,7 @@ export function useActiveClinicId(): UseActiveClinicIdState {
 
   useEffect(() => {
     let cancelled = false;
+
     async function resolve() {
       const supabase = createClient();
       const result = await getActiveClinicId(supabase);
@@ -52,9 +53,17 @@ export function useActiveClinicId(): UseActiveClinicIdState {
         });
       }
     }
-    resolve();
+
+    void resolve();
+
+    function onFocus() {
+      void resolve();
+    }
+    window.addEventListener("focus", onFocus);
+
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
 

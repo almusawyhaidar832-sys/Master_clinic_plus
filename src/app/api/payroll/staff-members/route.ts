@@ -1,27 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
+import {
+  payrollClinicQueryParam,
+  resolvePayrollApiClinic,
+} from "@/lib/auth/resolve-payroll-clinic";
 
 /**
- * GET /api/payroll/staff-members
+ * GET /api/payroll/staff-members?clinic_id=
  * موظفو الخدمات النشطون — قراءة موثوقة عبر service_role.
  */
 export async function GET(req: NextRequest) {
   try {
-    const caller = await getApiCallerProfile(req);
-    if (!caller) {
-      return NextResponse.json({ error: "يجب تسجيل الدخول أولاً" }, { status: 401 });
+    const resolved = await resolvePayrollApiClinic(req, {
+      requestedClinicId: payrollClinicQueryParam(req),
+    });
+    if (!resolved.ok) {
+      return NextResponse.json(
+        { error: resolved.error },
+        { status: resolved.status }
+      );
     }
 
-    if (!["accountant", "super_admin"].includes(caller.role)) {
-      return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
-    }
-
-    const clinicId = caller.clinic_id;
-    if (!clinicId) {
-      return NextResponse.json({ error: "حسابك غير مربوط بعيادة" }, { status: 400 });
-    }
-
+    const { clinicId } = resolved;
     const admin = getAdminClient();
     const { data, error } = await admin
       .from("staff_members")
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ staff: data ?? [] });
+    return NextResponse.json({ clinic_id: clinicId, staff: data ?? [] });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
     return NextResponse.json({ error: msg }, { status: 500 });

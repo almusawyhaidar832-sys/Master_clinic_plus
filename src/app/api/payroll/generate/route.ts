@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { writeAuditLog } from "@/lib/audit/write-audit-log";
+import { resolvePayrollApiClinic } from "@/lib/auth/resolve-payroll-clinic";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   fetchPayrollMonthAdmin,
@@ -14,21 +14,18 @@ import { recordPayrollGenerateTransactions } from "@/lib/services/payroll-financ
  */
 export async function POST(req: NextRequest) {
   try {
-    const caller = await getApiCallerProfile(req);
-    if (!caller) {
-      return NextResponse.json({ error: "يجب تسجيل الدخول أولاً" }, { status: 401 });
-    }
-
-    if (!["accountant", "super_admin"].includes(caller.role)) {
-      return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
-    }
-
-    const clinicId = caller.clinic_id;
-    if (!clinicId) {
-      return NextResponse.json({ error: "حسابك غير مربوط بعيادة" }, { status: 400 });
-    }
-
     const body = await req.json().catch(() => ({}));
+    const resolved = await resolvePayrollApiClinic(req, {
+      requestedClinicId: (body as { clinic_id?: string }).clinic_id,
+    });
+    if (!resolved.ok) {
+      return NextResponse.json(
+        { error: resolved.error },
+        { status: resolved.status }
+      );
+    }
+
+    const { clinicId, caller } = resolved;
     const monthYear = (body as { month_year?: string }).month_year;
 
     if (!monthYear || !/^\d{4}-\d{2}$/.test(monthYear)) {

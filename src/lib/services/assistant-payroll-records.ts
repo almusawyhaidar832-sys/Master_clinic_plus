@@ -617,6 +617,7 @@ export async function generateMonthlyPayroll(
 
 /** توليد رواتب الشهر عبر API (يتجاوز RLS) */
 export async function generateMonthlyPayrollViaApi(
+  clinicId: string,
   monthYear: string
 ): Promise<GenerateMonthlyPayrollResult & { totalCreated?: number }> {
   const res = await fetch("/api/payroll/generate", {
@@ -626,7 +627,7 @@ export async function generateMonthlyPayrollViaApi(
       "Content-Type": "application/json",
       ...authPortalHeaders("accountant"),
     },
-    body: JSON.stringify({ month_year: monthYear }),
+    body: JSON.stringify({ clinic_id: clinicId, month_year: monthYear }),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -736,21 +737,31 @@ export async function unconfirmPayrollViaApi(
   return { ok: true };
 }
 
-export async function fetchPayrollMonthViaApi(monthYear: string): Promise<{
+export async function fetchPayrollMonthViaApi(
+  clinicId: string,
+  monthYear: string
+): Promise<{
   records: PayrollRecord[];
   slips: SalarySlip[];
 }> {
-  const res = await fetch(
-    `/api/payroll/month?month_year=${encodeURIComponent(monthYear)}`,
-    {
-      credentials: "include",
-      headers: authPortalHeaders("accountant"),
-    }
-  );
+  const params = new URLSearchParams({
+    clinic_id: clinicId,
+    month_year: monthYear,
+  });
+  const res = await fetch(`/api/payroll/month?${params}`, {
+    credentials: "include",
+    headers: authPortalHeaders("accountant"),
+  });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(
       (json as { error?: string }).error ?? "تعذر جلب رواتب الشهر"
+    );
+  }
+  const resolvedClinic = (json as { clinic_id?: string }).clinic_id;
+  if (resolvedClinic && resolvedClinic !== clinicId) {
+    throw new Error(
+      "تعارض العيادة — حدّث الصفحة أو أعد تسجيل الدخول ثم حاول مجدداً"
     );
   }
   return {
