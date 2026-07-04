@@ -17,6 +17,8 @@ const LOG = "[automation]";
 export type SessionSavedOptions = {
   treatmentCompleted?: boolean;
   skipPatientWhatsApp?: boolean;
+  /** افتراضياً true — لا يُرسل واتساب للطبيب؛ المراجع فقط (يدوياً من نافذة الفاتورة) */
+  skipDoctorWhatsApp?: boolean;
   treatmentCaseId?: string | null;
   messageSnapshot?: WhatsAppMessageSnapshot | null;
   queueEntryId?: string | null;
@@ -32,7 +34,8 @@ export type UnifiedWhatsAppOutcome = {
 };
 
 /**
- * بعد تحديث الحالة — نقطة الدخول الوحيدة لإرسال واتساب (مراجع + طبيب).
+ * بعد تحديث الحالة — إشعار داخلي للطبيب + واتساب للمراجع (يدوياً أو تلقائياً).
+ * واتساب الطبيب معطّل افتراضياً.
  */
 export async function runSessionSavedAutomation(
   operationId: string,
@@ -76,6 +79,27 @@ export async function runSessionSavedAutomation(
     console.error(LOG, "doctor_notify", msg);
   }
 
+  const skipPatient =
+    Boolean(options.skipPatientWhatsApp) || !ctx.patientPhone?.trim();
+  const skipDoctor =
+    options.skipDoctorWhatsApp !== false ||
+    !ctx.doctorPhone?.trim() ||
+    (ctx.paidAmount <= 0 && ctx.sessionKind !== "payment");
+
+  if (skipPatient && skipDoctor) {
+    return {
+      ok: errors.length === 0,
+      errors,
+      whatsapp: {
+        sent: false,
+        skipped: "manual_patient_only",
+        errors: [],
+        patientBody: null,
+        doctorSent: false,
+      },
+    };
+  }
+
   const waType = await resolvePatientMessageType(
     admin,
     operationId,
@@ -84,9 +108,7 @@ export async function runSessionSavedAutomation(
     options
   );
 
-  const sendDoctor =
-    Boolean(ctx.doctorPhone?.trim()) &&
-    (ctx.paidAmount > 0 || ctx.sessionKind === "payment");
+  const sendDoctor = !skipDoctor;
 
   const wa = await sendUnifiedWhatsApp({
     supabase: admin,
@@ -96,9 +118,9 @@ export async function runSessionSavedAutomation(
     clinicName: getClinicDisplayName(ctx.clinic),
     patientName: ctx.patientName,
     doctorName: ctx.doctorName,
-    patientPhone: options.skipPatientWhatsApp ? null : ctx.patientPhone,
+    patientPhone: skipPatient ? null : ctx.patientPhone,
     doctorPhone: sendDoctor ? ctx.doctorPhone : null,
-    skipPatient: Boolean(options.skipPatientWhatsApp) || !ctx.patientPhone?.trim(),
+    skipPatient,
     skipDoctor: !sendDoctor,
     patientMessageType: waType,
     queueEntryId: options.queueEntryId ?? null,

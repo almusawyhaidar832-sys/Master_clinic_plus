@@ -115,6 +115,17 @@ export type EvolutionSessionSnapshot = {
   instanceListData: unknown;
 };
 
+const SESSION_CACHE_MS = 20_000;
+const sessionCache = new Map<
+  string,
+  { snapshot: EvolutionSessionSnapshot; expires: number }
+>();
+
+export function invalidateEvolutionSessionCache(instanceName?: string) {
+  if (instanceName?.trim()) sessionCache.delete(instanceName.trim());
+  else sessionCache.clear();
+}
+
 /**
  * حالة الجلسة الموحّدة — لا نستدعي /connect إذا كانت open (يقطع الجلسة على الهاتف).
  */
@@ -124,6 +135,11 @@ export async function resolveEvolutionSession(
   const instanceName =
     instanceOverride?.trim() ||
     (await resolveWhatsAppInstanceName());
+
+  const cached = sessionCache.get(instanceName);
+  if (cached && cached.expires > Date.now()) {
+    return cached.snapshot;
+  }
 
   const [stateRes, listRes] = await Promise.all([
     evolutionFetch(
@@ -153,12 +169,19 @@ export async function resolveEvolutionSession(
   else if (stateFromEndpoint !== "unknown") state = stateFromEndpoint;
   else state = stateFromList;
 
-  return {
+  const snapshot: EvolutionSessionSnapshot = {
     linked,
     state,
     connectionStateData: stateRes.data,
     instanceListData: listRes.data,
   };
+
+  sessionCache.set(instanceName, {
+    snapshot,
+    expires: Date.now() + SESSION_CACHE_MS,
+  });
+
+  return snapshot;
 }
 
 export async function fetchEvolutionConnectionState(): Promise<{

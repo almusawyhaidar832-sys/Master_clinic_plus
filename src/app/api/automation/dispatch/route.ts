@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
       storagePath,
       fileName,
       skipPatientWhatsApp,
+      skipDoctorWhatsApp,
       treatmentCaseId,
       messageSnapshot: rawSnapshot,
       queueEntryId,
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
       storagePath?: string;
       fileName?: string | null;
       skipPatientWhatsApp?: boolean;
+      skipDoctorWhatsApp?: boolean;
       queueEntryId?: string | null;
     };
 
@@ -101,6 +103,7 @@ export async function POST(req: NextRequest) {
         const result = await runSessionSavedAutomation(operationId, {
           treatmentCompleted: Boolean(treatmentCompleted),
           skipPatientWhatsApp: Boolean(skipPatientWhatsApp),
+          skipDoctorWhatsApp: skipDoctorWhatsApp !== false,
           treatmentCaseId:
             typeof treatmentCaseId === "string" && treatmentCaseId.trim()
               ? treatmentCaseId.trim()

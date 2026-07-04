@@ -318,12 +318,20 @@ export function SessionInvoiceModal({
         return;
       }
 
-      // الفاتورة تُرسل كنص — PDF اختياري (إن فشل أو كَبُر يكفي النص)
-      let invoicePdfSent = false;
-      let invoicePdfError: string | undefined;
+      setActionMessage({
+        type: "success",
+        text: "✓ أُرسل النص للمراجع — جاري إرسال المرفقات...",
+      });
+      setWaLoading(false);
+
       await waitForPaint();
-      const invoicePdf = await tryGeneratePdf(invoicePrintId);
-      invoicePdfError = invoicePdf.error;
+      const [invoicePdf, rxPrintData] = await Promise.all([
+        tryGeneratePdf(invoicePrintId),
+        ensurePrescriptionReady(),
+      ]);
+
+      let invoicePdfSent = false;
+      let invoicePdfError: string | undefined = invoicePdf.error;
       if (invoicePdf.base64) {
         const invoiceResult = await sendWhatsAppPdf({
           pdfBase64: invoicePdf.base64,
@@ -344,10 +352,8 @@ export function SessionInvoiceModal({
       let prescriptionSent = false;
       let prescriptionExpected = false;
       let prescriptionError: string | undefined;
-      const rxPrintData = await ensurePrescriptionReady();
       if (rxPrintData) {
         prescriptionExpected = true;
-        await waitForPaint();
         await waitForPaint();
         const prescriptionPdf = await tryGeneratePdf(rxPrintId);
         prescriptionError = prescriptionPdf.error;
@@ -768,20 +774,20 @@ export function SessionInvoiceModal({
 
               className="w-full bg-[#25D366] hover:bg-[#1da851] text-white"
 
-              disabled={waLoading || prescriptionLoading || !data.patientPhone}
+              disabled={waLoading || !data.patientPhone}
 
               onClick={() => void sendWhatsAppPackage()}
 
             >
 
-              {waLoading || prescriptionLoading ? (
+              {waLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <MessageCircle className="h-4 w-4" />
               )}
 
-              {prescriptionLoading
-                ? "جاري تحميل الوصفة..."
+              {waLoading
+                ? "جاري الإرسال للمراجع..."
                 : hasPrescription
                   ? archivedHistory
                     ? "إعادة إرسال (فاتورة + وصفة)"

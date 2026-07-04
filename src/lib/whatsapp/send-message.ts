@@ -366,10 +366,14 @@ async function logWhatsAppRow(
     sent_at: params.status === "sent" ? new Date().toISOString() : null,
   };
 
-  const { error } = await supabase.from("whatsapp_messages").insert(row);
-  if (error) {
-    console.error(LOG_PREFIX, "db_log_failed", error.message, params.messageType);
-  }
+  void supabase
+    .from("whatsapp_messages")
+    .insert(row)
+    .then(({ error }) => {
+      if (error) {
+        console.error(LOG_PREFIX, "db_log_failed", error.message, params.messageType);
+      }
+    });
 
   if (params.error_message) {
     console.error(LOG_PREFIX, "delivery_failed", {

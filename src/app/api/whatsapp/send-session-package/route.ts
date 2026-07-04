@@ -11,9 +11,6 @@ import {
   resolveWhatsAppClinic,
   whatsappNoClinicError,
 } from "@/lib/whatsapp/resolve-clinic";
-import { getWhatsAppConfig } from "@/lib/whatsapp/config";
-import { resolveEvolutionSession } from "@/lib/whatsapp/evolution-client";
-import { resolveWhatsAppInstanceForClinic } from "@/lib/whatsapp/resolve-instance";
 import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
 import { sendAccountingWhatsAppPackage } from "@/lib/whatsapp/session-package-server";
 
@@ -113,25 +110,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: phoneCheck.message }, { status: 400 });
     }
     phone = phoneCheck.normalized;
-
-    const cfg = getWhatsAppConfig();
-    if (cfg.configured && cfg.provider === "evolution") {
-      const instanceName = await resolveWhatsAppInstanceForClinic(
-        resolved.clinicId
-      );
-      const session = await resolveEvolutionSession(instanceName);
-      if (!session.linked) {
-        return NextResponse.json(
-          {
-            error: describeWhatsAppDeliveryError("whatsapp_not_linked"),
-            hint: `جلسة واتساب عيادتك (${instanceName}) غير متصلة — افتح /dashboard/whatsapp وامسح QR`,
-            instanceName,
-            configured: true,
-          },
-          { status: 400 }
-        );
-      }
-    }
 
     const result = await sendAccountingWhatsAppPackage(admin, {
       clinicId: resolved.clinicId,

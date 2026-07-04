@@ -129,14 +129,24 @@ export async function fetchClinicalBundleForOperation(
   let pdfUrl: string | null = null;
   const xrayUrls: string[] = [];
 
-  for (const row of xrayRows ?? []) {
-    const rec = row as Record<string, unknown>;
-    const path = String(rec.storage_path ?? "").trim();
-    if (!path) continue;
-    const fileName = String(rec.file_name ?? "");
-    const mimeType = String(rec.mime_type ?? "");
-    const signed = await signedStorageUrl(supabase, path);
-    if (!signed) continue;
+  const signedRows = await Promise.all(
+    (xrayRows ?? []).map(async (row) => {
+      const rec = row as Record<string, unknown>;
+      const path = String(rec.storage_path ?? "").trim();
+      if (!path) return null;
+      const signed = await signedStorageUrl(supabase, path);
+      if (!signed) return null;
+      return {
+        fileName: String(rec.file_name ?? ""),
+        mimeType: String(rec.mime_type ?? ""),
+        signed,
+      };
+    })
+  );
+
+  for (const item of signedRows) {
+    if (!item) continue;
+    const { fileName, mimeType, signed } = item;
 
     if (mimeType === "application/pdf" || fileName.toLowerCase().endsWith(".pdf")) {
       if (!pdfUrl) pdfUrl = signed;

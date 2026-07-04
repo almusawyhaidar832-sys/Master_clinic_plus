@@ -14,9 +14,6 @@ import {
 } from "@/lib/whatsapp/resolve-clinic";
 import { deliverWhatsAppDocument } from "@/lib/whatsapp/send-message";
 import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
-import { getWhatsAppConfig } from "@/lib/whatsapp/config";
-import { resolveEvolutionSession } from "@/lib/whatsapp/evolution-client";
-import { resolveWhatsAppInstanceForClinic } from "@/lib/whatsapp/resolve-instance";
 
 const MAX_PDF_BYTES = 8 * 1024 * 1024;
 
@@ -109,25 +106,6 @@ export async function POST(req: NextRequest) {
         { error: describeWhatsAppDeliveryError("no_patient_phone") },
         { status: 400 }
       );
-    }
-
-    const cfg = getWhatsAppConfig();
-    if (cfg.configured && cfg.provider === "evolution") {
-      const instanceName = await resolveWhatsAppInstanceForClinic(
-        resolved.clinicId
-      );
-      const session = await resolveEvolutionSession(instanceName);
-      if (!session.linked) {
-        return NextResponse.json(
-          {
-            error: describeWhatsAppDeliveryError("whatsapp_not_linked"),
-            hint: `جلسة واتساب عيادتك (${instanceName}) غير متصلة — افتح /dashboard/whatsapp وامسح QR`,
-            instanceName,
-            configured: true,
-          },
-          { status: 400 }
-        );
-      }
     }
 
     const caption = String(body.caption ?? "").trim() || "مرفق من العيادة";

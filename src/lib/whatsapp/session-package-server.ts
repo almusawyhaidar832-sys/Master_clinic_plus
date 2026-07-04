@@ -17,7 +17,7 @@ export type SessionPackageSendResult = {
   errors: string[];
 };
 
-/** إرسال يدوي من المحاسب: 1) نص تفاصيل 2) PDF فاتورة 3) PDF وصفة */
+/** إرسال يدوي من المحاسب: 1) نص فاتورة فوراً 2) ملحق سريري 3) PDF اختياري */
 export async function sendAccountingWhatsAppPackage(
   admin: SupabaseClient,
   input: {
@@ -39,17 +39,12 @@ export async function sendAccountingWhatsAppPackage(
   let invoiceSent = false;
   let prescriptionSent = false;
 
-  const clinicalAppendix = await buildClinicalWhatsAppAppendix(
-    admin,
-    input.operationId,
-    input.queueEntryId
-  );
-  const fullText = `${input.invoiceText.trim()}${clinicalAppendix}`.trim();
+  const invoiceBody = input.invoiceText.trim();
 
   const textOutcome = await deliverWhatsAppMessage(admin, {
     clinicId: input.clinicId,
     rawPhone: input.phone,
-    messageBody: fullText,
+    messageBody: invoiceBody,
     messageType: "session_accounting_package_text",
   });
 
@@ -61,6 +56,31 @@ export async function sendAccountingWhatsAppPackage(
         textOutcome.providerError ?? "text_send_failed"
       )
     );
+  }
+
+  if (textSent) {
+    const clinicalAppendix = await buildClinicalWhatsAppAppendix(
+      admin,
+      input.operationId,
+      input.queueEntryId
+    );
+    const appendix = clinicalAppendix.trim();
+    if (appendix) {
+      const appendixOutcome = await deliverWhatsAppMessage(admin, {
+        clinicId: input.clinicId,
+        rawPhone: input.phone,
+        messageBody: appendix,
+        messageType: "session_clinical_appendix",
+      });
+      if (!appendixOutcome.configured) configured = false;
+      if (!appendixOutcome.ok && appendixOutcome.configured) {
+        errors.push(
+          describeWhatsAppDeliveryError(
+            appendixOutcome.providerError ?? "clinical_appendix_failed"
+          )
+        );
+      }
+    }
   }
 
   if (input.invoicePdfBase64?.trim()) {

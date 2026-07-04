@@ -1724,6 +1724,7 @@ export function QuickEntryForm({
               messageSnapshot,
               queueEntryId: visitQueueEntryId ?? null,
               skipPatientWhatsApp: true,
+              skipDoctorWhatsApp: true,
             }),
           });
 
@@ -1742,10 +1743,12 @@ export function QuickEntryForm({
             whatsappNote = ` — واتساب: ${waData.error ?? "فشل الطلب"}`;
           } else if (waData.error && !wa?.sent) {
             whatsappNote = ` — واتساب: ${waData.error}`;
+          } else if (wa?.skipped === "manual_patient_only") {
+            whatsappNote =
+              " — أرسل واتساب للمراجع من نافذة الفاتورة (لا إرسال تلقائي للطبيب).";
           } else if (wa?.sent) {
-            whatsappNote = justCompleted
-              ? " — إشعار الطبيب فقط (لا واتساب تلقائي للمراجع)"
-              : " — لا واتساب تلقائي للمراجع — أرسل من نافذة الفاتورة";
+            whatsappNote =
+              " — أُرسل واتساب للمراجع — راجع نافذة الفاتورة إن لزم.";
           } else if (wa?.skipped === "no_patient_phone") {
             whatsappNote =
               " — لم يُرسل واتساب: أضف رقم جوال المراجع في الحقل أعلاه.";
