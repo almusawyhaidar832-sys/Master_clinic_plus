@@ -145,7 +145,7 @@ function alertAccountantBillingFromRow(
 }
 
 function alertAccountantFromBroadcast(
-  payload: { name?: string; entryId?: string },
+  payload: { name?: string; entryId?: string; gender?: PatientGender },
   seen: Set<string>,
   linkPath = "/dashboard/queue"
 ) {
@@ -162,6 +162,7 @@ function alertAccountantFromBroadcast(
     message: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
     linkPath,
     patientName: name,
+    patientGender: payload.gender ?? null,
   });
 }
 
@@ -397,7 +398,11 @@ export function useAccountantQueueRealtime(
         "broadcast",
         { event: "queue_admit_request" },
         ({ payload }) => {
-          const p = payload as { name?: string; entryId?: string };
+          const p = payload as {
+            name?: string;
+            entryId?: string;
+            gender?: PatientGender;
+          };
           notifyQueueRefresh({ scope: "clinic", clinicId });
           if (filterDoctorId) {
             notifyQueueRefresh({ scope: "doctor", doctorId: filterDoctorId });

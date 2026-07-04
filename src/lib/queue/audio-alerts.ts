@@ -9,9 +9,11 @@ import {
 import type { PatientGender } from "@/lib/queue/patient-gender";
 import { showBrowserNotification } from "@/lib/queue/realtime-client";
 import {
+  playAttentionBeep,
   prepareSpeechAuto,
   speakArabic,
   speakPatientCallParts,
+  unlockSpeechAudio,
 } from "@/lib/queue/web-speech";
 
 export type QueueAlertKind =
@@ -62,18 +64,23 @@ function persistAudioConsent(): void {
   }
 }
 
-/** Unlock Web Audio — browsers block sound until user interacts with the page */
+/** Unlock Web Audio + speech — browsers block sound until user interacts with the page */
 export async function unlockQueueAudio(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   try {
     if (!ctx) ctx = new AudioContext();
     if (ctx.state === "suspended") await ctx.resume();
     audioReady = ctx.state === "running";
-    if (audioReady) persistAudioConsent();
-    return audioReady;
   } catch {
-    return false;
+    audioReady = false;
   }
+
+  const speechOk = await unlockSpeechAudio().catch(() => false);
+  if (audioReady || speechOk) {
+    persistAudioConsent();
+    return true;
+  }
+  return false;
 }
 
 /** تشغيل MP3 عبر Web Audio (Android يمنع HTMLAudioElement بعد fetch بعيد) */
@@ -206,6 +213,7 @@ async function speakQueueAlertVoice(
   options?: { clearQueue?: boolean }
 ): Promise<void> {
   prepareSpeechAuto();
+  await playAttentionBeep().catch(() => undefined);
 
   if (detail.audioUrl) {
     const played = await playDoctorCallAudioUrl(detail.audioUrl);

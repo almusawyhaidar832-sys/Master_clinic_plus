@@ -51,7 +51,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | "timeout">
 }
 
 export async function fetchPushSubscriptionStatus(
-  portal: "doctor" | "assistant" = "doctor"
+  portal: "doctor" | "assistant" | "accountant" = "doctor"
 ): Promise<PushSubscriptionStatus | null> {
   try {
     const res = await fetch("/api/push/status", {
@@ -67,7 +67,7 @@ export async function fetchPushSubscriptionStatus(
 
 async function savePushSubscription(
   subscription: PushSubscription,
-  portal: "doctor" | "assistant" = "doctor"
+  portal: "doctor" | "assistant" | "accountant" = "doctor"
 ): Promise<boolean> {
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
@@ -82,7 +82,7 @@ async function savePushSubscription(
 }
 
 async function registerWebPushForPortal(
-  portal: "doctor" | "assistant",
+  portal: "doctor" | "assistant" | "accountant",
   requestPermission = false,
   options?: { forceResubscribe?: boolean }
 ): Promise<PushRegisterResult> {
@@ -183,6 +183,14 @@ export async function registerAssistantWebPush(
   return registerWebPushForPortal("assistant", requestPermission, options);
 }
 
+/** اشتراك Web Push لمحاسب العيادة */
+export async function registerAccountantWebPush(
+  requestPermission = false,
+  options?: { forceResubscribe?: boolean }
+): Promise<PushRegisterResult> {
+  return registerWebPushForPortal("accountant", requestPermission, options);
+}
+
 /** إعادة تسجيل Push عند العودة للتطبيق (iOS/Android) */
 export async function refreshDoctorWebPushIfGranted(): Promise<PushRegisterResult | null> {
   if (
@@ -204,6 +212,17 @@ export async function refreshAssistantWebPushIfGranted(): Promise<PushRegisterRe
     return null;
   }
   return registerAssistantWebPush(false);
+}
+
+export async function refreshAccountantWebPushIfGranted(): Promise<PushRegisterResult | null> {
+  if (
+    typeof window === "undefined" ||
+    !("Notification" in window) ||
+    Notification.permission !== "granted"
+  ) {
+    return null;
+  }
+  return registerAccountantWebPush(false);
 }
 
 /** إعادة اشتراك Push عند انتهاء الاشتراك (pushsubscriptionchange في SW) */

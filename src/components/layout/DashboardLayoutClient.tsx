@@ -14,6 +14,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { DeveloperImpersonationBanner } from "@/components/developer/DeveloperImpersonationBanner";
 import { ClinicDataSyncBridge } from "@/components/sync/ClinicDataSyncBridge";
 import { QueueRealtimeBridge } from "@/components/queue/QueueRealtimeBridge";
+import { AccountantAlertsSetup } from "@/components/accountant/AccountantAlertsSetup";
 import type { NavItem, UserRole } from "@/types";
 
 export function DashboardLayoutClient({
@@ -95,6 +96,7 @@ export function DashboardLayoutClient({
     >
       <DeveloperImpersonationBanner />
       <ClinicDataSyncBridge />
+      <AccountantAlertsSetup />
       <QueueRealtimeBridge portal="dashboard" />
       {children}
     </DashboardShell>

@@ -11,7 +11,12 @@ import {
   hasPersistedAudioConsent,
   installGlobalAudioUnlock,
   isQueueAudioReady,
+  unlockQueueAudio,
 } from "@/lib/queue/audio-alerts";
+import {
+  hasPersistedSpeechUnlock,
+  prepareSpeechAuto,
+} from "@/lib/queue/web-speech";
 
 interface AudioAlertsContextValue {
   /** Web Audio is running (unlocked this session) */
@@ -34,8 +39,13 @@ export function AudioAlertsProvider({ children }: { children: ReactNode }) {
   const [hasConsent, setHasConsent] = useState(false);
 
   useEffect(() => {
-    setHasConsent(hasPersistedAudioConsent());
+    setHasConsent(hasPersistedAudioConsent() || hasPersistedSpeechUnlock());
     setAudioReady(isQueueAudioReady());
+
+    if (hasPersistedAudioConsent() || hasPersistedSpeechUnlock()) {
+      prepareSpeechAuto();
+      void unlockQueueAudio();
+    }
 
     return installGlobalAudioUnlock(() => {
       setAudioReady(true);

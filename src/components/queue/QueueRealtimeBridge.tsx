@@ -18,6 +18,15 @@ import {
 } from "@/hooks/useQueueRealtime";
 import { ensureNotificationPermission } from "@/lib/queue/realtime-client";
 import { QueueAlertOverlay } from "@/components/queue/QueueAlertOverlay";
+import {
+  listenForPushAlertMessages,
+  listenForServiceWorkerNavigation,
+} from "@/lib/push/client";
+import {
+  triggerQueueAlert,
+  type QueueAlertKind,
+} from "@/lib/queue/audio-alerts";
+import { useRouter } from "next/navigation";
 
 interface QueueRealtimeBridgeProps {
   portal: "dashboard" | "doctor" | "assistant";
@@ -34,6 +43,7 @@ export function QueueRealtimeBridge({
   portal,
   enablePolling = true,
 }: QueueRealtimeBridgeProps) {
+  const router = useRouter();
   const { profile } = useClinicProfile();
   const clinicId = profile?.id ?? null;
   const [doctorId, setDoctorId] = useState<string | null>(null);
@@ -75,6 +85,37 @@ export function QueueRealtimeBridge({
     if (portal === "doctor") return;
     void ensureNotificationPermission();
   }, [portal]);
+
+  /** Push / SW → نداء صوتي عندما التطبيق مفتوح (محاسب / مساعد / طبيب) */
+  useEffect(() => {
+    return listenForPushAlertMessages((payload) => {
+      const rawKind = payload.kind ?? "accountant_admit";
+      const kindMap: Record<string, QueueAlertKind> = {
+        doctor_queue: "doctor_new",
+        doctor_new: "doctor_new",
+        doctor_exam: "doctor_exam",
+        accountant_admit: "accountant_admit",
+        accountant_billing: "accountant_billing",
+        accountant_payment: "accountant_billing",
+      };
+      const kind = kindMap[rawKind] ?? "accountant_admit";
+
+      void triggerQueueAlert({
+        kind,
+        title: payload.title ?? "تنبيه 🔔",
+        message: payload.body ?? "",
+        linkPath: payload.url,
+        patientName: payload.patientName,
+        audioUrl: payload.audioUrl,
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    return listenForServiceWorkerNavigation((url) => {
+      router.push(url);
+    });
+  }, [router]);
 
   const activeDoctorId =
     portal === "doctor" || portal === "assistant" ? doctorId : null;

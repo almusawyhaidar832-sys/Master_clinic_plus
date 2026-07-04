@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile, isApiAssistantRole, isApiDoctorRole } from "@/lib/auth/api-session";
+import {
+  getApiCallerProfile,
+  isApiAssistantRole,
+  isApiDoctorRole,
+  isApiStaffRole,
+} from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { isWebPushConfigured } from "@/lib/push/server";
 
@@ -8,7 +13,7 @@ interface PushSubscriptionJson {
   keys?: { p256dh?: string; auth?: string };
 }
 
-/** POST — حفظ اشتراك Web Push للطبيب أو المساعد */
+/** POST — حفظ اشتراك Web Push للطبيب أو المساعد أو المحاسب */
 export async function POST(req: NextRequest) {
   try {
     if (!isWebPushConfigured()) {
@@ -22,7 +27,9 @@ export async function POST(req: NextRequest) {
     const role = profile?.role ?? "";
     if (
       !profile ||
-      (!isApiDoctorRole(role) && !isApiAssistantRole(role))
+      (!isApiDoctorRole(role) &&
+        !isApiAssistantRole(role) &&
+        !isApiStaffRole(role))
     ) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile, isApiAssistantRole, isApiDoctorRole } from "@/lib/auth/api-session";
+import {
+  getApiCallerProfile,
+  isApiAssistantRole,
+  isApiDoctorRole,
+  isApiStaffRole,
+} from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { isWebPushConfigured } from "@/lib/push/server";
 
@@ -11,7 +16,9 @@ export async function GET(req: NextRequest) {
 
     if (
       !profile ||
-      (!isApiDoctorRole(profile.role) && !isApiAssistantRole(profile.role))
+      (!isApiDoctorRole(profile.role) &&
+        !isApiAssistantRole(profile.role) &&
+        !isApiStaffRole(profile.role))
     ) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }

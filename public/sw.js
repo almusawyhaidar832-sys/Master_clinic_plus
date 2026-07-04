@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v21-doctor-push";
+const CACHE_NAME = "mcp-app-v22-accountant-voice";
 
 const NOTIFICATION_ICON = "/icons/icon-192.png";
 
@@ -207,18 +207,29 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("push", (event) => {
   const data = parsePushPayload(event);
+  const payload = {
+    title: data.title || "مراجع جديد",
+    body: data.body || "لديك مراجع جديد في الانتظار — افتح التطبيق",
+    url: data.url || "/doctor/queue",
+    tag: data.tag || "doctor-queue",
+    kind: data.kind || "doctor_queue",
+    patientName: data.patientName,
+    audioUrl: data.audioUrl,
+    silent: false,
+    requireInteraction: true,
+    renotify: true,
+  };
+
   event.waitUntil(
-    showCustomNotification(data.title || "مراجع جديد", {
-      body:
-        data.body || "لديك مراجع جديد في الانتظار — افتح التطبيق",
-      url: data.url || "/doctor/queue",
-      tag: data.tag || "doctor-queue",
-      kind: data.kind || "doctor_queue",
-      patientName: data.patientName,
-      silent: false,
-      requireInteraction: true,
-      renotify: true,
-    })
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if (!client.url.startsWith(self.location.origin)) continue;
+          client.postMessage({ type: "QUEUE_PUSH_ALERT", payload });
+        }
+        return showCustomNotification(payload.title, payload);
+      })
   );
 });
 
