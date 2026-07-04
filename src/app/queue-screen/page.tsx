@@ -40,6 +40,7 @@ import {
   saveQueueScreenClinicRef,
 } from "@/lib/queue/queue-screen-storage";
 import { QueueScreenDisplay } from "@/components/queue/QueueScreenDisplay";
+import { QueueScreenAudioUnlockOverlay } from "@/components/queue/QueueScreenAudioUnlockOverlay";
 import { QueueScreenPwaInstall } from "@/components/queue/QueueScreenPwaInstall";
 import { QueueScreenTvFit } from "@/components/queue/QueueScreenTvFit";
 import { useAutoReloadOnNewDeploy } from "@/lib/queue/auto-reload";
@@ -228,6 +229,17 @@ function QueueScreenContent() {
   const prevWaitingRef = useRef<Set<string>>(new Set());
   const queueReadyRef = useRef(false);
 
+  const handleUnlockAudio = useCallback(async () => {
+    const diag = await unlockSpeechAudioDiagnostics().catch(() => null);
+    lastAudioDiagRef.current = diag;
+    if (diag?.unlocked) {
+      setAudioUnlocked(true);
+      setAudioDiagnosticMessage(null);
+      await playAttentionBeep().catch(() => {});
+    }
+    return diag;
+  }, []);
+
   useEffect(() => {
     if (hasPersistedSpeechUnlock()) {
       setAudioUnlockHint("اضغط OK على الريموت لتفعيل الصوت");
@@ -365,11 +377,33 @@ function QueueScreenContent() {
         (r) => !prevWaitingRef.current.has(r.id)
       );
 
-      if (queueReadyRef.current) {
+      if (!queueReadyRef.current) {
         for (const entry of calledRows) {
           const at = entry.called_at ?? "";
           if (at) prevCalledAtRef.current.set(entry.id, at);
         }
+      } else {
+        for (const entry of calledRows) {
+          const at = entry.called_at ?? "";
+          if (!at) continue;
+
+          const wasCalled = prevCalledRef.current.has(entry.id);
+          const prevAt = prevCalledAtRef.current.get(entry.id);
+          const isNewCall = !wasCalled;
+          const isRecall = wasCalled && prevAt != null && prevAt !== at;
+
+          if (isNewCall || isRecall) {
+            handleQueueScreenCall(
+              resolvePatientName(entry),
+              resolveDoctorName(entry),
+              resolvePatientGender(entry),
+              { entryId: entry.id, recall: isRecall }
+            );
+          }
+
+          prevCalledAtRef.current.set(entry.id, at);
+        }
+
         if (newlyWaiting.length > 0) {
           void playAttentionBeep();
         }
@@ -544,8 +578,14 @@ function QueueScreenContent() {
   }
 
   return (
-    <QueueScreenTvFit>
-      <QueueScreenDisplay
+    <>
+      <QueueScreenAudioUnlockOverlay
+        visible={!audioUnlocked}
+        hint={audioUnlockHint}
+        onUnlock={() => void handleUnlockAudio()}
+      />
+      <QueueScreenTvFit>
+        <QueueScreenDisplay
       clinicName={clinicName}
       currentTime={currentTime}
       currentDate={currentDate}
@@ -572,8 +612,8 @@ function QueueScreenContent() {
       onTestSound={() => {
         setAudioDiagnosticMessage("جارٍ اختبار الصوت...");
         void (async () => {
-          const diag = await unlockSpeechAudioDiagnostics().catch(() => null);
-          lastAudioDiagRef.current = diag;
+          await handleUnlockAudio();
+          const diag = lastAudioDiagRef.current;
           if (diag?.unlocked) setAudioUnlocked(true);
 
           if (displayCalled[0]) {
@@ -614,7 +654,8 @@ function QueueScreenContent() {
         void navigator.clipboard?.writeText(buildDiagnosticsReport())
       }
     />
-    </QueueScreenTvFit>
+      </QueueScreenTvFit>
+    </>
   );
 }
 

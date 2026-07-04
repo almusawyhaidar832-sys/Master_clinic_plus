@@ -33,26 +33,23 @@ export function QueueScreenTvFit({ children }: { children: ReactNode }) {
       raf = requestAnimationFrame(() => {
         inner.style.transform = "none";
         inner.style.width = `${DESIGN_W}px`;
-        inner.style.height = "auto";
+        inner.style.height = `${DESIGN_H}px`;
 
         const vv = window.visualViewport;
         const availableW = vv?.width ?? viewport.clientWidth ?? window.innerWidth;
         const availableH = vv?.height ?? viewport.clientHeight ?? window.innerHeight;
 
-        const neededW = inner.scrollWidth || DESIGN_W;
-        const neededH = inner.scrollHeight || DESIGN_H;
+        // لوحة ثابتة 1920×1080 — نملأ الشاشة بالعرض/الارتفاع (بدون تصغير
+        // بسبب بطاقات إضافية طويلة كانت تترك حوافاً فارغة يميناً ويساراً).
+        const scaleX = availableW / DESIGN_W;
+        const scaleY = availableH / DESIGN_H;
+        const scale = Math.max(MIN_SCALE, Math.min(scaleX, scaleY));
 
-        const scaleX = availableW / neededW;
-        const scaleY = availableH / neededH;
-        const scale = Math.max(MIN_SCALE, Math.min(scaleX, scaleY, 1));
+        const scaledW = DESIGN_W * scale;
+        const scaledH = DESIGN_H * scale;
 
-        const scaledW = neededW * scale;
-        const scaledH = neededH * scale;
-
-        // إزاحة صريحة بالبكسل بدل الاعتماد على margin:auto — تعمل بشكل
-        // صحيح دائماً بغض النظر عن اتجاه الكتابة (RTL) أو فيض الصندوق
         const offsetX = Math.max(0, (availableW - scaledW) / 2);
-        const offsetY = scaledH < availableH ? Math.max(0, (availableH - scaledH) / 2) : 0;
+        const offsetY = Math.max(0, (availableH - scaledH) / 2);
 
         inner.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
 

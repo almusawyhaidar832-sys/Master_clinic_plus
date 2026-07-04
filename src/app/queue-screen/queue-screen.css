@@ -6,6 +6,7 @@ html.qs-tv-mode body {
   overflow: hidden !important;
   height: 100%;
   width: 100%;
+  max-width: none;
   margin: 0;
   padding: 0;
   -webkit-text-size-adjust: 100%;
@@ -37,9 +38,90 @@ html.qs-tv-mode body {
   top: 0;
   left: 0;
   width: 1920px;
+  height: 1080px;
+  overflow: hidden;
   transform-origin: 0 0;
   will-change: transform;
   opacity: 0;
+}
+
+/* تخطيط التلفاز — أفقي دائماً (لا يعتمد على lg: breakpoint) */
+html.qs-tv-mode .qs-tv-display-root {
+  height: 1080px;
+}
+
+html.qs-tv-mode .qs-tv-main-row {
+  flex-direction: row;
+}
+
+html.qs-tv-mode .qs-tv-banner-row {
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+html.qs-tv-mode .qs-tv-banner-clinic {
+  text-align: right;
+}
+
+html.qs-tv-mode .qs-tv-sidebar {
+  width: 22rem;
+  max-width: 22rem;
+}
+
+html.qs-tv-mode .qs-called-grid {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+}
+
+html.qs-tv-mode .qs-called-grid[data-count="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+html.qs-tv-mode .qs-called-grid[data-count="3"],
+html.qs-tv-mode .qs-called-grid[data-count="4"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+html.qs-tv-mode .qs-call-card-compact .qs-patient-hero {
+  font-size: clamp(1.35rem, 2.2vw, 2.25rem);
+  margin-bottom: 1rem;
+}
+
+html.qs-tv-mode .qs-call-card-compact .qs-ticket-hero {
+  font-size: clamp(2rem, 3.5vw, 3.25rem);
+  margin-bottom: 1rem;
+}
+
+html.qs-tv-mode .qs-call-card-compact .qs-doctor-name {
+  font-size: clamp(0.95rem, 1.4vw, 1.15rem);
+}
+
+html.qs-tv-mode .qs-call-card-compact {
+  padding: 1rem 1.25rem;
+}
+
+html.qs-tv-mode .qs-call-card-compact .qs-call-status-badge {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+}
+
+html.qs-tv-mode .qs-call-card-compact .qs-repeat-btn {
+  margin-top: 0.75rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+html.qs-tv-mode .qs-tv-footer {
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+}
+
+html.qs-tv-mode .qs-tv-footer p {
+  margin-top: 0;
 }
 
 .qs-tv-fit-inner.qs-tv-fit-ready {
@@ -290,4 +372,49 @@ html.qs-tv-mode body {
 .qs-setup-input:focus {
   border-color: #0891b2;
   box-shadow: 0 0 0 4px rgba(8, 145, 178, 0.15);
+}
+
+/* ─── تفعيل الصوت على التلفاز ─── */
+.qs-audio-unlock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: rgba(8, 47, 73, 0.92);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  outline: none;
+}
+
+.qs-audio-unlock-card {
+  max-width: 42rem;
+  text-align: center;
+  animation: qs-audio-unlock-pulse 2.4s ease-in-out infinite;
+}
+
+.qs-audio-unlock-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 7rem;
+  height: 7rem;
+  margin-bottom: 1.5rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #0891b2, #14b8a6);
+  box-shadow:
+    0 0 0 0 rgba(20, 184, 166, 0.45),
+    0 12px 40px rgba(8, 145, 178, 0.35);
+}
+
+@keyframes qs-audio-unlock-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
 }

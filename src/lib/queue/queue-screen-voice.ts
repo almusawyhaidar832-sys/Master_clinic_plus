@@ -95,6 +95,11 @@ function enqueueImmediate(job: AnnouncementJob) {
   speaking = false;
   lastAnnouncedKey = "";
   lastAnnouncedAt = 0;
+  if (!isSpeechGestureUnlocked()) {
+    pendingJobs.unshift(job);
+    void drainQueue();
+    return;
+  }
   void playAnnouncement(job, true);
 }
 

@@ -13,7 +13,7 @@ const CLOUD_TTS_ATTEMPTS = 3;
 const DOCTOR_CLOUD_TTS_TIMEOUT_MS = 8_000;
 const DOCTOR_CLOUD_TTS_ATTEMPTS = 1;
 /** شاشة الانتظار — نداء فوري: مهلة قصيرة ومحاولة واحدة */
-const QUEUE_SCREEN_TTS_TIMEOUT_MS = 4_500;
+const QUEUE_SCREEN_TTS_TIMEOUT_MS = 8_000;
 const QUEUE_SCREEN_TTS_ATTEMPTS = 1;
 
 const ttsBlobCache = new Map<string, Blob>();

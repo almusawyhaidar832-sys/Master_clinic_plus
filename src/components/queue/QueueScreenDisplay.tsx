@@ -51,6 +51,7 @@ function CalledCard({
   entry,
   isLive,
   isRecall,
+  compact = false,
   resolvePatientName,
   resolveDoctorName,
   onRepeatCall,
@@ -59,6 +60,7 @@ function CalledCard({
   entry: QueueScreenEntry;
   isLive: boolean;
   isRecall: boolean;
+  compact?: boolean;
   resolvePatientName: (entry: QueueScreenEntry) => string;
   resolveDoctorName: (entry: QueueScreenEntry) => string;
   onRepeatCall: (entry: QueueScreenEntry) => void;
@@ -73,6 +75,7 @@ function CalledCard({
       key={animationKey}
       className={cn(
         "qs-enter qs-call-card relative overflow-hidden rounded-[2rem] border-[3px] px-5 py-6 lg:px-8 lg:py-8",
+        compact && "qs-call-card-compact rounded-2xl border-2 px-4 py-4",
         isInProgress
           ? "qs-call-card-progress"
           : isRecall
@@ -94,7 +97,8 @@ function CalledCard({
       <div className="relative flex flex-col items-center text-center">
         <div
           className={cn(
-            "mb-6 inline-flex items-center gap-3 rounded-2xl px-6 py-3 text-lg font-black lg:text-xl",
+            "qs-call-status-badge mb-6 inline-flex items-center gap-3 rounded-2xl px-6 py-3 text-lg font-black lg:text-xl",
+            compact && "mb-3 px-4 py-2 text-sm",
             isInProgress
               ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/30"
               : isRecall
@@ -120,12 +124,13 @@ function CalledCard({
           )}
         </div>
 
-        <p className="mb-2 text-lg font-bold tracking-wide text-slate-500 lg:text-xl">
+        <p className={cn("mb-2 text-lg font-bold tracking-wide text-slate-500 lg:text-xl", compact && "mb-1 text-sm")}>
           رقم الدور
         </p>
         <div
           className={cn(
             "qs-ticket-hero mb-8 tabular-nums",
+            compact && "mb-3",
             isInProgress
               ? "text-emerald-600"
               : isRecall
@@ -136,12 +141,13 @@ function CalledCard({
           {entry.ticket_number}
         </div>
 
-        <p className="mb-3 text-xl font-bold text-teal-700 lg:text-2xl">المراجع</p>
-        <h3 className="qs-patient-hero mb-8 max-w-full px-2">{name}</h3>
+        <p className={cn("mb-3 text-xl font-bold text-teal-700 lg:text-2xl", compact && "mb-1 text-sm")}>المراجع</p>
+        <h3 className={cn("qs-patient-hero mb-8 max-w-full px-2", compact && "mb-3")}>{name}</h3>
 
         <div
           className={cn(
             "flex w-full max-w-2xl items-center justify-center gap-3 rounded-2xl border-2 px-6 py-4",
+            compact && "max-w-none px-3 py-2",
             isInProgress
               ? "border-emerald-200 bg-emerald-50"
               : "border-sky-100 bg-sky-50"
@@ -165,7 +171,10 @@ function CalledCard({
         <button
           type="button"
           onClick={() => onRepeatCall(entry)}
-          className="mt-6 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50"
+          className={cn(
+            "qs-repeat-btn mt-6 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50",
+            compact && "mt-3 px-3 py-1.5 text-xs"
+          )}
           title="إعادة النداء"
         >
           <RotateCcw className="h-5 w-5" />
@@ -197,14 +206,16 @@ export function QueueScreenDisplay({
   onInstalled,
   onCopyDiagnostics,
 }: QueueScreenDisplayProps) {
+  const multiCall = called.length > 1;
+
   return (
-    <div className="qs-bg-mesh relative flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="qs-bg-mesh qs-tv-display-root relative flex h-full min-h-0 flex-col overflow-hidden">
       <div className="qs-grid-overlay pointer-events-none absolute inset-0 opacity-60" />
 
       {/* بانر العيادة */}
       <div className="qs-clinic-banner relative z-20 shrink-0 px-4 py-3 text-white lg:px-8 lg:py-4">
-        <div className="flex flex-col items-center gap-4 lg:flex-row lg:justify-between">
-          <div className="w-full flex-1 text-center lg:text-right">
+        <div className="qs-tv-banner-row flex flex-col items-center gap-4 lg:flex-row lg:justify-between">
+          <div className="qs-tv-banner-clinic w-full flex-1 text-center lg:text-right">
             <p className="mb-1 text-sm font-semibold tracking-widest text-cyan-100 lg:text-base">
               مرحباً بكم في
             </p>
@@ -264,14 +275,14 @@ export function QueueScreenDisplay({
         )}
       </div>
 
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row lg:gap-4 lg:p-4">
+      <div className="qs-tv-main-row relative z-10 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row lg:gap-4 lg:p-4">
         <section className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-          <h2 className="text-center text-2xl font-black text-slate-800 lg:text-3xl">
+          <h2 className="shrink-0 text-center text-2xl font-black text-slate-800 lg:text-3xl">
             المراجع المطلوب الآن
           </h2>
 
           {called.length === 0 ? (
-            <div className="qs-glass qs-icon-float flex flex-1 flex-col items-center justify-center rounded-[2rem] px-8 py-16 text-center">
+            <div className="qs-glass qs-icon-float flex flex-1 flex-col items-center justify-center rounded-[2rem] px-8 py-10 text-center">
               <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-cyan-100 to-teal-100">
                 <Clock className="h-12 w-12 text-cyan-600" />
               </div>
@@ -283,14 +294,18 @@ export function QueueScreenDisplay({
               </p>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-              {called.map((entry) => (
+            <div
+              className="qs-called-grid min-h-0 flex-1 overflow-hidden"
+              data-count={String(Math.min(called.length, 4))}
+            >
+              {called.slice(0, 3).map((entry) => (
                 <CalledCard
                   key={`${entry.id}-${entry.id === liveCallEntryId ? liveCallTick : 0}`}
                   animationKey={`${entry.id}-${entry.id === liveCallEntryId ? liveCallTick : 0}`}
                   entry={entry}
                   isLive={entry.id === liveCallEntryId}
                   isRecall={entry.id === liveCallEntryId && Boolean(liveCallRecall)}
+                  compact={multiCall}
                   resolvePatientName={resolvePatientName}
                   resolveDoctorName={resolveDoctorName}
                   onRepeatCall={onRepeatCall}
@@ -300,7 +315,7 @@ export function QueueScreenDisplay({
           )}
         </section>
 
-        <aside className="flex min-h-0 w-full shrink-0 flex-col lg:w-[min(28vw,24rem)]">
+        <aside className="qs-tv-sidebar flex min-h-0 w-full shrink-0 flex-col lg:w-[min(28vw,24rem)]">
           <div className="qs-glass flex h-full min-h-0 flex-col rounded-[2rem] p-4 lg:p-5">
             <div className="mb-5 flex items-center justify-between border-b border-sky-100 pb-4">
               <div>
@@ -400,7 +415,7 @@ export function QueueScreenDisplay({
         </aside>
       </div>
 
-      <footer className="qs-glass relative z-10 shrink-0 border-t border-sky-100 px-4 py-2 text-center">
+      <footer className="qs-tv-footer qs-glass relative z-10 shrink-0 border-t border-sky-100 px-4 py-2 text-center">
         <p className="text-xl font-bold text-teal-800">{clinicName}</p>
         <p className="mt-1 text-sm text-slate-500">
           Master Clinic Plus
