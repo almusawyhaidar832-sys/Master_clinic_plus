@@ -896,6 +896,93 @@ export async function confirmQueueTransferByAccountant(
   }
 }
 
+/** المحاسب — تحويل مراجع مباشرة لطبيب آخر (بدون طلب من الطبيب) */
+export async function transferQueueByAccountant(
+  queueEntryId: string,
+  clinicId: string,
+  targetDoctorId: string
+) {
+  const admin = getAdminClient();
+  const entry = await loadQueueEntryContext(queueEntryId);
+
+  if (entry.clinic_id !== clinicId) {
+    throw new Error("غير مصرح");
+  }
+  if (entry.transfer_to_doctor_id) {
+    throw new Error("يوجد طلب تحويل معلّق — أكّده أو ارفضه أولاً");
+  }
+  if (entry.cancellation_requested_at) {
+    throw new Error("يوجد طلب إلغاء — أكّد الإلغاء أو حوّل من زر طلب الإلغاء");
+  }
+  if (!DOCTOR_QUEUE_ACTION_STATUSES.includes(entry.status)) {
+    throw new Error("لا يمكن التحويل في هذه المرحلة");
+  }
+  if (targetDoctorId === entry.doctor_id) {
+    throw new Error("اختر طبيباً غير الحالي");
+  }
+
+  const { data: target } = await admin
+    .from("doctors")
+    .select("id, full_name_ar, clinic_id, is_active")
+    .eq("id", targetDoctorId)
+    .maybeSingle();
+
+  if (!target || target.clinic_id !== entry.clinic_id || !target.is_active) {
+    throw new Error("الطبيب المستهدف غير متاح");
+  }
+
+  const fromDoctorId = entry.doctor_id;
+  const fromName = await fetchDoctorNameById(admin, fromDoctorId);
+  const patientName = resolveQueuePatientName(entry);
+  const now = new Date().toISOString();
+
+  const { data: updated, error } = await admin
+    .from("patient_queue")
+    .update({
+      doctor_id: targetDoctorId,
+      status: "waiting",
+      called_at: null,
+      sent_to_doctor_at: now,
+      transfer_to_doctor_id: null,
+      transfer_from_doctor_id: null,
+      transfer_requested_at: null,
+    })
+    .eq("id", queueEntryId)
+    .eq("clinic_id", clinicId)
+    .eq("doctor_id", fromDoctorId)
+    .is("transfer_to_doctor_id", null)
+    .is("cancellation_requested_at", null)
+    .in("status", DOCTOR_QUEUE_ACTION_STATUSES)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!updated) {
+    throw new Error("تعذر التحويل — تغيّرت حالة الدور قبل الإتمام");
+  }
+
+  if (entry.appointment_id) {
+    await admin
+      .from("appointments")
+      .update({ doctor_id: targetDoctorId })
+      .eq("id", entry.appointment_id)
+      .eq("clinic_id", clinicId);
+  }
+
+  const profileId = await resolveDoctorProfileId(admin, targetDoctorId, clinicId);
+  if (profileId) {
+    await insertNotifications([
+      {
+        clinic_id: clinicId,
+        recipient_profile_id: profileId,
+        title_ar: "حالة محوّلة إليك",
+        body_ar: `المراجع ${patientName} — حوّله المحاسب من الطبيب ${fromName}`,
+        link_path: "/doctor/queue",
+      },
+    ]);
+  }
+}
+
 /** المحاسب — إلغاء نهائي للدور والحجز بعد طلب الطبيب/المساعد */
 export async function finalizeQueueCancellationByAccountant(
   queueEntryId: string,

@@ -335,6 +335,8 @@ export default function QueuePage() {
   const [filterDoctor, setFilterDoctor] = useState<string>("all");
   const [cancelTransferEntry, setCancelTransferEntry] = useState<QueueEntry | null>(null);
   const [cancelTransferTargetId, setCancelTransferTargetId] = useState("");
+  const [transferEntry, setTransferEntry] = useState<QueueEntry | null>(null);
+  const [transferTargetId, setTransferTargetId] = useState("");
 
   const fetchQueue = useCallback(async () => {
     setPageError(null);
@@ -582,6 +584,50 @@ export default function QueuePage() {
       }
       setCancelTransferEntry(null);
       setCancelTransferTargetId("");
+      await fetchQueue();
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : t("errTransferConfirm"));
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const submitTransfer = async () => {
+    if (!transferEntry || !transferTargetId) return;
+    const patient =
+      transferEntry.patient?.full_name_ar ??
+      transferEntry.patient_name ??
+      t("queueUnnamedPatient");
+    if (
+      !confirm(
+        bi(
+          `تحويل «${patient}» إلى الطبيب المختار؟`,
+          `Transfer "${patient}" to the selected doctor?`
+        )
+      )
+    ) {
+      return;
+    }
+    setUpdating(transferEntry.id);
+    try {
+      await apiJson(`/api/queue/${transferEntry.id}`, lang, t, {
+        method: "PATCH",
+        body: JSON.stringify({
+          action: "accountant_transfer",
+          target_doctor_id: transferTargetId,
+        }),
+      });
+      if (clinicId) {
+        notifyQueueRefresh({ scope: "clinic", clinicId });
+        notifyQueueRefresh({ scope: "doctor", doctorId: transferTargetId });
+        notifyQueueRefresh({ scope: "doctor", doctorId: transferEntry.doctor_id });
+        void broadcastPatientSentToDoctor(supabase, transferTargetId, {
+          name: patient,
+          entryId: transferEntry.id,
+        });
+      }
+      setTransferEntry(null);
+      setTransferTargetId("");
       await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errTransferConfirm"));
@@ -872,6 +918,10 @@ export default function QueuePage() {
               (entry.status === "called" ||
               entry.status === "in_progress" ||
               (entry.status === "waiting" && !!entry.sent_to_doctor_at));
+            const canTransfer =
+              !transferPending &&
+              !cancellationPending &&
+              (entry.status === "waiting" || entry.status === "called");
             const recallLabel =
               entry.status === "waiting" && entry.sent_to_doctor_at
                 ? t("queueReCallDoctorTitle")
@@ -1010,6 +1060,20 @@ export default function QueuePage() {
                         : <RotateCcw className="h-3.5 w-3.5" />
                       }
                       <span className="hidden sm:inline">{recallLabel}</span>
+                    </button>
+                  )}
+                  {canTransfer && (
+                    <button
+                      onClick={() => {
+                        setTransferEntry(entry);
+                        setTransferTargetId("");
+                      }}
+                      disabled={updating === entry.id}
+                      className="flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-800 hover:bg-violet-100 disabled:opacity-60"
+                      title={t("docTransferToOther")}
+                    >
+                      <ArrowRightLeft className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">{t("docTransferToOther")}</span>
                     </button>
                   )}
                   {canSend && (
@@ -1167,6 +1231,67 @@ export default function QueuePage() {
                 type="button"
                 onClick={() => void submitCancelTransfer()}
                 disabled={!cancelTransferTargetId || updating === cancelTransferEntry.id}
+                className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              >
+                {bi("تأكيد التحويل", "Confirm transfer")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {transferEntry && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
+          <div className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-800">{t("docTransferModalTitle")}</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setTransferEntry(null);
+                  setTransferTargetId("");
+                }}
+                className="rounded-lg p-1 hover:bg-slate-100"
+              >
+                <X className="h-5 w-5 text-slate-500" />
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-slate-600">
+              {bi(
+                "سيتم تحويل المراجع مباشرة وإشعار الطبيب الجديد",
+                "The patient will be transferred immediately and the new doctor will be notified"
+              )}
+            </p>
+            <select
+              value={transferTargetId}
+              onChange={(e) => setTransferTargetId(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+            >
+              <option value="">{t("selectDoctor")}</option>
+              {doctors
+                .filter((d) => d.id !== transferEntry.doctor_id)
+                .map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.full_name_ar}
+                    {d.specialty_ar ? ` — ${d.specialty_ar}` : ""}
+                  </option>
+                ))}
+            </select>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setTransferEntry(null);
+                  setTransferTargetId("");
+                }}
+                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600"
+              >
+                {t("cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitTransfer()}
+                disabled={!transferTargetId || updating === transferEntry.id}
                 className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
               >
                 {bi("تأكيد التحويل", "Confirm transfer")}

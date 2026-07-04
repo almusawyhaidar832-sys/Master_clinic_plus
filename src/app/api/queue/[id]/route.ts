@@ -8,6 +8,7 @@ import {
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   accountantTransferAfterCancellation,
+  transferQueueByAccountant,
   confirmQueueTransferByAccountant,
   dismissQueueTransferRequest,
   emitQueueScreenCall,
@@ -80,7 +81,8 @@ export async function PATCH(
         | "confirm_transfer"
         | "dismiss_transfer"
         | "finalize_cancel"
-        | "transfer_after_cancel";
+        | "transfer_after_cancel"
+        | "accountant_transfer";
       target_doctor_id?: string;
     };
 
@@ -143,6 +145,22 @@ export async function PATCH(
         return NextResponse.json({ error: "اختر الطبيب المستهدف" }, { status: 400 });
       }
       await accountantTransferAfterCancellation(
+        id,
+        profile.clinic_id as string,
+        targetDoctorId
+      );
+      return NextResponse.json({ success: true });
+    }
+
+    if (body.action === "accountant_transfer") {
+      if (!staffRolesOk(role) || isApiAssistantRole(role)) {
+        return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
+      }
+      const targetDoctorId = String(body.target_doctor_id ?? "").trim();
+      if (!targetDoctorId) {
+        return NextResponse.json({ error: "اختر الطبيب المستهدف" }, { status: 400 });
+      }
+      await transferQueueByAccountant(
         id,
         profile.clinic_id as string,
         targetDoctorId
