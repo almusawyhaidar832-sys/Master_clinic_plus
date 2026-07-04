@@ -4,8 +4,12 @@ import {
   createApiSessionClient,
   getApiCallerProfile,
   getApiSessionUser,
+  isApiDoctorRole,
+  isApiAssistantRole,
+  isApiStaffRole,
 } from "@/lib/auth/api-session";
 import { getActiveClinicIdServer } from "@/lib/clinic-context.server";
+import { getDoctorByProfileId } from "@/lib/queue/server";
 
 export type QueueApiAccess =
   | {
@@ -37,6 +41,23 @@ export async function resolveQueueApiAccess(req: Request): Promise<QueueApiAcces
   }
 
   let clinicId = profile.clinic_id?.trim() || null;
+  let resolvedRole = profile.role;
+  const doctorRow = await getDoctorByProfileId(profile.id);
+
+  if (!clinicId && doctorRow?.clinic_id) {
+    clinicId = String(doctorRow.clinic_id).trim();
+  }
+  if (!clinicId && isApiDoctorRole(resolvedRole)) {
+    clinicId = (doctorRow?.clinic_id as string | undefined)?.trim() || null;
+  }
+  if (
+    doctorRow &&
+    !isApiDoctorRole(resolvedRole) &&
+    !isApiAssistantRole(resolvedRole) &&
+    !isApiStaffRole(resolvedRole)
+  ) {
+    resolvedRole = "doctor";
+  }
   if (!clinicId) {
     const supabase = await createApiSessionClient(req);
     const active = await getActiveClinicIdServer(supabase);
@@ -56,7 +77,7 @@ export async function resolveQueueApiAccess(req: Request): Promise<QueueApiAcces
     clinicId,
     profile: {
       id: profile.id,
-      role: profile.role,
+      role: resolvedRole,
       clinic_id: clinicId,
       full_name: profile.full_name,
     },

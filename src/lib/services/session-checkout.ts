@@ -367,8 +367,10 @@ export async function markQueueReadyForBilling(
 ): Promise<QueueStatus> {
   const entry = await loadQueueEntryForStatusChange(admin, queueEntryId, opts);
 
-  if (entry.status !== "in_progress") {
-    throw new Error("يمكن إرسال الجلسة للمحاسبة للمراجع داخل الكشف فقط");
+  if (entry.status !== "in_progress" && entry.status !== "called") {
+    throw new Error(
+      "يمكن إرسال الجلسة للمحاسبة للمراجع داخل الكشف أو بعد النداء فقط"
+    );
   }
 
   const doctorNotes = trimDoctorQueueNotes(opts.doctorNotes);
@@ -377,12 +379,20 @@ export async function markQueueReadyForBilling(
       .from("patient_queue")
       .update({ doctor_notes: doctorNotes })
       .eq("id", queueEntryId);
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (error.message.includes("doctor_notes")) {
+        throw new Error(
+          "عمود ملاحظات الطبيب غير موجود — شغّل supabase/migrations/20260708120000_queue_doctor_notes.sql"
+        );
+      }
+      throw new Error(error.message);
+    }
   }
 
   await updateQueueStatus(queueEntryId, "ready_for_billing", {
     doctorId: opts.doctorId,
     clinicId: opts.clinicId,
+    fromStatus: entry.status as QueueStatus,
   });
   await syncAppointmentFromQueueStatus(admin, queueEntryId, "ready_for_billing");
 

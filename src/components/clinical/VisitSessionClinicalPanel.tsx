@@ -243,7 +243,7 @@ export function VisitSessionClinicalPanel({
       ) : null}
 
       {hideHeader && !isAccountantView && (
-        <div className="mb-3 flex justify-end">
+        <div className="mb-3 flex justify-end gap-2">
           <Button
             type="button"
             variant="outline"
@@ -253,6 +253,21 @@ export function VisitSessionClinicalPanel({
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
+          {canSend && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void sendToAccounting()}
+              disabled={sending}
+            >
+              {sending ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {t("docSendToAccounting")}
+            </Button>
+          )}
         </div>
       )}
 

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getApiCallerProfile,
   isApiAssistantRole,
   isApiDoctorRole,
   isApiStaffRole,
 } from "@/lib/auth/api-session";
+import { resolveQueueApiAccess } from "@/lib/queue/api-access";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   accountantTransferAfterCancellation,
@@ -63,12 +63,14 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const profile = await getApiCallerProfile(req);
-    if (!profile?.clinic_id) {
-      return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
+    const access = await resolveQueueApiAccess(req);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
     }
+    const profile = access.profile;
+    const clinicId = access.clinicId;
 
-    const role = String(profile.role ?? "").toLowerCase();
+    const role = String(profile.role ?? "");
     const body = (await req.json()) as {
       action?:
         | "advance"
@@ -124,7 +126,7 @@ export async function PATCH(
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
 
-      await updateQueueAndSync(admin, id, "cancelled", { clinicId: profile.clinic_id });
+      await updateQueueAndSync(admin, id, "cancelled", { clinicId });
       return NextResponse.json({ success: true });
     }
 
@@ -132,7 +134,7 @@ export async function PATCH(
       if (!staffRolesOk(role) || isApiAssistantRole(role)) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
-      await finalizeQueueCancellationByAccountant(id, profile.clinic_id as string);
+      await finalizeQueueCancellationByAccountant(id, clinicId);
       await syncAppointmentFromQueueStatus(admin, id, "cancelled").catch(console.error);
       return NextResponse.json({ success: true, status: "cancelled" });
     }
@@ -147,7 +149,7 @@ export async function PATCH(
       }
       await accountantTransferAfterCancellation(
         id,
-        profile.clinic_id as string,
+        clinicId,
         targetDoctorId
       );
       return NextResponse.json({ success: true });
@@ -163,7 +165,7 @@ export async function PATCH(
       }
       await transferQueueByAccountant(
         id,
-        profile.clinic_id as string,
+        clinicId,
         targetDoctorId
       );
       return NextResponse.json({ success: true });
@@ -238,13 +240,13 @@ export async function PATCH(
 
     if (body.action === "enter") {
       let doctorId: string;
+      const linkedDoctor = await getDoctorByProfileId(profile.id);
 
-      if (isApiDoctorRole(role)) {
-        const doctor = await getDoctorByProfileId(profile.id);
-        if (!doctor) {
+      if (isApiDoctorRole(role) || linkedDoctor) {
+        if (!linkedDoctor) {
           return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
         }
-        doctorId = doctor.id;
+        doctorId = linkedDoctor.id;
       } else if (isApiAssistantRole(role)) {
         const ctx = await resolveAssistantApiContext(profile);
         if (!ctx) {
@@ -287,7 +289,7 @@ export async function PATCH(
         const patientCtx = await ensureQueueEntryPatient(
           admin,
           id,
-          profile.clinic_id as string
+          clinicId
         );
         visitSession = await ensureVisitSessionOperation(admin, {
           clinicId: patientCtx.clinicId,
@@ -309,7 +311,8 @@ export async function PATCH(
     }
 
     if (body.action === "ready_for_billing") {
-      const isDoctor = isApiDoctorRole(role);
+      const doctor = await getDoctorByProfileId(profile.id);
+      const isDoctor = isApiDoctorRole(role) || Boolean(doctor);
       const isAssistant = isApiAssistantRole(role);
 
       if (isAssistant) {
@@ -353,22 +356,45 @@ export async function PATCH(
         return NextResponse.json({ success: true, status, ledger_url: ledgerUrl });
       }
 
-      if (!isDoctor && !staffRolesOk(role)) {
+      if (isDoctor) {
+        if (!doctor) {
+          return NextResponse.json({ error: "حساب الطبيب غير مربوط" }, { status: 403 });
+        }
+        const status = await markQueueReadyForBilling(admin, id, {
+          doctorId: doctor.id,
+          clinicId,
+          doctorNotes: body.doctor_notes,
+        });
+        void notifyAccountantsReadyForBilling(id).catch((err) => {
+          console.error("[api/queue] billing notify failed:", err);
+        });
+
+        const { data: entryRow } = await admin
+          .from("patient_queue")
+          .select(
+            "patient_id, appointment_id, doctor_id, patient_name, patient_phone"
+          )
+          .eq("id", id)
+          .maybeSingle();
+
+        const ledgerUrl = buildLedgerPayUrl({
+          queueEntryId: id,
+          patientId: entryRow?.patient_id as string | null,
+          appointmentId: entryRow?.appointment_id as string | null,
+          doctorId: entryRow?.doctor_id as string | null,
+          patientName: entryRow?.patient_name as string | null,
+          patientPhone: entryRow?.patient_phone as string | null,
+        });
+
+        return NextResponse.json({ success: true, status, ledger_url: ledgerUrl });
+      }
+
+      if (!staffRolesOk(role)) {
         return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
       }
 
-      const opts = isDoctor
-        ? await (async () => {
-            const doctor = await getDoctorByProfileId(profile.id);
-            if (!doctor) {
-              throw new Error("حساب الطبيب غير مربوط");
-            }
-            return { doctorId: doctor.id };
-          })()
-        : { clinicId: profile.clinic_id as string };
-
       const status = await markQueueReadyForBilling(admin, id, {
-        ...opts,
+        clinicId,
         doctorNotes: body.doctor_notes,
       });
       void notifyAccountantsReadyForBilling(id).catch((err) => {
