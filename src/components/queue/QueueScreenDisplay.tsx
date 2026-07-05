@@ -221,20 +221,8 @@ export function QueueScreenDisplay({
 
       {/* بانر العيادة */}
       <div className="qs-clinic-banner relative z-20 shrink-0 px-4 py-3 text-white lg:px-8 lg:py-4">
-        <div className="qs-tv-banner-row flex flex-col items-center gap-4 lg:flex-row lg:justify-between">
-          <div className="qs-tv-banner-clinic w-full flex-1 text-center lg:text-right">
-            <p className="qs-welcome-text mb-1 flex items-center justify-center gap-2.5 lg:justify-end">
-              <Sparkles className="qs-welcome-spark h-5 w-5 shrink-0 lg:h-6 lg:w-6" />
-              مرحباً بكم في
-              <Sparkles className="qs-welcome-spark h-5 w-5 shrink-0 lg:h-6 lg:w-6" />
-            </p>
-            <h1 className="qs-clinic-hero">{clinicName}</h1>
-            <p className="mt-2 text-base font-medium text-white/80 lg:text-lg">
-              شاشة انتظار المراجعين
-            </p>
-          </div>
-
-          <div className="flex shrink-0 flex-wrap items-center justify-center gap-4 lg:gap-6">
+        <div className="qs-tv-banner-row relative flex items-center justify-between gap-4">
+          <div className="qs-tv-banner-side z-10 flex shrink-0">
             <button
               type="button"
               onClick={onTestSound}
@@ -267,7 +255,19 @@ export function QueueScreenDisplay({
                 {audioUnlocked ? "الصوت مفعّل — اضغط للاختبار" : audioUnlockHint}
               </span>
             </button>
-            <div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-center backdrop-blur-sm lg:text-left">
+          </div>
+
+          <div className="qs-tv-banner-center pointer-events-none absolute inset-x-0 flex flex-col items-center justify-center px-4 text-center sm:px-32 lg:px-56">
+            <p className="qs-welcome-text mb-0.5 flex items-center justify-center gap-2.5">
+              <Sparkles className="qs-welcome-spark h-5 w-5 shrink-0 lg:h-6 lg:w-6" />
+              مرحباً بكم في
+              <Sparkles className="qs-welcome-spark h-5 w-5 shrink-0 lg:h-6 lg:w-6" />
+            </p>
+            <h1 className="qs-clinic-hero">{clinicName}</h1>
+          </div>
+
+          <div className="qs-tv-banner-side z-10 ms-auto flex shrink-0">
+            <div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-center backdrop-blur-sm">
               <p className="text-5xl font-black tabular-nums leading-none tracking-tight lg:text-6xl">
                 {currentTime}
               </p>
@@ -278,7 +278,7 @@ export function QueueScreenDisplay({
           </div>
         </div>
         {audioDiagnosticMessage && (
-          <p className="mt-2 text-center text-xs font-medium text-white/85 lg:text-right">
+          <p className="mt-2 text-center text-xs font-medium text-white/85">
             {audioDiagnosticMessage}
           </p>
         )}
