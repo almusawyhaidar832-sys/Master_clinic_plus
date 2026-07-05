@@ -24,11 +24,10 @@ export function describeWhatsAppDeliveryError(
     case "number_not_on_whatsapp":
       return "هذا الرقم غير مسجّل على واتساب — تحقق من الرقم.";
     case "evolution_pending_delivery":
-      return "Evolution قبل الطلب لكن الرسالة لم تصل للجوال — سيرفر Railway يحتاج تحديث (تواصل مع مطوّر النظام).";
-    case "evolution_server_ack_only":
-      return "واتسapp قبل الرسالة على السيرفر لكن لم تُسلّم للجوال بعد — قد تصل خلال دقيقة أو السيرفر يحتاج تحديث.";
     case "evolution_delivery_error":
-      return "Evolution قبل الطلب لكن التسليم فشل على السيرفر — مطوّر النظام يحدّث Railway (WPP_LID_MODE=false + صورة Evolution جديدة).";
+      return "Evolution قبل الطلب لكن Baileys لم يُسلّم للجوال — المشكلة في سيرفر Evolution (مو التطبيق). جرّب VPS أو واتسapp Cloud API الرسمي.";
+    case "evolution_server_ack_only":
+      return "واتسapp قبل الرسالة على السيرفر لكن لم تُسلَّم للجوال بعد — قد تصل خلال دقيقة أو السيرفر يحتاج إصلاح.";
     case "whatsapp_lid_jid":
       return "واتساب يستخدم LID لهذا الرقم — على Railway: WPP_LID_MODE=false وصورة Evolution v2.3.7 ثم أعد QR.";
     case "evolution_license_required":
