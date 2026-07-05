@@ -292,7 +292,7 @@ export function extractEvolutionLinkedPhone(
     (i) => i.name === instanceName || i.instanceName === instanceName
   );
 
-  let digits =
+  const digits =
     pickJidDigits(row?.number) ||
     pickJidDigits(row?.ownerJid) ||
     pickJidDigits(row?.owner) ||
