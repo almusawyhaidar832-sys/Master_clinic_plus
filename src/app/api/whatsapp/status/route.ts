@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
     state: session.state,
     configured: true,
     instanceName,
+    evolutionPublicUrl: cfg.baseUrl || null,
     linkedPhone: session.linkedPhone,
     linkedPhoneDisplay: session.linkedPhone
       ? phoneToLocalDisplay(session.linkedPhone)

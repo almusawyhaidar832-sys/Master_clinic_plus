@@ -9,6 +9,7 @@ import { getClinicIdFromProfile } from "@/lib/clinic-context";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { QrCode, MessageCircle, RefreshCw, Wifi, WifiOff, Wrench } from "lucide-react";
 import { WhatsAppTestButton } from "@/components/patients/WhatsAppTestButton";
+import { WhatsAppRailwayHandoff } from "@/components/patients/WhatsAppRailwayHandoff";
 
 type ConnState = "open" | "close" | "connecting" | "unknown";
 
@@ -31,6 +32,9 @@ export default function WhatsAppSettingsPage() {
     null
   );
   const [repairMessage, setRepairMessage] = useState<string | null>(null);
+  const [evolutionPublicUrl, setEvolutionPublicUrl] = useState<string | null>(
+    null
+  );
   const [messages, setMessages] = useState<
     {
       id: string;
@@ -71,11 +75,15 @@ export default function WhatsAppSettingsPage() {
       instanceName?: string;
       linkedPhoneDisplay?: string | null;
       profileName?: string | null;
+      evolutionPublicUrl?: string | null;
     }) => {
       if (typeof data.state === "string") {
         setConnState(data.state as ConnState);
       }
       if (data.instanceName) setInstanceName(data.instanceName);
+      if (typeof data.evolutionPublicUrl === "string") {
+        setEvolutionPublicUrl(data.evolutionPublicUrl);
+      }
       if (data.linked) {
         setLinkedPhoneDisplay(data.linkedPhoneDisplay?.trim() || null);
         setLinkedProfileName(data.profileName?.trim() || null);
@@ -524,6 +532,8 @@ export default function WhatsAppSettingsPage() {
       </Card>
 
       <WhatsAppTestButton portal="accountant" />
+
+      <WhatsAppRailwayHandoff serverUrl={evolutionPublicUrl} />
 
       <Card>
         <CardHeader>
