@@ -21,7 +21,7 @@ export function WhatsAppTestButton({ portal }: WhatsAppTestButtonProps) {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
-    type: "success" | "error";
+    type: "success" | "warning" | "error";
     text: string;
   } | null>(null);
 
@@ -63,9 +63,16 @@ export function WhatsAppTestButton({ portal }: WhatsAppTestButtonProps) {
         });
         return;
       }
+      const linked =
+        data.linkedPhoneDisplay && data.evolutionLinked
+          ? `\nالمرسل: ${data.linkedPhoneDisplay}`
+          : data.evolutionLinked === false
+            ? "\nتحذير: واتساب غير مربوط حالياً"
+            : "";
+      const note = data.deliveryNote ? `\n${data.deliveryNote}` : "";
       setResult({
-        type: "success",
-        text: `${data.message ?? "تم"} (${data.normalizedPhone ?? check.normalized})`,
+        type: data.deliveryWarning ? "warning" : "success",
+        text: `${data.message ?? "تم"} (${data.normalizedPhone ?? check.normalized})${linked}${note}`,
       });
     } catch {
       setResult({ type: "error", text: "تعذر الاتصال بالخادم" });
@@ -110,8 +117,16 @@ export function WhatsAppTestButton({ portal }: WhatsAppTestButtonProps) {
             />
           </div>
           {result && (
-            <Alert variant={result.type === "success" ? "success" : "error"}>
-              {result.text}
+            <Alert
+              variant={
+                result.type === "error"
+                  ? "error"
+                  : result.type === "warning"
+                    ? "warning"
+                    : "success"
+              }
+            >
+              <span className="whitespace-pre-line">{result.text}</span>
             </Alert>
           )}
           <Button

@@ -29,6 +29,8 @@ export interface SendAppointmentUpdateResult {
   skipped?: boolean;
   error?: string;
   messageBody?: string;
+  deliveryWarning?: string;
+  providerMessageStatus?: string;
 }
 
 /**
@@ -88,5 +90,10 @@ export async function sendAppointmentUpdate(
     };
   }
 
-  return { sent: true, messageBody };
+  return {
+    sent: true,
+    messageBody,
+    deliveryWarning: outcome.deliveryWarning,
+    providerMessageStatus: outcome.providerMessageStatus,
+  };
 }

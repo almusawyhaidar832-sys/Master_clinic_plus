@@ -546,12 +546,78 @@ function parseEvolutionSendFailure(data: unknown): string | null {
   return null;
 }
 
+/** رقم Evolution بدون + (9647XXXXXXXXX) */
+export function formatEvolutionApiNumber(rawPhone: string): string {
+  let number = digitsOnly(rawPhone);
+  if (number.startsWith("00")) number = number.slice(2);
+  if (number.startsWith("0")) number = `964${number.slice(1)}`;
+  if (!number.startsWith("964") && number.length >= 10) {
+    number = `964${number}`;
+  }
+  return number;
+}
+
+function parseEvolutionMessageStatus(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const status = (data as Record<string, unknown>).status;
+  return typeof status === "string" && status.trim() ? status.trim() : null;
+}
+
+/** هل الرقم مسجّل على واتساب؟ (Evolution /chat/whatsappNumbers) */
+export async function checkEvolutionWhatsAppNumber(
+  rawPhone: string,
+  options?: { clinicId?: string; instanceName?: string }
+): Promise<{ exists: boolean; jid?: string; skipped?: boolean }> {
+  const { configured } = getWhatsAppConfig();
+  const instanceName =
+    options?.instanceName?.trim() ||
+    (options?.clinicId
+      ? await resolveWhatsAppInstanceForClinic(options.clinicId)
+      : await resolveWhatsAppInstanceName());
+  if (!configured) return { exists: true, skipped: true };
+
+  const number = formatEvolutionApiNumber(rawPhone);
+  const res = await evolutionFetch(
+    `/chat/whatsappNumbers/${encodeURIComponent(instanceName)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ numbers: [number] }),
+    }
+  );
+
+  if (!res.ok) {
+    console.warn(LOG, "whatsappNumbers_check_failed", res.status, res.text.slice(0, 200));
+    return { exists: true, skipped: true };
+  }
+
+  const rows = Array.isArray(res.data)
+    ? res.data
+    : res.data && typeof res.data === "object"
+      ? (((res.data as Record<string, unknown>).data as unknown[]) ??
+        ((res.data as Record<string, unknown>).response as unknown[]) ??
+        [])
+      : [];
+
+  const row = (rows[0] ?? null) as { exists?: boolean; jid?: string } | null;
+  return {
+    exists: row?.exists !== false,
+    jid: typeof row?.jid === "string" ? row.jid : undefined,
+  };
+}
+
 /** إرسال نص عبر Evolution — الرقم بدون + */
 export async function sendEvolutionText(
   rawPhone: string,
   text: string,
   options?: { clinicId?: string; instanceName?: string }
-): Promise<{ ok: boolean; status: number; error?: string; data?: unknown }> {
+): Promise<{
+  ok: boolean;
+  status: number;
+  error?: string;
+  data?: unknown;
+  providerMessageStatus?: string;
+  deliveryWarning?: string;
+}> {
   const { configured } = getWhatsAppConfig();
   const instanceName =
     options?.instanceName?.trim() ||
@@ -562,11 +628,19 @@ export async function sendEvolutionText(
     return { ok: false, status: 0, error: "whatsapp_not_configured" };
   }
 
-  let number = digitsOnly(rawPhone);
-  if (number.startsWith("00")) number = number.slice(2);
-  if (number.startsWith("0")) number = `964${number.slice(1)}`;
-  if (!number.startsWith("964") && number.length >= 10) {
-    number = `964${number}`;
+  const number = formatEvolutionApiNumber(rawPhone);
+
+  const numberCheck = await checkEvolutionWhatsAppNumber(rawPhone, {
+    clinicId: options?.clinicId,
+    instanceName,
+  });
+  if (!numberCheck.skipped && !numberCheck.exists) {
+    return {
+      ok: false,
+      status: 400,
+      error: "number_not_on_whatsapp",
+      data: numberCheck,
+    };
   }
 
   const res = await evolutionFetch(
@@ -590,7 +664,19 @@ export async function sendEvolutionText(
     return { ok: false, status: res.status, error: hiddenErr, data: res.data };
   }
 
-  return { ok: true, status: res.status, data: res.data };
+  const providerMessageStatus = parseEvolutionMessageStatus(res.data) ?? undefined;
+  const deliveryWarning =
+    providerMessageStatus?.toUpperCase() === "PENDING"
+      ? "evolution_pending_delivery"
+      : undefined;
+
+  return {
+    ok: true,
+    status: res.status,
+    data: res.data,
+    providerMessageStatus,
+    deliveryWarning,
+  };
 }
 
 /** إرسال ملف (PDF) عبر Evolution */

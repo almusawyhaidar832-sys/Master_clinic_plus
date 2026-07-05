@@ -11,6 +11,12 @@ import {
 } from "@/lib/whatsapp/resolve-clinic";
 import { deliverWhatsAppMessage } from "@/lib/whatsapp/send-message";
 import { requireWhatsAppManageAccess } from "@/lib/whatsapp/require-api-access";
+import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
+import {
+  resolveEvolutionSession,
+} from "@/lib/whatsapp/evolution-client";
+import { resolveWhatsAppInstanceForClinic } from "@/lib/whatsapp/resolve-instance";
+import { phoneToLocalDisplay } from "@/lib/phone";
 
 /**
  * POST /api/whatsapp/test
@@ -81,6 +87,9 @@ export async function POST(request: NextRequest) {
     messageType: "test_notification",
   });
 
+  const instanceName = await resolveWhatsAppInstanceForClinic(clinicId);
+  const session = await resolveEvolutionSession(instanceName, { skipCache: true });
+
   if (!outcome.ok && outcome.configured) {
     console.error("[whatsapp/test] failed", {
       providerError: outcome.providerError,
@@ -99,14 +108,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const deliveryNote = outcome.deliveryWarning
+    ? describeWhatsAppDeliveryError(outcome.deliveryWarning)
+    : null;
+
   return NextResponse.json({
     ok: true,
     status: outcome.status,
     normalizedPhone: outcome.normalizedPhone,
     configured: outcome.configured,
+    providerMessageStatus: outcome.providerMessageStatus ?? null,
+    deliveryWarning: outcome.deliveryWarning ?? null,
+    deliveryNote,
+    linkedPhoneDisplay: session.linkedPhone
+      ? phoneToLocalDisplay(session.linkedPhone)
+      : null,
+    evolutionLinked: session.linked,
     message:
       outcome.status === "pending"
         ? "لم يُضبط WHATSAPP_API_URL — سُجّلت الرسالة كمعلّقة"
-        : "تم إرسال الرسالة التجريبية",
+        : deliveryNote
+          ? "قبل Evolution الطلب — تحقق من وصول الرسالة على الجوال"
+          : "تم إرسال الرسالة التجريبية — تحقق من وصولها خلال دقيقة",
   });
 }

@@ -20,6 +20,8 @@ export interface WhatsAppSendOutcome {
   status: WhatsAppDeliveryStatus;
   providerError?: string;
   providerStatus?: number;
+  providerMessageStatus?: string;
+  deliveryWarning?: string;
   configured: boolean;
 }
 
@@ -92,6 +94,8 @@ export async function deliverWhatsAppMessage(
 
   let providerError: string | undefined;
   let providerStatus: number | undefined;
+  let providerMessageStatus: string | undefined;
+  let deliveryWarning: string | undefined;
 
   try {
     if (cfg.provider === "evolution") {
@@ -146,6 +150,8 @@ export async function deliverWhatsAppMessage(
           configured: true,
         };
       }
+      providerMessageStatus = evo.providerMessageStatus;
+      deliveryWarning = evo.deliveryWarning;
     } else {
       const res = await fetch(`${cfg.baseUrl}/message/send`, {
         method: "POST",
@@ -191,7 +197,14 @@ export async function deliverWhatsAppMessage(
       recipient_phone: normalizedPhone,
       status: "sent",
     });
-    return { ok: true, normalizedPhone, status: "sent", configured: true };
+    return {
+      ok: true,
+      normalizedPhone,
+      status: "sent",
+      configured: true,
+      providerMessageStatus,
+      deliveryWarning,
+    };
   } catch (e) {
     providerError = e instanceof Error ? e.message : String(e);
     console.error(LOG_PREFIX, params.messageType, "network_error", {

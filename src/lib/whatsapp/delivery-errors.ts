@@ -3,6 +3,8 @@ export interface WhatsAppDeliveryResult {
   skipped?: boolean;
   error?: string;
   messageBody?: string;
+  deliveryWarning?: string;
+  providerMessageStatus?: string;
 }
 
 /** رسائل عربية لحالات فشل إرسال واتساب — للمحاسب والمساعد */
@@ -21,6 +23,8 @@ export function describeWhatsAppDeliveryError(
       return "رقم الجوال غير صالح — استخدم 078 أو 077 (مثال: 07801234567).";
     case "number_not_on_whatsapp":
       return "هذا الرقم غير مسجّل على واتساب — تحقق من الرقم.";
+    case "evolution_pending_delivery":
+      return "Evolution قبل الطلب لكن الرسالة قد لا تصل — المشكلة غالباً في سيرفر Railway (أعد ربط QR أو حدّث Evolution).";
     case "text_send_failed":
       return "تعذر إرسال رسالة التفاصيل — تحقق من ربط واتساب العيادة.";
     case "invoice_pdf_failed":
