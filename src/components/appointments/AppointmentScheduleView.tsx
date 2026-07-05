@@ -274,7 +274,7 @@ export function AppointmentScheduleView() {
                     {formatDate(a.appointment_date)}
                   </td>
                   <td className="px-4 py-3 text-slate-600 tabular-nums" dir="ltr">
-                    {formatTime(a.start_time)} – {formatTime(a.end_time)}
+                    {formatTime(a.start_time)}
                   </td>
                   <td className="px-4 py-3">
                     <span

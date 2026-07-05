@@ -10,6 +10,7 @@ import {
   whatsappNoClinicError,
 } from "@/lib/whatsapp/resolve-clinic";
 import { deliverWhatsAppMessage } from "@/lib/whatsapp/send-message";
+import { requireWhatsAppManageAccess } from "@/lib/whatsapp/require-api-access";
 
 /**
  * POST /api/whatsapp/test
@@ -17,7 +18,8 @@ import { deliverWhatsAppMessage } from "@/lib/whatsapp/send-message";
  */
 export async function POST(request: NextRequest) {
   if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "غير متاح" }, { status: 404 });
+    const access = await requireWhatsAppManageAccess(request);
+    if (!access.ok) return access.response;
   }
 
   const profile = await getApiCallerProfile(request);

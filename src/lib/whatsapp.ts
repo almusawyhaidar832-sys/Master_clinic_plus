@@ -70,9 +70,10 @@ export function appointmentUpdateMessage(params: {
   const clinicName =
     params.clinicName ?? getClinicDisplayName(params.clinic ?? null);
   const doctor = formatDoctorDisplayName(params.doctorName);
-  const timeLine = params.endTime
-    ? `${params.time} – ${params.endTime}`
-    : params.time;
+  const timeLine =
+    params.action === "created" || !params.endTime
+      ? params.time
+      : `${params.time} – ${params.endTime}`;
 
   const actionIntro: Record<AppointmentUpdateAction, string> = {
     accepted: "تم تأكيد موعدكم",

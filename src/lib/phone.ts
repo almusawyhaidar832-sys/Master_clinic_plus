@@ -18,6 +18,26 @@ export function digitsOnly(input: string): string {
   return toWesternDigits(input).replace(/\D/g, "");
 }
 
+/** عرض محلي في النماذج: +9647801234567 → 07801234567 */
+export function phoneToLocalDisplay(phone: string | null | undefined): string {
+  if (!phone?.trim()) return "";
+  let d = digitsOnly(phone);
+  if (d.startsWith("964")) d = `0${d.slice(3)}`;
+  return d;
+}
+
+/**
+ * أثناء الكتابة — أرقام فقط، يبدأ بـ 07 (078 / 077 …).
+ * إذا بدأ المستخدم بـ 7 بدون 0 نضيف 0 تلقائياً.
+ */
+export function sanitizePatientPhoneInput(raw: string): string {
+  let d = digitsOnly(raw);
+  if (!d) return "";
+  if (d.startsWith("964")) d = `0${d.slice(3)}`;
+  if (d[0] === "7" && !d.startsWith("0")) d = `0${d}`;
+  return d.slice(0, 11);
+}
+
 /**
  * E.164-style for WhatsApp API: +9647XXXXXXXX
  * - يزيل المسافات والأصفار الزائدة
@@ -68,7 +88,8 @@ export function validatePatientPhone(raw: string): {
   if (national.length < 9 || national.length > 11) {
     return {
       ok: false,
-      message: "رقم الهاتف غير صالح — تحقق من الرقم العراقي (مثال: 07XX XXX XXXX)",
+      message:
+        "رقم الهاتف غير صالح — استخدم 078 أو 077 (مثال: 07801234567)",
     };
   }
 

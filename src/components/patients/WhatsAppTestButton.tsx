@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
-import { validatePatientPhone } from "@/lib/phone";
+import { validatePatientPhone, sanitizePatientPhoneInput } from "@/lib/phone";
 import { MessageCircle } from "lucide-react";
 
 export function WhatsAppTestButton() {
@@ -84,8 +84,8 @@ export function WhatsAppTestButton() {
               dir="ltr"
               className="w-full max-w-sm rounded-lg border border-slate-border bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="07XX XXX XXXX"
+              onChange={(e) => setPhone(sanitizePatientPhoneInput(e.target.value))}
+              placeholder="07801234567"
             />
           </div>
           {result && (

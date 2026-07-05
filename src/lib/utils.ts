@@ -89,6 +89,22 @@ export function formatDate(
   }).format(d);
 }
 
+/** مدة الموعد الافتراضية عند حجز وقت واحد (محاسب) */
+export const DEFAULT_APPOINTMENT_SLOT_MINUTES = 30;
+
+/** HH:MM + دقائق → HH:MM (لحساب end_time من وقت واحد) */
+export function addMinutesToTime(time: string, minutes: number): string {
+  const ascii = toAsciiDigits(time.trim().slice(0, 5));
+  const [hStr, mStr = "0"] = ascii.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return time.slice(0, 5);
+  const total = h * 60 + m + minutes;
+  const nh = Math.floor(total / 60) % 24;
+  const nm = total % 60;
+  return `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`;
+}
+
 export function formatTime(time: string | null | undefined): string {
   if (!time?.trim()) return "—";
   const ascii = toAsciiDigits(time.trim());

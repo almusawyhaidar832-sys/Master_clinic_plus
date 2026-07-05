@@ -9,6 +9,7 @@ import { resolveWhatsAppClinic } from "@/lib/whatsapp/resolve-clinic";
 import { resolveWhatsAppInstanceName } from "@/lib/whatsapp/resolve-instance";
 import { requireWhatsAppManageAccess } from "@/lib/whatsapp/require-api-access";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { phoneToLocalDisplay } from "@/lib/phone";
 
 /** GET /api/whatsapp/status — حالة الاتصال + تحديث whatsapp_linked في العيادة */
 export async function GET(req: NextRequest) {
@@ -49,6 +50,11 @@ export async function GET(req: NextRequest) {
     state: session.state,
     configured: true,
     instanceName,
+    linkedPhone: session.linkedPhone,
+    linkedPhoneDisplay: session.linkedPhone
+      ? phoneToLocalDisplay(session.linkedPhone)
+      : null,
+    profileName: session.profileName,
     raw:
       process.env.NODE_ENV === "development"
         ? {

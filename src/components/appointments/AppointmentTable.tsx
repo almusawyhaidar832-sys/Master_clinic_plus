@@ -22,6 +22,7 @@ import {
   setAccountantAppointmentStatusViaApi,
 } from "@/lib/services/accountant-appointments-client";
 import { formatDate, formatTime } from "@/lib/utils";
+import { phoneToLocalDisplay } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import {
   CalendarClock,
@@ -311,7 +312,7 @@ function AppointmentRow({
         )}
       </td>
       <td className="px-4 py-3 text-slate-600" dir="ltr">
-        {a.patient_phone || "—"}
+        {phoneToLocalDisplay(a.patient_phone) || "—"}
       </td>
       {showDoctorColumn && (
         <td className="px-4 py-3 text-slate-700">
@@ -322,7 +323,9 @@ function AppointmentRow({
         {formatDate(a.appointment_date)}
         <br />
         <span className="text-xs">
-          {formatTime(a.start_time)} – {formatTime(a.end_time)}
+          {role === "accountant"
+            ? formatTime(a.start_time)
+            : `${formatTime(a.start_time)} – ${formatTime(a.end_time)}`}
         </span>
       </td>
       <td className="px-4 py-3">

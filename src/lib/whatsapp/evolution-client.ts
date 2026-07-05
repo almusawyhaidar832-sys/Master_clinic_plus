@@ -1,4 +1,4 @@
-import { digitsOnly } from "@/lib/phone";
+import { digitsOnly, normalizePhoneForWhatsApp } from "@/lib/phone";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
 import {
   resolveWhatsAppInstanceForClinic,
@@ -13,6 +13,8 @@ export interface EvolutionQrResult {
   qrImageSrc: string | null;
   raw?: unknown;
   error?: string;
+  linkedPhone?: string | null;
+  profileName?: string | null;
 }
 
 const LOG = "[whatsapp/evolution]";
@@ -113,6 +115,10 @@ export type EvolutionSessionSnapshot = {
   state: EvolutionConnectionState;
   connectionStateData: unknown;
   instanceListData: unknown;
+  /** رقم واتساب العيادة المربوط (+964…) */
+  linkedPhone: string | null;
+  /** اسم الحساب على واتساب إن وُجد */
+  profileName: string | null;
 };
 
 const SESSION_CACHE_MS = 20_000;
@@ -172,11 +178,19 @@ export async function resolveEvolutionSession(
   else if (stateFromEndpoint !== "unknown") state = stateFromEndpoint;
   else state = stateFromList;
 
+  const { linkedPhone, profileName } = extractEvolutionLinkedPhone(
+    instanceName,
+    stateRes.data,
+    listRes.data
+  );
+
   const snapshot: EvolutionSessionSnapshot = {
     linked,
     state,
     connectionStateData: stateRes.data,
     instanceListData: listRes.data,
+    linkedPhone: linked ? linkedPhone : null,
+    profileName: linked ? profileName : null,
   };
 
   sessionCache.set(instanceName, {
@@ -200,17 +214,106 @@ export async function fetchEvolutionConnectionState(): Promise<{
   };
 }
 
-function parseInstanceList(data: unknown): { name?: string; instanceName?: string }[] {
-  if (Array.isArray(data)) return data as { name?: string; instanceName?: string }[];
+function parseInstanceList(
+  data: unknown
+): {
+  name?: string;
+  instanceName?: string;
+  owner?: string;
+  ownerJid?: string;
+  number?: string;
+  profileName?: string;
+  connectionStatus?: string | { state?: string };
+}[] {
+  if (Array.isArray(data)) {
+    return data as {
+      name?: string;
+      instanceName?: string;
+      owner?: string;
+      ownerJid?: string;
+      number?: string;
+      profileName?: string;
+      connectionStatus?: string | { state?: string };
+    }[];
+  }
   if (data && typeof data === "object") {
     const d = data as Record<string, unknown>;
     for (const key of ["instances", "data", "value", "response"]) {
       if (Array.isArray(d[key])) {
-        return d[key] as { name?: string; instanceName?: string }[];
+        return d[key] as {
+          name?: string;
+          instanceName?: string;
+          owner?: string;
+          ownerJid?: string;
+          number?: string;
+          profileName?: string;
+          connectionStatus?: string | { state?: string };
+        }[];
       }
     }
   }
   return [];
+}
+
+function pickJidDigits(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const head = value.trim().split("@")[0];
+  const d = digitsOnly(head);
+  return d.length >= 10 ? d : null;
+}
+
+function pickPhoneFromRecord(
+  record: Record<string, unknown> | null | undefined
+): string | null {
+  if (!record) return null;
+  const nested =
+    record.instance && typeof record.instance === "object"
+      ? (record.instance as Record<string, unknown>)
+      : null;
+
+  for (const source of [record, nested]) {
+    if (!source) continue;
+    for (const key of ["number", "ownerJid", "owner", "phoneNumber", "wuid"]) {
+      const digits = pickJidDigits(source[key]);
+      if (digits) return digits;
+    }
+  }
+  return null;
+}
+
+/** يستخرج رقم واتساب العيادة من استجابة Evolution */
+export function extractEvolutionLinkedPhone(
+  instanceName: string,
+  connectionStateData: unknown,
+  instanceListData: unknown
+): { linkedPhone: string | null; profileName: string | null } {
+  const rows = parseInstanceList(instanceListData);
+  const row = rows.find(
+    (i) => i.name === instanceName || i.instanceName === instanceName
+  );
+
+  let digits =
+    pickJidDigits(row?.number) ||
+    pickJidDigits(row?.ownerJid) ||
+    pickJidDigits(row?.owner) ||
+    pickPhoneFromRecord(
+      connectionStateData && typeof connectionStateData === "object"
+        ? (connectionStateData as Record<string, unknown>)
+        : null
+    );
+
+  let linkedPhone: string | null = null;
+  if (digits) {
+    const normalized = normalizePhoneForWhatsApp(digits);
+    linkedPhone = normalized || null;
+  }
+
+  const profileName =
+    typeof row?.profileName === "string" && row.profileName.trim()
+      ? row.profileName.trim()
+      : null;
+
+  return { linkedPhone, profileName };
 }
 
 function instanceExists(
@@ -350,6 +453,8 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
       connectionState: "open",
       qrImageSrc: null,
       raw: session.connectionStateData,
+      linkedPhone: session.linkedPhone,
+      profileName: session.profileName,
     };
   }
 
@@ -411,6 +516,36 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
   };
 }
 
+/** يكتشف أخطاء مخفية في استجابة Evolution (HTTP 200 لكن الإرسال فشل) */
+function parseEvolutionSendFailure(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const d = data as Record<string, unknown>;
+
+  if (d.exists === false) return "number_not_on_whatsapp";
+
+  const response = d.response;
+  if (response && typeof response === "object") {
+    const msg = (response as Record<string, unknown>).message;
+    if (Array.isArray(msg)) {
+      for (const item of msg) {
+        if (!item || typeof item !== "object") continue;
+        const row = item as { exists?: boolean; message?: string };
+        if (row.exists === false) return "number_not_on_whatsapp";
+        if (typeof row.message === "string" && row.message.trim()) {
+          return row.message.trim();
+        }
+      }
+    }
+  }
+
+  const status = String(d.status ?? "").toUpperCase();
+  if (status === "ERROR" || status === "FAILED") {
+    return typeof d.message === "string" ? d.message : "evolution_send_failed";
+  }
+
+  return null;
+}
+
 /** إرسال نص عبر Evolution — الرقم بدون + */
 export async function sendEvolutionText(
   rawPhone: string,
@@ -448,6 +583,11 @@ export async function sendEvolutionText(
         ? String((res.data as { message: string }).message)
         : res.text.slice(0, 400);
     return { ok: false, status: res.status, error: err, data: res.data };
+  }
+
+  const hiddenErr = parseEvolutionSendFailure(res.data);
+  if (hiddenErr) {
+    return { ok: false, status: res.status, error: hiddenErr, data: res.data };
   }
 
   return { ok: true, status: res.status, data: res.data };

@@ -2,16 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { X, RefreshCw } from "lucide-react";
-import { todayISO } from "@/lib/utils";
+import { todayISO, addMinutesToTime, DEFAULT_APPOINTMENT_SLOT_MINUTES } from "@/lib/utils";
 import { createAssistantAppointmentViaApi } from "@/lib/services/assistant-appointments-client";
 import { createAccountantAppointmentViaApi } from "@/lib/services/accountant-appointments-client";
 import { createClient } from "@/lib/supabase/client";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
-import { validatePatientPhone } from "@/lib/phone";
+import {
+  validatePatientPhone,
+  sanitizePatientPhoneInput,
+  phoneToLocalDisplay,
+  getPatientDisplayPhone,
+} from "@/lib/phone";
 import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
 import { Select } from "@/components/ui/Select";
 import { PatientSearchField } from "@/components/patients/PatientSearchField";
-import { getPatientDisplayPhone } from "@/lib/phone";
 import type { Doctor } from "@/types";
 
 interface AddAppointmentModalProps {
@@ -33,6 +37,7 @@ export function AddAppointmentModal({
   const [doctorId, setDoctorId] = useState("");
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [date, setDate] = useState(todayISO());
+  const [appointmentTime, setAppointmentTime] = useState("10:00");
   const [startTime, setStartTime] = useState("10:00");
   const [endTime, setEndTime] = useState("10:30");
   const [notes, setNotes] = useState("");
@@ -79,12 +84,19 @@ export function AddAppointmentModal({
     }
 
     setSaving(true);
+    const resolvedStart =
+      portal === "accountant" ? appointmentTime : startTime;
+    const resolvedEnd =
+      portal === "accountant"
+        ? addMinutesToTime(appointmentTime, DEFAULT_APPOINTMENT_SLOT_MINUTES)
+        : endTime;
+
     const payload = {
       patient_name_ar: name.trim(),
-      patient_phone: phone.trim(),
+      patient_phone: phoneCheck.normalized,
       appointment_date: date,
-      start_time: startTime,
-      end_time: endTime,
+      start_time: resolvedStart,
+      end_time: resolvedEnd,
       notes: notes.trim() || undefined,
     };
 
@@ -198,7 +210,7 @@ export function AddAppointmentModal({
               onSelect={(p) => {
                 setSelectedPatientId(p.id);
                 setName(p.full_name_ar);
-                setPhone(getPatientDisplayPhone(p) ?? "");
+                setPhone(phoneToLocalDisplay(getPatientDisplayPhone(p)));
               }}
             />
           </div>
@@ -206,11 +218,14 @@ export function AddAppointmentModal({
             <label className="mb-1 block text-sm font-medium text-slate-600">الهاتف</label>
             <input
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => setPhone(sanitizePatientPhoneInput(e.target.value))}
               required
               dir="ltr"
+              inputMode="tel"
+              placeholder="07801234567"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
             />
+            <p className="mt-1 text-xs text-slate-500">ابدأ بـ 078 أو 077</p>
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-600">التاريخ</label>
@@ -222,28 +237,43 @@ export function AddAppointmentModal({
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          {portal === "accountant" ? (
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">من</label>
+              <label className="mb-1 block text-sm font-medium text-slate-600">
+                وقت الموعد
+              </label>
               <input
                 type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                value={appointmentTime}
+                onChange={(e) => setAppointmentTime(e.target.value)}
                 required
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
               />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">إلى</label>
-              <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                required
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
-              />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-600">من</label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-600">إلى</label>
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+                />
+              </div>
             </div>
-          </div>
+          )}
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-600">ملاحظات</label>
             <input

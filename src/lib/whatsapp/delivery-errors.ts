@@ -18,7 +18,9 @@ export function describeWhatsAppDeliveryError(
     case "whatsapp_not_linked":
       return "واتساب غير مربوط — افتح «إعدادات واتساب» وامسح رمز QR من الهاتف.";
     case "invalid_phone_after_normalize":
-      return "رقم الجوال غير صالح — استخدم صيغة عراقية مثل 07XX XXX XXXX.";
+      return "رقم الجوال غير صالح — استخدم 078 أو 077 (مثال: 07801234567).";
+    case "number_not_on_whatsapp":
+      return "هذا الرقم غير مسجّل على واتساب — تحقق من الرقم.";
     case "text_send_failed":
       return "تعذر إرسال رسالة التفاصيل — تحقق من ربط واتساب العيادة.";
     case "invoice_pdf_failed":

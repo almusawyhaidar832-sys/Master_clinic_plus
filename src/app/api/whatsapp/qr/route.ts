@@ -3,6 +3,7 @@ import { getWhatsAppConfig } from "@/lib/whatsapp/config";
 import { fetchEvolutionQr } from "@/lib/whatsapp/evolution-client";
 import { resolveWhatsAppInstanceName } from "@/lib/whatsapp/resolve-instance";
 import { requireWhatsAppManageAccess } from "@/lib/whatsapp/require-api-access";
+import { phoneToLocalDisplay } from "@/lib/phone";
 
 /**
  * GET /api/whatsapp/qr
@@ -59,6 +60,11 @@ export async function GET(req: NextRequest) {
       configured: true,
       error: result.error,
       provider: "evolution",
+      linkedPhone: result.linkedPhone ?? null,
+      linkedPhoneDisplay: result.linkedPhone
+        ? phoneToLocalDisplay(result.linkedPhone)
+        : null,
+      profileName: result.profileName ?? null,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

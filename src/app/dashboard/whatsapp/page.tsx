@@ -7,6 +7,7 @@ import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { getClinicIdFromProfile } from "@/lib/clinic-context";
 import { QrCode, MessageCircle, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { WhatsAppTestButton } from "@/components/patients/WhatsAppTestButton";
 
 type ConnState = "open" | "close" | "connecting" | "unknown";
 
@@ -17,6 +18,12 @@ export default function WhatsAppSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [instanceName, setInstanceName] = useState<string | null>(null);
+  const [linkedPhoneDisplay, setLinkedPhoneDisplay] = useState<string | null>(
+    null
+  );
+  const [linkedProfileName, setLinkedProfileName] = useState<string | null>(
+    null
+  );
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const qrRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [bridgeConfigured, setBridgeConfigured] = useState<boolean | null>(
@@ -55,6 +62,29 @@ export default function WhatsAppSettingsPage() {
     setMessages(logs ?? []);
   }, []);
 
+  const applyStatusPayload = useCallback(
+    (data: {
+      linked?: boolean;
+      state?: ConnState;
+      instanceName?: string;
+      linkedPhoneDisplay?: string | null;
+      profileName?: string | null;
+    }) => {
+      if (typeof data.state === "string") {
+        setConnState(data.state as ConnState);
+      }
+      if (data.instanceName) setInstanceName(data.instanceName);
+      if (data.linked) {
+        setLinkedPhoneDisplay(data.linkedPhoneDisplay?.trim() || null);
+        setLinkedProfileName(data.profileName?.trim() || null);
+      } else {
+        setLinkedPhoneDisplay(null);
+        setLinkedProfileName(null);
+      }
+    },
+    []
+  );
+
   const checkConnection = useCallback(async (): Promise<boolean | null> => {
     try {
       const res = await fetch("/api/whatsapp/status");
@@ -62,12 +92,11 @@ export default function WhatsAppSettingsPage() {
       if (typeof data.configured === "boolean") {
         setBridgeConfigured(data.configured);
       }
+      applyStatusPayload(data);
       const state = (data.state as ConnState) ?? "unknown";
-      setConnState(state);
       if (data.linked) {
         setLinked(true);
         setQrImage(null);
-        if (data.instanceName) setInstanceName(data.instanceName);
         return true;
       }
       if (state === "connecting") {
@@ -78,7 +107,7 @@ export default function WhatsAppSettingsPage() {
     } catch {
       return null;
     }
-  }, []);
+  }, [applyStatusPayload]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -112,6 +141,7 @@ export default function WhatsAppSettingsPage() {
         setBridgeConfigured(data.configured);
       }
       if (data.instanceName) setInstanceName(data.instanceName);
+      applyStatusPayload(data);
 
       if (data.linked) {
         setLinked(true);
@@ -146,7 +176,7 @@ export default function WhatsAppSettingsPage() {
       setError("تعذر الاتصال بجسر الواتساب — تحقق من WHATSAPP_API_URL");
     }
     setLoading(false);
-  }, [checkConnection, stopPolling]);
+  }, [checkConnection, stopPolling, applyStatusPayload]);
 
   const startLinkedKeepalive = useCallback(() => {
     stopPolling();
@@ -204,6 +234,8 @@ export default function WhatsAppSettingsPage() {
         setConnState("connecting");
       }
       setLinked(false);
+      setLinkedPhoneDisplay(null);
+      setLinkedProfileName(null);
       await startScan();
     } catch {
       setError("تعذر الاتصال بالجسر");
@@ -268,6 +300,20 @@ export default function WhatsAppSettingsPage() {
               </span>
             )}
           </p>
+          {linked && linkedPhoneDisplay && (
+            <div className="mx-auto mt-3 max-w-sm rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+              <p className="font-semibold text-emerald-900">الرقم المربوط</p>
+              <p className="mt-1 text-lg font-bold tracking-wide text-emerald-800" dir="ltr">
+                {linkedPhoneDisplay}
+              </p>
+              {linkedProfileName && (
+                <p className="mt-1 text-xs text-emerald-700">{linkedProfileName}</p>
+              )}
+              <p className="mt-2 text-xs text-emerald-700">
+                رسائل الحجز تُرسل من هذا الرقم — تأكد أنه واتساب العيادة الصحيح
+              </p>
+            </div>
+          )}
         </CardHeader>
 
         {error && (
@@ -364,6 +410,8 @@ export default function WhatsAppSettingsPage() {
           </li>
         </ul>
       </Card>
+
+      <WhatsAppTestButton />
 
       <Card>
         <CardHeader>
