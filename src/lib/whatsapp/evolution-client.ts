@@ -485,6 +485,26 @@ export async function autoRepairEvolutionWhatsApp(
 
   const cleanup = await cleanupExtraEvolutionInstances(name);
 
+  const sessionBefore = await resolveEvolutionSession(name, { skipCache: true });
+  if (sessionBefore.linked) {
+    await restartEvolutionConnection(name);
+    const sessionAfter = await resolveEvolutionSession(name, { skipCache: true });
+    if (sessionAfter.linked) {
+      return {
+        ok: true,
+        deletedInstances: cleanup.deleted,
+        deleteFailures: cleanup.failed,
+        qr: {
+          linked: true,
+          connectionState: "open",
+          qrImageSrc: null,
+          linkedPhone: sessionAfter.linkedPhone,
+          profileName: sessionAfter.profileName,
+        },
+      };
+    }
+  }
+
   await evolutionFetch(`/instance/logout/${encodeURIComponent(name)}`, {
     method: "DELETE",
   });
@@ -727,6 +747,115 @@ function parseEvolutionMessageStatus(data: unknown): string | null {
   return typeof status === "string" && status.trim() ? status.trim() : null;
 }
 
+function extractEvolutionMessageKey(
+  data: unknown
+): { id?: string; remoteJid?: string } | null {
+  if (!data || typeof data !== "object") return null;
+  const key = (data as Record<string, unknown>).key;
+  if (!key || typeof key !== "object") return null;
+  const row = key as Record<string, unknown>;
+  return {
+    id: typeof row.id === "string" ? row.id : undefined,
+    remoteJid: typeof row.remoteJid === "string" ? row.remoteJid : undefined,
+  };
+}
+
+function shouldRestartEvolutionBeforeSend(): boolean {
+  return process.env.WHATSAPP_RESTART_BEFORE_SEND !== "false";
+}
+
+/** إعادة تشغيل اتصال Baileys بدون logout (أفضل من QR المتكرر) */
+export async function restartEvolutionConnection(
+  instanceName: string
+): Promise<{ ok: boolean; error?: string }> {
+  const name = instanceName.trim();
+  if (!name) return { ok: false, error: "instance_name_required" };
+
+  const res = await evolutionFetch(
+    `/instance/restart/${encodeURIComponent(name)}`,
+    { method: "POST" }
+  );
+
+  if (!res.ok) {
+    const msg =
+      typeof res.data === "object" && res.data && "message" in (res.data as object)
+        ? String((res.data as { message: string }).message)
+        : res.text.slice(0, 300);
+    return { ok: false, error: msg || `HTTP ${res.status}` };
+  }
+
+  await new Promise((r) => setTimeout(r, 4500));
+  invalidateEvolutionSessionCache(name);
+  return { ok: true };
+}
+
+async function sendEvolutionComposingPresence(
+  instanceName: string,
+  number: string
+): Promise<void> {
+  await evolutionFetch(
+    `/chat/sendPresence/${encodeURIComponent(instanceName)}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        number,
+        presence: "composing",
+        delay: 800,
+      }),
+    }
+  );
+}
+
+async function pollEvolutionMessageDeliveryStatus(
+  instanceName: string,
+  messageId: string,
+  remoteJid: string,
+  maxMs = 18_000
+): Promise<string | null> {
+  const started = Date.now();
+  while (Date.now() - started < maxMs) {
+    const res = await evolutionFetch(
+      `/chat/findStatusMessage/${encodeURIComponent(instanceName)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          where: { id: messageId, remoteJid, fromMe: true },
+          limit: 1,
+        }),
+      }
+    );
+
+    if (res.ok) {
+      const rows = Array.isArray(res.data)
+        ? res.data
+        : res.data && typeof res.data === "object"
+          ? (((res.data as Record<string, unknown>).messages as unknown[]) ??
+            ((res.data as Record<string, unknown>).data as unknown[]) ??
+            (Array.isArray((res.data as Record<string, unknown>).response)
+              ? ((res.data as Record<string, unknown>).response as unknown[])
+              : []))
+          : [];
+
+      const row = (rows[0] ?? res.data) as Record<string, unknown> | null;
+      const status = String(row?.status ?? "").toUpperCase();
+      if (
+        status === "DELIVERY_ACK" ||
+        status === "READ" ||
+        status === "SERVER_ACK"
+      ) {
+        return status;
+      }
+      if (status === "ERROR" || status === "FAILED") {
+        return "ERROR";
+      }
+    }
+
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+
+  return null;
+}
+
 /** هل الرقم مسجّل على واتساب؟ (Evolution /chat/whatsappNumbers) */
 export async function checkEvolutionWhatsAppNumber(
   rawPhone: string,
@@ -773,7 +902,11 @@ export async function checkEvolutionWhatsAppNumber(
 export async function sendEvolutionText(
   rawPhone: string,
   text: string,
-  options?: { clinicId?: string; instanceName?: string }
+  options?: {
+    clinicId?: string;
+    instanceName?: string;
+    restartConnection?: boolean;
+  }
 ): Promise<{
   ok: boolean;
   status: number;
@@ -815,12 +948,44 @@ export async function sendEvolutionText(
     };
   }
 
+  const sendNumber = numberCheck.jid?.endsWith("@s.whatsapp.net")
+    ? numberCheck.jid.split("@")[0] ?? sendTarget.number
+    : sendTarget.number;
+  const remoteJid =
+    numberCheck.jid?.endsWith("@s.whatsapp.net")
+      ? numberCheck.jid
+      : `${sendTarget.number}@s.whatsapp.net`;
+
+  const restartBeforeSend =
+    options?.restartConnection ??
+    shouldRestartEvolutionBeforeSend();
+
+  if (restartBeforeSend) {
+    const restarted = await restartEvolutionConnection(instanceName);
+    if (!restarted.ok) {
+      console.warn(LOG, "restart_before_send_failed", restarted.error);
+    }
+    const session = await resolveEvolutionSession(instanceName, {
+      skipCache: true,
+    });
+    if (!session.linked) {
+      return {
+        ok: false,
+        status: 503,
+        error: "whatsapp_not_linked",
+        data: { restartError: restarted.error },
+      };
+    }
+  }
+
+  await sendEvolutionComposingPresence(instanceName, sendNumber);
+
   const res = await evolutionFetch(
     `/message/sendText/${encodeURIComponent(instanceName)}`,
     {
       method: "POST",
       body: JSON.stringify({
-        number: sendTarget.number,
+        number: sendNumber,
         text,
         delay: 1200,
         linkPreview: false,
@@ -841,11 +1006,40 @@ export async function sendEvolutionText(
     return { ok: false, status: res.status, error: hiddenErr, data: res.data };
   }
 
-  const providerMessageStatus = parseEvolutionMessageStatus(res.data) ?? undefined;
+  let providerMessageStatus =
+    parseEvolutionMessageStatus(res.data) ?? undefined;
+  const messageKey = extractEvolutionMessageKey(res.data);
+
+  if (
+    messageKey?.id &&
+    (!providerMessageStatus ||
+      providerMessageStatus.toUpperCase() === "PENDING")
+  ) {
+    const polled = await pollEvolutionMessageDeliveryStatus(
+      instanceName,
+      messageKey.id,
+      messageKey.remoteJid ?? remoteJid
+    );
+    if (polled) providerMessageStatus = polled;
+  }
+
+  if (providerMessageStatus?.toUpperCase() === "ERROR") {
+    return {
+      ok: false,
+      status: res.status,
+      error: "evolution_delivery_error",
+      data: res.data,
+      providerMessageStatus,
+    };
+  }
+
   const deliveryWarning =
-    providerMessageStatus?.toUpperCase() === "PENDING"
+    !providerMessageStatus ||
+    providerMessageStatus.toUpperCase() === "PENDING"
       ? "evolution_pending_delivery"
-      : undefined;
+      : providerMessageStatus.toUpperCase() === "SERVER_ACK"
+        ? "evolution_server_ack_only"
+        : undefined;
 
   return {
     ok: true,
