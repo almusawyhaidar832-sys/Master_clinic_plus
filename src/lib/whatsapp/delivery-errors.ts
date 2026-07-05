@@ -28,7 +28,7 @@ export function describeWhatsAppDeliveryError(
     case "evolution_server_ack_only":
       return "واتسapp قبل الرسالة على السيرفر لكن لم تُسلّم للجوال بعد — قد تصل خلال دقيقة أو السيرفر يحتاج تحديث.";
     case "evolution_delivery_error":
-      return "Evolution أبلغ عن خطأ في التسليم — أعد «إصلاح واتساب» أو حدّث سيرفر Railway.";
+      return "Evolution قبل الطلب لكن التسليم فشل على السيرفر — مطوّر النظام يحدّث Railway (WPP_LID_MODE=false + صورة Evolution جديدة).";
     case "whatsapp_lid_jid":
       return "واتساب يستخدم LID لهذا الرقم — على Railway: WPP_LID_MODE=false وحدّث صورة Evolution إلى 2.4.0-rc2 ثم أعد QR.";
     case "text_send_failed":

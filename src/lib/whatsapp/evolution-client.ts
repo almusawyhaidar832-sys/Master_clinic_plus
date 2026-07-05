@@ -761,7 +761,7 @@ function extractEvolutionMessageKey(
 }
 
 function shouldRestartEvolutionBeforeSend(): boolean {
-  return process.env.WHATSAPP_RESTART_BEFORE_SEND !== "false";
+  return process.env.WHATSAPP_RESTART_BEFORE_SEND === "true";
 }
 
 /** إعادة تشغيل اتصال Baileys بدون logout (أفضل من QR المتكرر) */
@@ -836,17 +836,19 @@ async function pollEvolutionMessageDeliveryStatus(
               : []))
           : [];
 
-      const row = (rows[0] ?? res.data) as Record<string, unknown> | null;
-      const status = String(row?.status ?? "").toUpperCase();
-      if (
-        status === "DELIVERY_ACK" ||
-        status === "READ" ||
-        status === "SERVER_ACK"
-      ) {
-        return status;
-      }
-      if (status === "ERROR" || status === "FAILED") {
-        return "ERROR";
+      const row = rows[0] as Record<string, unknown> | undefined;
+      if (row && typeof row === "object") {
+        const status = String(row.status ?? "").toUpperCase();
+        if (
+          status === "DELIVERY_ACK" ||
+          status === "READ" ||
+          status === "SERVER_ACK"
+        ) {
+          return status;
+        }
+        if (status === "ERROR" || status === "FAILED") {
+          return "ERROR";
+        }
       }
     }
 
@@ -1025,11 +1027,11 @@ export async function sendEvolutionText(
 
   if (providerMessageStatus?.toUpperCase() === "ERROR") {
     return {
-      ok: false,
+      ok: true,
       status: res.status,
-      error: "evolution_delivery_error",
       data: res.data,
       providerMessageStatus,
+      deliveryWarning: "evolution_delivery_error",
     };
   }
 

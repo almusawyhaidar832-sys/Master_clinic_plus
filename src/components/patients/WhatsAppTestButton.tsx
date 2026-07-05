@@ -53,13 +53,16 @@ export function WhatsAppTestButton({ portal }: WhatsAppTestButtonProps) {
       });
       const data = await res.json();
       if (!res.ok) {
-        const detail = data.providerError
-          ? ` — ${data.providerError}`
+        const detail = data.deliveryNote ?? data.providerError
+          ? ` — ${data.deliveryNote ?? data.providerError}`
           : "";
-        const hint = data.hint ? `\n${data.hint}` : "";
+        const steps =
+          Array.isArray(data.fixSteps) && data.fixSteps.length > 0
+            ? `\n\n${data.fixSteps.map((s: string, i: number) => `${i + 1}. ${s}`).join("\n")}`
+            : "";
         setResult({
           type: "error",
-          text: (data.error ?? "فشل الإرسال") + detail + hint,
+          text: (data.error ?? "فشل الإرسال") + detail + steps,
         });
         return;
       }

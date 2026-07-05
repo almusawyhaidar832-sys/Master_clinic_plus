@@ -106,13 +106,19 @@ export async function POST(request: NextRequest) {
       status: outcome.providerStatus,
       phone: outcome.normalizedPhone,
     });
+    const deliveryNote = describeWhatsAppDeliveryError(outcome.providerError);
     return NextResponse.json(
       {
         ok: false,
         error: "فشل إرسال الرسالة التجريبية",
         providerError: outcome.providerError,
+        deliveryNote,
         normalizedPhone: outcome.normalizedPhone,
-        hint: "راجع سجلات الاستضافة أو Supabase — ابحث عن [whatsapp]",
+        fixSteps: [
+          "اضغط «إصلاح واتساب الآن»",
+          "تواصل مع مطوّر النظام لتحديث سيرفر Evolution على Railway",
+        ],
+        hint: deliveryNote,
       },
       { status: 502 }
     );
