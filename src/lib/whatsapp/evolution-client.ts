@@ -557,6 +557,68 @@ export function formatEvolutionApiNumber(rawPhone: string): string {
   return number;
 }
 
+/** يختار رقم الإرسال من JID إن وُجد (@s.whatsapp.net) */
+export function resolveEvolutionSendNumber(
+  rawPhone: string,
+  numberCheck: { jid?: string }
+): { number: string; lidJid?: string } {
+  const fallback = formatEvolutionApiNumber(rawPhone);
+  const jid = numberCheck.jid?.trim();
+  if (!jid) return { number: fallback };
+  if (jid.includes("@lid")) return { number: fallback, lidJid: jid };
+  if (jid.endsWith("@s.whatsapp.net")) {
+    const digits = jid.split("@")[0]?.replace(/\D/g, "");
+    if (digits) return { number: digits };
+  }
+  return { number: fallback };
+}
+
+export type EvolutionInstanceSummary = {
+  name: string;
+  connected: boolean;
+  phone: string | null;
+  profileName: string | null;
+  messageCount: number | null;
+};
+
+/** قائمة مختصرة بكل instances — للتشخيص */
+export async function summarizeEvolutionInstances(): Promise<
+  EvolutionInstanceSummary[]
+> {
+  const listRes = await evolutionFetch("/instance/fetchInstances", {
+    method: "GET",
+  });
+  if (!listRes.ok) return [];
+
+  return parseInstanceList(listRes.data).map((row) => {
+    const name = String(row.name ?? row.instanceName ?? "").trim();
+    const statusRaw =
+      typeof row.connectionStatus === "string"
+        ? row.connectionStatus
+        : row.connectionStatus &&
+            typeof row.connectionStatus === "object" &&
+            "state" in row.connectionStatus
+          ? String((row.connectionStatus as { state?: string }).state ?? "")
+          : "";
+    const connected =
+      parseConnectionState({ connectionStatus: statusRaw }) === "open";
+    const { linkedPhone } = extractEvolutionLinkedPhone(name, null, [row]);
+    const messageCount =
+      row && typeof row === "object" && "messageCount" in row
+        ? Number((row as { messageCount?: number }).messageCount)
+        : null;
+
+    return {
+      name,
+      connected,
+      phone: linkedPhone,
+      profileName:
+        typeof row.profileName === "string" ? row.profileName.trim() : null,
+      messageCount: Number.isFinite(messageCount) ? messageCount : null,
+    };
+  });
+}
+
 function parseEvolutionMessageStatus(data: unknown): string | null {
   if (!data || typeof data !== "object") return null;
   const status = (data as Record<string, unknown>).status;
@@ -628,8 +690,6 @@ export async function sendEvolutionText(
     return { ok: false, status: 0, error: "whatsapp_not_configured" };
   }
 
-  const number = formatEvolutionApiNumber(rawPhone);
-
   const numberCheck = await checkEvolutionWhatsAppNumber(rawPhone, {
     clinicId: options?.clinicId,
     instanceName,
@@ -643,11 +703,21 @@ export async function sendEvolutionText(
     };
   }
 
+  const sendTarget = resolveEvolutionSendNumber(rawPhone, numberCheck);
+  if (sendTarget.lidJid) {
+    return {
+      ok: false,
+      status: 400,
+      error: "whatsapp_lid_jid",
+      data: { jid: sendTarget.lidJid, numberCheck },
+    };
+  }
+
   const res = await evolutionFetch(
     `/message/sendText/${encodeURIComponent(instanceName)}`,
     {
       method: "POST",
-      body: JSON.stringify({ number, text }),
+      body: JSON.stringify({ number: sendTarget.number, text }),
     }
   );
 

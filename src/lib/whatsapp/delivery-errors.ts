@@ -24,7 +24,9 @@ export function describeWhatsAppDeliveryError(
     case "number_not_on_whatsapp":
       return "هذا الرقم غير مسجّل على واتساب — تحقق من الرقم.";
     case "evolution_pending_delivery":
-      return "Evolution قبل الطلب لكن الرسالة قد لا تصل — المشكلة غالباً في سيرفر Railway (أعد ربط QR أو حدّث Evolution).";
+      return "Evolution قبل الطلب لكن الرسالة قد لا تصل — حدّث Evolution على Railway (WPP_LID_MODE=false + CONFIG_SESSION_PHONE_VERSION) ثم أعد QR.";
+    case "whatsapp_lid_jid":
+      return "واتساب يستخدم LID لهذا الرقم — على Railway: WPP_LID_MODE=false وحدّث صورة Evolution إلى 2.4.0-rc2 ثم أعد QR.";
     case "text_send_failed":
       return "تعذر إرسال رسالة التفاصيل — تحقق من ربط واتساب العيادة.";
     case "invoice_pdf_failed":

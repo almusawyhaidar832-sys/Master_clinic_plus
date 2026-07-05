@@ -13,7 +13,9 @@ import { deliverWhatsAppMessage } from "@/lib/whatsapp/send-message";
 import { requireWhatsAppManageAccess } from "@/lib/whatsapp/require-api-access";
 import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
 import {
+  checkEvolutionWhatsAppNumber,
   resolveEvolutionSession,
+  summarizeEvolutionInstances,
 } from "@/lib/whatsapp/evolution-client";
 import { resolveWhatsAppInstanceForClinic } from "@/lib/whatsapp/resolve-instance";
 import { phoneToLocalDisplay } from "@/lib/phone";
@@ -89,6 +91,14 @@ export async function POST(request: NextRequest) {
 
   const instanceName = await resolveWhatsAppInstanceForClinic(clinicId);
   const session = await resolveEvolutionSession(instanceName, { skipCache: true });
+  const numberCheck = await checkEvolutionWhatsAppNumber(validated.normalized, {
+    clinicId,
+    instanceName,
+  });
+  const instances = await summarizeEvolutionInstances();
+  const extraConnected = instances.filter(
+    (i) => i.connected && i.name !== instanceName
+  );
 
   if (!outcome.ok && outcome.configured) {
     console.error("[whatsapp/test] failed", {
@@ -112,14 +122,29 @@ export async function POST(request: NextRequest) {
     ? describeWhatsAppDeliveryError(outcome.deliveryWarning)
     : null;
 
+  const fixSteps =
+    outcome.deliveryWarning || extraConnected.length > 0
+      ? [
+          "Railway → Evolution → Variables: WPP_LID_MODE=false",
+          "CONFIG_SESSION_PHONE_VERSION=2.3000.1039700148",
+          "Docker: evoapicloud/evolution-api:2.4.0-rc2 ثم Redeploy",
+          "Manager: احذف instances الزائدة — خلّي instance العيادة فقط",
+          "Logout → QR جديد من هذه الصفحة",
+        ]
+      : [];
+
   return NextResponse.json({
     ok: true,
     status: outcome.status,
     normalizedPhone: outcome.normalizedPhone,
     configured: outcome.configured,
+    instanceName,
     providerMessageStatus: outcome.providerMessageStatus ?? null,
     deliveryWarning: outcome.deliveryWarning ?? null,
     deliveryNote,
+    recipientJid: numberCheck.jid ?? null,
+    extraInstances: extraConnected.map((i) => i.name),
+    fixSteps,
     linkedPhoneDisplay: session.linkedPhone
       ? phoneToLocalDisplay(session.linkedPhone)
       : null,

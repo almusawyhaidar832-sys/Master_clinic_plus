@@ -70,9 +70,18 @@ export function WhatsAppTestButton({ portal }: WhatsAppTestButtonProps) {
             ? "\nتحذير: واتساب غير مربوط حالياً"
             : "";
       const note = data.deliveryNote ? `\n${data.deliveryNote}` : "";
+      const jid = data.recipientJid ? `\nJID: ${data.recipientJid}` : "";
+      const extra =
+        Array.isArray(data.extraInstances) && data.extraInstances.length > 0
+          ? `\n⚠ instances زائدة: ${data.extraInstances.join(", ")}`
+          : "";
+      const steps =
+        Array.isArray(data.fixSteps) && data.fixSteps.length > 0
+          ? `\n\nخطوات Railway:\n${data.fixSteps.map((s: string, i: number) => `${i + 1}. ${s}`).join("\n")}`
+          : "";
       setResult({
         type: data.deliveryWarning ? "warning" : "success",
-        text: `${data.message ?? "تم"} (${data.normalizedPhone ?? check.normalized})${linked}${note}`,
+        text: `${data.message ?? "تم"} (${data.normalizedPhone ?? check.normalized})${linked}${jid}${extra}${note}${steps}`,
       });
     } catch {
       setResult({ type: "error", text: "تعذر الاتصال بالخادم" });
