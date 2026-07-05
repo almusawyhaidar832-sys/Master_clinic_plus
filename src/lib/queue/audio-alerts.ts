@@ -70,22 +70,23 @@ function persistAudioConsent(): void {
   }
 }
 
-/** Unlock Web Audio + speech — browsers block sound until user interacts with the page */
+/** Unlock Web Audio — browsers block sound until user interacts with the page */
 export async function unlockQueueAudio(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   try {
     if (!ctx) ctx = new AudioContext();
     if (ctx.state === "suspended") await ctx.resume();
     audioReady = ctx.state === "running";
+    if (audioReady) {
+      persistAudioConsent();
+      return true;
+    }
   } catch {
     audioReady = false;
   }
 
-  const speechOk = await unlockSpeechAudio().catch(() => false);
-  if (audioReady || speechOk) {
-    persistAudioConsent();
-    return true;
-  }
+  // speech unlock as secondary — don't block chime/TTS on AudioContext alone
+  void unlockSpeechAudio().catch(() => false);
   return false;
 }
 
@@ -252,24 +253,51 @@ async function resolveAlertAudioUrl(
   return fetchQueueAnnounceAudioUrl(entryId, variant);
 }
 
+function isQueueScreenPath(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/queue-screen")
+  );
+}
+
+function isAccountantDashboardPath(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/dashboard")
+  );
+}
+
 async function speakQueueAlertVoice(
   detail: QueueAlertDetail,
   options?: { clearQueue?: boolean }
 ): Promise<void> {
   prepareSpeechAuto();
 
-  const audioUrl = await resolveAlertAudioUrl(detail);
-  if (audioUrl) {
-    const played = await playDoctorCallAudioUrl(audioUrl);
+  const onTv = isQueueScreenPath();
+  const onAccountant = isAccountantDashboardPath();
+
+  // محاسب PWA على الحاسوب: نطق فوري من المتصفح (كان يعمل بسرعة قبل تعديل السحابة)
+  const speechOpts = {
+    useCloud: onTv && !onAccountant,
+    skipCloudQueue: true,
+    clearQueue: options?.clearQueue,
+  } as const;
+
+  // MP3 من البث — شاشة التلفاز فقط؛ المحاسب يستخدم نطق المتصفح الفوري
+  if (!onAccountant && detail.audioUrl?.trim()) {
+    const played = await playDoctorCallAudioUrl(detail.audioUrl);
     if (played) return;
   }
 
-  /** TTS سحابي (Edge) — أوضح للأسماء العربية على Windows وشاشات التلفاز */
-  const speechOpts = {
-    useCloud: true as const,
-    skipCloudQueue: true,
-    clearQueue: options?.clearQueue,
-  };
+  // طلب MP3 من السيرفر — شاشة التلفاز فقط (ليس المحاسب)
+  if (onTv && !onAccountant) {
+    const audioUrl = await resolveAlertAudioUrl(detail);
+    if (audioUrl) {
+      const played = await playDoctorCallAudioUrl(audioUrl);
+      if (played) return;
+    }
+  }
+
   const gender = detail.patientGender ?? null;
 
   if (detail.patientName?.trim()) {
@@ -315,16 +343,12 @@ export async function playDoctorCallAudioUrl(url: string): Promise<boolean> {
 export function replayQueueAlert(detail: QueueAlertDetail): void {
   void (async () => {
     await unlockQueueAudio();
-    if (detail.patientName?.trim()) {
-      await speakQueueAlertVoice(detail, { clearQueue: true });
-    } else {
-      void playQueueAlertSound(detail.kind);
-      await speakQueueAlertVoice(detail, { clearQueue: true });
-    }
+    void playQueueAlertSound(detail.kind);
+    await speakQueueAlertVoice(detail, { clearQueue: true });
   })();
 }
 
-/** Sound + voice + on-screen banner — بدون إشعار متصفح داخل التطبيق */
+/** Sound + voice + on-screen banner */
 export function triggerQueueAlert(detail: QueueAlertDetail): void {
   dispatchQueueAlertUI(detail);
 
@@ -348,9 +372,10 @@ export function triggerQueueAlert(detail: QueueAlertDetail): void {
     });
   }
 
+  // نغمة فورية — لا ننتظر فتح AudioContext (كما كان سابقاً)
+  void playQueueAlertSound(detail.kind);
   void (async () => {
     await unlockQueueAudio();
-    void playQueueAlertSound(detail.kind);
     await speakQueueAlertVoice(detail, { clearQueue: true });
   })();
 }

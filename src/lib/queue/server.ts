@@ -644,10 +644,21 @@ export async function sendQueueEntryToDoctor(
   });
 }
 
-/** Re-notify accountants: doctor requests patient entry again */
+/** نداء المحاسب + شاشة انتظار المرضى معاً — عند طلب الطبيب دخول مراجع */
+export async function notifyPatientAdmitAllTargets(
+  queueEntryId: string,
+  options?: { recall?: boolean }
+) {
+  await Promise.all([
+    notifyAccountantsPatientAdmit(queueEntryId),
+    emitQueueScreenCall(queueEntryId, { recall: options?.recall === true }),
+  ]);
+}
+
+/** Re-notify accountants + TV screen: doctor requests patient entry again */
 export async function recallAccountantNotification(queueEntryId: string) {
-  await notifyAccountantsPatientAdmit(queueEntryId).catch((err) => {
-    console.error("[queue] accountant recall failed:", err);
+  await notifyPatientAdmitAllTargets(queueEntryId, { recall: true }).catch((err) => {
+    console.error("[queue] admit recall failed:", err);
   });
 }
 

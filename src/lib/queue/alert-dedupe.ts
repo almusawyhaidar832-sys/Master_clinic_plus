@@ -1,7 +1,7 @@
 /** Prevent duplicate alerts from polling + realtime firing together */
 const recentKeys = new Set<string>();
 const SESSION_KEY = "mcp-queue-alert-keys";
-const DEDUPE_MS = 120_000;
+const DEDUPE_MS = 45_000;
 
 function readSessionKeys(): Record<string, number> {
   if (typeof sessionStorage === "undefined") return {};

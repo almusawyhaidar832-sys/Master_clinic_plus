@@ -11,11 +11,11 @@ import {
   transferQueueByAccountant,
   confirmQueueTransferByAccountant,
   dismissQueueTransferRequest,
-  emitQueueScreenCall,
   finalizeQueueCancellationByAccountant,
   getDoctorByProfileId,
   notifyAccountantsReadyForBilling,
   notifyAccountantsReadyForPayment,
+  notifyPatientAdmitAllTargets,
   rejectQueueEntryByDoctor,
   requestQueueTransferByStaff,
   requestQueueCancellationByStaff,
@@ -502,7 +502,7 @@ export async function PATCH(
     });
 
     if (next === "called") {
-      void emitQueueScreenCall(id).catch(console.error);
+      void notifyPatientAdmitAllTargets(id).catch(console.error);
     }
 
     return NextResponse.json({ success: true, status: next });

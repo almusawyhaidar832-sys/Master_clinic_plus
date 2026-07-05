@@ -90,16 +90,9 @@ export function QueueRealtimeBridge({
     void ensureNotificationPermission();
   }, [portal]);
 
-  /** Push / SW — للتبويب بالخلفية فقط؛ Realtime يغطي التبويب النشط */
+  /** Push / SW → نداء صوتي (dedupe يمنع التكرار مع Realtime) */
   useEffect(() => {
     return listenForPushAlertMessages((payload) => {
-      if (
-        typeof document !== "undefined" &&
-        document.visibilityState === "visible"
-      ) {
-        return;
-      }
-
       const rawKind = payload.kind ?? "accountant_admit";
       const dedupeKey = queueAlertDedupeKey({
         kind: rawKind,
