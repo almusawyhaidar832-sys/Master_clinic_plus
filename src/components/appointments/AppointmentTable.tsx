@@ -209,6 +209,7 @@ export function AppointmentTable({
                   key={a.id}
                   appointment={a}
                   showDoctorColumn={showDoctorColumn}
+                  singleTimeDisplay={role === "accountant"}
                   canManage={canManage}
                   actionId={actionId}
                   onAccept={() => handleAccept(a)}
@@ -267,6 +268,7 @@ export function AppointmentTable({
 function AppointmentRow({
   appointment: a,
   showDoctorColumn,
+  singleTimeDisplay,
   canManage,
   actionId,
   onAccept,
@@ -276,6 +278,7 @@ function AppointmentRow({
 }: {
   appointment: AppointmentWithDoctor;
   showDoctorColumn: boolean;
+  singleTimeDisplay: boolean;
   canManage: boolean;
   actionId: string | null;
   onAccept: () => void;
@@ -323,7 +326,7 @@ function AppointmentRow({
         {formatDate(a.appointment_date)}
         <br />
         <span className="text-xs">
-          {role === "accountant"
+          {singleTimeDisplay
             ? formatTime(a.start_time)
             : `${formatTime(a.start_time)} – ${formatTime(a.end_time)}`}
         </span>
