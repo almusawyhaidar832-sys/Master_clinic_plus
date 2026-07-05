@@ -82,16 +82,16 @@ function ClinicCodeTvSetup({
     <div className="qs-bg-mesh relative flex min-h-screen flex-col items-center justify-center px-6 py-10">
       <div className="qs-grid-overlay pointer-events-none absolute inset-0 opacity-50" />
       <div className="qs-setup-card relative z-10 w-full max-w-lg rounded-3xl p-8 text-center">
-        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 shadow-lg shadow-cyan-500/30">
+        <div className="qs-setup-icon mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl">
           <Monitor className="h-10 w-10 text-white" />
         </div>
         <h1 className="qs-title-shimmer text-3xl font-black">شاشة انتظار المرضى</h1>
-        <p className="mt-3 text-sm leading-relaxed text-slate-600">
-          اكتب <strong className="text-teal-700">رمز عيادتك</strong> مرة واحدة — تُحفظ
+        <p className="mt-3 text-sm leading-relaxed text-slate-muted">
+          اكتب <strong className="text-primary-700">رمز عيادتك</strong> مرة واحدة — تُحفظ
           على هذا التلفاز وتفتح تلقائياً كل يوم.
         </p>
-        <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-slate-500">
-          <Sparkles className="h-3.5 w-3.5 text-cyan-600" />
+        <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-slate-muted">
+          <Sparkles className="h-3.5 w-3.5 text-premium-500" />
           رمز خاص بعيادتك — لا تختلط مع عيادة أخرى
         </p>
 
@@ -118,13 +118,13 @@ function ClinicCodeTvSetup({
           {siteHost && (
             <p className="text-xs text-slate-500" dir="ltr">
               أو افتح: {siteHost}/queue-screen?clinic=
-              <span className="font-semibold text-teal-700">{code.trim() || "رمزك"}</span>
+              <span className="font-semibold text-primary-700">{code.trim() || "رمزك"}</span>
             </p>
           )}
           <button
             type="submit"
             disabled={!code.trim()}
-            className="w-full rounded-2xl bg-gradient-to-l from-cyan-600 to-teal-600 py-4 text-lg font-bold text-white shadow-lg shadow-cyan-500/25 hover:opacity-95 disabled:opacity-40"
+            className="qs-setup-btn w-full rounded-2xl py-4 text-lg font-bold text-white hover:opacity-95 disabled:opacity-40"
           >
             فتح شاشة هذه العيادة
           </button>
@@ -173,8 +173,8 @@ function SetupScreen({ onClinicResolved }: { onClinicResolved: (id: string) => v
     return (
       <div className="qs-bg-mesh flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent" />
-          <p className="text-lg font-medium text-slate-600">جارٍ تحميل شاشة الانتظار...</p>
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+          <p className="text-lg font-medium text-slate-muted">جارٍ تحميل شاشة الانتظار...</p>
         </div>
       </div>
     );
@@ -541,8 +541,8 @@ function QueueScreenContent() {
     return (
       <div className="qs-bg-mesh flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent" />
-          <p className="text-lg font-medium text-slate-600">جارٍ فتح شاشة العيادة...</p>
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+          <p className="text-lg font-medium text-slate-muted">جارٍ فتح شاشة العيادة...</p>
         </div>
       </div>
     );
@@ -681,7 +681,7 @@ export default function QueueScreenPage() {
     <Suspense
       fallback={
         <div className="qs-bg-mesh flex min-h-screen items-center justify-center">
-          <p className="text-lg font-medium text-slate-600">جارٍ تحميل شاشة الانتظار...</p>
+          <p className="text-lg font-medium text-slate-muted">جارٍ تحميل شاشة الانتظار...</p>
         </div>
       }
     >

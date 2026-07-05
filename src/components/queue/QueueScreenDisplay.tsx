@@ -7,6 +7,7 @@ import {
   Clock,
   Copy,
   RotateCcw,
+  Sparkles,
   Stethoscope,
   Volume2,
 } from "lucide-react";
@@ -87,10 +88,10 @@ function CalledCard({
         className={cn(
           "pointer-events-none absolute inset-x-0 top-0 h-3",
           isInProgress
-            ? "bg-gradient-to-l from-emerald-400 to-teal-400"
+            ? "bg-gradient-to-l from-success-text to-primary-400"
             : isRecall
-              ? "bg-gradient-to-l from-amber-400 to-orange-400"
-              : "bg-gradient-to-l from-cyan-400 to-teal-500"
+              ? "bg-gradient-to-l from-warning-text to-premium-400"
+              : "bg-gradient-to-l from-primary-400 to-primary-600"
         )}
       />
 
@@ -100,10 +101,10 @@ function CalledCard({
             "qs-call-status-badge mb-6 inline-flex items-center gap-3 rounded-2xl px-6 py-3 text-lg font-black lg:text-xl",
             compact && "mb-3 px-4 py-2 text-sm",
             isInProgress
-              ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/30"
+              ? "bg-success-text text-white shadow-glow"
               : isRecall
-                ? "bg-amber-500 text-white shadow-md shadow-amber-500/30"
-                : "bg-gradient-to-l from-cyan-600 to-teal-600 text-white shadow-md shadow-cyan-500/30"
+                ? "bg-warning-text text-white shadow-gold"
+                : "bg-gradient-to-l from-primary-600 to-primary-500 text-white shadow-glow"
           )}
         >
           {isInProgress ? (
@@ -124,24 +125,24 @@ function CalledCard({
           )}
         </div>
 
-        <p className={cn("mb-2 text-lg font-bold tracking-wide text-slate-500 lg:text-xl", compact && "mb-1 text-sm")}>
+        <p className={cn("mb-2 text-lg font-bold tracking-wide text-slate-muted lg:text-xl", compact && "mb-1 text-sm")}>
           رقم الدور
         </p>
         <div
           className={cn(
-            "qs-ticket-hero mb-8 tabular-nums",
+            "qs-ticket-hero qs-ticket-glow mb-8 tabular-nums",
             compact && "mb-3",
             isInProgress
-              ? "text-emerald-600"
+              ? "text-success-text"
               : isRecall
-                ? "text-amber-600"
-                : "text-cyan-600"
+                ? "text-warning-text"
+                : "text-primary-600"
           )}
         >
           {entry.ticket_number}
         </div>
 
-        <p className={cn("mb-3 text-xl font-bold text-teal-700 lg:text-2xl", compact && "mb-1 text-sm")}>المراجع</p>
+        <p className={cn("mb-3 text-xl font-bold text-primary-700 lg:text-2xl", compact && "mb-1 text-sm")}>المراجع</p>
         <h3 className={cn("qs-patient-hero mb-8 max-w-full px-2", compact && "mb-3")}>{name}</h3>
 
         <div
@@ -149,22 +150,22 @@ function CalledCard({
             "flex w-full max-w-2xl items-center justify-center gap-3 rounded-2xl border-2 px-6 py-4",
             compact && "max-w-none px-3 py-2",
             isInProgress
-              ? "border-emerald-200 bg-emerald-50"
-              : "border-sky-100 bg-sky-50"
+              ? "border-success-border bg-success"
+              : "border-primary/15 bg-primary-50/60"
           )}
         >
           <Stethoscope
             className={cn(
               "h-8 w-8 shrink-0 lg:h-10 lg:w-10",
-              isInProgress ? "text-emerald-600" : "text-teal-600"
+              isInProgress ? "text-success-text" : "text-primary-600"
             )}
           />
           <p className="qs-doctor-name text-center">
-            <span className="font-medium text-slate-500">
+            <span className="font-medium text-slate-muted">
               {isInProgress ? "عند الطبيب" : "الطبيب المعالج"}
             </span>
             <br />
-            <span className="text-slate-800">{doctor}</span>
+            <span className="text-slate-text">{doctor}</span>
           </p>
         </div>
 
@@ -172,7 +173,7 @@ function CalledCard({
           type="button"
           onClick={() => onRepeatCall(entry)}
           className={cn(
-            "qs-repeat-btn mt-6 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50",
+            "qs-repeat-btn mt-6 flex items-center gap-2 rounded-xl border border-slate-border bg-surface-card px-5 py-2.5 text-sm font-semibold text-slate-muted shadow-sm transition-colors hover:bg-primary-50 hover:text-primary-700",
             compact && "mt-3 px-3 py-1.5 text-xs"
           )}
           title="إعادة النداء"
@@ -210,14 +211,22 @@ export function QueueScreenDisplay({
 
   return (
     <div className="qs-bg-mesh qs-tv-display-root relative flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="qs-grid-overlay pointer-events-none absolute inset-0 opacity-60" />
+      {/* طبقة أضواء متحركة */}
+      <div className="qs-aurora-layer" aria-hidden>
+        <div className="qs-aurora-blob qs-aurora-blob--1" />
+        <div className="qs-aurora-blob qs-aurora-blob--2" />
+        <div className="qs-aurora-blob qs-aurora-blob--3" />
+      </div>
+      <div className="qs-grid-overlay pointer-events-none absolute inset-0 opacity-50" />
 
       {/* بانر العيادة */}
       <div className="qs-clinic-banner relative z-20 shrink-0 px-4 py-3 text-white lg:px-8 lg:py-4">
         <div className="qs-tv-banner-row flex flex-col items-center gap-4 lg:flex-row lg:justify-between">
           <div className="qs-tv-banner-clinic w-full flex-1 text-center lg:text-right">
-            <p className="mb-1 text-sm font-semibold tracking-widest text-cyan-100 lg:text-base">
+            <p className="mb-1 flex items-center justify-center gap-2 text-sm font-semibold tracking-widest text-white/75 lg:justify-end lg:text-base">
+              <Sparkles className="h-4 w-4 text-premium-300" />
               مرحباً بكم في
+              <Sparkles className="h-4 w-4 text-premium-300" />
             </p>
             <h1 className="qs-clinic-hero">{clinicName}</h1>
             <p className="mt-2 text-base font-medium text-white/80 lg:text-lg">
@@ -234,7 +243,7 @@ export function QueueScreenDisplay({
                 "flex items-center gap-2 rounded-2xl border px-5 py-3 backdrop-blur-sm transition-colors focus:outline-none focus-visible:ring-4 focus-visible:ring-white/60",
                 audioUnlocked
                   ? "border-white/30 bg-white/15 hover:bg-white/20"
-                  : "border-amber-200/50 bg-amber-500/25 hover:bg-amber-500/35 animate-pulse"
+                  : "border-premium-300/40 bg-premium-500/25 hover:bg-premium-500/35 animate-pulse"
               )}
             >
               <span className="relative flex h-3 w-3">
@@ -243,23 +252,23 @@ export function QueueScreenDisplay({
                     "absolute inline-flex h-full w-full rounded-full",
                     audioUnlocked
                       ? "animate-ping bg-white opacity-70"
-                      : "bg-amber-200 opacity-90"
+                      : "bg-premium-200 opacity-90"
                   )}
                 />
                 <span
                   className={cn(
                     "relative inline-flex h-3 w-3 rounded-full",
-                    audioUnlocked ? "bg-white" : "bg-amber-300"
+                    audioUnlocked ? "bg-white" : "bg-premium-300"
                   )}
                 />
               </span>
-              <Volume2 className={cn("h-5 w-5", audioUnlocked ? "text-white" : "text-amber-100")} />
+              <Volume2 className={cn("h-5 w-5", audioUnlocked ? "text-white" : "text-premium-100")} />
               <span className="text-base font-bold">
                 {audioUnlocked ? "الصوت مفعّل — اضغط للاختبار" : audioUnlockHint}
               </span>
             </button>
-            <div className="text-center lg:text-left">
-              <p className="text-5xl font-black tabular-nums leading-none lg:text-6xl">
+            <div className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-center backdrop-blur-sm lg:text-left">
+              <p className="text-5xl font-black tabular-nums leading-none tracking-tight lg:text-6xl">
                 {currentTime}
               </p>
               <p className="mt-1 text-sm font-medium text-white/75 lg:text-base">
@@ -277,19 +286,21 @@ export function QueueScreenDisplay({
 
       <div className="qs-tv-main-row relative z-10 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 lg:flex-row lg:gap-4 lg:p-4">
         <section className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-          <h2 className="shrink-0 text-center text-2xl font-black text-slate-800 lg:text-3xl">
+          <h2 className="qs-section-heading shrink-0 text-center text-2xl lg:text-3xl">
+            <span className="qs-sparkle-dot" aria-hidden />
             المراجع المطلوب الآن
+            <span className="qs-sparkle-dot" aria-hidden />
           </h2>
 
           {called.length === 0 ? (
             <div className="qs-glass qs-icon-float flex flex-1 flex-col items-center justify-center rounded-[2rem] px-8 py-10 text-center">
-              <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-cyan-100 to-teal-100">
-                <Clock className="h-12 w-12 text-cyan-600" />
+              <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-primary-100 to-primary-50 shadow-glow ring-4 ring-primary/10">
+                <Clock className="h-12 w-12 text-primary-600" />
               </div>
-              <p className="text-3xl font-bold text-slate-600">لا يوجد نداء حالياً</p>
-              <p className="mt-3 max-w-lg text-lg leading-relaxed text-slate-500">
-                سيظهر <strong className="text-teal-700">اسم المراجع</strong> و{" "}
-                <strong className="text-teal-700">رقم الدور</strong> هنا بحجم كبير
+              <p className="text-3xl font-bold text-slate-text">لا يوجد نداء حالياً</p>
+              <p className="mt-3 max-w-lg text-lg leading-relaxed text-slate-muted">
+                سيظهر <strong className="text-primary-700">اسم المراجع</strong> و{" "}
+                <strong className="text-primary-700">رقم الدور</strong> هنا بحجم كبير
                 عند النداء
               </p>
             </div>
@@ -317,13 +328,13 @@ export function QueueScreenDisplay({
 
         <aside className="qs-tv-sidebar flex min-h-0 w-full shrink-0 flex-col lg:w-[min(28vw,24rem)]">
           <div className="qs-glass flex h-full min-h-0 flex-col rounded-[2rem] p-4 lg:p-5">
-            <div className="mb-5 flex items-center justify-between border-b border-sky-100 pb-4">
+            <div className="mb-5 flex items-center justify-between border-b border-primary/10 pb-4">
               <div>
-                <h2 className="text-2xl font-black text-slate-800">قائمة الانتظار</h2>
-                <p className="text-sm font-medium text-slate-500">المراجعون التاليون</p>
+                <h2 className="text-2xl font-black text-slate-text">قائمة الانتظار</h2>
+                <p className="text-sm font-medium text-slate-muted">المراجعون التاليون</p>
               </div>
               {waiting.length > 0 && (
-                <span className="flex h-12 min-w-[3rem] items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 px-3 text-2xl font-black text-white shadow-md shadow-amber-400/30">
+                <span className="qs-waiting-badge flex h-12 min-w-[3rem] items-center justify-center rounded-2xl px-3 text-2xl font-black text-white">
                   {waiting.length}
                 </span>
               )}
@@ -331,8 +342,8 @@ export function QueueScreenDisplay({
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pr-1">
               {waiting.length === 0 ? (
-                <div className="rounded-2xl border-2 border-dashed border-sky-200 bg-sky-50/50 py-16 text-center">
-                  <p className="text-lg font-medium text-slate-500">لا يوجد أحد في الانتظار</p>
+                <div className="rounded-2xl border-2 border-dashed border-primary/20 bg-primary-50/40 py-16 text-center">
+                  <p className="text-lg font-medium text-slate-muted">لا يوجد أحد في الانتظار</p>
                 </div>
               ) : (
                 waiting.slice(0, 10).map((entry, idx) => {
@@ -342,18 +353,16 @@ export function QueueScreenDisplay({
                     <div
                       key={entry.id}
                       className={cn(
-                        "flex items-start gap-4 rounded-2xl border-2 px-4 py-4",
+                        "flex items-start gap-4 rounded-2xl border-2 px-4 py-4 transition-shadow",
                         isNext
-                          ? "border-amber-300 bg-gradient-to-l from-amber-50 to-orange-50 shadow-sm"
-                          : "border-sky-100 bg-white"
+                          ? "qs-waiting-next"
+                          : "border-primary/10 bg-surface-card hover:shadow-soft"
                       )}
                     >
                       <span
                         className={cn(
-                          "flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-2xl font-black tabular-nums",
-                          isNext
-                            ? "bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-sm"
-                            : "bg-sky-100 text-cyan-700"
+                          "flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-2xl font-black tabular-nums text-white",
+                          isNext ? "qs-ticket-badge-next" : "qs-ticket-badge"
                         )}
                       >
                         {entry.ticket_number}
@@ -367,12 +376,12 @@ export function QueueScreenDisplay({
                         >
                           {name}
                         </p>
-                        <p className="mt-1 text-base font-medium text-slate-500">
+                        <p className="mt-1 text-base font-medium text-slate-muted">
                           {entry.doctor?.full_name_ar}
                         </p>
                       </div>
                       {isNext && (
-                        <span className="shrink-0 rounded-xl bg-gradient-to-l from-amber-500 to-orange-500 px-3 py-1.5 text-sm font-black text-white shadow-sm">
+                        <span className="qs-waiting-badge shrink-0 rounded-xl px-3 py-1.5 text-sm font-black text-white">
                           التالي
                         </span>
                       )}
@@ -381,7 +390,7 @@ export function QueueScreenDisplay({
                 })
               )}
               {waiting.length > 10 && (
-                <p className="py-2 text-center text-sm font-medium text-slate-400">
+                <p className="py-2 text-center text-sm font-medium text-slate-muted">
                   +{waiting.length - 10} في الانتظار
                 </p>
               )}
@@ -394,7 +403,7 @@ export function QueueScreenDisplay({
               <button
                 type="button"
                 onClick={() => void navigator.clipboard?.writeText(screenUrl)}
-                className="flex items-center justify-center gap-2 py-2 text-[10px] text-slate-400 hover:text-teal-600"
+                className="flex items-center justify-center gap-2 py-2 text-[10px] text-slate-muted hover:text-primary-600"
               >
                 <Copy className="h-3 w-3" />
                 نسخ رابط الشاشة
@@ -404,7 +413,7 @@ export function QueueScreenDisplay({
               <button
                 type="button"
                 onClick={onCopyDiagnostics}
-                className="flex items-center justify-center gap-2 py-2 text-[10px] text-slate-400 hover:text-teal-600"
+                className="flex items-center justify-center gap-2 py-2 text-[10px] text-slate-muted hover:text-primary-600"
               >
                 <Copy className="h-3 w-3" />
                 نسخ معلومات التشخيص لإرسالها للدعم الفني
@@ -415,9 +424,9 @@ export function QueueScreenDisplay({
         </aside>
       </div>
 
-      <footer className="qs-tv-footer qs-glass relative z-10 shrink-0 border-t border-sky-100 px-4 py-2 text-center">
-        <p className="text-xl font-bold text-teal-800">{clinicName}</p>
-        <p className="mt-1 text-sm text-slate-500">
+      <footer className="qs-tv-footer qs-glass relative z-10 shrink-0 border-t border-primary/10 px-4 py-2 text-center">
+        <p className="text-xl font-bold text-primary-800">{clinicName}</p>
+        <p className="mt-1 text-sm text-slate-muted">
           Master Clinic Plus
           {installedApp ? " · مثبّتة على هذا الجهاز" : ""}
         </p>

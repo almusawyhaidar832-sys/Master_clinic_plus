@@ -88,22 +88,22 @@ export function QueueScreenPwaInstall({
             type="button"
             onClick={() => void handleInstall()}
             disabled={installing}
-            className="inline-flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-1 font-bold text-white hover:bg-teal-700 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-lg bg-primary-600 px-3 py-1 font-bold text-white hover:bg-primary-700 disabled:opacity-50"
           >
             <Download className="h-3 w-3" />
             {installing ? "جاري التثبيت..." : "تثبيت التطبيق"}
           </button>
         ) : (
-          <span className="font-medium text-teal-700">Chrome ⋮ → تثبيت التطبيق</span>
+          <span className="font-medium text-primary-700">Chrome ⋮ → تثبيت التطبيق</span>
         )}
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-right text-xs text-slate-600">
-      <p className="mb-2 flex items-center gap-2 font-bold text-slate-800">
-        <Monitor className="h-4 w-4 text-teal-600" />
+    <div className="rounded-2xl border border-primary/15 bg-primary-50/60 p-4 text-right text-xs text-slate-muted">
+      <p className="mb-2 flex items-center gap-2 font-bold text-slate-text">
+        <Monitor className="h-4 w-4 text-primary-600" />
         تثبيت شاشة الانتظار كتطبيق على التلفاز
       </p>
 
@@ -112,7 +112,7 @@ export function QueueScreenPwaInstall({
           type="button"
           onClick={() => void handleInstall()}
           disabled={installing}
-          className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-cyan-600 to-teal-600 px-4 py-3 text-sm font-bold text-white shadow-md hover:opacity-95 disabled:opacity-50"
+          className="qs-setup-btn mb-3 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-white hover:opacity-95 disabled:opacity-50"
         >
           <Download className="h-4 w-4" />
           {installing ? "جاري التثبيت..." : "تثبيت التطبيق الآن"}
