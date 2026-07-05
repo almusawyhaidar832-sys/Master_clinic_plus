@@ -90,6 +90,11 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
             {collectionStatusLabel(row.paymentStatus)}
           </span>
         </div>
+          {row.paymentStatus === "paid_full" && row.visitPaidToday > 0 && (
+            <p className="mt-1 text-xs font-semibold text-emerald-700">
+              ✓ دفع {formatCurrency(row.visitPaidToday)} — مكتمل
+            </p>
+          )}
         <p className="mt-0.5 text-xs text-slate-muted">{row.sessionLabel}</p>
         {row.patientPhone && (
           <p className="mt-0.5 text-xs text-slate-muted" dir="ltr">
@@ -100,15 +105,27 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
 
       <div className="flex flex-wrap items-center gap-4 sm:justify-end">
         <div className="text-right">
-          <p className="text-[11px] text-slate-muted">دفع اليوم</p>
+          <p className="text-[11px] text-slate-muted">دفع هذا اليوم</p>
           <p
             className={cn(
-              "font-bold tabular-nums",
-              row.paidToday > 0 ? "text-success-text" : "text-slate-muted"
+              "text-lg font-bold tabular-nums",
+              row.visitPaidToday > 0 ? "text-success-text" : "text-slate-muted"
             )}
           >
-            {formatCurrency(row.paidToday)}
+            {formatCurrency(row.visitPaidToday)}
           </p>
+          {row.paidToday > 0 &&
+            row.paidToday !== row.visitPaidToday &&
+            row.visitPaidToday > 0 && (
+              <p className="mt-0.5 text-[10px] text-slate-muted">
+                هذه الجلسة: {formatCurrency(row.paidToday)}
+              </p>
+            )}
+          {row.requiredToday > 0 && (
+            <p className="mt-0.5 text-[10px] text-slate-muted">
+              مطلوب: {formatCurrency(row.requiredToday)}
+            </p>
+          )}
         </div>
         <div className="text-right">
           <p className="text-[11px] text-slate-muted">المتبقي</p>
@@ -174,7 +191,7 @@ function DoctorSection({
               {formatDoctorDisplayName(doctorName)}
             </p>
             <p className="mt-0.5 text-xs text-slate-muted">
-              {stats.totalPatients} مراجع · محصّل{" "}
+              {stats.totalPatients} جلسة · محصّل{" "}
               {formatCurrency(stats.totalCollected)} · متبقي{" "}
               {formatCurrency(stats.totalRemaining)}
             </p>
@@ -358,7 +375,7 @@ export function DailyCollectionsPanel() {
             </CardTitle>
           </CardHeader>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <SummaryChip label="مراجعين" value={result.totals.totalPatients} />
+            <SummaryChip label="جلسات" value={result.totals.totalPatients} />
             <SummaryChip
               label="دفعوا"
               value={result.totals.paidFull + result.totals.partial}

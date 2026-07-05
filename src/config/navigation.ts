@@ -24,6 +24,7 @@ export const accountantModuleNav: ModuleNavItem[] = [
   { href: "/dashboard/doctors",      labelKey: "navDoctors",          icon: "doctors" },
   { href: "/dashboard/withdrawals",  labelKey: "navWithdrawals",      icon: "withdrawals", requiredModule: "doctor_wallet" },
   { href: "/dashboard/salary",       labelKey: "navStaffSalaries",    icon: "salary" },
+  { href: "/dashboard/payroll-history", labelKey: "navPayrollHistory", icon: "scrollText" },
   { href: "/dashboard/employees",    labelKey: "navPayrollManage",    icon: "userCog" },
   { href: "/dashboard/lab",          labelKey: "navLab",              icon: "testTube",    requiredModule: "lab_integration" },
   { href: "/dashboard/pharmacy",     labelKey: "navPharmacy",         icon: "pill",        requiredModule: "pharmacy_link" },

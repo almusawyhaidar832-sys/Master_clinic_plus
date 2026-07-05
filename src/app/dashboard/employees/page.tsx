@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Pencil, RefreshCw, UserX, Users } from "lucide-react";
+import { Pencil, RefreshCw, UserX, Users, History } from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -78,16 +78,25 @@ export default function EmployeesPage() {
             ) : null}
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => void load()}
-          disabled={loading}
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          تحديث
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/dashboard/payroll-history"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-border px-3 py-2 text-sm font-medium text-slate-text hover:bg-surface"
+          >
+            <History className="h-4 w-4" />
+            سجل الصرف التاريخي
+          </Link>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void load()}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            تحديث
+          </Button>
+        </div>
       </div>
 
       {successMsg && <Alert variant="success">{successMsg}</Alert>}

@@ -125,48 +125,50 @@ export async function fetchLedgerOperationsForDate(
   patientPrimaryCaseId: Map<string, string>;
 }> {
   const date = filters.date ?? todayISO();
-  const limit = filters.limit ?? 100;
+  const limit = filters.limit ?? 500;
   const { startIso, endIso } = localPeriodUtcBounds(date, date);
 
-  let opsQuery = supabase
+  const selectCols =
+    "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)";
+
+  let byOpDateQuery = supabase
     .from("patient_operations")
-    .select(
-      "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
-    )
+    .select(selectCols)
     .eq("clinic_id", clinicId)
     .eq("operation_date", date)
     .or("invoice_status.neq.archived,invoice_status.is.null")
     .order("created_at", { ascending: false })
     .limit(limit);
 
+  let byCreatedQuery = supabase
+    .from("patient_operations")
+    .select(selectCols)
+    .eq("clinic_id", clinicId)
+    .gte("created_at", startIso)
+    .lte("created_at", endIso)
+    .or("invoice_status.neq.archived,invoice_status.is.null")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
   if (filters.doctorId) {
-    opsQuery = opsQuery.eq("doctor_id", filters.doctorId);
+    byOpDateQuery = byOpDateQuery.eq("doctor_id", filters.doctorId);
+    byCreatedQuery = byCreatedQuery.eq("doctor_id", filters.doctorId);
   }
 
-  let { data } = await opsQuery;
+  const [byOpDateRes, byCreatedRes] = await Promise.all([
+    byOpDateQuery,
+    byCreatedQuery,
+  ]);
 
-  if (!data?.length) {
-    let fallback = supabase
-      .from("patient_operations")
-      .select(
-        "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
-      )
-      .eq("clinic_id", clinicId)
-      .gte("created_at", startIso)
-      .lte("created_at", endIso)
-      .or("invoice_status.neq.archived,invoice_status.is.null")
-      .order("created_at", { ascending: false })
-      .limit(limit);
-
-    if (filters.doctorId) {
-      fallback = fallback.eq("doctor_id", filters.doctorId);
-    }
-
-    data = (await fallback).data;
+  const mergedById = new Map<string, TodayOperationRow>();
+  for (const row of [...(byOpDateRes.data ?? []), ...(byCreatedRes.data ?? [])]) {
+    const op = row as TodayOperationRow;
+    if (op.invoice_status === "archived") continue;
+    mergedById.set(op.id, op);
   }
 
-  const operations = ((data ?? []) as TodayOperationRow[]).filter(
-    (op) => op.invoice_status !== "archived"
+  const operations = [...mergedById.values()].sort((a, b) =>
+    String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))
   );
 
   const patientIds = [
@@ -197,11 +199,15 @@ export async function fetchLedgerOperationsForDate(
     for (const row of patientCases ?? []) {
       const r = row as Record<string, unknown>;
       const patientId = String(r.patient_id ?? "");
+      const caseId = String(r.id ?? "");
       const status = String(r.treatment_status ?? r.status ?? "active");
-      if (!patientId || status === "completed") continue;
+      if (!patientId || !caseId) continue;
+
+      allCaseIds.add(caseId);
+
+      if (status === "completed") continue;
       if (!patientPrimaryCaseId.has(patientId)) {
-        patientPrimaryCaseId.set(patientId, String(r.id));
-        allCaseIds.add(String(r.id));
+        patientPrimaryCaseId.set(patientId, caseId);
       }
     }
   }
