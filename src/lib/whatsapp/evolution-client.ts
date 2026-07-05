@@ -1,5 +1,6 @@
 import { digitsOnly, normalizePhoneForWhatsApp } from "@/lib/phone";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
+import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
 import {
   resolveWhatsAppInstanceForClinic,
   resolveWhatsAppInstanceName,
@@ -18,6 +19,22 @@ export interface EvolutionQrResult {
 }
 
 const LOG = "[whatsapp/evolution]";
+
+export function parseEvolutionLicenseError(
+  data: unknown,
+  text: string
+): "evolution_license_required" | null {
+  if (text.includes("LICENSE_REQUIRED") || text.includes("service not activated")) {
+    return "evolution_license_required";
+  }
+  if (!data || typeof data !== "object") return null;
+  const d = data as Record<string, unknown>;
+  if (d.code === "LICENSE_REQUIRED") return "evolution_license_required";
+  if (String(d.error ?? "").includes("not activated")) {
+    return "evolution_license_required";
+  }
+  return null;
+}
 
 export async function evolutionFetch(
   path: string,
@@ -559,6 +576,16 @@ export async function fetchEvolutionQrNamed(
   );
 
   if (!connect.ok) {
+    const licenseErr = parseEvolutionLicenseError(connect.data, connect.text);
+    if (licenseErr) {
+      return {
+        linked: false,
+        connectionState: "unknown",
+        qrImageSrc: null,
+        error: describeWhatsAppDeliveryError(licenseErr),
+        raw: connect.data,
+      };
+    }
     const ensured = await ensureEvolutionInstanceNamed(name);
     const fallbackQr = ensured.qrFromCreate;
     if (fallbackQr) {
@@ -574,6 +601,17 @@ export async function fetchEvolutionQrNamed(
       connectionState: session.state,
       qrImageSrc: null,
       error: connect.text.slice(0, 300) || `HTTP ${connect.status}`,
+      raw: connect.data,
+    };
+  }
+
+  const licenseErr = parseEvolutionLicenseError(connect.data, connect.text);
+  if (licenseErr) {
+    return {
+      linked: false,
+      connectionState: "unknown",
+      qrImageSrc: null,
+      error: describeWhatsAppDeliveryError(licenseErr),
       raw: connect.data,
     };
   }

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Copy, Check } from "lucide-react";
 
-const DOCKER_IMAGE = "evoapicloud/evolution-api:2.4.0-rc2";
+const DOCKER_IMAGE = "evoapicloud/evolution-api:v2.3.7";
 const PHONE_VERSION = "2.3000.1039700148";
 
 function buildHandoffText(serverUrl: string | null): string {
@@ -27,6 +27,8 @@ function buildHandoffText(serverUrl: string | null): string {
     "DATABASE_PROVIDER=postgresql",
     "",
     "3) Redeploy ثم instance واحد فقط — QR من /dashboard/whatsapp",
+    "",
+    "⚠️ لا تستخدم 2.4.0 — يطلب ترخيص LICENSE_REQUIRED",
     "",
     "المشكلة: Baileys يقبل الرسالة PENDING لكن لا يُسلّم للجوال.",
   ].join("\n");
@@ -59,6 +61,10 @@ export function WhatsAppRailwayHandoff({
         </p>
       </CardHeader>
       <div className="space-y-3 px-4 pb-4">
+        <Alert variant="error">
+          إذا ظهر LICENSE_REQUIRED: لا تستخدم Evolution 2.4 — ارجع إلى v2.3.7
+          على Railway.
+        </Alert>
         <Alert variant="warning">
           رسالة الاختبار تعني: Evolution قبل الطلب لكن التسليم فشل على
           السيرفر — لا يُحل من التطبيق أو QR فقط.

@@ -30,7 +30,9 @@ export function describeWhatsAppDeliveryError(
     case "evolution_delivery_error":
       return "Evolution قبل الطلب لكن التسليم فشل على السيرفر — مطوّر النظام يحدّث Railway (WPP_LID_MODE=false + صورة Evolution جديدة).";
     case "whatsapp_lid_jid":
-      return "واتساب يستخدم LID لهذا الرقم — على Railway: WPP_LID_MODE=false وحدّث صورة Evolution إلى 2.4.0-rc2 ثم أعد QR.";
+      return "واتساب يستخدم LID لهذا الرقم — على Railway: WPP_LID_MODE=false وصورة Evolution v2.3.7 ثم أعد QR.";
+    case "evolution_license_required":
+      return "Evolution 2.4 يطلب ترخيص — على Railway غيّر Docker إلى evoapicloud/evolution-api:v2.3.7 ثم Redeploy (بدون 2.4.0).";
     case "text_send_failed":
       return "تعذر إرسال رسالة التفاصيل — تحقق من ربط واتساب العيادة.";
     case "invoice_pdf_failed":

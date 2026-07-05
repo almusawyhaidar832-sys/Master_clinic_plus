@@ -14,7 +14,7 @@ import { requireWhatsAppManageAccess } from "@/lib/whatsapp/require-api-access";
 import { createApiSessionClient } from "@/lib/auth/api-session";
 
 const RAILWAY_FIX_STEPS = [
-  "Docker Image: evoapicloud/evolution-api:2.4.0-rc2 (أو v2.3.6)",
+  "Docker Image: evoapicloud/evolution-api:v2.3.7 (لا تستخدم 2.4.0 — يطلب ترخيص)",
   "WPP_LID_MODE=false",
   "CONFIG_SESSION_PHONE_VERSION=2.3000.1039700148 (من wppconnect.io/whatsapp-versions)",
   "SERVER_URL = نفس رابط Evolution العام على Railway",
