@@ -12,6 +12,7 @@ import type { ModuleNavItem } from "@/hooks/useModuleNav";
 export const accountantModuleNav: ModuleNavItem[] = [
   { href: "/dashboard",              labelKey: "navExecutiveDashboard", icon: "dashboard" },
   { href: "/dashboard/ledger",       labelKey: "navAddSession",       icon: "patients",    requiredModule: "billing" },
+  { href: "/dashboard/daily-collections", labelKey: "navDailyCollections", icon: "profits", requiredModule: "billing" },
   { href: "/dashboard/queue",        labelKey: "navWaitingRoom",      icon: "listOrdered", requiredModule: "patient_queue" },
   { href: "/dashboard/appointments", labelKey: "navAppointments",     icon: "calendarClock", requiredModule: "appointments" },
   { href: "/dashboard/assistants",   labelKey: "navAssistants",       icon: "userRound" },

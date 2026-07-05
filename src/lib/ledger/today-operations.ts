@@ -108,33 +108,45 @@ function buildCaseInfoFromRow(row: Record<string, unknown>): TodayCaseInfo {
   };
 }
 
-export async function fetchTodayLedgerOperations(
+export type LedgerOperationsFilters = {
+  date?: string;
+  doctorId?: string;
+  limit?: number;
+};
+
+export async function fetchLedgerOperationsForDate(
   supabase: SupabaseClient,
-  clinicId: string
+  clinicId: string,
+  filters: LedgerOperationsFilters = {}
 ): Promise<{
   operations: TodayOperationRow[];
   caseRemainingById: Map<string, number>;
   caseInfoById: Map<string, TodayCaseInfo>;
   patientPrimaryCaseId: Map<string, string>;
 }> {
-  const today = todayISO();
-  const { startIso, endIso } = localPeriodUtcBounds(today, today);
+  const date = filters.date ?? todayISO();
+  const limit = filters.limit ?? 100;
+  const { startIso, endIso } = localPeriodUtcBounds(date, date);
 
-  const opsQuery = supabase
+  let opsQuery = supabase
     .from("patient_operations")
     .select(
       "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
     )
     .eq("clinic_id", clinicId)
-    .eq("operation_date", today)
+    .eq("operation_date", date)
     .or("invoice_status.neq.archived,invoice_status.is.null")
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(limit);
+
+  if (filters.doctorId) {
+    opsQuery = opsQuery.eq("doctor_id", filters.doctorId);
+  }
 
   let { data } = await opsQuery;
 
   if (!data?.length) {
-    const fallback = await supabase
+    let fallback = supabase
       .from("patient_operations")
       .select(
         "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
@@ -144,8 +156,13 @@ export async function fetchTodayLedgerOperations(
       .lte("created_at", endIso)
       .or("invoice_status.neq.archived,invoice_status.is.null")
       .order("created_at", { ascending: false })
-      .limit(100);
-    data = fallback.data;
+      .limit(limit);
+
+    if (filters.doctorId) {
+      fallback = fallback.eq("doctor_id", filters.doctorId);
+    }
+
+    data = (await fallback).data;
   }
 
   const operations = ((data ?? []) as TodayOperationRow[]).filter(
@@ -208,4 +225,16 @@ export async function fetchTodayLedgerOperations(
   }
 
   return { operations, caseRemainingById, caseInfoById, patientPrimaryCaseId };
+}
+
+export async function fetchTodayLedgerOperations(
+  supabase: SupabaseClient,
+  clinicId: string
+): Promise<{
+  operations: TodayOperationRow[];
+  caseRemainingById: Map<string, number>;
+  caseInfoById: Map<string, TodayCaseInfo>;
+  patientPrimaryCaseId: Map<string, string>;
+}> {
+  return fetchLedgerOperationsForDate(supabase, clinicId, { date: todayISO() });
 }

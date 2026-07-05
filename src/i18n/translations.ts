@@ -168,6 +168,7 @@ const translations = {
     // ── Navigation (sidebar / mobile) ──
     navExecutiveDashboard:  "الربح والتحكم",
     navAddSession:          "إدخال جلسة",
+    navDailyCollections:    "كشف التحصيل",
     navWaitingRoom:         "غرفة الانتظار",
     navAppointments:        "الحجوزات",
     navAssistants:          "إدارة المساعدين",
@@ -273,6 +274,8 @@ const translations = {
     quickActionsTitle:            "الإجراءات السريعة",
     qlLedgerTitle:                "إدخال عملية جديدة",
     qlLedgerDesc:                 "سجل مريض — حساب المتبقي تلقائياً",
+    qlDailyCollectionsTitle:      "كشف التحصيل اليومي",
+    qlDailyCollectionsDesc:       "من دفع ومن لم يدفع — لكل طبيب",
     qlQueueTitle:                 "غرفة الانتظار",
     qlQueueDesc:                  "نداء صوتي — تتبع حي للمرضى",
     qlAppointmentsTitle:          "الحجوزات",
@@ -895,6 +898,7 @@ const translations = {
     // ── Navigation (sidebar / mobile) ──
     navExecutiveDashboard:  "Executive Dashboard",
     navAddSession:          "Add Session",
+    navDailyCollections:    "Daily Collections",
     navWaitingRoom:         "Waiting Room",
     navAppointments:        "Appointments",
     navAssistants:          "Assistants",
@@ -1000,6 +1004,8 @@ const translations = {
     quickActionsTitle:            "Quick Actions",
     qlLedgerTitle:                "New Session Entry",
     qlLedgerDesc:                 "Register patient — balance calculated automatically",
+    qlDailyCollectionsTitle:      "Daily Collections",
+    qlDailyCollectionsDesc:       "Paid vs unpaid — by doctor",
     qlQueueTitle:                 "Waiting Room",
     qlQueueDesc:                  "Voice call — live patient tracking",
     qlAppointmentsTitle:          "Appointments",

@@ -8,7 +8,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Users, Stethoscope, Wallet, Receipt,
   FileText, ListOrdered, QrCode, CalendarClock,
-  ChevronLeft,
+  ChevronLeft, CalendarDays,
 } from "lucide-react";
 
 export function DashboardHomeContent() {
@@ -21,6 +21,13 @@ export function DashboardHomeContent() {
       desc: t("qlLedgerDesc"),
       icon: Users,
       color: "mc-icon-badge-primary",
+    },
+    {
+      href: "/dashboard/daily-collections",
+      title: t("qlDailyCollectionsTitle"),
+      desc: t("qlDailyCollectionsDesc"),
+      icon: CalendarDays,
+      color: "mc-icon-badge-success",
     },
     {
       href: "/dashboard/queue",
