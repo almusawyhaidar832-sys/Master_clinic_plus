@@ -125,11 +125,8 @@ export async function POST(request: NextRequest) {
   const fixSteps =
     outcome.deliveryWarning || extraConnected.length > 0
       ? [
-          "Railway → Evolution → Variables: WPP_LID_MODE=false",
-          "CONFIG_SESSION_PHONE_VERSION=2.3000.1039700148",
-          "Docker: evoapicloud/evolution-api:2.4.0-rc2 ثم Redeploy",
-          "Manager: احذف instances الزائدة — خلّي instance العيادة فقط",
-          "Logout → QR جديد من هذه الصفحة",
+          "اضغط «إصلاح واتساب الآن» مرة أخرى",
+          "إذا لم تصل الرسالة: تواصل مع مطوّر النظام لتحديث Railway (خطوة واحدة من عنده)",
         ]
       : [];
 
