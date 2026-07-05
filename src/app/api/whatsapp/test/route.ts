@@ -17,14 +17,16 @@ import { requireWhatsAppManageAccess } from "@/lib/whatsapp/require-api-access";
  * Body: { phone?: string } — defaults to WHATSAPP_TEST_PHONE env or profile.phone
  */
 export async function POST(request: NextRequest) {
-  if (process.env.NODE_ENV === "production") {
-    const access = await requireWhatsAppManageAccess(request);
-    if (!access.ok) return access.response;
-  }
+  const access = await requireWhatsAppManageAccess(request);
+  if (!access.ok) return access.response;
 
-  const profile = await getApiCallerProfile(request);
+  const profile =
+    access.profile ?? (await getApiCallerProfile(request));
   if (!profile) {
-    return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+    return NextResponse.json(
+      { error: "غير مصرح — سجّل الدخول من بوابة المحاسب" },
+      { status: 401 }
+    );
   }
 
   let bodyPhone = "";
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
     /* empty body ok */
   }
 
-  const supabase = await createApiSessionClient();
+  const supabase = await createApiSessionClient(request);
   const { data: profileRow } = await supabase
     .from("profiles")
     .select("phone")

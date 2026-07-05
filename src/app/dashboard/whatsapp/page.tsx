@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { getClinicIdFromProfile } from "@/lib/clinic-context";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { QrCode, MessageCircle, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { WhatsAppTestButton } from "@/components/patients/WhatsAppTestButton";
 
@@ -85,9 +86,22 @@ export default function WhatsAppSettingsPage() {
     []
   );
 
+  const whatsappFetch = useCallback(
+    (path: string, init?: RequestInit) =>
+      fetch(path, {
+        ...init,
+        credentials: "include",
+        headers: {
+          ...authPortalHeaders("accountant"),
+          ...(init?.headers as Record<string, string> | undefined),
+        },
+      }),
+    []
+  );
+
   const checkConnection = useCallback(async (): Promise<boolean | null> => {
     try {
-      const res = await fetch("/api/whatsapp/status");
+      const res = await whatsappFetch("/api/whatsapp/status");
       const data = await res.json();
       if (typeof data.configured === "boolean") {
         setBridgeConfigured(data.configured);
@@ -107,7 +121,7 @@ export default function WhatsAppSettingsPage() {
     } catch {
       return null;
     }
-  }, [applyStatusPayload]);
+  }, [applyStatusPayload, whatsappFetch]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -134,7 +148,7 @@ export default function WhatsAppSettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/whatsapp/qr");
+      const res = await whatsappFetch("/api/whatsapp/qr");
       const data = await res.json();
 
       if (typeof data.configured === "boolean") {
@@ -176,7 +190,7 @@ export default function WhatsAppSettingsPage() {
       setError("تعذر الاتصال بجسر الواتساب — تحقق من WHATSAPP_API_URL");
     }
     setLoading(false);
-  }, [checkConnection, stopPolling, applyStatusPayload]);
+  }, [checkConnection, stopPolling, applyStatusPayload, whatsappFetch]);
 
   const startLinkedKeepalive = useCallback(() => {
     stopPolling();
@@ -218,7 +232,7 @@ export default function WhatsAppSettingsPage() {
     setError(null);
     stopPolling();
     try {
-      const res = await fetch("/api/whatsapp/restart", { method: "POST" });
+      const res = await whatsappFetch("/api/whatsapp/restart", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         setError(data.message ?? "تعذر إعادة ضبط الجلسة");
@@ -411,7 +425,7 @@ export default function WhatsAppSettingsPage() {
         </ul>
       </Card>
 
-      <WhatsAppTestButton />
+      <WhatsAppTestButton portal="accountant" />
 
       <Card>
         <CardHeader>

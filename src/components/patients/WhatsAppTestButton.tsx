@@ -3,10 +3,20 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
+import {
+  portalIdFromPath,
+  type AuthPortalId,
+} from "@/lib/auth/portal-access";
 import { validatePatientPhone, sanitizePatientPhoneInput } from "@/lib/phone";
 import { MessageCircle } from "lucide-react";
 
-export function WhatsAppTestButton() {
+interface WhatsAppTestButtonProps {
+  /** بوابة الدخول — مهم عند تعدد الجلسات (محاسب / مساعد) */
+  portal?: AuthPortalId;
+}
+
+export function WhatsAppTestButton({ portal }: WhatsAppTestButtonProps) {
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -25,9 +35,20 @@ export function WhatsAppTestButton() {
 
     setLoading(true);
     try {
+      const resolvedPortal =
+        portal ??
+        (typeof window !== "undefined"
+          ? portalIdFromPath(window.location.pathname)
+          : null) ??
+        "accountant";
+
       const res = await fetch("/api/whatsapp/test", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...authPortalHeaders(resolvedPortal),
+        },
         body: JSON.stringify({ phone: check.normalized }),
       });
       const data = await res.json();
