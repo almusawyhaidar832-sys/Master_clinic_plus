@@ -12,6 +12,7 @@ import {
 } from "@/lib/queue/announce-audio-client";
 import type { PatientGender } from "@/lib/queue/patient-gender";
 import { showBrowserNotification } from "@/lib/queue/realtime-client";
+import { showAppNotification } from "@/lib/push/client";
 import {
   prepareSpeechAuto,
   speakArabic,
@@ -332,16 +333,24 @@ export function triggerQueueAlert(detail: QueueAlertDetail): void {
     document.visibilityState === "visible";
 
   if (!inApp) {
-    showBrowserNotification(detail.title, detail.message, detail.linkPath);
+    void showAppNotification({
+      title: detail.title,
+      body: detail.message,
+      url: detail.linkPath,
+      tag: detail.entryId ? `queue-${detail.entryId}` : `queue-${detail.kind}`,
+      kind: detail.kind,
+      patientName: detail.patientName,
+      silent: false,
+      requireInteraction: true,
+      renotify: true,
+    }).catch(() => {
+      showBrowserNotification(detail.title, detail.message, detail.linkPath);
+    });
   }
 
   void (async () => {
     await unlockQueueAudio();
-    if (detail.patientName?.trim()) {
-      await speakQueueAlertVoice(detail, { clearQueue: true });
-    } else {
-      void playQueueAlertSound(detail.kind);
-      await speakQueueAlertVoice(detail, { clearQueue: true });
-    }
+    void playQueueAlertSound(detail.kind);
+    await speakQueueAlertVoice(detail, { clearQueue: true });
   })();
 }

@@ -91,10 +91,55 @@ export function buildQueueAnnounceAudioUrl(
   }
 }
 
+const announceAudioCache = new Map<
+  string,
+  { buffer: Buffer; expiresAt: number }
+>();
+
+function announceCacheKey(entryId: string, variant: QueueAnnounceVariant): string {
+  return `${entryId}:${variant}`;
+}
+
+export function getCachedQueueAnnounceAudio(
+  entryId: string,
+  variant: QueueAnnounceVariant
+): Buffer | null {
+  const cached = announceAudioCache.get(announceCacheKey(entryId, variant));
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    announceAudioCache.delete(announceCacheKey(entryId, variant));
+    return null;
+  }
+  return cached.buffer;
+}
+
+function cacheQueueAnnounceAudio(
+  entryId: string,
+  variant: QueueAnnounceVariant,
+  buffer: Buffer
+): void {
+  announceAudioCache.set(announceCacheKey(entryId, variant), {
+    buffer,
+    expiresAt: Date.now() + 7200_000,
+  });
+}
+
+/** Pre-generate MP3 so the accountant/TV fetch is instant */
+export function warmQueueAnnounceAudio(
+  entryId: string,
+  variant: QueueAnnounceVariant
+): void {
+  if (!entryId.trim()) return;
+  if (getCachedQueueAnnounceAudio(entryId, variant)) return;
+  void synthesizeQueueAnnounceForEntry(entryId, variant).catch(() => undefined);
+}
+
 export async function synthesizeQueueAnnounceForEntry(
   entryId: string,
   variant: QueueAnnounceVariant
 ): Promise<Buffer> {
+  const cached = getCachedQueueAnnounceAudio(entryId, variant);
+  if (cached) return cached;
   const admin = getAdminClient();
   const { data: entry, error } = await admin
     .from("patient_queue")
@@ -141,5 +186,7 @@ export async function synthesizeQueueAnnounceForEntry(
     plain = buildQueueScreenAnnouncement(formattedName, doctorName, gender);
   }
 
-  return synthesizeArabicSpeech(plain);
+  const audio = await synthesizeArabicSpeech(plain);
+  cacheQueueAnnounceAudio(entryId, variant, audio);
+  return audio;
 }

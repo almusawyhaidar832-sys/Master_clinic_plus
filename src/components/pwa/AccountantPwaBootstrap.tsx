@@ -7,8 +7,10 @@ import {
   registerAccountantWebPush,
 } from "@/lib/push/client";
 import { warmAccountantShellCache } from "@/lib/pwa/accountant-shell-cache";
+import { ensureNotificationPermission } from "@/lib/queue/realtime-client";
 import {
   hasPersistedAudioConsent,
+  installGlobalAudioUnlock,
   unlockQueueAudio,
 } from "@/lib/queue/audio-alerts";
 import {
@@ -25,6 +27,18 @@ export function AccountantPwaBootstrap() {
       prepareSpeechAuto();
       void unlockQueueAudio();
     }
+
+    return installGlobalAudioUnlock(() => {
+      prepareSpeechAuto();
+      void unlockQueueAudio();
+      void ensureNotificationPermission()
+        .then((granted) => {
+          if (granted) {
+            void registerAccountantWebPush(false).catch(() => undefined);
+          }
+        })
+        .catch(() => undefined);
+    });
   }, []);
 
   useEffect(() => {

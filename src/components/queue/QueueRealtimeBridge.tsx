@@ -16,6 +16,10 @@ import {
   useAccountantQueueRealtime,
   useDoctorQueueRealtime,
 } from "@/hooks/useQueueRealtime";
+import {
+  queueAlertDedupeKey,
+  shouldFireQueueAlert,
+} from "@/lib/queue/alert-dedupe";
 import { ensureNotificationPermission } from "@/lib/queue/realtime-client";
 import { QueueAlertOverlay } from "@/components/queue/QueueAlertOverlay";
 import {
@@ -86,10 +90,24 @@ export function QueueRealtimeBridge({
     void ensureNotificationPermission();
   }, [portal]);
 
-  /** Push / SW → نداء صوتي عندما التطبيق مفتوح (محاسب / مساعد / طبيب) */
+  /** Push / SW — للتبويب بالخلفية فقط؛ Realtime يغطي التبويب النشط */
   useEffect(() => {
     return listenForPushAlertMessages((payload) => {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState === "visible"
+      ) {
+        return;
+      }
+
       const rawKind = payload.kind ?? "accountant_admit";
+      const dedupeKey = queueAlertDedupeKey({
+        kind: rawKind,
+        entryId: payload.entryId,
+        tag: payload.tag,
+      });
+      if (dedupeKey && !shouldFireQueueAlert(dedupeKey)) return;
+
       const kindMap: Record<string, QueueAlertKind> = {
         doctor_queue: "doctor_new",
         doctor_new: "doctor_new",

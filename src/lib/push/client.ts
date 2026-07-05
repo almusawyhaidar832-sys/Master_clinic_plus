@@ -250,6 +250,7 @@ export function listenForPushAlertMessages(
     patientName?: string;
     kind?: string;
     audioUrl?: string;
+    tag?: string;
     entryId?: string;
   }) => void
 ): () => void {

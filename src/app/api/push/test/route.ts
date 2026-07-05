@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile, isApiAssistantRole, isApiDoctorRole } from "@/lib/auth/api-session";
+import {
+  getApiCallerProfile,
+  isApiAssistantRole,
+  isApiDoctorRole,
+  isApiStaffRole,
+} from "@/lib/auth/api-session";
 import { sendWebPushToProfile, isWebPushConfigured } from "@/lib/push/server";
 
-/** POST — اختبار إشعار Push من السيرفر (طبيب فقط) */
+/** POST — اختبار إشعار Push من السيرفر (طبيب / مساعد / محاسب) */
 export async function POST(req: NextRequest) {
   try {
     if (!isWebPushConfigured()) {
@@ -16,19 +21,32 @@ export async function POST(req: NextRequest) {
     const role = profile?.role ?? "";
     if (
       !profile ||
-      (!isApiDoctorRole(role) && !isApiAssistantRole(role))
+      (!isApiDoctorRole(role) &&
+        !isApiAssistantRole(role) &&
+        !isApiStaffRole(role))
     ) {
       return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
-    const url = isApiAssistantRole(role) ? "/assistant/queue" : "/doctor/queue";
-    const tag = isApiAssistantRole(role) ? "assistant-queue-test" : "doctor-queue-test";
+    const url = isApiStaffRole(role)
+      ? "/dashboard/queue"
+      : isApiAssistantRole(role)
+        ? "/assistant/queue"
+        : "/doctor/queue";
+    const tag = isApiStaffRole(role)
+      ? "accountant-queue-test"
+      : isApiAssistantRole(role)
+        ? "assistant-queue-test"
+        : "doctor-queue-test";
+    const kind = isApiStaffRole(role) ? "accountant_admit" : "doctor_queue";
 
     const result = await sendWebPushToProfile(profile.id, {
       title: "تجربة النداء 🔔",
-      body: "إذا وصلك هذا الإشعار — التنبيهات تعمل حتى والتطبيق مغلق",
+      body: "إذا وصلك هذا الإشعار — التنبيهات تعمل حتى والتطبيق في تبويب آخر",
       url,
       tag,
+      kind,
+      patientName: "أحمد",
     });
 
     return NextResponse.json({

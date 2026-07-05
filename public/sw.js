@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v22-accountant-voice";
+const CACHE_NAME = "mcp-app-v24-push-dedupe";
 
 const NOTIFICATION_ICON = "/icons/icon-192.png";
 
@@ -215,6 +215,7 @@ self.addEventListener("push", (event) => {
     kind: data.kind || "doctor_queue",
     patientName: data.patientName,
     audioUrl: data.audioUrl,
+    entryId: data.entryId,
     silent: false,
     requireInteraction: true,
     renotify: true,
@@ -224,6 +225,14 @@ self.addEventListener("push", (event) => {
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((clientList) => {
+        const hasVisibleClient = clientList.some(
+          (client) => client.visibilityState === "visible"
+        );
+
+        if (hasVisibleClient) {
+          return undefined;
+        }
+
         for (const client of clientList) {
           if (!client.url.startsWith(self.location.origin)) continue;
           client.postMessage({ type: "QUEUE_PUSH_ALERT", payload });

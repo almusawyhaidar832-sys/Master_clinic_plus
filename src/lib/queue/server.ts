@@ -20,7 +20,7 @@ import {
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
 import { normalizeOptionalPatientPhone, patientPhoneColumns } from "@/lib/phone";
-import { buildQueueAnnounceAudioUrl } from "@/lib/queue/queue-announce-audio-url";
+import { buildQueueAnnounceAudioUrl, warmQueueAnnounceAudio } from "@/lib/queue/queue-announce-audio-url";
 
 export type QueueStatus =
   | "waiting"
@@ -358,14 +358,6 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
 
   if (error || !entry) return;
 
-  const { data: staff } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("clinic_id", entry.clinic_id)
-    .in("role", ["accountant", "super_admin", "assistant"]);
-
-  if (!staff?.length) return;
-
   const patientRow = entry.patient as {
     full_name_ar?: string;
     speech_name_ar?: string | null;
@@ -391,17 +383,15 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
   const billingBody = formatAccountantBillingAlertMessage(name, doctorNotes);
 
   const clinicId = entry.clinic_id as string;
+  const entryId = entry.id as string;
+  const billingAudioUrl = buildQueueAnnounceAudioUrl(entryId, "accountant_billing");
 
-  // 1) بث فوري أولاً — يصل للمحاسب مباشرة على أي صفحة (Realtime)
-  const billingAudioUrl = buildQueueAnnounceAudioUrl(
-    entry.id as string,
-    "accountant_billing"
-  );
+  warmQueueAnnounceAudio(entryId, "accountant_billing");
 
   await pushQueueBroadcasts([
     broadcastBillingReadyServer(clinicId, {
       name: speechName,
-      entryId: entry.id as string,
+      entryId,
       linkPath: ledgerPath,
       gender: gender ?? undefined,
       doctorNotes: doctorNotes ?? undefined,
@@ -411,31 +401,58 @@ export async function notifyAccountantsReadyForBilling(queueEntryId: string) {
     console.error("[queue] billing broadcast failed:", err);
   });
 
-  // 2) جرس + Push بالخلفية — لا تُبطئ النداء داخل التطبيق
-  void Promise.allSettled([
+  void deliverAccountantBillingFollowups({
+    clinicId,
+    entryId,
+    billingBody,
+    ledgerPath,
+    speechName,
+    billingAudioUrl,
+  }).catch((err) => {
+    console.error("[queue] billing notify background failed:", err);
+  });
+}
+
+async function deliverAccountantBillingFollowups(input: {
+  clinicId: string;
+  entryId: string;
+  billingBody: string;
+  ledgerPath: string;
+  speechName: string;
+  billingAudioUrl?: string;
+}) {
+  const admin = getAdminClient();
+  const { data: staff } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("clinic_id", input.clinicId)
+    .in("role", ["accountant", "super_admin", "assistant"]);
+
+  if (!staff?.length) return;
+
+  await Promise.allSettled([
     insertNotifications(
       staff.map((s) => ({
-        clinic_id: clinicId,
+        clinic_id: input.clinicId,
         recipient_profile_id: s.id,
         title_ar: "جلسة جاهزة للمحاسبة",
-        body_ar: `${billingBody}، افتح إدخال الجلسة`,
-        link_path: ledgerPath,
+        body_ar: `${input.billingBody}، افتح إدخال الجلسة`,
+        link_path: input.ledgerPath,
       }))
     ),
     ...staff.map((s) =>
       sendWebPushToProfile(s.id, {
         title: "جلسة جاهزة للمحاسبة 🔔",
-        body: billingBody,
-        url: ledgerPath,
-        tag: `billing-${entry.id}`,
-        patientName: speechName,
+        body: input.billingBody,
+        url: input.ledgerPath,
+        tag: `billing-${input.entryId}`,
+        entryId: input.entryId,
+        patientName: input.speechName,
         kind: "accountant_billing",
-        audioUrl: billingAudioUrl,
+        audioUrl: input.billingAudioUrl,
       })
     ),
-  ]).catch((err) => {
-    console.error("[queue] billing notify background failed:", err);
-  });
+  ]);
 }
 
 /** Notify accountants: patient ready for checkout after doctor session */
@@ -491,6 +508,7 @@ export async function notifyAccountantsReadyForPayment(queueEntryId: string) {
         body: `المراجع ${name} — أكمل الحساب الآن`,
         url: ledgerPath,
         tag: `payment-${entry.id}`,
+        entryId: entry.id as string,
         patientName: speechName,
         kind: "accountant_payment",
       })
@@ -505,20 +523,12 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
   const { data: entry, error } = await admin
     .from("patient_queue")
     .select(
-      "id, clinic_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar, speech_name_ar)"
+      "id, clinic_id, patient_name, ticket_number, patient_id, patient:patients(full_name_ar, speech_name_ar, gender)"
     )
     .eq("id", queueEntryId)
     .maybeSingle();
 
   if (error || !entry) throw new Error("queue entry not found");
-
-  const { data: staff } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("clinic_id", entry.clinic_id)
-    .in("role", ["accountant", "super_admin"]);
-
-  if (!staff?.length) return;
 
   const patientRow = entry.patient as {
     full_name_ar?: string;
@@ -541,16 +551,15 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
   });
 
   const clinicId = entry.clinic_id as string;
-  const admitAudioUrl = buildQueueAnnounceAudioUrl(
-    entry.id as string,
-    "accountant_admit"
-  );
+  const entryId = entry.id as string;
+  const admitAudioUrl = buildQueueAnnounceAudioUrl(entryId, "accountant_admit");
 
-  // بث فوري أولاً — نداء المحاسب مباشرة
+  warmQueueAnnounceAudio(entryId, "accountant_admit");
+
   await pushQueueBroadcasts([
     broadcastAdmitRequestServer(clinicId, {
       name: speechName,
-      entryId: entry.id as string,
+      entryId,
       gender: gender ?? undefined,
       audioUrl: admitAudioUrl,
     }),
@@ -558,30 +567,56 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
     console.error("[queue] admit broadcast failed:", err);
   });
 
-  void Promise.allSettled([
+  void deliverAccountantAdmitFollowups({
+    clinicId,
+    entryId,
+    name,
+    speechName,
+    admitAudioUrl,
+  }).catch((err) => {
+    console.error("[queue] admit notify background failed:", err);
+  });
+}
+
+async function deliverAccountantAdmitFollowups(input: {
+  clinicId: string;
+  entryId: string;
+  name: string;
+  speechName: string;
+  admitAudioUrl?: string;
+}) {
+  const admin = getAdminClient();
+  const { data: staff } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("clinic_id", input.clinicId)
+    .in("role", ["accountant", "super_admin"]);
+
+  if (!staff?.length) return;
+
+  await Promise.allSettled([
     insertNotifications(
       staff.map((s) => ({
-        clinic_id: clinicId,
+        clinic_id: input.clinicId,
         recipient_profile_id: s.id,
         title_ar: "ادخل المراجع للعيادة",
-        body_ar: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
+        body_ar: `المراجع ${input.name} — يُرجى دخوله للعيادة الآن`,
         link_path: "/dashboard/queue",
       }))
     ),
     ...staff.map((s) =>
       sendWebPushToProfile(s.id, {
         title: "طلب دخول مراجع 🔔",
-        body: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
+        body: `المراجع ${input.name} — يُرجى دخوله للعيادة الآن`,
         url: "/dashboard/queue",
-        tag: `admit-${entry.id}`,
-        patientName: speechName,
+        tag: `admit-${input.entryId}`,
+        entryId: input.entryId,
+        patientName: input.speechName,
         kind: "accountant_admit",
-        audioUrl: admitAudioUrl,
+        audioUrl: input.admitAudioUrl,
       })
     ),
-  ]).catch((err) => {
-    console.error("[queue] admit notify background failed:", err);
-  });
+  ]);
 }
 
 /** Mark entry as sent to doctor + persist notification */

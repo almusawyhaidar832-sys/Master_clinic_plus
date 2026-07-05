@@ -40,3 +40,38 @@ export function shouldFireQueueAlert(key: string): boolean {
   setTimeout(() => recentKeys.delete(key), DEDUPE_MS);
   return true;
 }
+
+function entryIdFromPushTag(tag?: string | null): string | undefined {
+  const trimmed = tag?.trim();
+  if (!trimmed) return undefined;
+  const match = trimmed.match(/^(?:admit|billing|payment|doctor-queue)-(.+)$/);
+  return match?.[1];
+}
+
+/** Dedupe key for Realtime / polling / Web Push on the same queue event */
+export function queueAlertDedupeKey(input: {
+  kind?: string | null;
+  entryId?: string | null;
+  tag?: string | null;
+  sentAt?: string | null;
+}): string | null {
+  const kind = input.kind?.trim() ?? "";
+  const entryId =
+    input.entryId?.trim() || entryIdFromPushTag(input.tag) || undefined;
+  if (!entryId) return null;
+
+  switch (kind) {
+    case "accountant_admit":
+      return `accountant-called-${entryId}`;
+    case "accountant_billing":
+    case "accountant_payment":
+      return `accountant-billing-${entryId}`;
+    case "doctor_queue":
+    case "doctor_new":
+      return input.sentAt
+        ? `doctor-recall-${entryId}-${input.sentAt}`
+        : `doctor-new-${entryId}`;
+    default:
+      return null;
+  }
+}
