@@ -409,32 +409,107 @@ export async function restartEvolutionInstanceNamed(
   return { ok: ensured.ok, error: ensured.error };
 }
 
-export async function restartEvolutionInstance(): Promise<EvolutionQrResult> {
-  const { configured } = getWhatsAppConfig();
-  const instanceName = await resolveWhatsAppInstanceName();
-  if (!configured) {
-    return {
-      linked: false,
-      connectionState: "unknown",
-      qrImageSrc: null,
-      error: "لم يُضبط WHATSAPP_API_URL أو WHATSAPP_API_KEY",
-    };
-  }
+/** حذف instance من Evolution (logout + حذف البيانات) */
+export async function deleteEvolutionInstanceNamed(
+  instanceName: string
+): Promise<{ ok: boolean; error?: string }> {
+  const name = instanceName.trim();
+  if (!name) return { ok: false, error: "instance_name_required" };
 
-  await evolutionFetch(
-    `/instance/logout/${encodeURIComponent(instanceName)}`,
+  const res = await evolutionFetch(
+    `/instance/delete/${encodeURIComponent(name)}`,
     { method: "DELETE" }
   );
 
-  await new Promise((r) => setTimeout(r, 1500));
+  if (!res.ok && res.status !== 404) {
+    const msg =
+      typeof res.data === "object" && res.data && "message" in (res.data as object)
+        ? String((res.data as { message: string }).message)
+        : res.text.slice(0, 300);
+    return { ok: false, error: msg || `HTTP ${res.status}` };
+  }
 
-  return fetchEvolutionQr();
+  invalidateEvolutionSessionCache(name);
+  return { ok: true };
 }
 
-/** جلب QR للعرض في واجهة «ربط واتساب» */
-export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
+/** يحذف كل instances ما عدا instance العيادة */
+export async function cleanupExtraEvolutionInstances(
+  keepInstanceName: string
+): Promise<{ deleted: string[]; failed: { name: string; error: string }[] }> {
+  const keep = keepInstanceName.trim();
+  const instances = await summarizeEvolutionInstances();
+  const deleted: string[] = [];
+  const failed: { name: string; error: string }[] = [];
+
+  for (const row of instances) {
+    const name = row.name.trim();
+    if (!name || name === keep) continue;
+    const result = await deleteEvolutionInstanceNamed(name);
+    if (result.ok) deleted.push(name);
+    else failed.push({ name, error: result.error ?? "delete_failed" });
+  }
+
+  return { deleted, failed };
+}
+
+/**
+ * إصلاح تلقائي: حذف instances زائدة → logout → instance جديد → QR.
+ * يتطلب مسح QR مرة واحدة من جوال العيادة.
+ */
+export async function autoRepairEvolutionWhatsApp(
+  instanceName: string
+): Promise<{
+  ok: boolean;
+  deletedInstances: string[];
+  deleteFailures: { name: string; error: string }[];
+  qr: EvolutionQrResult;
+  error?: string;
+}> {
+  const name = instanceName.trim();
   const { configured } = getWhatsAppConfig();
-  const instanceName = await resolveWhatsAppInstanceName();
+  if (!configured) {
+    return {
+      ok: false,
+      deletedInstances: [],
+      deleteFailures: [],
+      qr: {
+        linked: false,
+        connectionState: "unknown",
+        qrImageSrc: null,
+        error: "whatsapp_not_configured",
+      },
+      error: "whatsapp_not_configured",
+    };
+  }
+
+  const cleanup = await cleanupExtraEvolutionInstances(name);
+
+  await evolutionFetch(`/instance/logout/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+  await new Promise((r) => setTimeout(r, 2000));
+
+  invalidateEvolutionSessionCache(name);
+  await ensureEvolutionInstanceNamed(name);
+
+  const qr = await fetchEvolutionQrNamed(name);
+
+  return {
+    ok: qr.linked || Boolean(qr.qrImageSrc),
+    deletedInstances: cleanup.deleted,
+    deleteFailures: cleanup.failed,
+    qr,
+    error: qr.error,
+  };
+}
+
+/** جلب QR لـ instance محدد */
+export async function fetchEvolutionQrNamed(
+  instanceName: string
+): Promise<EvolutionQrResult> {
+  const name = instanceName.trim();
+  const { configured } = getWhatsAppConfig();
   if (!configured) {
     return {
       linked: false,
@@ -444,9 +519,9 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
     };
   }
 
-  await ensureEvolutionInstanceNamed(instanceName);
+  await ensureEvolutionInstanceNamed(name);
 
-  const session = await resolveEvolutionSession(instanceName);
+  const session = await resolveEvolutionSession(name);
   if (session.linked) {
     return {
       linked: true,
@@ -459,12 +534,12 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
   }
 
   const connect = await evolutionFetch(
-    `/instance/connect/${encodeURIComponent(instanceName)}`,
+    `/instance/connect/${encodeURIComponent(name)}`,
     { method: "GET" }
   );
 
   if (!connect.ok) {
-    const ensured = await ensureEvolutionInstanceNamed(instanceName);
+    const ensured = await ensureEvolutionInstanceNamed(name);
     const fallbackQr = ensured.qrFromCreate;
     if (fallbackQr) {
       return {
@@ -502,7 +577,7 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
         connectionState === "unknown" ? session.state : connectionState,
       qrImageSrc: null,
       error:
-        "لم يُرجع Evolution رمز QR — اضغط «QR جديد (بعد خطأ الربط)» أو «إعادة الربط»",
+        "لم يُرجع Evolution رمز QR — اضغط «إصلاح تلقائي» مرة أخرى",
       raw: connect.data,
     };
   }
@@ -514,6 +589,33 @@ export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
     qrImageSrc,
     raw: connect.data,
   };
+}
+
+export async function restartEvolutionInstance(): Promise<EvolutionQrResult> {
+  const { configured } = getWhatsAppConfig();
+  const instanceName = await resolveWhatsAppInstanceName();
+  if (!configured) {
+    return {
+      linked: false,
+      connectionState: "unknown",
+      qrImageSrc: null,
+      error: "لم يُضبط WHATSAPP_API_URL أو WHATSAPP_API_KEY",
+    };
+  }
+
+  await evolutionFetch(
+    `/instance/logout/${encodeURIComponent(instanceName)}`,
+    { method: "DELETE" }
+  );
+
+  await new Promise((r) => setTimeout(r, 1500));
+
+  return fetchEvolutionQr();
+}
+
+export async function fetchEvolutionQr(): Promise<EvolutionQrResult> {
+  const instanceName = await resolveWhatsAppInstanceName();
+  return fetchEvolutionQrNamed(instanceName);
 }
 
 /** يكتشف أخطاء مخفية في استجابة Evolution (HTTP 200 لكن الإرسال فشل) */
@@ -717,7 +819,12 @@ export async function sendEvolutionText(
     `/message/sendText/${encodeURIComponent(instanceName)}`,
     {
       method: "POST",
-      body: JSON.stringify({ number: sendTarget.number, text }),
+      body: JSON.stringify({
+        number: sendTarget.number,
+        text,
+        delay: 1200,
+        linkPreview: false,
+      }),
     }
   );
 

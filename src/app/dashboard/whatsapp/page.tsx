@@ -7,7 +7,7 @@ import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { getClinicIdFromProfile } from "@/lib/clinic-context";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import { QrCode, MessageCircle, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { QrCode, MessageCircle, RefreshCw, Wifi, WifiOff, Wrench } from "lucide-react";
 import { WhatsAppTestButton } from "@/components/patients/WhatsAppTestButton";
 
 type ConnState = "open" | "close" | "connecting" | "unknown";
@@ -30,6 +30,7 @@ export default function WhatsAppSettingsPage() {
   const [bridgeConfigured, setBridgeConfigured] = useState<boolean | null>(
     null
   );
+  const [repairMessage, setRepairMessage] = useState<string | null>(null);
   const [messages, setMessages] = useState<
     {
       id: string;
@@ -257,6 +258,62 @@ export default function WhatsAppSettingsPage() {
     setLoading(false);
   }, [startScan, stopPolling]);
 
+  const runAutoRepair = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setRepairMessage(null);
+    stopPolling();
+    try {
+      const res = await whatsappFetch("/api/whatsapp/auto-repair", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? data.message ?? "تعذر الإصلاح التلقائي");
+        setLoading(false);
+        return;
+      }
+
+      const deleted =
+        Array.isArray(data.deletedInstances) && data.deletedInstances.length > 0
+          ? `حُذفت ${data.deletedInstances.length} جلسة زائدة. `
+          : "";
+      setRepairMessage(`${deleted}${data.message ?? "تم الإصلاح"}`);
+
+      if (data.instanceName) setInstanceName(data.instanceName);
+
+      if (data.linked) {
+        setLinked(true);
+        setConnState("open");
+        setQrImage(null);
+        startLinkedKeepalive();
+        void loadMessageLog();
+      } else if (data.qr) {
+        const src =
+          typeof data.qr === "string" && data.qr.startsWith("data:")
+            ? data.qr
+            : typeof data.qr === "string"
+              ? `data:image/png;base64,${data.qr}`
+              : null;
+        setQrImage(src);
+        setLinked(false);
+        setConnState("connecting");
+        await startScan();
+      } else if (data.error) {
+        setError(data.error);
+      }
+    } catch {
+      setError("تعذر الاتصال بالخادم أثناء الإصلاح");
+    }
+    setLoading(false);
+  }, [
+    whatsappFetch,
+    stopPolling,
+    startScan,
+    startLinkedKeepalive,
+    loadMessageLog,
+  ]);
+
   useEffect(() => {
     void loadMessageLog();
     void checkConnection().then((connected) => {
@@ -292,6 +349,47 @@ export default function WhatsAppSettingsPage() {
           Evolution API (Baileys) — امسح QR من تطبيق واتساب على جوال العيادة
         </p>
       </div>
+
+      <Card className="border-amber-200 bg-amber-50/80">
+        <CardHeader>
+          <CardTitle className="text-base text-amber-950">
+            إصلاح واتساب تلقائياً
+          </CardTitle>
+          <p className="text-sm text-amber-900/90">
+            يحذف الجلسات الزائدة ويعيد ضبط الربط —{" "}
+            <strong>تحتاج فقط مسح QR مرة واحدة</strong> من جوال العيادة.
+          </p>
+        </CardHeader>
+        <div className="px-4 pb-4">
+          {repairMessage && (
+            <Alert variant="success" className="mb-3">
+              {repairMessage}
+            </Alert>
+          )}
+          <Button
+            type="button"
+            className="w-full bg-amber-700 hover:bg-amber-800"
+            disabled={loading}
+            onClick={runAutoRepair}
+          >
+            {loading ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                جاري الإصلاح...
+              </>
+            ) : (
+              <>
+                <Wrench className="h-4 w-4" />
+                إصلاح واتساب الآن (خطوتين فقط)
+              </>
+            )}
+          </Button>
+          <ol className="mt-3 list-decimal space-y-1 pr-5 text-xs text-amber-950/80">
+            <li>اضغط الزر أعلاه وانتظر 10–20 ثانية</li>
+            <li>امسح QR من واتسapp جوال العيادة (07770010105)</li>
+          </ol>
+        </div>
+      </Card>
 
       <Card className="text-center">
         <CardHeader>
