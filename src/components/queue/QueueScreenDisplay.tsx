@@ -223,10 +223,10 @@ export function QueueScreenDisplay({
       <div className="qs-clinic-banner relative z-20 shrink-0 px-4 py-3 text-white lg:px-8 lg:py-4">
         <div className="qs-tv-banner-row flex flex-col items-center gap-4 lg:flex-row lg:justify-between">
           <div className="qs-tv-banner-clinic w-full flex-1 text-center lg:text-right">
-            <p className="mb-1 flex items-center justify-center gap-2 text-sm font-semibold tracking-widest text-white/75 lg:justify-end lg:text-base">
-              <Sparkles className="h-4 w-4 text-premium-300" />
+            <p className="qs-welcome-text mb-1 flex items-center justify-center gap-2.5 lg:justify-end">
+              <Sparkles className="qs-welcome-spark h-5 w-5 shrink-0 lg:h-6 lg:w-6" />
               مرحباً بكم في
-              <Sparkles className="h-4 w-4 text-premium-300" />
+              <Sparkles className="qs-welcome-spark h-5 w-5 shrink-0 lg:h-6 lg:w-6" />
             </p>
             <h1 className="qs-clinic-hero">{clinicName}</h1>
             <p className="mt-2 text-base font-medium text-white/80 lg:text-lg">
@@ -334,7 +334,7 @@ export function QueueScreenDisplay({
                 <p className="text-sm font-medium text-slate-muted">المراجعون التاليون</p>
               </div>
               {waiting.length > 0 && (
-                <span className="qs-waiting-badge flex h-12 min-w-[3rem] items-center justify-center rounded-2xl px-3 text-2xl font-black text-white">
+                <span className="flex h-12 min-w-[3rem] items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 px-3 text-2xl font-black text-white shadow-md shadow-amber-400/30">
                   {waiting.length}
                 </span>
               )}
@@ -342,7 +342,7 @@ export function QueueScreenDisplay({
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden pr-1">
               {waiting.length === 0 ? (
-                <div className="rounded-2xl border-2 border-dashed border-primary/20 bg-primary-50/40 py-16 text-center">
+                <div className="rounded-2xl border-2 border-dashed border-amber-200 bg-amber-50/50 py-16 text-center">
                   <p className="text-lg font-medium text-slate-muted">لا يوجد أحد في الانتظار</p>
                 </div>
               ) : (
@@ -355,14 +355,16 @@ export function QueueScreenDisplay({
                       className={cn(
                         "flex items-start gap-4 rounded-2xl border-2 px-4 py-4 transition-shadow",
                         isNext
-                          ? "qs-waiting-next"
+                          ? "border-amber-300 bg-gradient-to-l from-amber-50 to-orange-50 shadow-sm"
                           : "border-primary/10 bg-surface-card hover:shadow-soft"
                       )}
                     >
                       <span
                         className={cn(
-                          "flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-2xl font-black tabular-nums text-white",
-                          isNext ? "qs-ticket-badge-next" : "qs-ticket-badge"
+                          "flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-2xl font-black tabular-nums",
+                          isNext
+                            ? "bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-sm"
+                            : "bg-primary-100 text-primary-700"
                         )}
                       >
                         {entry.ticket_number}
@@ -381,7 +383,7 @@ export function QueueScreenDisplay({
                         </p>
                       </div>
                       {isNext && (
-                        <span className="qs-waiting-badge shrink-0 rounded-xl px-3 py-1.5 text-sm font-black text-white">
+                        <span className="shrink-0 rounded-xl bg-gradient-to-l from-amber-500 to-orange-500 px-3 py-1.5 text-sm font-black text-white shadow-sm">
                           التالي
                         </span>
                       )}
