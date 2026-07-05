@@ -45,11 +45,30 @@ export async function getCurrentUser(
   }
 }
 
-export async function signOutUser(supabase: SupabaseClient): Promise<void> {
-  const { error } = await supabase.auth.signOut();
+type SignOutScope = "local" | "global" | "others";
+
+/**
+ * Sign out — defaults to `local` so logging in/out on one device does not
+ * terminate sessions on other phones or computers (Supabase default is global).
+ */
+export async function signOutUser(
+  supabase: SupabaseClient,
+  scope: SignOutScope = "local"
+): Promise<void> {
+  const auth = supabase.auth as {
+    signOut: (opts?: { scope: SignOutScope }) => Promise<{ error: { message: string } | null }>;
+  };
+  const { error } = await auth.signOut({ scope });
   if (error) {
     console.error("[auth] signOut failed:", error.message);
   }
+}
+
+/** Sign out from every device — use only when the user explicitly requests it */
+export async function signOutUserEverywhere(
+  supabase: SupabaseClient
+): Promise<void> {
+  await signOutUser(supabase, "global");
 }
 
 export async function getSession(supabase: SupabaseClient) {
@@ -109,7 +128,7 @@ export async function verifyPasswordSignIn(
   if (error) {
     return { ok: false, reason: error.message };
   }
-  await client.auth.signOut();
+  await client.auth.signOut({ scope: "local" });
   return { ok: true };
 }
 

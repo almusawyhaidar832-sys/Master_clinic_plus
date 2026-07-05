@@ -23,6 +23,17 @@ export async function syncPortalSessionClient(
   }
 
   const supabase = createClientForPortal(authPortal);
+
+  // Server login already set portal cookies — avoid a second signIn that adds
+  // extra sessions and can interfere with other devices.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { data } = await getSession(supabase);
+    if (data.session?.user) {
+      return { ok: true };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  }
+
   const email = await resolveEmailForUsername(supabase, username.trim());
   if (!email) {
     return { ok: false, error: "تعذر تحديد حساب الدخول" };
