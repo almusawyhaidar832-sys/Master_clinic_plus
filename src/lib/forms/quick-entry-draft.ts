@@ -18,6 +18,7 @@ export interface QuickEntryFormDraft {
   notes: string;
   isReviewStatement: boolean;
   reviewFeeEnabled: boolean;
+  applyExaminationFee: boolean;
   selectedCaseId: string | null;
   forceNewPlan: boolean;
   clinicalTeeth: Record<number, ToothRecordInput>;

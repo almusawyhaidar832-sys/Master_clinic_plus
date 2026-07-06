@@ -317,6 +317,46 @@ export async function processQuickEntryOfflinePayload(
         }
       }
     }
+  } else if (!error && payload.billingMode === "examination") {
+    const fee = payload.reviewFeeLive;
+    const created = await createTreatmentCase(admin, {
+      patientId,
+      clinicId,
+      treatmentName: payload.operationLabel,
+      casePrice: 0,
+      discount: 0,
+      paid: fee,
+      doctorShare: 0,
+      clinicShare: fee,
+      primaryDoctorId: payload.sessionDoctorId,
+      sessionOnly: true,
+    });
+    if (created.case?.id) {
+      linkedCaseId = created.case.id;
+      optionalCols.treatment_case_id = created.case.id;
+    }
+
+    const paymentCols: Record<string, unknown> = {
+      total_amount: 0,
+      paid_amount: fee,
+      doctor_share_amount: 0,
+      clinic_share_amount: fee,
+    };
+
+    const res = await insertPatientOperation(admin, {
+      clinicId,
+      patientId,
+      doctorId: payload.sessionDoctorId,
+      sessionKind: "payment",
+      operationLabel:
+        fee > 0
+          ? `${payload.operationLabel} — كشف + كشفية`
+          : payload.operationLabel,
+      fields: paymentCols,
+      optionalCols,
+    });
+    op = res.op;
+    error = res.error;
   } else if (!error && payload.entryMode === "payment" && payload.paid > 0) {
     if (
       payload.forceNewPlan &&

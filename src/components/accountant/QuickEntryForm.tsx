@@ -29,6 +29,7 @@ import {
   isTreatmentCaseComplete,
   FINANCIAL_EPSILON,
   previewTreatmentSplitWithReview,
+  previewPaidSessionSplit,
   resolveCaseFinancialSplit,
   resolveSessionKind,
   saveFirstSessionPlanFallback,
@@ -94,6 +95,7 @@ import {
 import { computeLabCostSplit } from "@/lib/invoices/lab-session-details";
 import {
   amountFieldLabel,
+  examinationFeeAmount,
   previewSessionBillingTotals,
   resolveSessionPaymentShares,
   SESSION_BILLING_MODE_OPTIONS,
@@ -149,7 +151,9 @@ function buildPostSaveFinancialSnap(
   }
 ): PatientFinancialPlan {
   const paidDelta =
-    opts.billingMode === "session" || opts.billingMode === "complete"
+    opts.billingMode === "session" ||
+    opts.billingMode === "complete" ||
+    opts.billingMode === "examination"
       ? opts.paid
       : 0;
   const totalPaid = plan.total_paid + paidDelta;
@@ -313,6 +317,7 @@ export function QuickEntryForm({
   const [notes, setNotes] = useState("");
   const [isReviewStatement, setIsReviewStatement] = useState(false);
   const [reviewFeeEnabled, setReviewFeeEnabled] = useState(false);
+  const [applyExaminationFee, setApplyExaminationFee] = useState(false);
   const [clinicReviewFeeAmount, setClinicReviewFeeAmount] = useState(0);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(false);
@@ -383,6 +388,7 @@ export function QuickEntryForm({
     setNotes(draft.notes);
     setIsReviewStatement(draft.isReviewStatement);
     setReviewFeeEnabled(draft.reviewFeeEnabled);
+    setApplyExaminationFee(draft.applyExaminationFee ?? false);
     setSelectedCaseId(draft.selectedCaseId);
     setForceNewPlan(draft.forceNewPlan);
     setClinical({ xrayFiles: [], teeth: draft.clinicalTeeth ?? {} });
@@ -407,6 +413,7 @@ export function QuickEntryForm({
       notes,
       isReviewStatement,
       reviewFeeEnabled,
+      applyExaminationFee,
       selectedCaseId,
       forceNewPlan,
       clinicalTeeth: clinical.teeth,
@@ -428,6 +435,7 @@ export function QuickEntryForm({
       notes,
       isReviewStatement,
       reviewFeeEnabled,
+      applyExaminationFee,
       selectedCaseId,
       forceNewPlan,
       clinical.teeth,
@@ -522,6 +530,7 @@ export function QuickEntryForm({
       setOperationName(prefillTreatmentName?.trim() ?? "");
       setTotalAmount("");
       setBillingMode("session");
+      setApplyExaminationFee(false);
       setPaidAmount("");
       setDiscountAmount("");
       setAdditionalDiscountAmount("");
@@ -545,9 +554,22 @@ export function QuickEntryForm({
     !defaultPatientPhone?.trim() && !patientPhone.trim();
 
   const reviewFeeLive =
-    isReviewStatement && reviewFeeEnabled && clinicReviewFeeAmount > 0
+    billingMode !== "examination" &&
+    isReviewStatement &&
+    reviewFeeEnabled &&
+    clinicReviewFeeAmount > 0
       ? clinicReviewFeeAmount
       : 0;
+
+  const examinationFeeLive = examinationFeeAmount({
+    applyExaminationFee:
+      billingMode === "examination" ? applyExaminationFee : false,
+    reviewFeeEnabled,
+    clinicReviewFeeAmount,
+  });
+
+  const entryAmountLive =
+    billingMode === "examination" ? examinationFeeLive : paid;
 
   const financialPreview = previewSessionFinancials(plan, {
     isFirstSession,
@@ -561,16 +583,49 @@ export function QuickEntryForm({
   const selectedDoctor = doctors.find((d) => d.id === doctorId) ?? null;
   const billingPreview = previewSessionBillingTotals(plan, {
     mode: billingMode,
-    amount: paid,
+    amount: entryAmountLive,
     additionalDiscount: additionalDiscountNum,
   });
   const remaining = billingPreview.registeredDebt;
-  const sessionPaymentShares = resolveSessionPaymentShares({
-    paidAmount: paid,
-    materialsCost: materials,
-    doctor: selectedDoctor,
-    plan,
-  });
+  const sessionPaymentShares =
+    billingMode === "examination" && examinationFeeLive > 0
+      ? { doctorShare: 0, clinicShare: examinationFeeLive }
+      : resolveSessionPaymentShares({
+          paidAmount: entryAmountLive,
+          materialsCost: materials,
+          doctor: selectedDoctor,
+          plan,
+        });
+
+  const paymentPreviewSplit = useMemo(() => {
+    if (!selectedDoctor) return null;
+    if (billingMode === "examination") {
+      if (examinationFeeLive <= 0) return null;
+      return {
+        paidAmount: examinationFeeLive,
+        doctorShare: 0,
+        clinicShare: examinationFeeLive,
+      };
+    }
+    if (entryAmountLive <= 0 && materials <= 0) return null;
+    return previewPaidSessionSplit({
+      paidAmount: entryAmountLive,
+      caseFinalPrice: plan.final_price,
+      caseDoctorShare: plan.doctor_share_total,
+      caseClinicShare: plan.clinic_share_total,
+      doctor: selectedDoctor,
+      materialsCost: materials,
+    });
+  }, [
+    selectedDoctor,
+    billingMode,
+    examinationFeeLive,
+    entryAmountLive,
+    materials,
+    plan.final_price,
+    plan.doctor_share_total,
+    plan.clinic_share_total,
+  ]);
 
   const treatmentOnly = Math.max(0, finalPriceLive - reviewFeeLive);
 
@@ -906,7 +961,7 @@ export function QuickEntryForm({
       return;
     }
 
-    if (formSchema.showOperation && !operationName.trim()) {
+    if (formSchema.showOperation && !operationName.trim() && billingMode !== "examination") {
       setMessage({
         type: "error",
         text: "أدخل نوع العلاج للحالة الجديدة (مثلاً حشوة ضوئية أو تقويم)",
@@ -954,7 +1009,9 @@ export function QuickEntryForm({
       labNotes,
       isReviewStatement,
       reviewFeeEnabled,
-      reviewFeeLive,
+      applyExaminationFee,
+      reviewFeeLive:
+        billingMode === "examination" ? examinationFeeLive : reviewFeeLive,
       financialPlan: financialPlan,
       visitQueueEntryId: visitQueueEntryId ?? null,
       clinicalTeeth: clinical.teeth,
@@ -1050,7 +1107,8 @@ export function QuickEntryForm({
     const discount = parseAmount(discountAmount);
     const additionalDiscount = parseAmount(additionalDiscountAmount);
     const isNewCase = forceNewPlan || !selectedCaseId;
-    const entryAmount = paid;
+    const entryAmount =
+      billingMode === "examination" ? examinationFeeLive : paid;
 
     const phoneReady = await ensurePatientPhoneOnRecord(
       supabase,
@@ -1078,7 +1136,7 @@ export function QuickEntryForm({
       return;
     }
 
-    if (isNewCase && !operationName.trim() && billingMode !== "complete") {
+    if (isNewCase && !operationName.trim() && billingMode !== "complete" && billingMode !== "examination") {
       setMessage({
         type: "error",
         text: "أدخل نوع العلاج للحالة الجديدة",
@@ -1125,10 +1183,30 @@ export function QuickEntryForm({
     }
 
     const operationLabel =
-      pickedCase?.treatment_name_ar?.trim() ||
-      operationName.trim();
+      billingMode === "examination"
+        ? operationName.trim() || "كشف"
+        : pickedCase?.treatment_name_ar?.trim() || operationName.trim();
 
-    if (isReviewStatement && !reviewFeeEnabled) {
+    if (billingMode === "examination" && applyExaminationFee) {
+      if (!reviewFeeEnabled) {
+        setMessage({
+          type: "error",
+          text: "فعّل كشفية المراجع من إعدادات العيادة أولاً",
+        });
+        setLoading(false);
+        return;
+      }
+      if (clinicReviewFeeAmount <= 0) {
+        setMessage({
+          type: "error",
+          text: "حدد مبلغ الكشفية في إعدادات العيادة",
+        });
+        setLoading(false);
+        return;
+      }
+    }
+
+    if (isReviewStatement && billingMode !== "examination" && !reviewFeeEnabled) {
       setMessage({
         type: "error",
         text: "فعّل كشفية المراجع من الإعدادات وحدد المبلغ أولاً",
@@ -1136,7 +1214,7 @@ export function QuickEntryForm({
       setLoading(false);
       return;
     }
-    if (isReviewStatement && reviewFeeEnabled && clinicReviewFeeAmount <= 0) {
+    if (isReviewStatement && billingMode !== "examination" && reviewFeeEnabled && clinicReviewFeeAmount <= 0) {
       setMessage({
         type: "error",
         text: "حدد مبلغ الكشفية في إعدادات العيادة",
@@ -1148,7 +1226,7 @@ export function QuickEntryForm({
     const optionalCols: Record<string, unknown> = {};
     if (notes.trim()) optionalCols.notes = notes.trim();
     if (labNotes.trim()) optionalCols.lab_notes = labNotes.trim();
-    if (isReviewStatement) {
+    if (isReviewStatement && billingMode !== "examination") {
       optionalCols.is_review_statement = true;
       if (reviewFeeLive > 0) optionalCols.review_fee_amount = reviewFeeLive;
     }
@@ -1275,7 +1353,9 @@ export function QuickEntryForm({
       if (!isNewCase) return { caseId: null, error: null };
 
       const initialPaid =
-        billingMode === "session" || billingMode === "complete"
+        billingMode === "session" ||
+        billingMode === "complete" ||
+        billingMode === "examination"
           ? entryAmount
           : 0;
       const created = await createTreatmentCaseViaApi({
@@ -1378,6 +1458,33 @@ export function QuickEntryForm({
       }
     }
 
+    if (!error && billingMode === "examination") {
+      const ensured = await ensureCaseForEntry();
+      if (ensured.error) {
+        error = ensured.error;
+      } else {
+        if (examinationFeeLive > 0) {
+          optionalCols.is_review_statement = true;
+          optionalCols.review_fee_amount = examinationFeeLive;
+        }
+        const paymentCols: Record<string, unknown> = {
+          total_amount: 0,
+          paid_amount: examinationFeeLive,
+          doctor_share_amount: 0,
+          clinic_share_amount: examinationFeeLive,
+        };
+        const res = await insertSession(
+          "payment",
+          paymentCols,
+          examinationFeeLive > 0
+            ? `${operationLabel} — كشف + كشفية`
+            : operationLabel
+        );
+        op = res.op;
+        error = res.error;
+      }
+    }
+
     if (!error && billingMode === "complete") {
       const ensured = await ensureCaseForEntry();
       if (ensured.error) {
@@ -1445,7 +1552,9 @@ export function QuickEntryForm({
 
     if (
       !error &&
-      (billingMode === "session" || billingMode === "complete") &&
+      (billingMode === "session" ||
+        billingMode === "complete" ||
+        billingMode === "examination") &&
       (entryAmount > 0 || additionalDiscount > 0)
     ) {
       const sync = await syncTreatmentCaseAfterSessionViaApi({
@@ -1579,6 +1688,12 @@ export function QuickEntryForm({
       if (snap.total_paid > 0) {
         successText += ` · مجموع المدفوع: ${formatCurrency(snap.total_paid)}`;
       }
+    } else if (billingMode === "examination") {
+      if (examinationFeeLive > 0) {
+        successText = `✓ كشف «${operationLabel}» — كشفية ${formatCurrency(examinationFeeLive)} (للعيادة)`;
+      } else {
+        successText = `✓ تم تسجيل كشف «${operationLabel}» — بدون رسوم`;
+      }
     } else if (isNewCase) {
       successText = `✓ جلسة أولى «${operationLabel}» — دفع ${formatCurrency(entryAmount)}`;
     } else {
@@ -1600,6 +1715,7 @@ export function QuickEntryForm({
     setOperationName("");
       setTotalAmount("");
       setBillingMode("session");
+      setApplyExaminationFee(false);
       setPaidAmount("");
     setDiscountAmount("");
     setAdditionalDiscountAmount("");
@@ -1613,11 +1729,11 @@ export function QuickEntryForm({
       doctorId,
       patientId: patientId ?? undefined,
     });
-    if (paid > 0) {
+    if (entryAmountLive > 0) {
       notifyClinicProfitRefresh(activeClinic.clinicId);
     }
 
-    if (paid > 0) {
+    if (entryAmountLive > 0) {
       setPendingSuccessOp(savedOp);
       let rxIdForInvoice: string | null = null;
       if (visitQueueEntryId) {
@@ -2225,7 +2341,7 @@ export function QuickEntryForm({
           </div>
         )}
 
-        {formSchema.showOperation && (
+        {formSchema.showOperation && billingMode !== "examination" && (
         <div className={isFollowUpSession ? "sm:col-span-2" : ""}>
           <label className="mc-entry-field-label">
             نوع الإجراء *
@@ -2264,9 +2380,15 @@ export function QuickEntryForm({
                 label="نوع التسجيل *"
                 name="billing_mode"
                 value={billingMode}
-                onChange={(e) =>
-                  setBillingMode(e.target.value as SessionBillingMode)
-                }
+                onChange={(e) => {
+                  const mode = e.target.value as SessionBillingMode;
+                  setBillingMode(mode);
+                  if (mode === "examination") {
+                    setApplyExaminationFee(false);
+                    setPaidAmount("");
+                    if (!operationName.trim()) setOperationName("كشف");
+                  }
+                }}
                 options={SESSION_BILLING_MODE_OPTIONS.map((o) => ({
                   value: o.value,
                   label: o.label,
@@ -2276,7 +2398,56 @@ export function QuickEntryForm({
               />
             )}
 
-            {formSchema.showPaidAmount && (
+            {billingMode === "examination" && (
+              <div className="space-y-3 rounded-lg border border-sky-200 bg-sky-50/70 p-3">
+                <div>
+                  <label className="mc-entry-field-label">
+                    نوع الكشف (اختياري)
+                  </label>
+                  <input
+                    type="text"
+                    className="mc-entry-input"
+                    value={operationName}
+                    onChange={(e) => setOperationName(e.target.value)}
+                    placeholder="كشف"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm text-slate-text">
+                  <input
+                    type="checkbox"
+                    checked={applyExaminationFee}
+                    onChange={(e) => setApplyExaminationFee(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-border text-primary"
+                  />
+                  كشفية مراجع
+                  {reviewFeeEnabled && clinicReviewFeeAmount > 0 && (
+                    <span className="font-semibold text-primary tabular-nums">
+                      {formatCurrency(clinicReviewFeeAmount)}
+                    </span>
+                  )}
+                </label>
+                {applyExaminationFee && reviewFeeEnabled && clinicReviewFeeAmount > 0 && (
+                  <p className="text-xs text-slate-muted tabular-nums">
+                    تُسجَّل كدفعة للعيادة بالكامل — لا تدخل محفظة الطبيب
+                  </p>
+                )}
+                {applyExaminationFee && !reviewFeeEnabled && (
+                  <p className="text-xs text-amber-800">
+                    فعّل الكشفية من{" "}
+                    <a href="/dashboard/settings" className="underline font-medium">
+                      إعدادات العيادة
+                    </a>
+                  </p>
+                )}
+                {!applyExaminationFee && (
+                  <p className="text-xs text-slate-muted">
+                    كشف بدون رسوم — تسجيل زيارة فقط
+                  </p>
+                )}
+              </div>
+            )}
+
+            {formSchema.showPaidAmount && billingMode !== "examination" && (
               <div className="space-y-1.5">
                 <CurrencyInput
                   label={amountFieldLabel(billingMode)}
@@ -2391,7 +2562,7 @@ export function QuickEntryForm({
           </div>
         )}
 
-        {formSchema.showReviewCheckbox && (
+        {formSchema.showReviewCheckbox && billingMode !== "examination" && (
         <div className="sm:col-span-2 space-y-1">
           <label className="flex items-center gap-2 text-sm text-slate-text">
             <input
@@ -2501,32 +2672,27 @@ export function QuickEntryForm({
         {formSchema.showFinancialPreview && (
         <FinancialPreview
           className="sm:col-span-2"
-          totalAmount={Math.max(0, finalPriceLive - reviewFeeLive)}
+          paymentSplitOnly
+          totalAmount={0}
           materialsCost={materials}
           doctor={selectedDoctor}
-          reviewFee={reviewFeeLive}
-          lockedSplit={lockedSplit}
-          isPaymentSession={isFollowUpSession}
-          paidAmount={paid}
-          caseFinalPrice={finalPriceLive}
-          caseDoctorShareTotal={
-            lockedSplit?.doctorShare ??
-            liveSplit?.doctorShare ??
-            plan.doctor_share_total
-          }
-          caseClinicShareTotal={
-            lockedSplit?.clinicShare ??
-            liveSplit?.clinicShare ??
-            plan.clinic_share_total
-          }
+          isPaymentSession
+          paidAmount={entryAmountLive}
+          paidSplitOverride={paymentPreviewSplit}
         />
         )}
 
+        {(billingMode === "debt" ||
+          remaining > FINANCIAL_EPSILON ||
+          (plan.final_price > FINANCIAL_EPSILON &&
+            (isFollowUpSession || billingMode === "complete"))) && (
         <div className="sm:col-span-2 mc-entry-remaining">
           <p className="text-sm font-bold text-slate-text">
-            {isFollowUpSession ? "الذمة المتبقية" : "المتبقي (ذمة)"}
+            {isFollowUpSession || billingMode === "debt"
+              ? "الذمة المتبقية"
+              : "المتبقي (ذمة)"}
           </p>
-          {isFollowUpSession && (
+          {isFollowUpSession && plan.final_price > FINANCIAL_EPSILON && (
             <p className="mt-0.5 text-xs text-slate-muted tabular-nums">
               السعر النهائي: {formatCurrency(finalPriceLive)}
             </p>
@@ -2548,6 +2714,7 @@ export function QuickEntryForm({
             </p>
           )}
         </div>
+        )}
 
         <div className="sm:col-span-2">
           <Button

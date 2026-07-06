@@ -32,6 +32,7 @@ export interface QuickEntryOfflineInput {
   materialsCost: string;
   notes: string;
   labNotes: string;
+  applyExaminationFee: boolean;
   isReviewStatement: boolean;
   reviewFeeEnabled: boolean;
   reviewFeeLive: number;
@@ -75,11 +76,20 @@ export function validateQuickEntryOffline(
   const isNewCase = input.forceNewPlan || !input.selectedCaseId;
   const entryMode: "plan" | "payment" = isNewCase ? "plan" : "payment";
 
-  if (isNewCase && !input.operationName.trim()) {
+  if (isNewCase && !input.operationName.trim() && input.billingMode !== "examination") {
     return {
       ok: false,
       message: "أدخل نوع العلاج للحالة الجديدة",
     };
+  }
+
+  if (input.billingMode === "examination" && input.applyExaminationFee) {
+    if (!input.reviewFeeEnabled) {
+      return { ok: false, message: "فعّل كشفية المراجع من إعدادات العيادة" };
+    }
+    if (input.reviewFeeLive <= 0) {
+      return { ok: false, message: "حدد مبلغ الكشفية في إعدادات العيادة" };
+    }
   }
 
   const patientName = input.patientQuery.trim();
@@ -87,7 +97,10 @@ export function validateQuickEntryOffline(
     return { ok: false, message: "أدخل اسم المريض" };
   }
 
-  const paid = parseAmount(input.paidAmount);
+  const paid =
+    input.billingMode === "examination"
+      ? input.reviewFeeLive
+      : parseAmount(input.paidAmount);
   const additionalDiscount = parseAmount(input.additionalDiscountAmount);
   const materials = parseAmount(input.materialsCost);
   const plan = input.financialPlan;
@@ -115,6 +128,7 @@ export function validateQuickEntryOffline(
 
   if (
     !isNewCase &&
+    input.billingMode !== "examination" &&
     (!plan || !hasTreatmentPlan(plan)) &&
     paid <= 0 &&
     additionalDiscount <= 0
@@ -147,9 +161,11 @@ export function validateQuickEntryOffline(
   }
 
   const operationLabel =
-    input.operationLabel.trim() || input.operationName.trim();
+    input.billingMode === "examination"
+      ? input.operationLabel.trim() || input.operationName.trim() || "كشف"
+      : input.operationLabel.trim() || input.operationName.trim();
 
-  if (isNewCase && !operationLabel) {
+  if (isNewCase && !operationLabel && input.billingMode !== "examination") {
     return { ok: false, message: "أدخل نوع العلاج" };
   }
 
@@ -179,7 +195,10 @@ export function validateQuickEntryOffline(
       paid,
       additionalDiscount,
       materials,
-      isReviewStatement: input.isReviewStatement,
+      isReviewStatement:
+        input.billingMode === "examination"
+          ? input.applyExaminationFee
+          : input.isReviewStatement,
       reviewFeeLive: input.reviewFeeLive,
       notes: input.notes.trim(),
       labNotes: input.labNotes.trim(),

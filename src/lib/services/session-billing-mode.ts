@@ -6,7 +6,11 @@ import {
 } from "@/lib/services/patient-financial-plan";
 
 /** نوع تسجيل الجلسة — بدون سعر كلي */
-export type SessionBillingMode = "session" | "debt" | "complete";
+export type SessionBillingMode =
+  | "session"
+  | "debt"
+  | "complete"
+  | "examination";
 
 export const SESSION_BILLING_MODE_OPTIONS: {
   value: SessionBillingMode;
@@ -28,6 +32,11 @@ export const SESSION_BILLING_MODE_OPTIONS: {
     label: "مكتمل",
     hint: "إغلاق الحالة — العلاج انتهى أو حالة جديدة لاحقاً",
   },
+  {
+    value: "examination",
+    label: "كشف",
+    hint: "زيارة كشف فقط — بدون علاج. فعّل الكشفية إن وُجدت رسوم",
+  },
 ];
 
 export function sessionBillingModeLabel(mode: SessionBillingMode): string {
@@ -46,6 +55,8 @@ export function amountFieldLabel(mode: SessionBillingMode): string {
       return "مبلغ الدين *";
     case "complete":
       return "المبلغ المدفوع (اختياري)";
+    case "examination":
+      return "المبلغ المدفوع";
     default:
       return "المبلغ المدفوع *";
   }
@@ -55,6 +66,9 @@ export function validateBillingAmount(
   mode: SessionBillingMode,
   amount: number
 ): string | null {
+  if (mode === "examination") {
+    return null;
+  }
   if (mode === "session" && amount <= 0) {
     return "أدخل المبلغ الذي دفعه المراجع في هذه الجلسة";
   }
@@ -62,6 +76,21 @@ export function validateBillingAmount(
     return "أدخل مبلغ الدين المراد تسجيله";
   }
   return null;
+}
+
+export function examinationFeeAmount(opts: {
+  applyExaminationFee: boolean;
+  reviewFeeEnabled: boolean;
+  clinicReviewFeeAmount: number;
+}): number {
+  if (
+    !opts.applyExaminationFee ||
+    !opts.reviewFeeEnabled ||
+    opts.clinicReviewFeeAmount <= 0
+  ) {
+    return 0;
+  }
+  return opts.clinicReviewFeeAmount;
 }
 
 /** معاينة بعد هذا الإدخال — بدون سعر كلي */
@@ -79,7 +108,11 @@ export function previewSessionBillingTotals(
 } {
   const additionalDiscount = opts.additionalDiscount ?? 0;
   const paidDelta =
-    opts.mode === "session" || opts.mode === "complete" ? opts.amount : 0;
+    opts.mode === "session" ||
+    opts.mode === "complete" ||
+    opts.mode === "examination"
+      ? opts.amount
+      : 0;
   const debtDelta = opts.mode === "debt" ? opts.amount : 0;
 
   const totalPaidAfter = plan.total_paid + paidDelta;

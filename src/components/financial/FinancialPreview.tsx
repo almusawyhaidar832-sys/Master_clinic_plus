@@ -19,6 +19,15 @@ interface FinancialPreviewProps {
   caseFinalPrice?: number;
   caseDoctorShareTotal?: number;
   caseClinicShareTotal?: number;
+  /** بدون ملخص السعر الكلي — فقط توزيع المبلغ المدفوع حسب النسبة */
+  paymentSplitOnly?: boolean;
+  paidSplitOverride?: {
+    doctorShare: number;
+    clinicShare: number;
+    paidAmount: number;
+    labDoctorShare?: number;
+    labClinicShare?: number;
+  } | null;
 }
 
 type SplitPreview = {
@@ -199,8 +208,11 @@ export function FinancialPreview({
   caseFinalPrice = 0,
   caseDoctorShareTotal = 0,
   caseClinicShareTotal = 0,
+  paymentSplitOnly = false,
+  paidSplitOverride = null,
 }: FinancialPreviewProps) {
   const preview = useMemo((): SplitPreview | null => {
+    if (paymentSplitOnly) return null;
     if (!doctor) return null;
 
     if (lockedSplit && lockedSplit.agreedTotal > 0) {
@@ -274,9 +286,12 @@ export function FinancialPreview({
       clinicShare: split.clinicShare,
       locked: false,
     };
-  }, [totalAmount, materialsCost, doctor, reviewFee, lockedSplit]);
+  }, [totalAmount, materialsCost, doctor, reviewFee, lockedSplit, paymentSplitOnly]);
 
   const paidPreview = useMemo(() => {
+    if (paidSplitOverride && paidSplitOverride.paidAmount > 0) {
+      return paidSplitOverride;
+    }
     if (!doctor || (paidAmount <= 0 && materialsCost <= 0)) return null;
     const caseDoc =
       caseDoctorShareTotal > 0
@@ -309,7 +324,53 @@ export function FinancialPreview({
     lockedSplit,
     isPaymentSession,
     materialsCost,
+    paidSplitOverride,
   ]);
+
+  if (paymentSplitOnly) {
+    if (!doctor) {
+      return (
+        <div
+          className={`rounded-xl border border-dashed border-slate-border bg-surface p-4 text-sm text-slate-muted ${className}`}
+        >
+          اختر الطبيب لمعاينة حصته وحصة العيادة من المبلغ المدفوع
+        </div>
+      );
+    }
+
+    if (!paidPreview) {
+      return (
+        <div
+          className={`rounded-xl border border-dashed border-slate-border bg-surface p-4 text-sm text-slate-muted ${className}`}
+        >
+          أدخل المبلغ المدفوع لمعاينة توزيعه بين الطبيب والعيادة حسب النسبة
+        </div>
+      );
+    }
+
+    return (
+      <div className={`space-y-3 ${className}`}>
+        <div className="rounded-xl border border-emerald-400/40 bg-gradient-to-br from-emerald-50/80 to-white p-3.5 space-y-3">
+          <div>
+            <p className="text-sm font-bold text-emerald-900">
+              توزيع المبلغ المدفوع — الطبيب والعيادة
+            </p>
+            <p className="text-xs text-emerald-800/80 mt-0.5">
+              من {formatCurrency(paidPreview.paidAmount)} المدفوع
+              {materialsCost > 0
+                ? ` — بعد خصم المختبر (${formatCurrency(materialsCost)})`
+                : ` — حسب نسبة الطبيب (${doctor.percentage}%)`}
+            </p>
+          </div>
+          <PaidSplitColumns
+            paidPreview={paidPreview}
+            doctor={doctor}
+            materialsCost={materialsCost}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (!preview) {
     return (

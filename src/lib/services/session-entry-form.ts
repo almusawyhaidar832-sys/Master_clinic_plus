@@ -90,9 +90,8 @@ export function buildSessionEntrySchema(opts: {
       !opts.lockDoctorId && !!opts.hasAssignedDoctor,
     showPatientSearch: !opts.defaultPatientId,
     showMaterials: !picking,
-    showFinancialPreview:
-      (!picking && isFirst) ||
-      (isFollowUp && hasTreatmentPlan(opts.plan) && opts.plan.final_price > 0),
+    /** توزيع حصة الطبيب/العيادة من المبلغ المدفوع — بدون ملخص السعر الكلي */
+    showFinancialPreview: !picking,
     /** أشعة ومخطط أسنان — لكل جلسة على حدة (أولى أو متابعة) */
     showClinicalRecord: !picking,
     showReviewCheckbox: isFirst && !picking,
