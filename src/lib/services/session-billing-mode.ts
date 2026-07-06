@@ -167,6 +167,8 @@ function num(v: unknown): number {
 export function resolveOperationPaymentSplit(
   op: {
     paid_amount?: number | string | null;
+    doctor_share_amount?: number | string | null;
+    clinic_share_amount?: number | string | null;
     materials_cost?: number | string | null;
   },
   doctor: Doctor | null,
@@ -179,6 +181,30 @@ export function resolveOperationPaymentSplit(
   const paid = num(op.paid_amount);
   if (paid <= 0) {
     return { doctorShare: 0, clinicShare: 0, paid: 0 };
+  }
+
+  const storedDoc = num(op.doctor_share_amount);
+  const storedClinic = num(op.clinic_share_amount);
+  if (storedDoc > 0 || storedClinic > 0) {
+    if (storedDoc > 0 && storedClinic > 0) {
+      return {
+        doctorShare: roundMoney(storedDoc),
+        clinicShare: roundMoney(storedClinic),
+        paid,
+      };
+    }
+    if (storedDoc > 0) {
+      return {
+        doctorShare: roundMoney(storedDoc),
+        clinicShare: roundMoney(Math.max(0, paid - storedDoc)),
+        paid,
+      };
+    }
+    return {
+      doctorShare: roundMoney(Math.max(0, paid - storedClinic)),
+      clinicShare: roundMoney(storedClinic),
+      paid,
+    };
   }
 
   const split = previewPaidSessionSplit({

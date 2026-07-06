@@ -646,6 +646,16 @@ function shouldUseDoctorPercentageForPaymentSplit(
   const caseClinicRatio = caseClinic / finalPrice;
   const pctMismatch = Math.abs(caseDocRatio - expectedPct) > 0.011;
 
+  // حالة مسجّلة كلها للعيادة لكن الطبيب نسبة — استخدم نسبة الطبيب
+  if (
+    caseDoc <= FINANCIAL_EPSILON &&
+    caseClinic > FINANCIAL_EPSILON &&
+    expectedPct > 0 &&
+    expectedPct < 1
+  ) {
+    return true;
+  }
+
   const fiftyFiftyStored =
     caseDoc > 0 &&
     caseClinic > 0 &&
