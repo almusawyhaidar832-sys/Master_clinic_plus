@@ -16,7 +16,9 @@ import {
   type DebtorCaseDetail,
 } from "@/lib/ledger/outstanding-debt";
 import {
+  resolveReviewFeeOnOperation,
   treatmentPaidForDoctorShare,
+  isReviewFeeOnlyPayment,
 } from "@/lib/services/doctor-wallet";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import { DOCTOR_FINANCE_WITH_NAME_SELECT } from "@/lib/services/doctor-db-select";
@@ -129,18 +131,56 @@ function reviewFeeAmountOnOp(op: TodayOperationRow): number {
   return num(row.review_fee_amount);
 }
 
-function isReviewFeeCollection(op: TodayOperationRow): boolean {
-  if (op.is_review_statement) return true;
-  if (reviewFeeAmountOnOp(op) > 0) return true;
+function isReviewFeeCollection(
+  op: TodayOperationRow,
+  clinicReviewFee = 0
+): boolean {
+  const raw = op as TodayOperationRow & {
+    review_fee_amount?: number | string | null;
+  };
+  if (
+    isReviewFeeOnlyPayment(
+      {
+        paid_amount: op.paid_amount,
+        review_fee_amount: raw.review_fee_amount,
+        is_review_statement: op.is_review_statement,
+      },
+      clinicReviewFee
+    )
+  ) {
+    return true;
+  }
   const label = opName(op);
   return label.includes("كشفية") || label.includes("كشف +");
 }
 
-function sessionLabelFromOp(op: TodayOperationRow): string {
+function sessionLabelFromOp(
+  op: TodayOperationRow,
+  clinicReviewFee = 0
+): string {
   if (num(op.remaining_debt) > 0 && num(op.paid_amount) <= 0) {
     return `${opName(op)} — تسجيل دين`;
   }
-  if (isReviewFeeCollection(op)) {
+  const paid = ledgerPaidToday(op);
+  const reviewFee = resolveReviewFeeOnOperation(
+    {
+      paid_amount: op.paid_amount,
+      review_fee_amount: num(
+        (op as { review_fee_amount?: unknown }).review_fee_amount
+      ),
+      is_review_statement: op.is_review_statement,
+    },
+    clinicReviewFee
+  );
+  if (
+    reviewFee > FINANCIAL_EPSILON &&
+    paid > reviewFee + FINANCIAL_EPSILON
+  ) {
+    const base =
+      opName(op).replace(/\s*—\s*كشف\s*\+\s*كشفية/i, "").trim() || "جلسة";
+    return `${base} — علاج + كشفية ${formatCurrency(reviewFee)}`;
+  }
+  if (isReviewFeeCollection(op, clinicReviewFee)) {
     const fee = reviewFeeAmountOnOp(op) || ledgerPaidToday(op);
     const base = opName(op).replace(/\s*—\s*كشف\s*\+\s*كشفية/i, "").trim() || "كشف";
     return fee > 0
@@ -273,10 +313,11 @@ function lookupVisitPaidToday(
 function isReviewFeeSettledVisit(
   op: TodayOperationRow,
   remaining: number,
-  requiredToday: number
+  requiredToday: number,
+  clinicReviewFee = 0
 ): boolean {
   if (requiredToday > FINANCIAL_EPSILON) return false;
-  if (!isReviewFeeCollection(op)) return false;
+  if (!isReviewFeeCollection(op, clinicReviewFee)) return false;
   if (ledgerPaidToday(op) <= FINANCIAL_EPSILON) return false;
   return remaining <= FINANCIAL_EPSILON;
 }
@@ -515,7 +556,8 @@ type DoctorPaymentMeta = {
 /** حصة الطبيب لزيارة — نسبته الحالية فقط (بدون 50/50 مخزّن) */
 function earnedVisitShareLive(
   ops: TodayOperationRow[],
-  meta: DoctorPaymentMeta
+  meta: DoctorPaymentMeta,
+  clinicReviewFee = 0
 ): number {
   if (meta.salary) return 0;
 
@@ -525,11 +567,14 @@ function earnedVisitShareLive(
       review_fee_amount?: unknown;
       is_review_statement?: boolean | null;
     };
-    const treatmentPaid = treatmentPaidForDoctorShare({
-      paid_amount: num(op.paid_amount),
-      review_fee_amount: num(raw.review_fee_amount),
-      is_review_statement: raw.is_review_statement,
-    });
+    const treatmentPaid = treatmentPaidForDoctorShare(
+      {
+        paid_amount: num(op.paid_amount),
+        review_fee_amount: num(raw.review_fee_amount),
+        is_review_statement: raw.is_review_statement,
+      },
+      clinicReviewFee
+    );
     if (treatmentPaid <= FINANCIAL_EPSILON) continue;
 
     if (meta.doctor) {
@@ -549,7 +594,8 @@ function computeVisitDoctorShares(
   operations: TodayOperationRow[],
   visitPaidByKey: Map<string, number>,
   metaByDoctor: Map<string, DoctorPaymentMeta>,
-  groupByDay: boolean
+  groupByDay: boolean,
+  clinicReviewFee = 0
 ): { byDoctor: Map<string, number>; byVisit: Map<string, number> } {
   const groups = new Map<
     string,
@@ -581,7 +627,7 @@ function computeVisitDoctorShares(
   for (const { doctorId, vk, ops } of groups.values()) {
     const meta = metaByDoctor.get(doctorId);
     if (!meta) continue;
-    const earned = earnedVisitShareLive(ops, meta);
+    const earned = earnedVisitShareLive(ops, meta, clinicReviewFee);
     byVisit.set(vk, earned);
     byDoctor.set(doctorId, (byDoctor.get(doctorId) ?? 0) + earned);
   }
@@ -920,6 +966,19 @@ export function collectionStatusClass(status: CollectionPaymentStatus): string {
   }
 }
 
+async function loadClinicDefaultReviewFee(
+  supabase: SupabaseClient,
+  clinicId: string
+): Promise<number> {
+  const { data } = await supabase
+    .from("clinics")
+    .select("review_fee_enabled, review_fee_amount")
+    .eq("id", clinicId)
+    .maybeSingle();
+  if (!data?.review_fee_enabled) return 0;
+  return num(data.review_fee_amount);
+}
+
 export async function fetchDailyCollections(
   supabase: SupabaseClient,
   clinicId: string,
@@ -937,6 +996,8 @@ export async function fetchDailyCollections(
   const effectiveTo = dateTo >= dateFrom ? dateTo : dateFrom;
   const effectiveFrom = dateFrom;
   const groupByDay = effectiveFrom !== effectiveTo;
+
+  const clinicReviewFee = await loadClinicDefaultReviewFee(supabase, clinicId);
 
   const [ledger, queueRes, doctorsRes] = await Promise.all([
     fetchLedgerOperationsForDate(supabase, clinicId, {
@@ -1040,7 +1101,8 @@ export async function fetchDailyCollections(
     ),
     visitPaidByKey,
     metaByDoctor,
-    groupByDay
+    groupByDay,
+    clinicReviewFee
   );
 
   const assistantPayrollLines = await fetchDailyAssistantPayrollLines(
@@ -1134,7 +1196,8 @@ export async function fetchDailyCollections(
     const reviewFeeSettled = isReviewFeeSettledVisit(
       op,
       remaining,
-      requiredToday
+      requiredToday,
+      clinicReviewFee
     );
     const caseDebtTotal = debtForCollectionStatus({
       remaining,
@@ -1173,7 +1236,7 @@ export async function fetchDailyCollections(
       doctorId,
       doctorName: op.doctor?.full_name_ar?.trim() || "طبيب",
       visitDate: groupByDay ? opDate : null,
-      sessionLabel: sessionLabelFromOp(op),
+      sessionLabel: sessionLabelFromOp(op, clinicReviewFee),
       paidToday,
       visitPaidToday,
       visitDoctorShare: visitDoctorShareByKey.get(vk) ?? 0,
@@ -1414,37 +1477,46 @@ type CaseShareRow = {
   primary_doctor_id?: string | null;
 };
 
-function isReviewFeeOnlyOperation(op: TodayOperationRow): boolean {
+function isReviewFeeOnlyOperation(
+  op: TodayOperationRow,
+  clinicReviewFee = 0
+): boolean {
   const raw = op as TodayOperationRow & {
     is_review_statement?: boolean | null;
     review_fee_amount?: number | string | null;
   };
-  if (Boolean(raw.is_review_statement)) return true;
-  const paid = num(op.paid_amount);
-  const reviewFee = num(raw.review_fee_amount);
-  return (
-    reviewFee > FINANCIAL_EPSILON &&
-    paid > FINANCIAL_EPSILON &&
-    paid <= reviewFee + FINANCIAL_EPSILON
+  return isReviewFeeOnlyPayment(
+    {
+      paid_amount: op.paid_amount,
+      review_fee_amount: raw.review_fee_amount,
+      is_review_statement: raw.is_review_statement,
+    },
+    clinicReviewFee
   );
 }
 
 function doctorShareByLivePercentage(
   paid: number,
   doctor: Doctor | null | undefined,
-  op: TodayOperationRow
+  op: TodayOperationRow,
+  clinicReviewFee = 0
 ): number {
   if (paid <= FINANCIAL_EPSILON || !doctor || isSalaryDoctor(doctor)) {
     return 0;
   }
 
-  const reviewFee = reviewFeeAmountOnOp(op);
-  const treatmentPaid =
-    op.is_review_statement || (reviewFee > 0 && paid <= reviewFee + FINANCIAL_EPSILON)
-      ? 0
-      : reviewFee > 0
-        ? Math.max(0, paid - reviewFee)
-        : paid;
+  const raw = op as TodayOperationRow & {
+    review_fee_amount?: number | string | null;
+    is_review_statement?: boolean | null;
+  };
+  const treatmentPaid = treatmentPaidForDoctorShare(
+    {
+      paid_amount: paid,
+      review_fee_amount: raw.review_fee_amount,
+      is_review_statement: raw.is_review_statement,
+    },
+    clinicReviewFee
+  );
   if (treatmentPaid <= FINANCIAL_EPSILON) return 0;
 
   return computeLiveDoctorShare(
@@ -1470,6 +1542,8 @@ export async function fetchPeriodCollectionFinancialTotals(
     dateFrom: from,
     dateTo: to,
   });
+
+  const clinicReviewFee = await loadClinicDefaultReviewFee(supabase, clinicId);
 
   const caseIds = [
     ...new Set(
@@ -1529,7 +1603,7 @@ export async function fetchPeriodCollectionFinancialTotals(
 
     collected += paid;
 
-    if (isReviewFeeOnlyOperation(op)) {
+    if (isReviewFeeOnlyOperation(op, clinicReviewFee)) {
       continue;
     }
 
@@ -1539,7 +1613,12 @@ export async function fetchPeriodCollectionFinancialTotals(
     if (!effectiveDoctorId) continue;
 
     const doctor = doctorById.get(effectiveDoctorId);
-    const doctorShare = doctorShareByLivePercentage(paid, doctor, op);
+    const doctorShare = doctorShareByLivePercentage(
+      paid,
+      doctor,
+      op,
+      clinicReviewFee
+    );
     doctorShareTotal += doctorShare;
 
     const current = byDoctorMap.get(effectiveDoctorId) ?? {

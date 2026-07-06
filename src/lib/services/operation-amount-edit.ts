@@ -1,11 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import { treatmentPaidForDoctorShare } from "@/lib/services/doctor-wallet";
 import {
+  FINANCIAL_EPSILON,
   doctorPaymentPct,
   previewPaidSessionSplit,
   previewTreatmentSplitWithReview,
 } from "@/lib/services/patient-financial-plan";
-import { treatmentPaidForDoctorShare } from "@/lib/services/doctor-wallet";
 import {
   isPersistedTreatmentCaseId,
   processCasePayment,
@@ -72,10 +73,41 @@ type ShareRecalc = {
   remainingDebt: number;
 };
 
+/** يكمّل review_fee_amount للجلسات القديمة (كشفية + علاج) */
+async function normalizeOperationReviewFee(
+  admin: SupabaseClient,
+  clinicId: string,
+  op: OperationRow
+): Promise<OperationRow> {
+  const paid = num(op.paid_amount);
+  const stored = num(op.review_fee_amount);
+  if (stored > 0 || !op.is_review_statement || paid <= 0) {
+    return op;
+  }
+
+  const { data: clinic } = await admin
+    .from("clinics")
+    .select("review_fee_enabled, review_fee_amount")
+    .eq("id", clinicId)
+    .maybeSingle();
+
+  const clinicFee =
+    clinic?.review_fee_enabled && num(clinic.review_fee_amount) > 0
+      ? num(clinic.review_fee_amount)
+      : 0;
+
+  if (clinicFee > 0 && paid > clinicFee + FINANCIAL_EPSILON) {
+    return { ...op, review_fee_amount: clinicFee, is_review_statement: true };
+  }
+
+  return { ...op, review_fee_amount: paid, is_review_statement: true };
+}
+
 /** إعادة حساب حصة الطبيب/العيادة حسب النسبة — نفس منطق الإدخال السريع */
 async function recalculateOperationShares(
   admin: SupabaseClient,
-  op: OperationRow
+  op: OperationRow,
+  clinicId?: string
 ): Promise<ShareRecalc> {
   const paid = num(op.paid_amount);
   const total = num(op.total_amount);
@@ -83,6 +115,13 @@ async function recalculateOperationShares(
   const reviewFee = num(op.review_fee_amount);
   const caseId = op.treatment_case_id ? String(op.treatment_case_id) : null;
   const isPlan = op.session_kind === "plan" || total > 0;
+  const effectiveClinicId = clinicId ?? String(op.clinic_id ?? "");
+
+  const normalized =
+    effectiveClinicId && !reviewFee && op.is_review_statement
+      ? await normalizeOperationReviewFee(admin, effectiveClinicId, op)
+      : op;
+  const reviewFeeNorm = num(normalized.review_fee_amount);
 
   const { data: doctorRaw } = await admin
     .from("doctors")
@@ -127,10 +166,10 @@ async function recalculateOperationShares(
   const patientPaid = num(patientRaw?.total_paid);
 
   if (isPlan && total > 0) {
-    const planTotal = total + reviewFee;
+    const planTotal = total + reviewFeeNorm;
     const planSplit = previewTreatmentSplitWithReview(
       total,
-      reviewFee,
+      reviewFeeNorm,
       materials,
       doctor
     );
@@ -148,9 +187,12 @@ async function recalculateOperationShares(
     const remainingDebt = Math.max(0, planTotal - patientPaid);
 
     return {
-      doctorShare: capDoctorShare(paid, doctor, doctorShare, op),
+      doctorShare: capDoctorShare(paid, doctor, doctorShare, normalized),
       clinicShare: roundMoney(
-        Math.max(0, paid - capDoctorShare(paid, doctor, doctorShare, op))
+        Math.max(
+          0,
+          paid - capDoctorShare(paid, doctor, doctorShare, normalized)
+        )
       ),
       remainingDebt,
     };
@@ -158,8 +200,8 @@ async function recalculateOperationShares(
 
   const split = previewPaidSessionSplit({
     paidAmount: paid,
-    reviewFee,
-    isReviewStatement: Boolean(op.is_review_statement),
+    reviewFee: reviewFeeNorm,
+    isReviewStatement: Boolean(normalized.is_review_statement),
     caseFinalPrice: caseFinal || agreed,
     caseDoctorShare: caseDoc || patientDoc,
     caseClinicShare: caseClinic || patientClinic,
@@ -176,18 +218,18 @@ async function recalculateOperationShares(
           : Math.max(0, total - paid);
 
     return {
-      doctorShare: capDoctorShare(paid, doctor, split.doctorShare, op),
+      doctorShare: capDoctorShare(paid, doctor, split.doctorShare, normalized),
       clinicShare: roundMoney(
         Math.max(
           0,
-          paid - capDoctorShare(paid, doctor, split.doctorShare, op)
+          paid - capDoctorShare(paid, doctor, split.doctorShare, normalized)
         )
       ),
       remainingDebt: roundMoney(remainingDebt),
     };
   }
 
-  const fallbackDoc = capDoctorShare(paid, doctor, 0, op);
+  const fallbackDoc = capDoctorShare(paid, doctor, 0, normalized);
   return {
     doctorShare: fallbackDoc,
     clinicShare: roundMoney(Math.max(0, paid - fallbackDoc)),
@@ -278,7 +320,11 @@ export async function syncFinancialsAfterOperationEdit(
     );
   }
 
-  const shares = await recalculateOperationShares(admin, after);
+  const shares = await recalculateOperationShares(
+    admin,
+    after,
+    String(after.clinic_id)
+  );
 
   const { error: shareErr } = await admin
     .from("patient_operations")
@@ -435,20 +481,29 @@ export async function repairDoctorOperationShares(
       continue;
     }
 
-    const shares = await recalculateOperationShares(admin, op);
+    const normalized = await normalizeOperationReviewFee(
+      admin,
+      clinicId,
+      op
+    );
+    const shares = await recalculateOperationShares(admin, normalized, clinicId);
     const beforeDoc = num(op.doctor_share_amount);
+    const beforeReview = num(op.review_fee_amount);
+    const patch: Record<string, unknown> = {
+      doctor_share_amount: shares.doctorShare,
+      clinic_share_amount: shares.clinicShare,
+      remaining_debt: shares.remainingDebt,
+    };
+    if (num(normalized.review_fee_amount) !== beforeReview) {
+      patch.review_fee_amount = normalized.review_fee_amount;
+      patch.is_review_statement = normalized.is_review_statement ?? true;
+    }
     if (
       Math.abs(beforeDoc - shares.doctorShare) > 0.01 ||
-      Math.abs(num(op.clinic_share_amount) - shares.clinicShare) > 0.01
+      Math.abs(num(op.clinic_share_amount) - shares.clinicShare) > 0.01 ||
+      num(normalized.review_fee_amount) !== beforeReview
     ) {
-      await admin
-        .from("patient_operations")
-        .update({
-          doctor_share_amount: shares.doctorShare,
-          clinic_share_amount: shares.clinicShare,
-          remaining_debt: shares.remainingDebt,
-        })
-        .eq("id", op.id);
+      await admin.from("patient_operations").update(patch).eq("id", op.id);
       repaired += 1;
     }
 

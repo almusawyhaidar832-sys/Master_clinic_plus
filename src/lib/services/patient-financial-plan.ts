@@ -7,6 +7,7 @@ import {
   type DoctorShareInput,
 } from "@/lib/finance";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import { isReviewFeeOnlyPayment } from "@/lib/services/doctor-wallet";
 import type { Doctor, DoctorPercentage, MaterialsCostShare } from "@/types";
 
 export type SessionKind = "plan" | "payment";
@@ -732,10 +733,13 @@ export function previewPaidSessionSplit(opts: {
   const materials = Math.max(0, opts.materialsCost ?? 0);
   if (paid <= 0 && materials <= 0) return null;
 
-  // كشفية فقط — 100% للعيادة
+  // كشفية فقط — 100% للعيادة (بدون مبلغ علاج في نفس الدفعة)
   if (
-    opts.isReviewStatement ||
-    (reviewFee > FINANCIAL_EPSILON && paid <= reviewFee + FINANCIAL_EPSILON)
+    isReviewFeeOnlyPayment({
+      paid_amount: paid,
+      review_fee_amount: reviewFee,
+      is_review_statement: opts.isReviewStatement,
+    })
   ) {
     if (paid <= FINANCIAL_EPSILON) return null;
     return { paidAmount: paid, doctorShare: 0, clinicShare: roundMoney(paid) };

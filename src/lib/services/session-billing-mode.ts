@@ -6,7 +6,7 @@ import {
   previewPaidSessionSplit,
   type PatientFinancialPlan,
 } from "@/lib/services/patient-financial-plan";
-import { treatmentPaidForDoctorShare } from "@/lib/services/doctor-wallet";
+import { treatmentPaidForDoctorShare, isReviewFeeOnlyPayment } from "@/lib/services/doctor-wallet";
 
 /** نوع تسجيل الجلسة — بدون سعر كلي */
 export type SessionBillingMode =
@@ -193,12 +193,15 @@ export function resolveOperationPaymentSplit(
 
   const reviewFee = num(op.review_fee_amount);
   const isReviewStatement = Boolean(op.is_review_statement);
-  const hasReviewComponent =
-    isReviewStatement || reviewFee > FINANCIAL_EPSILON;
+  const reviewOnly = isReviewFeeOnlyPayment({
+    paid_amount: op.paid_amount,
+    review_fee_amount: op.review_fee_amount,
+    is_review_statement: op.is_review_statement,
+  });
 
   const storedDoc = num(op.doctor_share_amount);
   const storedClinic = num(op.clinic_share_amount);
-  if (!hasReviewComponent && (storedDoc > 0 || storedClinic > 0)) {
+  if (!reviewOnly && (storedDoc > 0 || storedClinic > 0)) {
     if (storedDoc > 0 && storedClinic > 0) {
       return {
         doctorShare: roundMoney(storedDoc),
