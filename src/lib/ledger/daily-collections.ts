@@ -328,6 +328,9 @@ function computeStats(rows: DailyCollectionRow[]): DoctorDailySummary["stats"] {
         break;
       case "debtor":
         stats.debtors += 1;
+        if (row.visitPaidToday > FINANCIAL_EPSILON) {
+          stats.partial += 1;
+        }
         break;
     }
   }
@@ -355,11 +358,16 @@ function mergeStats(
 
 export function matchesCollectionFilter(
   status: CollectionPaymentStatus,
-  filter: CollectionStatusFilter
+  filter: CollectionStatusFilter,
+  visitPaidToday = 0
 ): boolean {
   if (filter === "all") return true;
   if (filter === "paid") {
-    return status === "paid_full" || status === "partial";
+    return (
+      status === "paid_full" ||
+      status === "partial" ||
+      (status === "debtor" && visitPaidToday > FINANCIAL_EPSILON)
+    );
   }
   if (filter === "unpaid") {
     return status === "unpaid";
@@ -609,7 +617,9 @@ export async function fetchDailyCollections(
   }
 
   const allRows = sessionRows
-    .filter((row) => matchesCollectionFilter(row.paymentStatus, statusFilter))
+    .filter((row) =>
+      matchesCollectionFilter(row.paymentStatus, statusFilter, row.visitPaidToday)
+    )
     .filter(
       (row) => row.paymentStatus !== "in_visit" || statusFilter === "all"
     );

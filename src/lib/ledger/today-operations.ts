@@ -3,6 +3,7 @@ import {
   buildPlanFromCaseRow,
   computedCaseRemaining,
 } from "@/lib/services/patient-financial-plan";
+import { resolveSessionPaidAmount } from "@/lib/services/patient-operations-profile";
 import { opDebt, operationLabelForCase, type PatientOperation } from "@/types";
 import { localPeriodUtcBounds, todayISO } from "@/lib/utils";
 
@@ -24,6 +25,7 @@ export type TodayCaseInfo = {
 export type TodayOperationRow = PatientOperation & {
   patient?: { full_name_ar: string };
   doctor?: { full_name_ar: string };
+  invoices?: { paid_amount: number; total_amount: number; remaining_amount: number }[] | null;
 };
 
 export function sessionKindLabel(kind: PatientOperation["session_kind"]): string {
@@ -65,8 +67,9 @@ export function ledgerCaseName(
   return operationLabelForCase(op);
 }
 
-export function ledgerPaidToday(op: PatientOperation): number {
-  return Math.max(0, num(op.paid_amount));
+/** المدفوع في الجلسة — نفس منطق ملف المراجع (يشمل الفاتورة المؤرشفة) */
+export function ledgerPaidToday(op: TodayOperationRow | PatientOperation): number {
+  return Math.max(0, resolveSessionPaidAmount(op));
 }
 
 /** المتبقي المعروض في جدول جلسات اليوم — ذمة الحالة إن وُجدت */
@@ -131,14 +134,13 @@ export async function fetchLedgerOperationsForDate(
   const { startIso, endIso } = localPeriodUtcBounds(date, date);
 
   const selectCols =
-    "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)";
+    "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar), invoices(paid_amount, total_amount, remaining_amount)";
 
   let byOpDateQuery = supabase
     .from("patient_operations")
     .select(selectCols)
     .eq("clinic_id", clinicId)
     .eq("operation_date", date)
-    .or("invoice_status.neq.archived,invoice_status.is.null")
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -148,7 +150,6 @@ export async function fetchLedgerOperationsForDate(
     .eq("clinic_id", clinicId)
     .gte("created_at", startIso)
     .lte("created_at", endIso)
-    .or("invoice_status.neq.archived,invoice_status.is.null")
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -164,9 +165,7 @@ export async function fetchLedgerOperationsForDate(
 
   const mergedById = new Map<string, TodayOperationRow>();
   for (const row of [...(byOpDateRes.data ?? []), ...(byCreatedRes.data ?? [])]) {
-    const op = row as TodayOperationRow;
-    if (op.invoice_status === "archived") continue;
-    mergedById.set(op.id, op);
+    mergedById.set((row as TodayOperationRow).id, row as TodayOperationRow);
   }
 
   const operations = [...mergedById.values()].sort((a, b) =>
