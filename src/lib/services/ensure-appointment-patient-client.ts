@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getPatientDisplayPhone } from "@/lib/phone";
 import {
   ensurePatientIdForBooking,
-  findPatientIdByPhone,
+  findPatientIdByName,
   resolveExistingPatientId,
 } from "@/lib/services/resolve-patient-id";
 
@@ -21,10 +21,10 @@ export async function resolveAppointmentPatientProfileHref(
     return `/dashboard/patients/${appointment.patient_id}`;
   }
 
-  const phone = appointment.patient_phone?.trim();
-  if (phone) {
-    const byPhone = await findPatientIdByPhone(supabase, clinicId, phone);
-    if (byPhone) return `/dashboard/patients/${byPhone}`;
+  const name = appointment.patient_name_ar?.trim();
+  if (name) {
+    const byName = await findPatientIdByName(supabase, clinicId, name);
+    if (byName) return `/dashboard/patients/${byName}`;
   }
 
   const ctx = await ensureAppointmentPatientClient(

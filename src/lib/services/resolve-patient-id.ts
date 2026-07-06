@@ -52,21 +52,23 @@ export async function findPatientIdByName(
   return (data?.id as string | undefined) ?? null;
 }
 
-/** بحث ملف موجود — بالهاتف أولاً ثم الاسم (يمنع تكرار الملفات) */
+/**
+ * بحث ملف موجود — بالاسم فقط عند وجود اسم.
+ * لا نربط بالهاتف وحده: العائلة قد تشترك برقم واحد وأسماء مختلفة.
+ */
 export async function resolveExistingPatientId(
   supabase: SupabaseClient,
   clinicId: string,
   input: { name?: string | null; phone?: string | null }
 ): Promise<string | null> {
-  const phone = input.phone?.trim();
-  if (phone) {
-    const byPhone = await findPatientIdByPhone(supabase, clinicId, phone);
-    if (byPhone) return byPhone;
-  }
-
   const name = input.name?.trim();
   if (name) {
     return findPatientIdByName(supabase, clinicId, name);
+  }
+
+  const phone = input.phone?.trim();
+  if (phone) {
+    return findPatientIdByPhone(supabase, clinicId, phone);
   }
 
   return null;

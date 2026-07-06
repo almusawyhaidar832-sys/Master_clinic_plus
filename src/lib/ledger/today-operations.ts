@@ -7,7 +7,6 @@ import {
 import { resolveSessionPaidAmount } from "@/lib/services/patient-operations-profile";
 import {
   normalizePatientNameForMatch,
-  patientPhoneDigits,
 } from "@/lib/services/resolve-patient-id";
 import { CLINICAL_SESSION_LABEL } from "@/lib/clinical/constants";
 import { opDebt, operationLabelForCase, type PatientOperation } from "@/types";
@@ -45,25 +44,14 @@ export type ConsolidatedTodayOperationRow = TodayOperationRow & {
   visitOperationIds: string[];
 };
 
-function patientPhoneFromOp(op: TodayOperationRow): string | null {
-  const patient = op.patient;
-  if (!patient || typeof patient !== "object") return null;
-  const raw =
-    (patient.phone as string | null | undefined) ??
-    (patient.phone_number as string | null | undefined);
-  const digits = patientPhoneDigits(raw);
-  return digits.length >= 8 ? digits : null;
-}
-
-/** مفتاح زيارة — طبيب + هاتف أو اسم (لا patient_id — يمنع تكرار نفس المراجع بملفين) */
+/** مفتاح زيارة — طبيب + ملف المراجع أو الاسم (يدعم عائلة برقم هاتف مشترك) */
 function canonicalVisitKey(input: {
   doctorId: string;
+  patientId: string | null;
   patientName: string;
-  patientPhone?: string | null;
 }): string {
-  const phone = patientPhoneDigits(input.patientPhone);
-  if (phone.length >= 8) {
-    return `${input.doctorId}:phone:${phone}`;
+  if (input.patientId) {
+    return `${input.doctorId}:${input.patientId}`;
   }
   return `${input.doctorId}:name:${normalizePatientNameForMatch(input.patientName)}`;
 }
@@ -111,8 +99,8 @@ export function consolidateLedgerOperationsByVisit(
 
     const key = canonicalVisitKey({
       doctorId,
+      patientId: op.patient_id ?? null,
       patientName: op.patient?.full_name_ar?.trim() || "مراجع",
-      patientPhone: patientPhoneFromOp(op),
     });
     const list = groups.get(key) ?? [];
     list.push(op);

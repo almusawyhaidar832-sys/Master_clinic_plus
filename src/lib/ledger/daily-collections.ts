@@ -9,7 +9,6 @@ import {
 } from "@/lib/ledger/today-operations";
 import {
   normalizePatientNameForMatch,
-  patientPhoneDigits,
 } from "@/lib/services/resolve-patient-id";
 import {
   sumPatientDebtFromCases,
@@ -158,12 +157,6 @@ function normalizePatientName(name: string): string {
   return normalizePatientNameForMatch(name);
 }
 
-function patientPhoneFromOp(op: TodayOperationRow): string | null {
-  const phone = phoneFromPatientJoin(op.patient);
-  const digits = patientPhoneDigits(phone);
-  return digits.length >= 8 ? digits : null;
-}
-
 function rowKey(doctorId: string, patientId: string | null, patientName: string): string {
   const patientPart = patientId ?? normalizePatientName(patientName);
   return `${doctorId}:${patientPart}`;
@@ -221,19 +214,16 @@ function visitKey(
   return rowKey(doctorId, patientId, patientName);
 }
 
-/** مفتاح موحّد — يمنع صفّين لنفس المراجع (حتى مع ملفين مكررين) */
+/** مفتاح موحّد — طبيب + مراجع (يدعم عائلة برقم هاتف واحد) */
 function canonicalVisitKey(input: {
   doctorId: string;
   patientId: string | null;
   patientName: string;
-  patientPhone?: string | null;
   day?: string;
 }): string {
-  const phone = patientPhoneDigits(input.patientPhone);
-  const base =
-    phone.length >= 8
-      ? `${input.doctorId}:phone:${phone}`
-      : `${input.doctorId}:name:${normalizePatientName(input.patientName)}`;
+  const base = input.patientId
+    ? `${input.doctorId}:${input.patientId}`
+    : `${input.doctorId}:name:${normalizePatientName(input.patientName)}`;
   return input.day ? `${base}:${input.day}` : base;
 }
 
@@ -253,7 +243,6 @@ function sumVisitPaidToday(
       doctorId,
       patientId,
       patientName,
-      patientPhone: patientPhoneFromOp(op),
       day: groupByDay ? op.operation_date ?? undefined : undefined,
     });
     totals.set(key, (totals.get(key) ?? 0) + paid);
@@ -351,7 +340,6 @@ function computeVisitDoctorShares(
       doctorId,
       patientId: op.patient_id ?? null,
       patientName: op.patient?.full_name_ar?.trim() || "مراجع",
-      patientPhone: patientPhoneFromOp(op),
       day: groupByDay ? op.operation_date ?? undefined : undefined,
     });
     const groupKey = `${doctorId}\0${vk}`;
@@ -412,7 +400,6 @@ function computeStats(
       doctorId: row.doctorId,
       patientId: row.patientId,
       patientName: row.patientName,
-      patientPhone: row.patientPhone,
       day: groupByDay ? row.visitDate ?? undefined : undefined,
     });
     visitCollected.set(vk, row.visitPaidToday);
@@ -483,7 +470,6 @@ function mergeRowsByVisit(
       doctorId: row.doctorId,
       patientId: row.patientId,
       patientName: row.patientName,
-      patientPhone: row.patientPhone,
       day: groupByDay ? row.visitDate ?? undefined : undefined,
     });
     const list = groups.get(key) ?? [];
@@ -799,9 +785,6 @@ export async function fetchDailyCollections(
       doctorId,
       patientId,
       patientName,
-      patientPhone:
-        queue?.patient_phone?.trim() ||
-        patientPhoneFromOp(op),
       day: groupByDay ? opDate : undefined,
     });
     const visitPaidToday = visitPaidByKey.get(vk) ?? paidToday;
@@ -860,7 +843,6 @@ export async function fetchDailyCollections(
       doctorId: entry.doctor_id,
       patientId: entry.patient_id,
       patientName,
-      patientPhone: entry.patient_phone,
       day: groupByDay ? entryDate : undefined,
     });
     const visitPaidToday = visitPaidByKey.get(vk) ?? 0;

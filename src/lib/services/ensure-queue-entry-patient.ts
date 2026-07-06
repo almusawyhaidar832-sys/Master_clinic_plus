@@ -2,11 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensureAppointmentPatient } from "@/lib/services/ensure-appointment-patient";
-import {
-  ensurePatientProfileForBooking,
-  findPatientIdByName,
-  findPatientIdByPhone,
-} from "@/lib/services/resolve-patient-id";
+import { ensurePatientProfileForBooking } from "@/lib/services/resolve-patient-id";
 
 export interface QueueEntryPatientContext {
   queueEntryId: string;
@@ -52,13 +48,8 @@ export async function ensureQueueEntryPatient(
   const queuePhone = (entry.patient_phone as string | null)?.trim() ?? "";
   const queueName = (entry.patient_name as string | null)?.trim() ?? "";
 
-  if (!patientId && queuePhone) {
-    patientId = await findPatientIdByPhone(admin, clinicId, queuePhone);
-  }
-
-  if (!patientId && queueName) {
-    patientId = await findPatientIdByName(admin, clinicId, queueName);
-  }
+  let resolvedName = queueName || "مراجع";
+  let resolvedPhone = queuePhone || null;
 
   if (!patientId) {
     const name = queueName || (queuePhone ? "مراجع" : "");
@@ -74,20 +65,22 @@ export async function ensureQueueEntryPatient(
       primaryDoctorId: entry.doctor_id as string,
     });
     patientId = profile.patientId;
+    resolvedName = profile.name;
+    resolvedPhone = profile.phone ?? (queuePhone || null);
+  } else {
+    const { data: patient } = await admin
+      .from("patients")
+      .select("full_name_ar, phone, phone_number")
+      .eq("id", patientId)
+      .maybeSingle();
+
+    resolvedName =
+      (patient?.full_name_ar as string)?.trim() || queueName || "مراجع";
+    resolvedPhone =
+      (patient?.phone as string | null) ??
+      (patient?.phone_number as string | null) ??
+      (queuePhone || null);
   }
-
-  const { data: patient } = await admin
-    .from("patients")
-    .select("full_name_ar, phone, phone_number")
-    .eq("id", patientId)
-    .maybeSingle();
-
-  const resolvedName =
-    (patient?.full_name_ar as string)?.trim() || queueName || "مراجع";
-  const resolvedPhone =
-    (patient?.phone as string | null) ??
-    (patient?.phone_number as string | null) ??
-    (queuePhone || null);
 
   const queuePatch: Record<string, unknown> = {
     patient_id: patientId,
