@@ -23,7 +23,7 @@ import {
   slipPaidNet,
 } from "@/lib/services/payroll-paid-portions";
 import {
-  reverseLastAssistantPayrollPaidTransaction,
+  creditAssistantPayrollAmounts,
   reverseLastStaffSlipPaidTransaction,
 } from "@/lib/services/payroll-financial";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
@@ -1408,7 +1408,15 @@ async function reconcileAssistantPayrollConfirmedToAccrued(
   clinicId: string,
   assistantId: string,
   monthYear: string,
-  fullNet: number
+  fullNet: number,
+  trimHint?: {
+    totalSalary: number;
+    doctorShare: number;
+    clinicShare: number;
+    doctorSharePct: number;
+    entryId: string;
+    entryDate: string;
+  }
 ): Promise<{ error?: string; notice?: string }> {
   const { data: record, error: fetchErr } = await admin
     .from("payroll_records")
@@ -1421,79 +1429,74 @@ async function reconcileAssistantPayrollConfirmedToAccrued(
   if (fetchErr) return { error: fetchErr.message };
   if (!record) return {};
 
-  let paidTotal = assistantPaidTotalSalary(record as PayrollRecord);
+  const paidTotal = assistantPaidTotalSalary(record as PayrollRecord);
   if (paidTotal <= fullNet + FINANCIAL_EPSILON) return {};
 
-  let reversedAny = false;
-  const liveRecord = { ...(record as PayrollRecord) };
-
-  for (let i = 0; i < 30 && paidTotal > fullNet + FINANCIAL_EPSILON; i++) {
-    const tx = await reverseLastAssistantPayrollPaidTransaction(
-      admin,
-      clinicId,
-      liveRecord
-    );
-    if (!tx.ok) {
-      return { error: tx.error ?? "تعذر تعديل تأكيد الصرف تلقائياً" };
-    }
-    if ((tx.reversedDoctor ?? 0) <= 0 && (tx.reversedClinic ?? 0) <= 0) {
-      break;
-    }
-
-    reversedAny = true;
-    const paidDoctor = assistantPaidDoctorShare(liveRecord);
-    const paidClinic = assistantPaidClinicShare(liveRecord);
-    const newPaidDoctor = roundMoney(
-      Math.max(0, paidDoctor - (tx.reversedDoctor ?? 0))
-    );
-    const newPaidClinic = roundMoney(
-      Math.max(0, paidClinic - (tx.reversedClinic ?? 0))
-    );
-    const reversedTotal = roundMoney(
-      (tx.reversedDoctor ?? 0) + (tx.reversedClinic ?? 0)
-    );
-    const newPaidTotal = roundMoney(Math.max(0, paidTotal - reversedTotal));
-
-    const { error: updErr } = await admin
-      .from("payroll_records")
-      .update({
-        paid_doctor_share_amount: newPaidDoctor,
-        paid_clinic_share_amount: newPaidClinic,
-        paid_total_salary: newPaidTotal,
-        paid_at: newPaidTotal > 0 ? liveRecord.paid_at : null,
-        status: "generated",
-      })
-      .eq("id", liveRecord.id);
-
-    if (updErr) return { error: updErr.message };
-
-    liveRecord.paid_doctor_share_amount = newPaidDoctor;
-    liveRecord.paid_clinic_share_amount = newPaidClinic;
-    liveRecord.paid_total_salary = newPaidTotal;
-    paidTotal = newPaidTotal;
-  }
-
-  if (paidTotal > fullNet + FINANCIAL_EPSILON) {
+  if (!trimHint || trimHint.totalSalary <= FINANCIAL_EPSILON) {
     return {
       error:
         "المبلغ المؤكَّد أكبر من الراتب بعد التعديل — ألغِ تأكيد الصرف يدوياً",
     };
   }
 
-  if (reversedAny) {
-    await recomputeAssistantPayrollRecord(
-      admin,
-      clinicId,
-      assistantId,
-      monthYear
-    );
-    return {
-      notice:
-        "تم إلغاء تأكيد صرف زائد تلقائياً — يمكنك إعادة التأكيد بعد التعديل",
-    };
+  const excess = roundMoney(paidTotal - fullNet);
+  const trimTotal = roundMoney(Math.min(excess, trimHint.totalSalary));
+  if (trimTotal <= FINANCIAL_EPSILON) return {};
+
+  const trimBreakdown = breakdownAssistantSalary({
+    total_salary: trimTotal,
+    doctor_share_percentage: trimHint.doctorSharePct,
+  });
+
+  const paidDoctor = assistantPaidDoctorShare(record as PayrollRecord);
+  const paidClinic = assistantPaidClinicShare(record as PayrollRecord);
+  const newPaidDoctor = roundMoney(
+    Math.max(0, paidDoctor - trimBreakdown.doctorShare)
+  );
+  const newPaidClinic = roundMoney(
+    Math.max(0, paidClinic - trimBreakdown.clinicShare)
+  );
+  const newPaidTotal = roundMoney(Math.max(0, paidTotal - trimTotal));
+
+  const credit = await creditAssistantPayrollAmounts(
+    admin,
+    clinicId,
+    record as PayrollRecord,
+    {
+      doctor: trimBreakdown.doctorShare,
+      clinic: trimBreakdown.clinicShare,
+    },
+    `حذف/تعديل أجر ${trimHint.entryDate}`,
+    `salary-entry:${trimHint.entryId}`
+  );
+  if (!credit.ok) {
+    return { error: credit.error ?? "تعذر تصحيح خصم الطبيب" };
   }
 
-  return {};
+  const { error: updErr } = await admin
+    .from("payroll_records")
+    .update({
+      paid_doctor_share_amount: newPaidDoctor,
+      paid_clinic_share_amount: newPaidClinic,
+      paid_total_salary: newPaidTotal,
+      paid_at: newPaidTotal > 0 ? (record as PayrollRecord).paid_at : null,
+      status: "generated",
+    })
+    .eq("id", record.id);
+
+  if (updErr) return { error: updErr.message };
+
+  await recomputeAssistantPayrollRecord(
+    admin,
+    clinicId,
+    assistantId,
+    monthYear
+  );
+
+  return {
+    notice:
+      "تم تصحيح مبلغ هذه الحركة فقط — تأكيدات الأيام السابقة لم تتأثر",
+  };
 }
 
 async function reconcileStaffSlipConfirmedToAccrued(
@@ -1564,13 +1567,19 @@ async function reconcileStaffSlipConfirmedToAccrued(
   return {};
 }
 
-/** يضبط الصرف المؤكَّد قبل حذف/تعديل — أجر يومي يُلغى الزائد تلقائياً */
+/** يضبط الصرف المؤكَّد قبل حذف/تعديل — أجر يومي يُصحَّح مبلغ الحركة فقط */
 async function reconcileConfirmedPayBeforeMutation(
   admin: SupabaseClient,
   clinicId: string,
   monthYear: string,
   entry: LoadedSalaryEntry,
-  projectedEntries: SalaryEntry[]
+  projectedEntries: SalaryEntry[],
+  trimHint?: {
+    totalSalary: number;
+    doctorShare: number;
+    clinicShare: number;
+    doctorSharePct: number;
+  }
 ): Promise<{ error?: string; notice?: string }> {
   const staffId = entry.staff_id?.trim() ?? "";
   const assistantId = entry.assistant_id?.trim() ?? "";
@@ -1591,7 +1600,14 @@ async function reconcileConfirmedPayBeforeMutation(
         clinicId,
         assistantId,
         monthYear,
-        fullNet
+        fullNet,
+        trimHint
+          ? {
+              ...trimHint,
+              entryId: entry.id,
+              entryDate: entry.entry_date,
+            }
+          : undefined
       );
     }
 
@@ -1809,12 +1825,51 @@ export async function deleteSalaryEntry(
   }
 
   const projected = currentEntries.filter((row) => row.id !== entryId);
+
+  let trimHint:
+    | {
+        totalSalary: number;
+        doctorShare: number;
+        clinicShare: number;
+        doctorSharePct: number;
+      }
+    | undefined;
+  if (entry.assistant_id) {
+    const base = await loadAssistantPayrollBase(
+      admin,
+      clinicId,
+      entry.assistant_id
+    );
+    if (base.error) {
+      return {
+        entries: [],
+        slip: null,
+        payrollRecord: null,
+        netPayout: 0,
+        error: base.error,
+      };
+    }
+    if (isDailyWageAssistant(base.compensationMode)) {
+      const breakdown = breakdownAssistantSalary({
+        total_salary: Number(entry.amount),
+        doctor_share_percentage: base.doctorSharePercentage,
+      });
+      trimHint = {
+        totalSalary: breakdown.totalSalary,
+        doctorShare: breakdown.doctorShare,
+        clinicShare: breakdown.clinicShare,
+        doctorSharePct: breakdown.doctorSharePercentage,
+      };
+    }
+  }
+
   const reconcile = await reconcileConfirmedPayBeforeMutation(
     admin,
     clinicId,
     monthYear,
     entry,
-    projected
+    projected,
+    trimHint
   );
   if (reconcile.error) {
     return {
@@ -1955,6 +2010,44 @@ export async function updateSalaryEntry(
       : row
   );
 
+  let trimHint:
+    | {
+        totalSalary: number;
+        doctorShare: number;
+        clinicShare: number;
+        doctorSharePct: number;
+      }
+    | undefined;
+  const amountReduced = roundMoney(Number(entry.amount) - nextAmount);
+  if (entry.assistant_id && amountReduced > FINANCIAL_EPSILON) {
+    const base = await loadAssistantPayrollBase(
+      admin,
+      clinicId,
+      entry.assistant_id
+    );
+    if (base.error) {
+      return {
+        entries: [],
+        slip: null,
+        payrollRecord: null,
+        netPayout: 0,
+        error: base.error,
+      };
+    }
+    if (isDailyWageAssistant(base.compensationMode)) {
+      const breakdown = breakdownAssistantSalary({
+        total_salary: amountReduced,
+        doctor_share_percentage: base.doctorSharePercentage,
+      });
+      trimHint = {
+        totalSalary: breakdown.totalSalary,
+        doctorShare: breakdown.doctorShare,
+        clinicShare: breakdown.clinicShare,
+        doctorSharePct: breakdown.doctorSharePercentage,
+      };
+    }
+  }
+
   let mutationNotice: string | undefined;
 
   if (oldMonthYear === nextMonthYear) {
@@ -1963,7 +2056,8 @@ export async function updateSalaryEntry(
       clinicId,
       oldMonthYear,
       entry,
-      projected
+      projected,
+      trimHint
     );
     if (reconcile.error) {
       return {
@@ -1984,7 +2078,8 @@ export async function updateSalaryEntry(
       clinicId,
       oldMonthYear,
       entry,
-      oldProjected
+      oldProjected,
+      trimHint
     );
     if (oldReconcile.error) {
       return {
@@ -2017,7 +2112,8 @@ export async function updateSalaryEntry(
       clinicId,
       nextMonthYear,
       entry,
-      nextProjected
+      nextProjected,
+      trimHint
     );
     if (nextReconcile.error) {
       return {

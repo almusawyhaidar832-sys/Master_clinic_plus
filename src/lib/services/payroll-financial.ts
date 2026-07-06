@@ -426,3 +426,48 @@ export async function upsertStaffSlipAccrualTransaction(
   );
   return { ok: true };
 }
+
+/** تصحيح — إرجاع جزء من خصم الطبيب/العيادة بعد حذف أو تعديل حركة (بدون لمس تأكيدات سابقة) */
+export async function creditAssistantPayrollAmounts(
+  admin: SupabaseClient,
+  clinicId: string,
+  record: Pick<
+    PayrollRecord,
+    "id" | "doctor_id" | "assistant_name_ar" | "month_year"
+  >,
+  amounts: { doctor: number; clinic: number },
+  descriptionSuffix: string,
+  referenceId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const doctorCredit = roundMoney(amounts.doctor);
+  const clinicCredit = roundMoney(amounts.clinic);
+
+  if (doctorCredit > 0) {
+    const res = await recordFinancialTransaction(admin, {
+      clinicId,
+      amount: doctorCredit,
+      type: "assistant_payroll_doctor",
+      descriptionAr: `تصحيح — مساعد ${record.assistant_name_ar} — ${descriptionSuffix}`,
+      transactionDate: todayISO(),
+      doctorId: record.doctor_id,
+      referenceType: "payroll_entry_adjustment",
+      referenceId,
+    });
+    if (!res.ok) return { ok: false, error: res.error };
+  }
+
+  if (clinicCredit > 0) {
+    const res = await recordFinancialTransaction(admin, {
+      clinicId,
+      amount: clinicCredit,
+      type: "assistant_payroll_clinic",
+      descriptionAr: `تصحيح — مساعد ${record.assistant_name_ar} — ${descriptionSuffix}`,
+      transactionDate: todayISO(),
+      referenceType: "payroll_entry_adjustment_clinic",
+      referenceId,
+    });
+    if (!res.ok) return { ok: false, error: res.error };
+  }
+
+  return { ok: true };
+}
