@@ -48,10 +48,16 @@ AS $$
   FROM (SELECT (timezone('UTC', p_date))::date AS d) s;
 $$;
 
+-- ملاحظة: إذا شغّلت يدوياً 20260711120000_staff_appointment_allow_overlap.sql
+-- فلا تعِد تشغيل هذا الملف — القيد موجود مسبقاً والملف الأحدث يستبدله.
+--
 -- ملاحظة: إذا فشل هذا الـ migration بخطأ "conflicting key value" فهذا يعني
 -- وجود بيانات تاريخية متعارضة فعلاً (نتيجة نفس الثغرة قبل الإصلاح) — يجب
 -- حلّها يدوياً (إلغاء أحد الموعدين المتعارضين أو تعديل وقته) قبل إعادة
 -- تشغيل هذا الملف.
+ALTER TABLE public.appointments
+  DROP CONSTRAINT IF EXISTS appointments_no_doctor_overlap;
+
 ALTER TABLE public.appointments
   ADD CONSTRAINT appointments_no_doctor_overlap
   EXCLUDE USING gist (
