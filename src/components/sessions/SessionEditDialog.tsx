@@ -109,7 +109,7 @@ export function SessionEditDialog({
         تعديل: {opName(operation)}
       </p>
       <p className="mb-2 text-xs text-slate-muted">
-        يُحدَّث المبلغ وحصة الطبيب حسب نسبته — عند الطبيب وكشف التحصيل وسجل
+        يُحدَّث المبلغ وحصة الطبيب حسب نسبته — عند الطبيب وكشف مالي وسجل
         المراقبة
       </p>
       {message && (

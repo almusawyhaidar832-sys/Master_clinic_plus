@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import {
   fetchDoctorMonthSalaryBreakdown,
@@ -96,6 +97,24 @@ export function calcOperationEarned(
   }
 
   return maxShare;
+}
+
+/** حصة الطبيب لزيارة واحدة — لا تتجاوز النسبة × إجمالي المدفوع */
+export function computeVisitDoctorShare(
+  ops: OperationEarningRow[],
+  doctorPct: number,
+  visitPaidTotal: number,
+  salaryDoctor = false
+): number {
+  if (salaryDoctor || visitPaidTotal <= FINANCIAL_EPSILON || ops.length === 0) {
+    return 0;
+  }
+  const maxShare = Math.round(visitPaidTotal * doctorPct * 100) / 100;
+  const fromOps = ops.reduce(
+    (sum, row) => sum + calcOperationEarned(row, doctorPct, salaryDoctor),
+    0
+  );
+  return Math.min(Math.round(fromOps * 100) / 100, maxShare);
 }
 
 export interface WalletStatsOptions {

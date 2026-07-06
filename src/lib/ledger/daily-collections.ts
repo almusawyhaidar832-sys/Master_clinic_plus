@@ -11,8 +11,13 @@ import {
   sumPatientDebtFromCases,
   type DebtorCaseDetail,
 } from "@/lib/ledger/outstanding-debt";
-import { calcOperationEarned } from "@/lib/services/doctor-wallet";
+import { computeVisitDoctorShare } from "@/lib/services/doctor-wallet";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import {
+  fetchDailyAssistantPayrollLines,
+  sumAssistantPayrollByDoctor,
+  type DailyAssistantPayrollLine,
+} from "@/lib/ledger/daily-assistant-payroll";
 import { opName } from "@/types";
 
 export type CollectionPaymentStatus =
@@ -42,6 +47,8 @@ export type DailyCollectionRow = {
   paidToday: number;
   /** إجمالي ما دُفع لهذا المراجع عند هذا الطبيب في هذا اليوم */
   visitPaidToday: number;
+  /** حصة الطبيب من مبلغ ما دفعه المراجع اليوم */
+  visitDoctorShare: number;
   requiredToday: number;
   remaining: number;
   /** إجمالي الدين على المراجع (كل الحالات المفتوحة) */
@@ -56,6 +63,7 @@ export type DoctorDailySummary = {
   doctorId: string;
   doctorName: string;
   rows: DailyCollectionRow[];
+  assistantPayroll: DailyAssistantPayrollLine[];
   stats: {
     totalPatients: number;
     paidFull: number;
@@ -66,8 +74,14 @@ export type DoctorDailySummary = {
     debtors: number;
     totalCollected: number;
     totalRemaining: number;
-    /** حصة الطبيب من المدفوع في هذا اليوم (حسب النسبة) */
+    /** حصة الطبيب من مدفوعات المراجعين في هذا اليوم */
     doctorShareToday: number;
+    /** ما يُخصم من الطبيب لأجور مساعديه */
+    assistantDoctorDeduction: number;
+    /** حصة العيادة من أجور المساعدين */
+    assistantClinicShare: number;
+    /** حصة الطبيب بعد خصم المساعدين */
+    netDoctorShareToday: number;
   };
 };
 
@@ -284,21 +298,50 @@ type DoctorPaymentMeta = {
   salary: boolean;
 };
 
-function sumDoctorShareToday(
+function computeVisitDoctorShares(
   operations: TodayOperationRow[],
+  visitPaidByKey: Map<string, number>,
   metaByDoctor: Map<string, DoctorPaymentMeta>
-): Map<string, number> {
-  const totals = new Map<string, number>();
+): { byDoctor: Map<string, number>; byVisit: Map<string, number> } {
+  const groups = new Map<
+    string,
+    { doctorId: string; vk: string; ops: TodayOperationRow[] }
+  >();
+
   for (const op of operations) {
     const doctorId = op.doctor_id;
     if (!doctorId) continue;
-    const paid = ledgerPaidToday(op);
-    if (paid <= FINANCIAL_EPSILON) continue;
-    const meta = metaByDoctor.get(doctorId) ?? { pct: 0.5, salary: false };
-    const earned = calcOperationEarned(op, meta.pct, meta.salary);
-    totals.set(doctorId, (totals.get(doctorId) ?? 0) + earned);
+    if (ledgerPaidToday(op) <= FINANCIAL_EPSILON) continue;
+
+    const vk = canonicalVisitKey({
+      doctorId,
+      patientId: op.patient_id ?? null,
+      patientName: op.patient?.full_name_ar?.trim() || "مراجع",
+    });
+    const groupKey = `${doctorId}\0${vk}`;
+    const existing = groups.get(groupKey);
+    if (existing) {
+      existing.ops.push(op);
+    } else {
+      groups.set(groupKey, { doctorId, vk, ops: [op] });
+    }
   }
-  return totals;
+
+  const byDoctor = new Map<string, number>();
+  const byVisit = new Map<string, number>();
+  for (const { doctorId, vk, ops } of groups.values()) {
+    const meta = metaByDoctor.get(doctorId) ?? { pct: 0.5, salary: false };
+    const visitPaid = visitPaidByKey.get(vk) ?? 0;
+    const earned = computeVisitDoctorShare(
+      ops,
+      meta.pct,
+      visitPaid,
+      meta.salary
+    );
+    byVisit.set(vk, earned);
+    byDoctor.set(doctorId, (byDoctor.get(doctorId) ?? 0) + earned);
+  }
+  return { byDoctor, byVisit };
 }
 
 function emptyStats(): DoctorDailySummary["stats"] {
@@ -313,6 +356,9 @@ function emptyStats(): DoctorDailySummary["stats"] {
     totalCollected: 0,
     totalRemaining: 0,
     doctorShareToday: 0,
+    assistantDoctorDeduction: 0,
+    assistantClinicShare: 0,
+    netDoctorShareToday: 0,
   };
 }
 
@@ -356,8 +402,32 @@ function computeStats(rows: DailyCollectionRow[]): DoctorDailySummary["stats"] {
   }
 
   stats.totalCollected = [...visitCollected.values()].reduce((s, n) => s + n, 0);
+  stats.doctorShareToday = rows.reduce((s, r) => s + r.visitDoctorShare, 0);
+  stats.netDoctorShareToday = Math.max(
+    0,
+    roundMoney(stats.doctorShareToday - stats.assistantDoctorDeduction)
+  );
 
-  return { ...stats, doctorShareToday: 0 };
+  return stats;
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function applyAssistantPayrollToStats(
+  stats: DoctorDailySummary["stats"],
+  assistant: {
+    doctorDeduction: number;
+    clinicShare: number;
+  }
+): void {
+  stats.assistantDoctorDeduction = assistant.doctorDeduction;
+  stats.assistantClinicShare = assistant.clinicShare;
+  stats.netDoctorShareToday = Math.max(
+    0,
+    roundMoney(stats.doctorShareToday - stats.assistantDoctorDeduction)
+  );
 }
 
 /** صف واحد لكل مراجع + طبيب في اليوم — بدل تكرار الاسم لكل سجل */
@@ -386,6 +456,7 @@ function mergeRowsByVisit(rows: DailyCollectionRow[]): DailyCollectionRow[] {
     const sorted = [...group].sort((a, b) => b.paidToday - a.paidToday);
     const primary = sorted[0]!;
     const visitPaidToday = Math.max(...group.map((r) => r.visitPaidToday));
+    const visitDoctorShare = Math.max(...group.map((r) => r.visitDoctorShare));
     const paidToday = group.reduce((s, r) => s + r.paidToday, 0);
     const remaining = Math.max(...group.map((r) => r.remaining));
     const caseDebtTotal = Math.max(...group.map((r) => r.caseDebtTotal));
@@ -429,6 +500,7 @@ function mergeRowsByVisit(rows: DailyCollectionRow[]): DailyCollectionRow[] {
       sessionLabel,
       paidToday: paidToday > 0 ? paidToday : primary.paidToday,
       visitPaidToday,
+      visitDoctorShare,
       requiredToday,
       remaining,
       caseDebtTotal,
@@ -464,6 +536,9 @@ function mergeStats(
   target.totalCollected += source.totalCollected;
   target.totalRemaining += source.totalRemaining;
   target.doctorShareToday += source.doctorShareToday;
+  target.assistantDoctorDeduction += source.assistantDoctorDeduction;
+  target.assistantClinicShare += source.assistantClinicShare;
+  target.netDoctorShareToday += source.netDoctorShareToday;
 }
 
 export function matchesCollectionFilter(
@@ -593,7 +668,25 @@ export async function fetchDailyCollections(
       });
     }
   }
-  const doctorShareById = sumDoctorShareToday(operations, metaByDoctor);
+  const { byVisit: visitDoctorShareByKey } = computeVisitDoctorShares(
+    operations,
+    visitPaidByKey,
+    metaByDoctor
+  );
+
+  const assistantPayrollLines = await fetchDailyAssistantPayrollLines(
+    supabase,
+    clinicId,
+    input.date,
+    input.doctorId
+  );
+  const assistantByDoctor = sumAssistantPayrollByDoctor(assistantPayrollLines);
+  const assistantLinesByDoctor = new Map<string, DailyAssistantPayrollLine[]>();
+  for (const line of assistantPayrollLines) {
+    const list = assistantLinesByDoctor.get(line.doctorId) ?? [];
+    list.push(line);
+    assistantLinesByDoctor.set(line.doctorId, list);
+  }
 
   const sessionRows: DailyCollectionRow[] = [];
 
@@ -683,6 +776,7 @@ export async function fetchDailyCollections(
       sessionLabel: sessionLabelFromOp(op),
       paidToday,
       visitPaidToday,
+      visitDoctorShare: visitDoctorShareByKey.get(vk) ?? 0,
       requiredToday,
       remaining: Math.max(remaining, caseDebtTotal),
       caseDebtTotal,
@@ -724,6 +818,7 @@ export async function fetchDailyCollections(
       sessionLabel: "زيارة",
       paidToday: 0,
       visitPaidToday,
+      visitDoctorShare: visitDoctorShareByKey.get(vk) ?? 0,
       requiredToday: 0,
       remaining: 0,
       caseDebtTotal: 0,
@@ -783,17 +878,36 @@ export async function fetchDailyCollections(
         if (paidCmp !== 0) return paidCmp;
         return a.patientName.localeCompare(b.patientName, "ar");
       });
+      const stats = computeStats(sorted);
+      const assistantTotals = assistantByDoctor.get(doctorId);
+      if (assistantTotals) {
+        applyAssistantPayrollToStats(stats, assistantTotals);
+      }
       return {
         doctorId,
         doctorName: doctorNameById.get(doctorId) ?? "طبيب",
         rows: sorted,
-        stats: {
-          ...computeStats(sorted),
-          doctorShareToday: doctorShareById.get(doctorId) ?? 0,
-        },
+        assistantPayroll: assistantLinesByDoctor.get(doctorId) ?? [],
+        stats,
       };
     })
     .sort((a, b) => a.doctorName.localeCompare(b.doctorName, "ar"));
+
+  for (const doctorId of assistantByDoctor.keys()) {
+    if (doctors.some((d) => d.doctorId === doctorId)) continue;
+    const assistantTotals = assistantByDoctor.get(doctorId)!;
+    const stats = emptyStats();
+    applyAssistantPayrollToStats(stats, assistantTotals);
+    doctors.push({
+      doctorId,
+      doctorName: doctorNameById.get(doctorId) ?? "طبيب",
+      rows: [],
+      assistantPayroll: assistantLinesByDoctor.get(doctorId) ?? [],
+      stats,
+    });
+  }
+
+  doctors.sort((a, b) => a.doctorName.localeCompare(b.doctorName, "ar"));
 
   const totals = emptyStats();
   for (const group of doctors) {

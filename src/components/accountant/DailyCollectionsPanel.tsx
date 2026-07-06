@@ -20,8 +20,10 @@ import {
   type DailyCollectionsResult,
   type DailyCollectionRow,
 } from "@/lib/ledger/daily-collections";
+import type { DailyAssistantPayrollLine } from "@/lib/ledger/daily-assistant-payroll";
 import { OutstandingDebtPanel } from "@/components/accountant/OutstandingDebtPanel";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
+import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { cn, formatCurrency, formatDate, todayISO } from "@/lib/utils";
 import {
   Calendar,
@@ -30,6 +32,7 @@ import {
   Receipt,
   RefreshCw,
   Stethoscope,
+  UserRound,
   Users,
 } from "lucide-react";
 
@@ -98,9 +101,18 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
         </div>
           {row.paymentStatus === "paid_full" && row.visitPaidToday > 0 && (
             <p className="mt-1 text-xs font-semibold text-emerald-700">
-              ✓ دفع {formatCurrency(row.visitPaidToday)} — مكتمل
+              ✓ دفع {formatCurrency(row.visitPaidToday)}
+              {row.visitDoctorShare > 0 &&
+                ` · حصة الطبيب ${formatCurrency(row.visitDoctorShare)}`}
             </p>
           )}
+          {(row.paymentStatus === "partial" ||
+            (row.paymentStatus === "debtor" && row.visitPaidToday > 0)) &&
+            row.visitDoctorShare > 0 && (
+              <p className="mt-1 text-xs text-primary tabular-nums">
+                حصة الطبيب من المدفوع: {formatCurrency(row.visitDoctorShare)}
+              </p>
+            )}
           {row.paymentStatus === "debtor" && debtAmount > 0 && (
             <p className="mt-1 text-xs font-bold text-debt-text tabular-nums">
               دين مسجّل: {formatCurrency(debtAmount)}
@@ -124,8 +136,16 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-4 sm:justify-end">
+        {row.requiredToday > FINANCIAL_EPSILON && (
+          <div className="text-right">
+            <p className="text-[11px] text-slate-muted">السعر الكلي</p>
+            <p className="font-bold tabular-nums text-slate-text">
+              {formatCurrency(row.requiredToday)}
+            </p>
+          </div>
+        )}
         <div className="text-right">
-          <p className="text-[11px] text-slate-muted">دفع هذا اليوم</p>
+          <p className="text-[11px] text-slate-muted">ما دفعه المراجع</p>
           <p
             className={cn(
               "text-lg font-bold tabular-nums",
@@ -134,18 +154,17 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
           >
             {formatCurrency(row.visitPaidToday)}
           </p>
-          {row.paidToday > 0 &&
-            row.paidToday !== row.visitPaidToday &&
-            row.visitPaidToday > 0 && (
-              <p className="mt-0.5 text-[10px] text-slate-muted">
-                هذه الجلسة: {formatCurrency(row.paidToday)}
-              </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[11px] text-slate-muted">حصة الطبيب</p>
+          <p
+            className={cn(
+              "text-lg font-bold tabular-nums",
+              row.visitDoctorShare > 0 ? "text-primary" : "text-slate-muted"
             )}
-          {row.requiredToday > 0 && (
-            <p className="mt-0.5 text-[10px] text-slate-muted">
-              مطلوب: {formatCurrency(row.requiredToday)}
-            </p>
-          )}
+          >
+            {formatCurrency(row.visitDoctorShare)}
+          </p>
         </div>
         <div className="text-right">
           <p className="text-[11px] text-slate-muted">
@@ -184,15 +203,68 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
   );
 }
 
+function AssistantPayrollRow({ line }: { line: DailyAssistantPayrollLine }) {
+  const isConfirmed = line.statusLabel === "صرف مؤكّد";
+
+  return (
+    <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-amber-50/30 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <UserRound className="h-4 w-4 shrink-0 text-amber-700" />
+          <p className="font-semibold text-slate-text">
+            مساعد: {line.assistantName}
+          </p>
+          <span
+            className={cn(
+              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+              isConfirmed
+                ? "bg-emerald-100 text-emerald-800"
+                : "bg-amber-100 text-amber-900"
+            )}
+          >
+            {line.statusLabel}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-slate-muted">
+          نسبة الطبيب من الأجر: {line.doctorSharePct}%
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 sm:justify-end">
+        <div className="text-right">
+          <p className="text-[11px] text-slate-muted">أجر المساعد</p>
+          <p className="font-bold tabular-nums text-slate-text">
+            {formatCurrency(line.totalSalary)}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[11px] text-slate-muted">يُخصم من الطبيب</p>
+          <p className="font-bold tabular-nums text-red-700">
+            − {formatCurrency(line.doctorDeduction)}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[11px] text-slate-muted">حصة العيادة</p>
+          <p className="font-bold tabular-nums text-slate-text">
+            {formatCurrency(line.clinicShare)}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DoctorSection({
   doctorName,
   stats,
   rows,
+  assistantPayroll,
   defaultOpen,
 }: {
   doctorName: string;
   stats: DailyCollectionsResult["totals"];
   rows: DailyCollectionRow[];
+  assistantPayroll: DailyAssistantPayrollLine[];
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -213,16 +285,32 @@ function DoctorSection({
               {formatDoctorDisplayName(doctorName)}
             </p>
             <p className="mt-0.5 text-xs text-slate-muted">
-              {stats.totalPatients} جلسة · محصّل{" "}
-              {formatCurrency(stats.totalCollected)}
-              {stats.doctorShareToday > 0 && (
+              {stats.totalPatients > 0 && (
                 <>
+                  {stats.totalPatients} مراجع · مدفوع{" "}
+                  {formatCurrency(stats.totalCollected)}
+                  {stats.doctorShareToday > 0 && (
+                    <>
+                      {" "}
+                      · حصة {formatCurrency(stats.doctorShareToday)}
+                    </>
+                  )}
                   {" "}
-                  · حصة الطبيب {formatCurrency(stats.doctorShareToday)}
+                  · متبقي {formatCurrency(stats.totalRemaining)}
                 </>
               )}
-              {" "}
-              · متبقي {formatCurrency(stats.totalRemaining)}
+              {stats.totalPatients === 0 && assistantPayroll.length > 0 && (
+                <>أجور مساعدين فقط</>
+              )}
+              {stats.assistantDoctorDeduction > 0 && (
+                <>
+                  {stats.totalPatients > 0 && " · "}
+                  خصم مساعدين −{formatCurrency(stats.assistantDoctorDeduction)}
+                  {stats.netDoctorShareToday >= 0 && (
+                    <> · صافي {formatCurrency(stats.netDoctorShareToday)}</>
+                  )}
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -249,12 +337,26 @@ function DoctorSection({
 
       {open && (
         <div className="border-t border-slate-border bg-surface-card">
-          {rows.length === 0 ? (
+          {rows.length === 0 && assistantPayroll.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-slate-muted">
               لا مراجعين في هذا التصنيف
             </p>
           ) : (
-            rows.map((row) => <PatientRow key={row.id} row={row} />)
+            <>
+              {rows.map((row) => (
+                <PatientRow key={row.id} row={row} />
+              ))}
+              {assistantPayroll.length > 0 && (
+                <div className="border-t border-amber-200/60">
+                  <p className="bg-amber-50/60 px-4 py-2 text-xs font-semibold text-amber-900">
+                    أجور مساعدي الطبيب
+                  </p>
+                  {assistantPayroll.map((line) => (
+                    <AssistantPayrollRow key={line.id} line={line} />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -364,10 +466,11 @@ export function DailyCollectionsPanel() {
           <span className="mc-icon-badge-primary">
             <Calendar className="h-5 w-5" />
           </span>
-          كشف التحصيل اليومي
+          كشف مالي
         </h2>
         <p className="mc-page-subtitle">
-          مراجعين كل طبيب — من دفع ومن لم يدفع — حسب التاريخ
+          لكل مراجع: ما دفعه، حصة الطبيب من المدفوع، والمتبقي. الملخص =
+          مجموع اليوم فقط — مو الرصيد التراكمي للطبيب.
         </p>
       </div>
 
@@ -460,7 +563,7 @@ export function DailyCollectionsPanel() {
               ملخص {dateLabel}
             </CardTitle>
           </CardHeader>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10">
             <SummaryChip label="جلسات" value={result.totals.totalPatients} />
             <SummaryChip
               label="دفعوا"
@@ -483,7 +586,7 @@ export function DailyCollectionsPanel() {
               className="border-violet-200 bg-violet-50/50"
             />
             <SummaryChip
-              label="محصّل"
+              label="مدفوع المراجعين"
               value={formatCurrency(result.totals.totalCollected)}
             />
             <SummaryChip
@@ -491,6 +594,20 @@ export function DailyCollectionsPanel() {
               value={formatCurrency(result.totals.doctorShareToday)}
               className="border-primary/30 bg-primary/5"
             />
+            {result.totals.assistantDoctorDeduction > 0 && (
+              <SummaryChip
+                label="خصم مساعدين"
+                value={`− ${formatCurrency(result.totals.assistantDoctorDeduction)}`}
+                className="border-red-200 bg-red-50/50"
+              />
+            )}
+            {result.totals.netDoctorShareToday > 0 && (
+              <SummaryChip
+                label="صافي حصة الأطباء"
+                value={formatCurrency(result.totals.netDoctorShareToday)}
+                className="border-emerald-300 bg-emerald-50/70"
+              />
+            )}
             <SummaryChip
               label="متبقي"
               value={formatCurrency(result.totals.totalRemaining)}
@@ -513,7 +630,7 @@ export function DailyCollectionsPanel() {
 
       {!loading && result && result.doctors.length === 0 && (
         <Alert variant="info">
-          لا توجد بيانات تحصيل لـ {dateLabel}
+          لا توجد بيانات مالية لـ {dateLabel}
           {doctorId ? " لهذا الطبيب" : ""}.
         </Alert>
       )}
@@ -525,6 +642,7 @@ export function DailyCollectionsPanel() {
             doctorName={group.doctorName}
             stats={group.stats}
             rows={group.rows}
+            assistantPayroll={group.assistantPayroll}
             defaultOpen={index === 0 || !!doctorId}
           />
         ))}
