@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
+import { CLINICAL_SESSION_LABEL } from "@/lib/clinical/constants";
 import {
   fetchLedgerOperationsForDate,
   ledgerDisplayRemaining,
@@ -294,24 +295,142 @@ function debtForCollectionStatus(opts: {
   return Math.max(opts.remaining, opts.patientDebtTotal);
 }
 
+function isClinicalVisualOnlyOp(op: TodayOperationRow): boolean {
+  const label = String(op.operation_name_ar ?? op.operation_type ?? "").trim();
+  return label === CLINICAL_SESSION_LABEL;
+}
+
+type PatientVisitContext = {
+  doctorsByPatientId: Map<string, Set<string>>;
+  namesByPatientId: Map<string, string>;
+  doctorsByPatientName: Map<string, Set<string>>;
+};
+
+function buildPatientVisitContext(
+  operations: TodayOperationRow[],
+  queueRes: QueueRow[]
+): PatientVisitContext {
+  const doctorsByPatientId = new Map<string, Set<string>>();
+  const namesByPatientId = new Map<string, string>();
+  const doctorsByPatientName = new Map<string, Set<string>>();
+
+  const addId = (patientId: string, name: string, doctorId: string) => {
+    namesByPatientId.set(patientId, name);
+    const set = doctorsByPatientId.get(patientId) ?? new Set();
+    set.add(doctorId);
+    doctorsByPatientId.set(patientId, set);
+  };
+
+  const addName = (name: string, doctorId: string) => {
+    const norm = normalizePatientName(name);
+    const set = doctorsByPatientName.get(norm) ?? new Set();
+    set.add(doctorId);
+    doctorsByPatientName.set(norm, set);
+  };
+
+  for (const op of operations) {
+    if (!op.doctor_id) continue;
+    const name = op.patient?.full_name_ar?.trim() || "مراجع";
+    if (op.patient_id) addId(op.patient_id, name, op.doctor_id);
+    else addName(name, op.doctor_id);
+  }
+  for (const q of queueRes) {
+    if (!q.doctor_id) continue;
+    const name = q.patient_name?.trim() || "مراجع";
+    if (q.patient_id) addId(q.patient_id, name, q.doctor_id);
+    else addName(name, q.doctor_id);
+  }
+
+  return { doctorsByPatientId, namesByPatientId, doctorsByPatientName };
+}
+
+function patientSawDoctorToday(
+  ctx: PatientVisitContext,
+  patientId: string | null,
+  patientName: string,
+  doctorId: string
+): boolean {
+  if (patientId) {
+    const set = ctx.doctorsByPatientId.get(patientId);
+    if (set?.has(doctorId)) return true;
+  }
+  return (
+    ctx.doctorsByPatientName.get(normalizePatientName(patientName))?.has(
+      doctorId
+    ) ?? false
+  );
+}
+
+const PAYMENT_OPS_SELECT =
+  "*, patient:patients!patient_id(full_name_ar, phone, phone_number), doctor:doctors!doctor_id(full_name_ar), invoices(paid_amount, total_amount, remaining_amount)";
+
+async function fetchPatientPaymentOpsForPeriod(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string,
+  patientIds: string[],
+  existing: TodayOperationRow[]
+): Promise<TodayOperationRow[]> {
+  if (!patientIds.length) return existing;
+  const seen = new Set(existing.map((o) => o.id));
+  const merged = [...existing];
+
+  const { data } = await supabase
+    .from("patient_operations")
+    .select(PAYMENT_OPS_SELECT)
+    .eq("clinic_id", clinicId)
+    .gte("operation_date", from)
+    .lte("operation_date", to)
+    .in("patient_id", patientIds);
+
+  for (const row of data ?? []) {
+    const op = row as TodayOperationRow;
+    if (!seen.has(op.id)) {
+      merged.push(op);
+      seen.add(op.id);
+    }
+  }
+  return merged;
+}
+
 function sumVisitPaidToday(
   operations: TodayOperationRow[],
-  groupByDay: boolean
+  groupByDay: boolean,
+  ctx: PatientVisitContext,
+  filterDoctorId?: string
 ): Map<string, number> {
   const totals = new Map<string, number>();
   for (const op of operations) {
-    const doctorId = op.doctor_id;
-    if (!doctorId) continue;
-    const patientId = op.patient_id ?? null;
-    const patientName = op.patient?.full_name_ar?.trim() || "مراجع";
     const paid = ledgerPaidToday(op);
     if (paid <= FINANCIAL_EPSILON) continue;
-    const key = canonicalVisitKey({
-      doctorId,
-      patientId,
-      patientName,
-      day: groupByDay ? op.operation_date ?? undefined : undefined,
-    });
+
+    const patientId = op.patient_id ?? null;
+    const patientName =
+      op.patient?.full_name_ar?.trim() ||
+      (patientId ? ctx.namesByPatientId.get(patientId) : null) ||
+      "مراجع";
+    const day = groupByDay ? op.operation_date ?? undefined : undefined;
+
+    if (filterDoctorId) {
+      if (
+        !patientSawDoctorToday(ctx, patientId, patientName, filterDoctorId)
+      ) {
+        continue;
+      }
+      const key = canonicalVisitKey({
+        doctorId: filterDoctorId,
+        patientId,
+        patientName,
+        day,
+      });
+      totals.set(key, (totals.get(key) ?? 0) + paid);
+      continue;
+    }
+
+    const doctorId = op.doctor_id;
+    if (!doctorId) continue;
+    const key = canonicalVisitKey({ doctorId, patientId, patientName, day });
     totals.set(key, (totals.get(key) ?? 0) + paid);
   }
   return totals;
@@ -533,7 +652,8 @@ function applyAssistantPayrollToStats(
 /** صف واحد لكل مراجع + طبيب في اليوم — بدل تكرار الاسم لكل سجل */
 function mergeRowsByVisit(
   rows: DailyCollectionRow[],
-  groupByDay: boolean
+  groupByDay: boolean,
+  visitPaidByKey: Map<string, number>
 ): DailyCollectionRow[] {
   const groups = new Map<string, DailyCollectionRow[]>();
 
@@ -553,13 +673,65 @@ function mergeRowsByVisit(
 
   for (const [key, group] of groups) {
     if (group.length === 1) {
-      merged.push(group[0]!);
+      const row = group[0]!;
+      const vkPaid = lookupVisitPaidToday(visitPaidByKey, {
+        doctorId: row.doctorId,
+        patientId: row.patientId,
+        patientName: row.patientName,
+        day: groupByDay ? row.visitDate ?? undefined : undefined,
+      });
+      const visitPaidToday = Math.max(
+        row.visitPaidToday,
+        vkPaid,
+        row.paidToday
+      );
+      if (visitPaidToday <= row.visitPaidToday + FINANCIAL_EPSILON) {
+        merged.push(row);
+        continue;
+      }
+      const reviewFeeSettled =
+        row.sessionLabel.includes("كشفية") &&
+        visitPaidToday > FINANCIAL_EPSILON &&
+        row.requiredToday <= FINANCIAL_EPSILON &&
+        row.remaining <= FINANCIAL_EPSILON;
+      const queueStatus =
+        visitPaidToday > FINANCIAL_EPSILON
+          ? null
+          : row.paymentStatus === "at_accountant"
+            ? "ready_for_billing"
+            : row.paymentStatus === "in_visit"
+              ? "in_progress"
+              : null;
+      merged.push({
+        ...row,
+        visitPaidToday,
+        paymentStatus: resolvePaymentStatus({
+          paidToday: Math.max(row.paidToday, visitPaidToday),
+          visitPaidToday,
+          remaining: row.remaining,
+          caseDebtTotal: row.caseDebtTotal,
+          requiredToday: row.requiredToday,
+          queueStatus,
+          hasOperation: row.operationIds.length > 0,
+          reviewFeeSettled,
+        }),
+      });
       continue;
     }
 
     const sorted = [...group].sort((a, b) => b.paidToday - a.paidToday);
     const primary = sorted[0]!;
-    const visitPaidToday = Math.max(...group.map((r) => r.visitPaidToday));
+    const vkPaid = lookupVisitPaidToday(visitPaidByKey, {
+      doctorId: primary.doctorId,
+      patientId: primary.patientId,
+      patientName: primary.patientName,
+      day: groupByDay ? primary.visitDate ?? undefined : undefined,
+    });
+    const visitPaidToday = Math.max(
+      vkPaid,
+      ...group.map((r) => r.visitPaidToday),
+      ...group.map((r) => r.paidToday)
+    );
     const visitDoctorShare = Math.max(...group.map((r) => r.visitDoctorShare));
     const paidToday = group.reduce((s, r) => s + r.paidToday, 0);
     const remaining = Math.max(...group.map((r) => r.remaining));
@@ -580,11 +752,14 @@ function mergeRowsByVisit(
     const queueEntryId =
       group.find((r) => r.queueEntryId)?.queueEntryId ?? null;
     const hasOperation = operationIds.length > 0;
-    const queueStatus = group.some((r) => r.paymentStatus === "at_accountant")
-      ? "ready_for_billing"
-      : group.some((r) => r.paymentStatus === "in_visit")
-        ? "in_progress"
-        : null;
+    const queueStatus =
+      visitPaidToday > FINANCIAL_EPSILON
+        ? null
+        : group.some((r) => r.paymentStatus === "at_accountant")
+          ? "ready_for_billing"
+          : group.some((r) => r.paymentStatus === "in_visit")
+            ? "in_progress"
+            : null;
 
     const sessionLabels = [
       ...new Set(group.map((r) => r.sessionLabel).filter(Boolean)),
@@ -594,13 +769,11 @@ function mergeRowsByVisit(
         ? sessionLabels[0]!
         : `${primary.sessionLabel} (+${sessionLabels.length - 1} سجل)`;
 
-    const reviewFeeSettled = group.some(
-      (r) =>
-        r.sessionLabel.includes("كشفية") &&
-        r.visitPaidToday > FINANCIAL_EPSILON &&
-        r.requiredToday <= FINANCIAL_EPSILON &&
-        r.remaining <= FINANCIAL_EPSILON
-    );
+    const reviewFeeSettled =
+      group.some((r) => r.sessionLabel.includes("كشفية")) &&
+      visitPaidToday > FINANCIAL_EPSILON &&
+      requiredToday <= FINANCIAL_EPSILON &&
+      remaining <= FINANCIAL_EPSILON;
 
     merged.push({
       id: `visit-${key}`,
@@ -760,7 +933,31 @@ export async function fetchDailyCollections(
 
   const queueIndex = buildQueueIndex(queueRes);
   const matchedQueueIds = new Set<string>();
-  const visitPaidByKey = sumVisitPaidToday(operations, groupByDay);
+
+  const patientIdsInScope = [
+    ...new Set(
+      [
+        ...operations.map((o) => o.patient_id),
+        ...queueRes.map((q) => q.patient_id),
+      ].filter((id): id is string => !!id && id.length > 0)
+    ),
+  ];
+
+  const visitContext = buildPatientVisitContext(operations, queueRes);
+  const opsForVisitPaid = await fetchPatientPaymentOpsForPeriod(
+    supabase,
+    clinicId,
+    effectiveFrom,
+    effectiveTo,
+    patientIdsInScope,
+    operations
+  );
+  const visitPaidByKey = sumVisitPaidToday(
+    opsForVisitPaid,
+    groupByDay,
+    visitContext,
+    input.doctorId
+  );
   const patientDebtMap = sumPatientDebtFromCases(caseInfoById);
 
   const metaByDoctor = new Map<string, DoctorPaymentMeta>();
@@ -790,7 +987,9 @@ export async function fetchDailyCollections(
     }
   }
   const { byVisit: visitDoctorShareByKey } = computeVisitDoctorShares(
-    operations,
+    opsForVisitPaid.filter(
+      (op) => !input.doctorId || op.doctor_id === input.doctorId
+    ),
     visitPaidByKey,
     metaByDoctor,
     groupByDay
@@ -819,6 +1018,13 @@ export async function fetchDailyCollections(
     const patientId = op.patient_id ?? null;
     const patientName = op.patient?.full_name_ar?.trim() || "مراجع";
     const paidToday = ledgerPaidToday(op);
+
+    if (
+      isClinicalVisualOnlyOp(op) &&
+      paidToday <= FINANCIAL_EPSILON
+    ) {
+      continue;
+    }
 
     if (
       op.session_kind === "discount" &&
@@ -998,7 +1204,11 @@ export async function fetchDailyCollections(
     });
   }
 
-  const mergedSessionRows = mergeRowsByVisit(sessionRows, groupByDay);
+  const mergedSessionRows = mergeRowsByVisit(
+    sessionRows,
+    groupByDay,
+    visitPaidByKey
+  );
 
   const allRows = mergedSessionRows
     .filter((row) =>

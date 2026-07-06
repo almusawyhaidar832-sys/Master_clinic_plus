@@ -190,9 +190,35 @@ export function ledgerCaseName(
   return operationLabelForCase(op);
 }
 
-/** المدفوع في الجلسة — نفس منطق ملف المراجع (يشمل الفاتورة المؤرشفة) */
+function reviewFeeOnOp(op: PatientOperation): number {
+  return num((op as { review_fee_amount?: unknown }).review_fee_amount);
+}
+
+/** المدفوع في الجلسة — يشمل الكشفية حتى لو paid_amount صفر في قاعدة البيانات */
 export function ledgerPaidToday(op: TodayOperationRow | PatientOperation): number {
-  return Math.max(0, resolveSessionPaidAmount(op));
+  const fromPaid = Math.max(0, resolveSessionPaidAmount(op));
+  if (fromPaid > FINANCIAL_EPSILON) return fromPaid;
+
+  const row = op as PatientOperation & {
+    review_fee_amount?: number;
+    is_review_statement?: boolean;
+    clinic_share_amount?: number;
+  };
+  const reviewFee = reviewFeeOnOp(row);
+  if (reviewFee > FINANCIAL_EPSILON) {
+    if (row.is_review_statement || reviewFee > 0) return reviewFee;
+  }
+
+  const label = String(row.operation_name_ar ?? row.operation_type ?? "");
+  if (
+    reviewFee > FINANCIAL_EPSILON ||
+    label.includes("كشفية") ||
+    label.includes("كشف +")
+  ) {
+    return Math.max(reviewFee, num(row.clinic_share_amount));
+  }
+
+  return fromPaid;
 }
 
 /** المدفوع في الزيارة — مجموع كل السجلات (كشف + علاج + دفعة) */
