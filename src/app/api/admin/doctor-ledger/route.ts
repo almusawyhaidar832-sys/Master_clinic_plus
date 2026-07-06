@@ -24,15 +24,11 @@ export async function GET(req: NextRequest) {
     }
 
     const monthYear = searchParams.get("month_year") ?? currentMonthYear();
-    const syncShares = searchParams.get("sync_shares") === "1";
-
     const admin = getAdminClient();
 
-    if (syncShares) {
-      await repairDoctorOperationShares(admin, profile.clinic_id, {
-        doctorId,
-      });
-    }
+    await repairDoctorOperationShares(admin, profile.clinic_id, {
+      doctorId,
+    });
 
     const data = await fetchDoctorLedgerDetail(admin, doctorId, monthYear);
 

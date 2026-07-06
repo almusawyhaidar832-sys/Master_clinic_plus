@@ -32,12 +32,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const syncShares = new URL(req.url).searchParams.get("sync_shares") === "1";
-    if (syncShares) {
-      await repairDoctorOperationShares(admin, doctor.clinic_id, {
-        doctorId: doctor.id,
-      });
-    }
+    await repairDoctorOperationShares(admin, doctor.clinic_id, {
+      doctorId: doctor.id,
+    });
 
     const stats = await fetchDoctorWalletStats(admin, doctor.id);
     return NextResponse.json(stats);

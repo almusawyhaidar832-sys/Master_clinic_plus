@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveDoctorFromApiRequest } from "@/lib/auth/resolve-doctor-api";
 import { syncDoctorExpensesToHistory } from "@/lib/services/invoice-archive";
+import { repairDoctorOperationShares } from "@/lib/services/operation-amount-edit";
 import {
   fetchDoctorLedgerFinancialOps,
   fetchDoctorLedgerInvoices,
@@ -32,6 +33,12 @@ export async function GET(req: NextRequest) {
       limit,
       offset,
     };
+
+    await repairDoctorOperationShares(ctx.admin, ctx.clinicId, {
+      doctorId: ctx.doctorId,
+      dateFrom: date_from ?? undefined,
+      dateTo: date_to ?? undefined,
+    });
 
     try {
       await syncDoctorExpensesToHistory(

@@ -161,7 +161,7 @@ function sessionLabelFromOp(
   if (num(op.remaining_debt) > 0 && num(op.paid_amount) <= 0) {
     return `${opName(op)} — تسجيل دين`;
   }
-  const paid = ledgerPaidToday(op);
+  const paid = ledgerPaidToday(op, clinicReviewFee);
   const reviewFee = resolveReviewFeeOnOperation(
     {
       paid_amount: op.paid_amount,
@@ -181,7 +181,7 @@ function sessionLabelFromOp(
     return `${base} — علاج + كشفية ${formatCurrency(reviewFee)}`;
   }
   if (isReviewFeeCollection(op, clinicReviewFee)) {
-    const fee = reviewFeeAmountOnOp(op) || ledgerPaidToday(op);
+    const fee = reviewFeeAmountOnOp(op) || ledgerPaidToday(op, clinicReviewFee);
     const base = opName(op).replace(/\s*—\s*كشف\s*\+\s*كشفية/i, "").trim() || "كشف";
     return fee > 0
       ? `${base} — كشفية ${formatCurrency(fee)}`
@@ -318,7 +318,7 @@ function isReviewFeeSettledVisit(
 ): boolean {
   if (requiredToday > FINANCIAL_EPSILON) return false;
   if (!isReviewFeeCollection(op, clinicReviewFee)) return false;
-  if (ledgerPaidToday(op) <= FINANCIAL_EPSILON) return false;
+  if (ledgerPaidToday(op, clinicReviewFee) <= FINANCIAL_EPSILON) return false;
   return remaining <= FINANCIAL_EPSILON;
 }
 
@@ -439,11 +439,12 @@ function sumVisitPaidToday(
   operations: TodayOperationRow[],
   groupByDay: boolean,
   ctx: PatientVisitContext,
-  filterDoctorId?: string
+  filterDoctorId?: string,
+  clinicReviewFee = 0
 ): Map<string, number> {
   const totals = new Map<string, number>();
   for (const op of operations) {
-    const paid = ledgerPaidToday(op);
+    const paid = ledgerPaidToday(op, clinicReviewFee);
     if (paid <= FINANCIAL_EPSILON) continue;
 
     const patientId = op.patient_id ?? null;
@@ -605,7 +606,7 @@ function computeVisitDoctorShares(
   for (const op of operations) {
     const doctorId = op.doctor_id;
     if (!doctorId) continue;
-    if (ledgerPaidToday(op) <= FINANCIAL_EPSILON) continue;
+    if (ledgerPaidToday(op, clinicReviewFee) <= FINANCIAL_EPSILON) continue;
 
     const vk = canonicalVisitKey({
       doctorId,
@@ -1045,7 +1046,8 @@ export async function fetchDailyCollections(
     opsForVisitPaid,
     groupByDay,
     visitContext,
-    input.doctorId
+    input.doctorId,
+    clinicReviewFee
   );
   const patientDebtMap = sumPatientDebtFromCases(caseInfoById);
 
@@ -1127,7 +1129,7 @@ export async function fetchDailyCollections(
 
     const patientId = op.patient_id ?? null;
     const patientName = op.patient?.full_name_ar?.trim() || "مراجع";
-    const paidToday = ledgerPaidToday(op);
+    const paidToday = ledgerPaidToday(op, clinicReviewFee);
 
     if (
       isClinicalVisualOnlyOp(op) &&
@@ -1598,7 +1600,7 @@ export async function fetchPeriodCollectionFinancialTotals(
   let doctorShareTotal = 0;
 
   for (const op of operations) {
-    const paid = ledgerPaidToday(op);
+    const paid = ledgerPaidToday(op, clinicReviewFee);
     if (paid <= FINANCIAL_EPSILON) continue;
 
     collected += paid;

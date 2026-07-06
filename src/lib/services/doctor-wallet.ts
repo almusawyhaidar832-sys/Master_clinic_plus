@@ -136,6 +136,33 @@ export function isReviewFeeOnlyPayment(
   return false;
 }
 
+/** ratio 7: 35k = 30k مجموع + 5k كشفية مضاعفة خطأً */
+export function isOverBumpedCombinedCollectedAmount(
+  paid: number,
+  reviewFee: number,
+  isReviewStatement?: boolean | null
+): boolean {
+  if (!isReviewStatement || reviewFee <= FINANCIAL_EPSILON || paid <= reviewFee) {
+    return false;
+  }
+  const ratio = paid / reviewFee;
+  return ratio >= 6.5 && ratio < 7.5;
+}
+
+/** المجموع المحصّل المعروض — يصحّح 35k → 30k عند مضاعفة الكشفية */
+export function normalizeCollectedWithReviewFee(
+  paid: number,
+  reviewFee: number,
+  isReviewStatement?: boolean | null
+): number {
+  if (
+    isOverBumpedCombinedCollectedAmount(paid, reviewFee, isReviewStatement)
+  ) {
+    return Math.max(reviewFee, paid - reviewFee);
+  }
+  return paid;
+}
+
 /**
  * مبلغ العلاج لحساب حصة الطبيب.
  * paid_amount = المجموع المحصّل (علاج + كشفية) — نطرح الكشفية دائماً.
@@ -148,10 +175,15 @@ export function treatmentPaidForDoctorShare(
   },
   clinicDefaultReviewFee = 0
 ): number {
-  const paid = Number(row.paid_amount ?? 0);
-  if (paid <= FINANCIAL_EPSILON) return 0;
+  const paidRaw = Number(row.paid_amount ?? 0);
+  if (paidRaw <= FINANCIAL_EPSILON) return 0;
 
   const reviewFee = resolveReviewFeeOnOperation(row, clinicDefaultReviewFee);
+  const paid = normalizeCollectedWithReviewFee(
+    paidRaw,
+    reviewFee,
+    row.is_review_statement
+  );
 
   if (
     isReviewFeeOnlyPayment(

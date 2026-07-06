@@ -6,6 +6,10 @@ import {
 } from "@/lib/services/patient-financial-plan";
 import { resolveSessionPaidAmount } from "@/lib/services/patient-operations-profile";
 import {
+  normalizeCollectedWithReviewFee,
+  resolveReviewFeeOnOperation,
+} from "@/lib/services/doctor-wallet";
+import {
   normalizePatientNameForMatch,
 } from "@/lib/services/resolve-patient-id";
 import { CLINICAL_SESSION_LABEL } from "@/lib/clinical/constants";
@@ -190,22 +194,25 @@ export function ledgerCaseName(
   return operationLabelForCase(op);
 }
 
-function reviewFeeOnOp(op: PatientOperation): number {
-  return num((op as { review_fee_amount?: unknown }).review_fee_amount);
-}
-
 /** المدفوع في الجلسة — يشمل الكشفية حتى لو paid_amount صفر في قاعدة البيانات */
-export function ledgerPaidToday(op: TodayOperationRow | PatientOperation): number {
+export function ledgerPaidToday(
+  op: TodayOperationRow | PatientOperation,
+  clinicDefaultReviewFee = 0
+): number {
   const fromPaid = Math.max(0, resolveSessionPaidAmount(op));
   const row = op as PatientOperation & {
     review_fee_amount?: number;
     is_review_statement?: boolean;
     clinic_share_amount?: number;
   };
-  const reviewFee = reviewFeeOnOp(row);
+  const reviewFee = resolveReviewFeeOnOperation(row, clinicDefaultReviewFee);
 
   if (fromPaid > FINANCIAL_EPSILON) {
-    return fromPaid;
+    return normalizeCollectedWithReviewFee(
+      fromPaid,
+      reviewFee,
+      row.is_review_statement
+    );
   }
   if (reviewFee > FINANCIAL_EPSILON) {
     if (row.is_review_statement || reviewFee > 0) return reviewFee;

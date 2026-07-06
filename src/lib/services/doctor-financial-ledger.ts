@@ -11,6 +11,8 @@ import {
   calcOperationEarned,
   filterWithdrawalsInPeriod,
   loadClinicReviewFeeForDoctor,
+  normalizeCollectedWithReviewFee,
+  resolveReviewFeeOnOperation,
   withdrawalEffectiveDate,
 } from "@/lib/services/doctor-wallet";
 import {
@@ -566,7 +568,13 @@ async function fetchDoctorSessionPayments(
         "";
       if (!paymentDate) continue;
 
-      const paid = Number(op.paid_amount ?? 0);
+      const paidRaw = Number(op.paid_amount ?? 0);
+      const reviewFee = resolveReviewFeeOnOperation(op, clinicReviewFee);
+      const paid = normalizeCollectedWithReviewFee(
+        paidRaw,
+        reviewFee,
+        op.is_review_statement
+      );
       const doctorShare = calcOperationEarned(
         op,
         doctorPct,

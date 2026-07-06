@@ -449,28 +449,30 @@ export function buildOperationAmountAuditNote(
 /** تصحيح paid_amount للجلسات القديمة (علاج فقط) أو المضاعفة خطأً */
 async function normalizeCombinedReviewPaidAmount(
   admin: SupabaseClient,
+  clinicId: string,
   op: OperationRow
 ): Promise<OperationRow> {
-  const paid = num(op.paid_amount);
-  const review = num(op.review_fee_amount);
+  const withReview = await normalizeOperationReviewFee(admin, clinicId, op);
+  const paid = num(withReview.paid_amount);
+  const review = num(withReview.review_fee_amount);
   if (
     review <= FINANCIAL_EPSILON ||
-    !op.is_review_statement ||
+    !withReview.is_review_statement ||
     paid <= review + FINANCIAL_EPSILON
   ) {
-    return op;
+    return withReview;
   }
 
   const { data: doctorRaw } = await admin
     .from("doctors")
     .select(DOCTOR_FINANCE_SELECT)
-    .eq("id", op.doctor_id)
+    .eq("id", withReview.doctor_id)
     .maybeSingle();
   const doctor = (doctorRaw as Doctor | null) ?? null;
-  if (!doctor || isSalaryDoctor(doctor)) return op;
+  if (!doctor || isSalaryDoctor(doctor)) return withReview;
 
   const pct = doctorPaymentPct(doctor);
-  const doc = num(op.doctor_share_amount);
+  const doc = num(withReview.doctor_share_amount);
   const ratio = paid / review;
   const docIfPaidMinusReview = roundMoney((paid - review) * pct);
   const docIfPaidMinus2Review = roundMoney((paid - review * 2) * pct);
@@ -483,20 +485,16 @@ async function normalizeCombinedReviewPaidAmount(
     Math.abs(doc - docIfPaidMinusReview) <= 0.02 &&
     Math.abs(doc - docIfPaidMinus2Review) > 0.02
   ) {
-    return { ...op, paid_amount: roundMoney(paid - review) };
+    return { ...withReview, paid_amount: roundMoney(paid - review) };
   }
 
   // قديم: paid=25,000 علاج فقط (ratio≈5) — نرفع إلى 30,000 (علاج + كشفية)
-  // لا نرفع إذا paid أصلاً مجموع صحيح (ratio≈6) وإلا نعيد 35k بالخطأ
   const docIfPaidIsTreatment = roundMoney(paid * pct);
-  if (
-    ratio <= 5.5 &&
-    Math.abs(doc - docIfPaidIsTreatment) <= 0.02
-  ) {
-    return { ...op, paid_amount: roundMoney(paid + review) };
+  if (ratio <= 5.5 && Math.abs(doc - docIfPaidIsTreatment) <= 0.02) {
+    return { ...withReview, paid_amount: roundMoney(paid + review) };
   }
 
-  return op;
+  return withReview;
 }
 
 /** إصلاح حصص جلسات طبيب — يصحّح doctor_share_amount المبالغ فيها */
@@ -541,13 +539,13 @@ export async function repairDoctorOperationShares(
       continue;
     }
 
-    const bumped = await normalizeCombinedReviewPaidAmount(admin, op);
-    const normalized = await normalizeOperationReviewFee(
+    const withReview = await normalizeOperationReviewFee(admin, clinicId, op);
+    const bumped = await normalizeCombinedReviewPaidAmount(
       admin,
       clinicId,
-      bumped
+      withReview
     );
-    const shares = await recalculateOperationShares(admin, normalized, clinicId);
+    const shares = await recalculateOperationShares(admin, bumped, clinicId);
     const beforeDoc = num(op.doctor_share_amount);
     const beforeReview = num(op.review_fee_amount);
     const beforePaid = num(op.paid_amount);
@@ -559,14 +557,14 @@ export async function repairDoctorOperationShares(
     if (num(bumped.paid_amount) !== beforePaid) {
       patch.paid_amount = num(bumped.paid_amount);
     }
-    if (num(normalized.review_fee_amount) !== beforeReview) {
-      patch.review_fee_amount = normalized.review_fee_amount;
-      patch.is_review_statement = normalized.is_review_statement ?? true;
+    if (num(bumped.review_fee_amount) !== beforeReview) {
+      patch.review_fee_amount = bumped.review_fee_amount;
+      patch.is_review_statement = bumped.is_review_statement ?? true;
     }
     if (
       Math.abs(beforeDoc - shares.doctorShare) > 0.01 ||
       Math.abs(num(op.clinic_share_amount) - shares.clinicShare) > 0.01 ||
-      num(normalized.review_fee_amount) !== beforeReview ||
+      num(bumped.review_fee_amount) !== beforeReview ||
       num(bumped.paid_amount) !== beforePaid
     ) {
       await admin.from("patient_operations").update(patch).eq("id", op.id);
