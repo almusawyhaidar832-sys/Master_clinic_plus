@@ -181,6 +181,18 @@ function visitKey(
   return rowKey(doctorId, patientId, patientName);
 }
 
+/** مفتاح موحّد — يمنع صفّين لنفس المراجع (مع/بدون patient_id) */
+function canonicalVisitKey(input: {
+  doctorId: string;
+  patientId: string | null;
+  patientName: string;
+}): string {
+  if (input.patientId) {
+    return `${input.doctorId}:${input.patientId}`;
+  }
+  return visitKey(input.doctorId, null, input.patientName);
+}
+
 function sumVisitPaidToday(
   operations: TodayOperationRow[]
 ): Map<string, number> {
@@ -192,7 +204,11 @@ function sumVisitPaidToday(
     const patientName = op.patient?.full_name_ar?.trim() || "مراجع";
     const paid = ledgerPaidToday(op);
     if (paid <= FINANCIAL_EPSILON) continue;
-    const key = visitKey(doctorId, patientId, patientName);
+    const key = canonicalVisitKey({
+      doctorId,
+      patientId,
+      patientName,
+    });
     totals.set(key, (totals.get(key) ?? 0) + paid);
   }
   return totals;
@@ -307,7 +323,11 @@ function computeStats(rows: DailyCollectionRow[]): DoctorDailySummary["stats"] {
   const visitCollected = new Map<string, number>();
   for (const row of rows) {
     stats.totalRemaining += row.remaining;
-    const vk = visitKey(row.doctorId, row.patientId, row.patientName);
+    const vk = canonicalVisitKey({
+      doctorId: row.doctorId,
+      patientId: row.patientId,
+      patientName: row.patientName,
+    });
     visitCollected.set(vk, row.visitPaidToday);
 
     switch (row.paymentStatus) {
@@ -338,6 +358,96 @@ function computeStats(rows: DailyCollectionRow[]): DoctorDailySummary["stats"] {
   stats.totalCollected = [...visitCollected.values()].reduce((s, n) => s + n, 0);
 
   return { ...stats, doctorShareToday: 0 };
+}
+
+/** صف واحد لكل مراجع + طبيب في اليوم — بدل تكرار الاسم لكل سجل */
+function mergeRowsByVisit(rows: DailyCollectionRow[]): DailyCollectionRow[] {
+  const groups = new Map<string, DailyCollectionRow[]>();
+
+  for (const row of rows) {
+    const key = canonicalVisitKey({
+      doctorId: row.doctorId,
+      patientId: row.patientId,
+      patientName: row.patientName,
+    });
+    const list = groups.get(key) ?? [];
+    list.push(row);
+    groups.set(key, list);
+  }
+
+  const merged: DailyCollectionRow[] = [];
+
+  for (const [key, group] of groups) {
+    if (group.length === 1) {
+      merged.push(group[0]!);
+      continue;
+    }
+
+    const sorted = [...group].sort((a, b) => b.paidToday - a.paidToday);
+    const primary = sorted[0]!;
+    const visitPaidToday = Math.max(...group.map((r) => r.visitPaidToday));
+    const paidToday = group.reduce((s, r) => s + r.paidToday, 0);
+    const remaining = Math.max(...group.map((r) => r.remaining));
+    const caseDebtTotal = Math.max(...group.map((r) => r.caseDebtTotal));
+    const requiredToday = Math.max(...group.map((r) => r.requiredToday));
+    const operationIds = [
+      ...new Set(group.flatMap((r) => r.operationIds)),
+    ];
+    const debtCases = [
+      ...new Map(
+        group
+          .flatMap((r) => r.debtCases)
+          .map((c) => [c.treatmentName, c] as const)
+      ).values(),
+    ];
+    const patientPhone =
+      group.find((r) => r.patientPhone)?.patientPhone ?? null;
+    const queueEntryId =
+      group.find((r) => r.queueEntryId)?.queueEntryId ?? null;
+    const hasOperation = operationIds.length > 0;
+    const queueStatus = group.some((r) => r.paymentStatus === "at_accountant")
+      ? "ready_for_billing"
+      : group.some((r) => r.paymentStatus === "in_visit")
+        ? "in_progress"
+        : null;
+
+    const sessionLabels = [
+      ...new Set(group.map((r) => r.sessionLabel).filter(Boolean)),
+    ];
+    const sessionLabel =
+      sessionLabels.length === 1
+        ? sessionLabels[0]!
+        : `${primary.sessionLabel} (+${sessionLabels.length - 1} سجل)`;
+
+    merged.push({
+      id: `visit-${key}`,
+      patientId: group.find((r) => r.patientId)?.patientId ?? primary.patientId,
+      patientName: primary.patientName,
+      patientPhone,
+      doctorId: primary.doctorId,
+      doctorName: primary.doctorName,
+      sessionLabel,
+      paidToday: paidToday > 0 ? paidToday : primary.paidToday,
+      visitPaidToday,
+      requiredToday,
+      remaining,
+      caseDebtTotal,
+      debtCases,
+      paymentStatus: resolvePaymentStatus({
+        paidToday: Math.max(paidToday, visitPaidToday),
+        visitPaidToday,
+        remaining,
+        caseDebtTotal,
+        requiredToday,
+        queueStatus,
+        hasOperation,
+      }),
+      queueEntryId,
+      operationIds,
+    });
+  }
+
+  return merged;
 }
 
 function mergeStats(
@@ -536,7 +646,11 @@ export async function fetchDailyCollections(
     const queue = findQueueForOperation(op, queueIndex);
     if (queue) matchedQueueIds.add(queue.id);
 
-    const vk = visitKey(doctorId, patientId, patientName);
+    const vk = canonicalVisitKey({
+      doctorId,
+      patientId,
+      patientName,
+    });
     const visitPaidToday = visitPaidByKey.get(vk) ?? paidToday;
 
     const patientDebt = patientId ? patientDebtMap.get(patientId) : undefined;
@@ -583,7 +697,11 @@ export async function fetchDailyCollections(
     if (entry.status === "cancelled" || matchedQueueIds.has(entry.id)) continue;
 
     const patientName = entry.patient_name?.trim() || "مراجع";
-    const vk = visitKey(entry.doctor_id, entry.patient_id, patientName);
+    const vk = canonicalVisitKey({
+      doctorId: entry.doctor_id,
+      patientId: entry.patient_id,
+      patientName,
+    });
     const visitPaidToday = visitPaidByKey.get(vk) ?? 0;
 
     const paymentStatus = resolvePaymentStatus({
@@ -616,7 +734,9 @@ export async function fetchDailyCollections(
     });
   }
 
-  const allRows = sessionRows
+  const mergedSessionRows = mergeRowsByVisit(sessionRows);
+
+  const allRows = mergedSessionRows
     .filter((row) =>
       matchesCollectionFilter(row.paymentStatus, statusFilter, row.visitPaidToday)
     )
