@@ -9,6 +9,7 @@ import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { TranslationKey } from "@/i18n/translations";
+import { DoctorDailyCollectionsPanel } from "@/components/doctor/DoctorDailyCollectionsPanel";
 import { DoctorLedgerInvoicesTab } from "@/components/doctor/DoctorLedgerInvoicesTab";
 import { DoctorLedgerPatientsTab } from "@/components/doctor/DoctorLedgerPatientsTab";
 import { DoctorLedgerOperationsTab } from "@/components/doctor/DoctorLedgerOperationsTab";
@@ -20,16 +21,17 @@ import {
   Users,
   ArrowDownToLine,
   ScrollText,
+  Calendar,
 } from "lucide-react";
 
-const VALID_TABS = ["invoices", "patients", "operations"] as const;
+const VALID_TABS = ["statement", "invoices", "patients", "operations"] as const;
 type LedgerTab = (typeof VALID_TABS)[number];
 
 function parseTab(value: string | null): LedgerTab {
   if (value && (VALID_TABS as readonly string[]).includes(value)) {
     return value as LedgerTab;
   }
-  return "invoices";
+  return "statement";
 }
 
 const TAB_ITEMS: {
@@ -37,6 +39,7 @@ const TAB_ITEMS: {
   labelKey: TranslationKey;
   icon: typeof FileText;
 }[] = [
+  { id: "statement", labelKey: "docTabDailyStatement", icon: Calendar },
   { id: "invoices", labelKey: "docTabInvoices", icon: FileText },
   { id: "patients", labelKey: "docTabLedgerPatients", icon: Users },
   { id: "operations", labelKey: "docTabFinancialOps", icon: ArrowDownToLine },
@@ -105,7 +108,7 @@ export default function DoctorFinancialLedgerPage() {
           </span>
           {t("docFinancialLedgerTitle")}
         </h1>
-        <p className="mt-1 text-sm text-slate-muted">{t("docFinancialLedgerSubtitle")}</p>
+        <p className="mt-1 text-sm text-slate-muted">{t("docFinancialLedgerSubtitleFull")}</p>
       </div>
 
       {balance !== null && (
@@ -142,6 +145,9 @@ export default function DoctorFinancialLedgerPage() {
         ))}
       </div>
 
+      {activeTab === "statement" && (
+        <DoctorDailyCollectionsPanel refreshKey={refreshKey} />
+      )}
       {activeTab === "invoices" && (
         <DoctorLedgerInvoicesTab refreshKey={refreshKey} />
       )}
