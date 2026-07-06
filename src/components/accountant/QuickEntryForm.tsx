@@ -1565,21 +1565,28 @@ export function QuickEntryForm({
     setForceNewPlan(false);
 
     let successText: string;
-    if (justCompleted) {
-      successText = `✓ تم إكمال العلاج — «${operationLabel}» — تسوية كاملة ولا ذمة متبقية.`;
-    } else if (entryMode === "plan") {
-      successText = `✓ حالة جديدة «${operationLabel}»: السعر الكلي ${formatCurrency(snap.case_price)}`;
-      if (snap.discount_total > 0) {
-        successText += ` — خصم ${formatCurrency(snap.discount_total)}`;
+    if (billingMode === "complete") {
+      successText = `✓ تم إغلاق الحالة «${operationLabel}» — العلاج مكتمل.`;
+      if (entryAmount > 0) {
+        successText += ` آخر دفعة: ${formatCurrency(entryAmount)}.`;
       }
-      successText += ` — المتبقي ${formatCurrency(snap.remaining_balance)}`;
+    } else if (billingMode === "debt") {
+      successText = `✓ «${operationLabel}» — دين مسجّل: ${formatCurrency(entryAmount)}`;
+      if (snap.total_paid > 0) {
+        successText += ` · مجموع المدفوع: ${formatCurrency(snap.total_paid)}`;
+      }
+    } else if (isNewCase) {
+      successText = `✓ جلسة أولى «${operationLabel}» — دفع ${formatCurrency(entryAmount)}`;
     } else {
       const parts: string[] = [`«${operationLabel}»`];
       if (additionalDiscount > 0) {
-        parts.push(`خصم إضافي ${formatCurrency(additionalDiscount)}`);
+        parts.push(`خصم ${formatCurrency(additionalDiscount)}`);
       }
-      if (paid > 0) parts.push(`دفعة ${formatCurrency(paid)}`);
-      successText = `✓ ${parts.join(" — ")} — الذمة ${formatCurrency(snap.remaining_balance)}`;
+      if (entryAmount > 0) parts.push(`دفع ${formatCurrency(entryAmount)}`);
+      successText = `✓ ${parts.join(" — ")} · مجموع المدفوع: ${formatCurrency(snap.total_paid)}`;
+      if (snap.remaining_balance > FINANCIAL_EPSILON) {
+        successText += ` · الدين: ${formatCurrency(snap.remaining_balance)}`;
+      }
     }
     setMessage({
       type: "success",
@@ -1881,12 +1888,12 @@ export function QuickEntryForm({
           </CardTitle>
           {isFollowUpSession && !loadingPlan && (
             <p className="mt-0.5 text-sm text-slate-600">
-              السعر محفوظ — أدخل المبلغ المدفوع
+              اختر نوع التسجيل ثم المبلغ — بدون سعر كلي للحالة
             </p>
           )}
           {!isFollowUpSession && !showCasePicker && !loadingPlan && (
             <p className="mt-0.5 text-sm text-slate-600">
-              السعر الكلي ثم المبلغ المدفوع تحته
+              نوع الإجراء ← نوع التسجيل (جلسة / دين / مكتمل) ← المبلغ
             </p>
           )}
         </CardHeader>
@@ -1902,8 +1909,8 @@ export function QuickEntryForm({
           <div className="sm:col-span-2 space-y-3">
             <Alert variant="success">
               تم إكمال العلاج — الحالة «
-              {selectedCase?.treatment_name_ar ?? "المختارة"}» مغلقة (لا دين). لبدء
-              نفس نوع العلاج بسعر جديد اضغط الزر أدناه.
+              {selectedCase?.treatment_name_ar ?? "المختارة"}» مغلقة. لبدء
+              علاج جديد (مثلاً سن آخر) اضغط الزر أدناه.
             </Alert>
             <Button
               type="button"
@@ -1913,7 +1920,7 @@ export function QuickEntryForm({
                 beginNewTreatmentCase(selectedCase?.treatment_name_ar)
               }
             >
-              + إجمالي كلي جديد — حالة علاج جديدة
+              + حالة علاج جديدة
             </Button>
           </div>
         )}
@@ -1922,7 +1929,7 @@ export function QuickEntryForm({
           <div className="sm:col-span-2 rounded-lg border border-primary/25 bg-primary/[0.06] px-3 py-2">
             <p className="text-sm font-bold text-primary-800">حالة علاج جديدة</p>
             <p className="mt-0.5 text-xs text-primary-700">
-              السعر الكلي ← المبلغ المدفوع ← الخصم
+              جلسة ← المبلغ المدفوع — أو دين ← مبلغ الذمة — أو مكتمل لإغلاق الحالة
             </p>
             {operationName.trim() && (
               <p className="text-xs text-slate-muted mt-1">
@@ -2180,38 +2187,35 @@ export function QuickEntryForm({
         </>
         )}
 
-        {formSchema.showPlanSummary && plan.final_price > 0 && (
+        {(formSchema.showPlanSummary || plan.total_paid > 0) && !showCasePicker && (
           <div className="sm:col-span-2 rounded-lg border border-primary/20 bg-primary/[0.05] px-3 py-2.5 space-y-1 text-sm">
             <p className="text-sm font-bold text-primary-800">ملخص الحالة</p>
-            <p className="font-bold text-slate-800">
-              السعر الكلي: {formatCurrency(plan.case_price)}
-            </p>
-            {plan.discount_total > 0 && (
-              <p className="text-slate-muted">
-                خصم مسجّل: {formatCurrency(plan.discount_total)}
-              </p>
-            )}
-            <p className="font-medium text-primary">
-              السعر النهائي: {formatCurrency(plan.final_price)}
-            </p>
             <p className="text-xs tabular-nums text-slate-muted">
-              مدفوع: {formatCurrency(plan.total_paid)}
+              مجموع المدفوع:{" "}
+              <span className="font-semibold text-primary">
+                {formatCurrency(plan.total_paid)}
+              </span>
             </p>
-            {(additionalDiscountNum > 0 || paid > 0) && (
-              <p className="text-xs tabular-nums mt-2 text-primary font-medium">
-                بعد هذا الإدخال — السعر النهائي: {formatCurrency(finalPriceLive)}
-                {" · "}الذمة:{" "}
-                <span className="text-debt-text font-bold">
-                  {formatCurrency(remaining)}
-                </span>
-              </p>
-            )}
-            {additionalDiscountNum <= 0 && paid <= 0 && (
-              <p className="text-xs tabular-nums mt-1 text-slate-muted">
-                الذمة الحالية:{" "}
+            {plan.final_price > FINANCIAL_EPSILON && (
+              <p className="text-xs tabular-nums text-slate-muted">
+                دين مسجّل / متبقٍ:{" "}
                 <span className="font-semibold text-debt-text">
                   {formatCurrency(plan.remaining_balance)}
                 </span>
+              </p>
+            )}
+            {(paid > 0 || billingMode === "debt") && (
+              <p className="text-xs tabular-nums mt-2 text-primary font-medium">
+                بعد هذا الإدخال — مجموع المدفوع:{" "}
+                {formatCurrency(billingPreview.totalPaidAfter)}
+                {remaining > FINANCIAL_EPSILON && (
+                  <>
+                    {" · "}الدين:{" "}
+                    <span className="text-debt-text font-bold">
+                      {formatCurrency(remaining)}
+                    </span>
+                  </>
+                )}
               </p>
             )}
           </div>
