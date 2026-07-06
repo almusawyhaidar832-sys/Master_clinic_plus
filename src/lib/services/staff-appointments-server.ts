@@ -255,16 +255,6 @@ export async function updateStaffAppointment(
   const nextStart = input.start_time ?? (current.start_time as string);
   const nextEnd = input.end_time ?? (current.end_time as string);
 
-  await assertNoOverlapForDoctor(
-    admin,
-    clinicId,
-    current.doctor_id as string,
-    nextDate,
-    nextStart,
-    nextEnd,
-    appointmentId
-  );
-
   let patientId = (current.patient_id as string | null) ?? null;
   let patientName =
     input.patient_name_ar?.trim() ?? (current.patient_name_ar as string);
@@ -380,14 +370,7 @@ export async function createStaffAppointment(
 
   if (!doctor) throw new Error("الطبيب غير موجود في عيادتك");
 
-  await assertNoOverlapForDoctor(
-    admin,
-    clinicId,
-    input.doctor_id,
-    input.appointment_date,
-    input.start_time,
-    input.end_time
-  );
+  // المحاسب/المالك يقدر يحجز حتى لو الوقت محجوز مسبقاً (حجز يدوي من الاستقبال)
 
   const patientProfile = await ensurePatientProfileForBooking(admin, clinicId, {
     name,
