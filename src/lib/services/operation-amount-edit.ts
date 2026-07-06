@@ -476,21 +476,24 @@ async function normalizeCombinedReviewPaidAmount(
   const docIfPaidMinus2Review = roundMoney((paid - review * 2) * pct);
 
   // مضاعفة كشفية: 25k علاج → 30k صح → 35k خطأ (نور ريسان: 30k وليس 35k)
+  // ratio 7 فقط — لا نلمس ratio 6 (30k مجموع صحيح)
   if (
-    ratio > 5 &&
-    ratio < 8 &&
+    ratio >= 6.5 &&
+    ratio < 7.5 &&
     Math.abs(doc - docIfPaidMinusReview) <= 0.02 &&
     Math.abs(doc - docIfPaidMinus2Review) > 0.02
   ) {
     return { ...op, paid_amount: roundMoney(paid - review) };
   }
 
-  // قديم: paid=25,000 علاج فقط — نرفع إلى 30,000 (علاج + كشفية)
-  if (ratio <= 10.5) {
-    const docIfPaidIsTreatment = roundMoney(paid * pct);
-    if (Math.abs(doc - docIfPaidIsTreatment) > 0.02) {
-      return { ...op, paid_amount: roundMoney(paid + review) };
-    }
+  // قديم: paid=25,000 علاج فقط (ratio≈5) — نرفع إلى 30,000 (علاج + كشفية)
+  // لا نرفع إذا paid أصلاً مجموع صحيح (ratio≈6) وإلا نعيد 35k بالخطأ
+  const docIfPaidIsTreatment = roundMoney(paid * pct);
+  if (
+    ratio <= 5.5 &&
+    Math.abs(doc - docIfPaidIsTreatment) <= 0.02
+  ) {
+    return { ...op, paid_amount: roundMoney(paid + review) };
   }
 
   return op;
@@ -500,7 +503,12 @@ async function normalizeCombinedReviewPaidAmount(
 export async function repairDoctorOperationShares(
   admin: SupabaseClient,
   clinicId: string,
-  opts: { doctorId?: string; date?: string } = {}
+  opts: {
+    doctorId?: string;
+    date?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  } = {}
 ): Promise<{ ok: boolean; repaired: number; error?: string }> {
   let query = admin
     .from("patient_operations")
@@ -509,6 +517,8 @@ export async function repairDoctorOperationShares(
 
   if (opts.doctorId) query = query.eq("doctor_id", opts.doctorId);
   if (opts.date) query = query.eq("operation_date", opts.date);
+  if (opts.dateFrom) query = query.gte("operation_date", opts.dateFrom);
+  if (opts.dateTo) query = query.lte("operation_date", opts.dateTo);
 
   const { data: ops, error } = await query;
   if (error) return { ok: false, repaired: 0, error: error.message };

@@ -588,15 +588,16 @@ export function QuickEntryForm({
     additionalDiscount: additionalDiscountNum,
   });
   const remaining = billingPreview.registeredDebt;
+  const reviewAddon =
+    isReviewStatement && billingMode !== "examination" ? reviewFeeLive : 0;
+  const sessionPaidTotal = entryAmountLive + reviewAddon;
+
   const sessionPaymentShares =
     billingMode === "examination" && examinationFeeLive > 0
       ? { doctorShare: 0, clinicShare: examinationFeeLive }
       : resolveSessionPaymentShares({
-          paidAmount: entryAmountLive,
-          reviewFee:
-            isReviewStatement && billingMode !== "examination"
-              ? reviewFeeLive
-              : 0,
+          paidAmount: sessionPaidTotal,
+          reviewFee: reviewAddon,
           isReviewStatement:
             isReviewStatement && billingMode !== "examination",
           materialsCost: materials,

@@ -40,6 +40,15 @@ export async function GET(req: NextRequest) {
     const syncShares = searchParams.get("sync_shares") === "1";
 
     const admin = getAdminClient();
+    const effectiveTo = dateTo ?? dateFrom;
+
+    if (dateFrom && effectiveTo) {
+      await repairDoctorOperationShares(admin, profile.clinic_id, {
+        doctorId,
+        dateFrom,
+        dateTo: effectiveTo,
+      });
+    }
 
     if (syncShares) {
       await repairDoctorOperationShares(admin, profile.clinic_id, {
