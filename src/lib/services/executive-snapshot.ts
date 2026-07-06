@@ -5,6 +5,11 @@ import {
   computeOutstandingDebtFromOperations,
 } from "@/lib/services/patient-treatment-cases";
 import { fetchPatientFinancialPlansBatch } from "@/lib/services/patient-financial-plan";
+import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import {
+  calcClinicOperationEarned,
+  calcOperationEarned,
+} from "@/lib/services/doctor-wallet";
 import { localDateISO, localPeriodUtcBounds } from "@/lib/utils";
 import { opDebt, opName, type PatientOperation } from "@/types";
 import type { TopPerformersPayload } from "@/lib/services/doctor-performance";
@@ -466,8 +471,8 @@ export async function fetchPaidSalariesBundle(
     from,
     to,
     closedMonths,
-    true,
-    "payroll_month"
+    false,
+    "cash_date"
   );
   const staffProfit = sumPaidSlipsInPeriod(
     slipRows,
@@ -482,8 +487,8 @@ export async function fetchPaidSalariesBundle(
     from,
     to,
     closedMonths,
-    true,
-    "payroll_month"
+    false,
+    "cash_date"
   );
   const assistantProfit = sumAssistantClinicPaidInPeriod(
     recordRows,
@@ -619,6 +624,126 @@ export async function fetchReviewFeesInPeriod(
     }
   }
   return { total, count };
+}
+
+export interface PeriodOperationFinancials {
+  revenue: number;
+  collected: number;
+  clinicShareTotal: number;
+  doctorShareTotal: number;
+}
+
+/**
+ * حصص العيادة/الطبيب من المدفوعات — يطابق calc_*_operation_earned (plan/payment).
+ */
+export async function summarizePeriodOperationFinancials(
+  supabase: SupabaseClient,
+  ops: PatientOperation[]
+): Promise<PeriodOperationFinancials> {
+  if (ops.length === 0) {
+    return {
+      revenue: 0,
+      collected: 0,
+      clinicShareTotal: 0,
+      doctorShareTotal: 0,
+    };
+  }
+
+  const caseIds = [
+    ...new Set(
+      ops
+        .map((o) => o.treatment_case_id?.trim())
+        .filter((id): id is string => !!id)
+    ),
+  ];
+  const doctorIds = [
+    ...new Set(
+      ops.map((o) => o.doctor_id).filter((id): id is string => !!id)
+    ),
+  ];
+
+  const [casesRes, doctorsRes] = await Promise.all([
+    caseIds.length
+      ? supabase
+          .from("patient_treatment_cases")
+          .select(
+            "id, clinic_share_total, doctor_share_total, final_price"
+          )
+          .in("id", caseIds)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    doctorIds.length
+      ? supabase
+          .from("doctors")
+          .select("id, percentage, payment_type, financial_agreement")
+          .in("id", doctorIds)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+  ]);
+
+  const caseById = new Map(
+    (casesRes.data ?? []).map((row) => [String(row.id), row])
+  );
+  const doctorMeta = new Map<
+    string,
+    { pct: number; salary: boolean }
+  >();
+  for (const doc of doctorsRes.data ?? []) {
+    const id = String(doc.id);
+    doctorMeta.set(id, {
+      pct: num(doc.percentage) / 100 || 0.5,
+      salary: isSalaryDoctor({
+        payment_type: doc.payment_type,
+        financial_agreement: doc.financial_agreement,
+      }),
+    });
+  }
+
+  let revenue = 0;
+  let collected = 0;
+  let clinicShareTotal = 0;
+  let doctorShareTotal = 0;
+
+  for (const op of ops) {
+    const paid = num(op.paid_amount);
+    const total = num(op.total_amount);
+    collected += paid;
+    revenue += total > 0 ? total : paid;
+
+    const doctorId = op.doctor_id ? String(op.doctor_id) : "";
+    const meta = doctorMeta.get(doctorId) ?? { pct: 0.5, salary: false };
+    const caseId = op.treatment_case_id?.trim();
+    const caseRow = caseId ? caseById.get(caseId) : undefined;
+
+    const earningRow = {
+      clinic_share_amount: op.clinic_share_amount,
+      doctor_share_amount: op.doctor_share_amount,
+      paid_amount: op.paid_amount,
+      patient_treatment_cases: caseRow
+        ? {
+            final_price: caseRow.final_price,
+            clinic_share_total: caseRow.clinic_share_total,
+            doctor_share_total: caseRow.doctor_share_total,
+          }
+        : null,
+    };
+
+    clinicShareTotal += calcClinicOperationEarned(
+      earningRow,
+      meta.pct,
+      meta.salary
+    );
+    doctorShareTotal += calcOperationEarned(
+      earningRow,
+      meta.pct,
+      meta.salary
+    );
+  }
+
+  return {
+    revenue: roundMoney(revenue),
+    collected: roundMoney(collected),
+    clinicShareTotal: roundMoney(clinicShareTotal),
+    doctorShareTotal: roundMoney(doctorShareTotal),
+  };
 }
 
 /** جلب كل جلسات الفترة (تاريخ العملية + وقت الإنشاء — تقويم محلي) */

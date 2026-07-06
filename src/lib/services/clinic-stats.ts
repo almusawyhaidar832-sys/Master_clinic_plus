@@ -91,7 +91,7 @@ export async function fetchClinicProfitStatsForPeriod(
   const { fetchTotalRefundsAmount } = await import(
     "@/lib/services/session-refunds"
   );
-  const { fetchResolvedSalaryDeductionForPeriod, loadOperationsInPeriod } =
+  const { fetchResolvedSalaryDeductionForPeriod, loadOperationsInPeriod, summarizePeriodOperationFinancials } =
     await import("@/lib/services/executive-snapshot");
 
   const [
@@ -124,15 +124,13 @@ export async function fetchClinicProfitStatsForPeriod(
     fetchClinicBalanceTopupsForPeriod(supabase, clinicId, from, to),
   ]);
 
-  const cashInflow = ops.reduce((s, r) => s + Number(r.paid_amount ?? 0), 0);
-  const clinicShareTotal = ops.reduce(
-    (s, r) => s + Number(r.clinic_share_amount ?? 0),
-    0
+  const opFinancials = await summarizePeriodOperationFinancials(
+    supabase,
+    ops
   );
-  const doctorShareTotal = ops.reduce(
-    (s, r) => s + Number(r.doctor_share_amount ?? 0),
-    0
-  );
+  const cashInflow = opFinancials.collected;
+  const clinicShareTotal = opFinancials.clinicShareTotal;
+  const doctorShareTotal = opFinancials.doctorShareTotal;
   const generalExpenses = (expensesRes.data ?? [])
     .filter((r) => (r.expense_kind ?? "general") !== "doctor_salary")
     .reduce((s, r) => s + Number(r.amount ?? 0), 0);

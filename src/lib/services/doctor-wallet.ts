@@ -110,6 +110,36 @@ export function calcOperationEarned(
   return maxShare;
 }
 
+/** حصة العيادة من جلسة — يطابق calc_clinic_operation_earned في Postgres */
+export function calcClinicOperationEarned(
+  row: OperationEarningRow & { clinic_share_amount?: number | string | null },
+  doctorPct: number,
+  salaryDoctor = false
+): number {
+  const direct = Number(row.clinic_share_amount ?? 0);
+  if (direct !== 0) {
+    return Math.round(direct * 100) / 100;
+  }
+
+  const paid = Number(row.paid_amount ?? 0);
+  if (paid <= 0) return 0;
+
+  const tc = row.patient_treatment_cases;
+  const caseRow = Array.isArray(tc) ? tc[0] : tc;
+  const finalPrice = Number(caseRow?.final_price ?? 0);
+  const caseClinic = Number(
+    (caseRow as { clinic_share_total?: number } | undefined)
+      ?.clinic_share_total ?? 0
+  );
+
+  if (finalPrice > 0) {
+    return Math.round(paid * (caseClinic / finalPrice) * 100) / 100;
+  }
+
+  const doctorEarned = calcOperationEarned(row, doctorPct, salaryDoctor);
+  return Math.round((paid - doctorEarned) * 100) / 100;
+}
+
 /** حصة الطبيب لزيارة واحدة — لا تتجاوز النسبة × إجمالي المدفوع */
 export function computeVisitDoctorShare(
   ops: OperationEarningRow[],

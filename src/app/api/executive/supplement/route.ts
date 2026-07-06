@@ -6,6 +6,7 @@ import {
   fetchNewPatientsInPeriod,
   fetchTopPerformersForPeriod,
   loadOperationsInPeriod,
+  summarizePeriodOperationFinancials,
 } from "@/lib/services/executive-snapshot";
 import { fetchClinicProfitStatsForPeriod } from "@/lib/services/clinic-stats";
 import { normalizeTopPerformersPayload } from "@/lib/services/doctor-performance";
@@ -33,11 +34,12 @@ export async function GET(req: NextRequest) {
     }
 
     const admin = getAdminClient();
-    const [supplement, profitStats, ops, topPerformers, newPatients] =
+    const ops = await loadOperationsInPeriod(admin, clinicId, from, to);
+    const [supplement, profitStats, opFinancials, topPerformers, newPatients] =
       await Promise.all([
         fetchExecutiveDashboardSupplement(admin, clinicId, from, to),
         fetchClinicProfitStatsForPeriod(admin, clinicId, from, to),
-        loadOperationsInPeriod(admin, clinicId, from, to),
+        summarizePeriodOperationFinancials(admin, ops),
         fetchTopPerformersForPeriod(admin, clinicId, from, to),
         fetchNewPatientsInPeriod(admin, clinicId, from, to),
       ]);
@@ -46,9 +48,7 @@ export async function GET(req: NextRequest) {
       profitStats.breakdown.find((b) => b.label === "كشفيات المراجعين")
         ?.amount ?? 0;
 
-    const revenue = Math.round(
-      ops.reduce((s, op) => s + Number(op.total_amount ?? 0), 0) * 100
-    ) / 100;
+    const revenue = opFinancials.revenue;
     const patientCount = new Set(
       ops.map((op) => op.patient_id).filter(Boolean)
     ).size;
@@ -58,13 +58,13 @@ export async function GET(req: NextRequest) {
       topPerformers: normalizeTopPerformersPayload(topPerformers),
       reportAligned: {
         netProfit: profitStats.netProfit,
-        clinicShareTotal: profitStats.clinicShareTotal,
+        clinicShareTotal: opFinancials.clinicShareTotal,
         totalExpenses: profitStats.totalExpenses,
         reviewFees,
         salariesDeducted: profitStats.totalSalariesPaid,
-        doctorShareTotal: profitStats.doctorShareTotal,
+        doctorShareTotal: opFinancials.doctorShareTotal,
         revenue,
-        collected: profitStats.cashInflow,
+        collected: opFinancials.collected,
         operationCount: ops.length,
         patientCount,
         newPatients,
