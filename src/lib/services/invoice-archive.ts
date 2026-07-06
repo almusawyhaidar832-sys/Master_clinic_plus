@@ -11,6 +11,7 @@ import { doctorShareFromExpense } from "@/lib/services/assistant-payroll";
 import { doctorPaymentPct } from "@/lib/services/patient-financial-plan";
 import {
   calcOperationEarned,
+  loadClinicReviewFeeForDoctor,
 } from "@/lib/services/doctor-wallet";
 import { DOCTOR_FINANCE_SELECT } from "@/lib/services/doctor-db-select";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
@@ -208,6 +209,10 @@ async function resolveDoctorShareForArchive(
   const doctor = (doctorRaw as Doctor | null) ?? null;
   const doctorPct = doctorPaymentPct(doctor);
   const salaryDoctor = isSalaryDoctor(doctor ?? {});
+  const clinicReviewFee = await loadClinicReviewFeeForDoctor(
+    admin,
+    (doctor as { clinic_id?: string } | null)?.clinic_id
+  );
 
   const doctorShare = calcOperationEarned(
     {
@@ -219,7 +224,8 @@ async function resolveDoctorShareForArchive(
     },
     doctorPct,
     salaryDoctor,
-    doctor
+    doctor,
+    clinicReviewFee
   );
 
   return {

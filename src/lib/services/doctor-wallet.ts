@@ -959,7 +959,7 @@ function sumOperationEarnings(
   );
 }
 
-async function loadClinicReviewFeeForDoctor(
+export async function loadClinicReviewFeeForDoctor(
   supabase: SupabaseClient,
   clinicId: string | null | undefined
 ): Promise<number> {

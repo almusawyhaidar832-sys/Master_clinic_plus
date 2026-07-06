@@ -3,27 +3,55 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
-import { createClient } from "@/lib/supabase/client";
-import {
-  fetchDoctorLedgers,
-  type DoctorLedgerSummary,
-} from "@/lib/services/clinic-reports";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
+import type { DoctorLedgerSummary } from "@/lib/services/clinic-reports";
 import { formatCurrency, currentMonthYear } from "@/lib/utils";
 import { ChevronLeft, Stethoscope } from "lucide-react";
 
 export default function AdminDoctorsLedgerPage() {
+  const { clinicId } = useActiveClinicId();
   const [doctors, setDoctors] = useState<DoctorLedgerSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
-      const data = await fetchDoctorLedgers(supabase, currentMonthYear());
-      setDoctors(data);
+      if (!clinicId) {
+        setDoctors([]);
+        setLoading(false);
+        return;
+      }
+
+      const repairKey = `mc:doctor-shares-auto-repair:v8:${clinicId}`;
+      const needSync =
+        typeof window !== "undefined" && !sessionStorage.getItem(repairKey);
+
+      const params = new URLSearchParams({
+        month_year: currentMonthYear(),
+      });
+      if (needSync) params.set("sync_shares", "1");
+
+      const res = await fetch(`/api/admin/doctor-ledgers?${params}`, {
+        credentials: "include",
+        headers: authPortalHeaders("admin"),
+      });
+      const json = (await res.json()) as {
+        doctors?: DoctorLedgerSummary[];
+        error?: string;
+      };
+
+      if (res.ok) {
+        if (needSync && typeof window !== "undefined") {
+          sessionStorage.setItem(repairKey, "1");
+        }
+        setDoctors(json.doctors ?? []);
+      } else {
+        setDoctors([]);
+      }
       setLoading(false);
     }
-    load();
-  }, []);
+    void load();
+  }, [clinicId]);
 
   if (loading) {
     return <p className="text-sm text-slate-muted">جاري التحميل...</p>;

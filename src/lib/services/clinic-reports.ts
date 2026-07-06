@@ -45,6 +45,7 @@ import {
   fetchOperationCountsByDoctor,
   fetchWithdrawalSumsByDoctor,
   filterWithdrawalsInPeriod,
+  loadClinicReviewFeeForDoctor,
   withdrawalEffectiveDate,
   type DoctorWalletStats,
 } from "@/lib/services/doctor-wallet";
@@ -324,12 +325,16 @@ export function doctorLedgerHasPeriodActivity(
 
 export async function fetchDoctorLedgers(
   supabase: SupabaseClient,
-  monthYear?: string
+  monthYear?: string,
+  explicitClinicId?: string
 ): Promise<DoctorLedgerSummary[]> {
   const { start, end } = getMonthBounds(monthYear);
   const periodScoped = Boolean(monthYear);
-  const { getActiveClinicId } = await import("@/lib/clinic-context");
-  const active = await getActiveClinicId(supabase);
+  const active = explicitClinicId
+    ? { clinicId: explicitClinicId }
+    : await import("@/lib/clinic-context").then((m) =>
+        m.getActiveClinicId(supabase)
+      );
   if (!active?.clinicId) return [];
 
   const { data: doctors } = await supabase
@@ -693,23 +698,32 @@ export async function fetchDoctorLedgerDetail(
   const doctorRow = (doctor as Doctor | null) ?? null;
   const doctorPct = doctorPaymentPct(doctorRow);
   const salaryDoctor = isSalaryDoctor(doctorRow ?? {});
-  const totalDoctorIncome = operations.reduce(
-    (s, r) =>
-      s +
-      calcOperationEarned(
-        {
-          doctor_share_amount: r.doctor_share_amount,
-          clinic_share_amount: r.clinic_share_amount,
-          paid_amount: r.paid_amount,
-          materials_cost: r.materials_cost,
-          review_fee_amount: r.review_fee_amount,
-          is_review_statement: r.is_review_statement,
-          patient_treatment_cases: r.patient_treatment_cases,
-        },
-        doctorPct,
-        salaryDoctor,
-        doctorRow
-      ),
+  const clinicReviewFee = await loadClinicReviewFeeForDoctor(
+    supabase,
+    doctor.clinic_id as string
+  );
+
+  const operationsWithShares = operations.map((r) => {
+    const doctorShare = calcOperationEarned(
+      {
+        doctor_share_amount: r.doctor_share_amount,
+        clinic_share_amount: r.clinic_share_amount,
+        paid_amount: r.paid_amount,
+        materials_cost: r.materials_cost,
+        review_fee_amount: r.review_fee_amount,
+        is_review_statement: r.is_review_statement,
+        patient_treatment_cases: r.patient_treatment_cases,
+      },
+      doctorPct,
+      salaryDoctor,
+      doctorRow,
+      clinicReviewFee
+    );
+    return { ...r, doctor_share_amount: doctorShare };
+  });
+
+  const totalDoctorIncome = operationsWithShares.reduce(
+    (s, r) => s + Number(r.doctor_share_amount ?? 0),
     0
   );
 
@@ -768,7 +782,7 @@ export async function fetchDoctorLedgerDetail(
   return {
     doctor,
     summary,
-    operations,
+    operations: operationsWithShares,
     withdrawals,
     salaryPayouts,
     settlement,

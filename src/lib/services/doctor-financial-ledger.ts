@@ -10,6 +10,7 @@ import { doctorPaymentPct } from "@/lib/services/patient-financial-plan";
 import {
   calcOperationEarned,
   filterWithdrawalsInPeriod,
+  loadClinicReviewFeeForDoctor,
   withdrawalEffectiveDate,
 } from "@/lib/services/doctor-wallet";
 import {
@@ -212,7 +213,12 @@ async function loadPatientNames(
 async function loadDoctorPaymentMeta(
   admin: SupabaseClient,
   doctorId: string
-): Promise<{ pct: number; salaryDoctor: boolean; doctor: Doctor | null }> {
+): Promise<{
+  pct: number;
+  salaryDoctor: boolean;
+  doctor: Doctor | null;
+  clinicReviewFee: number;
+}> {
   const { data } = await admin
     .from("doctors")
     .select(
@@ -222,10 +228,15 @@ async function loadDoctorPaymentMeta(
     .maybeSingle();
 
   const doctor = (data as Doctor | null) ?? null;
+  const clinicReviewFee = await loadClinicReviewFeeForDoctor(
+    admin,
+    (doctor as { clinic_id?: string } | null)?.clinic_id
+  );
   return {
     pct: doctorPaymentPct(doctor),
     salaryDoctor: isSalaryDoctor(data ?? {}),
     doctor,
+    clinicReviewFee,
   };
 }
 
@@ -488,12 +499,13 @@ function resolveHistoryDoctorShare(
 function isPaidSessionOperation(
   op: OperationEarningSource & { session_kind?: string | null },
   doctorPct: number,
-  salaryDoctor: boolean
+  salaryDoctor: boolean,
+  clinicReviewFee = 0
 ): boolean {
   const paid = Number(op.paid_amount ?? 0);
   if (op.session_kind === "discount" && paid <= 0) return false;
   if (paid > 0) return true;
-  return calcOperationEarned(op, doctorPct, salaryDoctor) > 0;
+  return calcOperationEarned(op, doctorPct, salaryDoctor, null, clinicReviewFee) > 0;
 }
 
 /** جلسات مدفوعة — سجل تاريخي + patient_operations (بدون صرفيات العيادة) */
@@ -505,7 +517,8 @@ async function fetchDoctorSessionPayments(
 ): Promise<SessionPaymentRow[]> {
   const seenOps = new Set<string>();
   const rows: SessionPaymentRow[] = [];
-  const { pct: doctorPct, salaryDoctor, doctor } = await loadDoctorPaymentMeta(
+  const { pct: doctorPct, salaryDoctor, doctor, clinicReviewFee } =
+    await loadDoctorPaymentMeta(
     admin,
     doctorId
   );
@@ -544,7 +557,8 @@ async function fetchDoctorSessionPayments(
     for (const raw of opsRes.data) {
       const op = raw as unknown as PatientOperation & OperationEarningSource;
       if (seenOps.has(op.id)) continue;
-      if (!isPaidSessionOperation(op, doctorPct, salaryDoctor)) continue;
+      if (!isPaidSessionOperation(op, doctorPct, salaryDoctor, clinicReviewFee))
+        continue;
 
       const paymentDate =
         op.operation_date?.slice(0, 10) ??
@@ -557,7 +571,8 @@ async function fetchDoctorSessionPayments(
         op,
         doctorPct,
         salaryDoctor,
-        doctor
+        doctor,
+        clinicReviewFee
       );
 
       const patientName =
