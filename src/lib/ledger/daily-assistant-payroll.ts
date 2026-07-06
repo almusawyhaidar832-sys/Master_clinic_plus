@@ -51,7 +51,7 @@ export async function fetchDailyAssistantPayrollLines(
   date: string,
   doctorId?: string
 ): Promise<DailyAssistantPayrollLine[]> {
-  let txQuery = supabase
+  const txQuery = supabase
     .from("transactions")
     .select(
       "id, doctor_id, amount, type, reference_type, reference_id, description_ar, transaction_date"
@@ -60,7 +60,7 @@ export async function fetchDailyAssistantPayrollLines(
     .eq("transaction_date", date)
     .in("type", ["assistant_payroll_doctor", "assistant_payroll_clinic"]);
 
-  let entriesQuery = supabase
+  const entriesQuery = supabase
     .from("salary_entries")
     .select(
       `
