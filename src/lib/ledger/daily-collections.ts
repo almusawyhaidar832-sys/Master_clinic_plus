@@ -19,6 +19,7 @@ import {
   type DailyAssistantPayrollLine,
 } from "@/lib/ledger/daily-assistant-payroll";
 import { opName } from "@/types";
+import { todayISO } from "@/lib/utils";
 
 export type CollectionPaymentStatus =
   | "paid_full"
@@ -42,6 +43,8 @@ export type DailyCollectionRow = {
   patientPhone: string | null;
   doctorId: string;
   doctorName: string;
+  /** تاريخ الزيارة عند عرض فترة زمنية */
+  visitDate: string | null;
   sessionLabel: string;
   /** مبلغ هذه الجلسة/السجل */
   paidToday: number;
@@ -87,6 +90,8 @@ export type DoctorDailySummary = {
 
 export type DailyCollectionsResult = {
   date: string;
+  dateFrom: string;
+  dateTo: string;
   doctors: DoctorDailySummary[];
   totals: DoctorDailySummary["stats"];
 };
@@ -98,6 +103,7 @@ type QueueRow = {
   patient_phone: string | null;
   doctor_id: string;
   status: string;
+  queue_date: string;
   doctor?: { full_name_ar: string } | null;
 };
 
@@ -200,15 +206,17 @@ function canonicalVisitKey(input: {
   doctorId: string;
   patientId: string | null;
   patientName: string;
+  day?: string;
 }): string {
-  if (input.patientId) {
-    return `${input.doctorId}:${input.patientId}`;
-  }
-  return visitKey(input.doctorId, null, input.patientName);
+  const base = input.patientId
+    ? `${input.doctorId}:${input.patientId}`
+    : visitKey(input.doctorId, null, input.patientName);
+  return input.day ? `${base}:${input.day}` : base;
 }
 
 function sumVisitPaidToday(
-  operations: TodayOperationRow[]
+  operations: TodayOperationRow[],
+  groupByDay: boolean
 ): Map<string, number> {
   const totals = new Map<string, number>();
   for (const op of operations) {
@@ -222,6 +230,7 @@ function sumVisitPaidToday(
       doctorId,
       patientId,
       patientName,
+      day: groupByDay ? op.operation_date ?? undefined : undefined,
     });
     totals.set(key, (totals.get(key) ?? 0) + paid);
   }
@@ -301,7 +310,8 @@ type DoctorPaymentMeta = {
 function computeVisitDoctorShares(
   operations: TodayOperationRow[],
   visitPaidByKey: Map<string, number>,
-  metaByDoctor: Map<string, DoctorPaymentMeta>
+  metaByDoctor: Map<string, DoctorPaymentMeta>,
+  groupByDay: boolean
 ): { byDoctor: Map<string, number>; byVisit: Map<string, number> } {
   const groups = new Map<
     string,
@@ -317,6 +327,7 @@ function computeVisitDoctorShares(
       doctorId,
       patientId: op.patient_id ?? null,
       patientName: op.patient?.full_name_ar?.trim() || "مراجع",
+      day: groupByDay ? op.operation_date ?? undefined : undefined,
     });
     const groupKey = `${doctorId}\0${vk}`;
     const existing = groups.get(groupKey);
@@ -362,7 +373,10 @@ function emptyStats(): DoctorDailySummary["stats"] {
   };
 }
 
-function computeStats(rows: DailyCollectionRow[]): DoctorDailySummary["stats"] {
+function computeStats(
+  rows: DailyCollectionRow[],
+  groupByDay: boolean
+): DoctorDailySummary["stats"] {
   const stats = emptyStats();
   stats.totalPatients = rows.length;
 
@@ -373,6 +387,7 @@ function computeStats(rows: DailyCollectionRow[]): DoctorDailySummary["stats"] {
       doctorId: row.doctorId,
       patientId: row.patientId,
       patientName: row.patientName,
+      day: groupByDay ? row.visitDate ?? undefined : undefined,
     });
     visitCollected.set(vk, row.visitPaidToday);
 
@@ -431,7 +446,10 @@ function applyAssistantPayrollToStats(
 }
 
 /** صف واحد لكل مراجع + طبيب في اليوم — بدل تكرار الاسم لكل سجل */
-function mergeRowsByVisit(rows: DailyCollectionRow[]): DailyCollectionRow[] {
+function mergeRowsByVisit(
+  rows: DailyCollectionRow[],
+  groupByDay: boolean
+): DailyCollectionRow[] {
   const groups = new Map<string, DailyCollectionRow[]>();
 
   for (const row of rows) {
@@ -439,6 +457,7 @@ function mergeRowsByVisit(rows: DailyCollectionRow[]): DailyCollectionRow[] {
       doctorId: row.doctorId,
       patientId: row.patientId,
       patientName: row.patientName,
+      day: groupByDay ? row.visitDate ?? undefined : undefined,
     });
     const list = groups.get(key) ?? [];
     list.push(row);
@@ -497,6 +516,7 @@ function mergeRowsByVisit(rows: DailyCollectionRow[]): DailyCollectionRow[] {
       patientPhone,
       doctorId: primary.doctorId,
       doctorName: primary.doctorName,
+      visitDate: groupByDay ? primary.visitDate : null,
       sessionLabel,
       paidToday: paidToday > 0 ? paidToday : primary.paidToday,
       visitPaidToday,
@@ -608,20 +628,28 @@ export async function fetchDailyCollections(
   supabase: SupabaseClient,
   clinicId: string,
   input: {
-    date: string;
+    date?: string;
+    dateFrom?: string;
+    dateTo?: string;
     doctorId?: string;
     statusFilter?: CollectionStatusFilter;
   }
 ): Promise<DailyCollectionsResult> {
   const statusFilter = input.statusFilter ?? "all";
+  const dateFrom = input.dateFrom ?? input.date ?? todayISO();
+  const dateTo = input.dateTo ?? input.date ?? dateFrom;
+  const effectiveTo = dateTo >= dateFrom ? dateTo : dateFrom;
+  const effectiveFrom = dateFrom;
+  const groupByDay = effectiveFrom !== effectiveTo;
 
   const [ledger, queueRes, doctorsRes] = await Promise.all([
     fetchLedgerOperationsForDate(supabase, clinicId, {
-      date: input.date,
+      dateFrom: effectiveFrom,
+      dateTo: effectiveTo,
       doctorId: input.doctorId,
-      limit: 500,
+      limit: groupByDay ? 2000 : 500,
     }),
-    fetchQueueForDate(supabase, clinicId, input.date, input.doctorId),
+    fetchQueueForPeriod(supabase, clinicId, effectiveFrom, effectiveTo, input.doctorId),
     supabase
       .from("doctors")
       .select("id, full_name_ar, percentage, payment_type, financial_agreement")
@@ -639,7 +667,7 @@ export async function fetchDailyCollections(
 
   const queueIndex = buildQueueIndex(queueRes);
   const matchedQueueIds = new Set<string>();
-  const visitPaidByKey = sumVisitPaidToday(operations);
+  const visitPaidByKey = sumVisitPaidToday(operations, groupByDay);
   const patientDebtMap = sumPatientDebtFromCases(caseInfoById);
 
   const metaByDoctor = new Map<string, DoctorPaymentMeta>();
@@ -671,13 +699,14 @@ export async function fetchDailyCollections(
   const { byVisit: visitDoctorShareByKey } = computeVisitDoctorShares(
     operations,
     visitPaidByKey,
-    metaByDoctor
+    metaByDoctor,
+    groupByDay
   );
 
   const assistantPayrollLines = await fetchDailyAssistantPayrollLines(
     supabase,
     clinicId,
-    input.date,
+    { dateFrom: effectiveFrom, dateTo: effectiveTo },
     input.doctorId
   );
   const assistantByDoctor = sumAssistantPayrollByDoctor(assistantPayrollLines);
@@ -739,10 +768,12 @@ export async function fetchDailyCollections(
     const queue = findQueueForOperation(op, queueIndex);
     if (queue) matchedQueueIds.add(queue.id);
 
+    const opDate = op.operation_date ?? effectiveFrom;
     const vk = canonicalVisitKey({
       doctorId,
       patientId,
       patientName,
+      day: groupByDay ? opDate : undefined,
     });
     const visitPaidToday = visitPaidByKey.get(vk) ?? paidToday;
 
@@ -773,6 +804,7 @@ export async function fetchDailyCollections(
       patientPhone: queue?.patient_phone ?? null,
       doctorId,
       doctorName: op.doctor?.full_name_ar?.trim() || "طبيب",
+      visitDate: groupByDay ? opDate : null,
       sessionLabel: sessionLabelFromOp(op),
       paidToday,
       visitPaidToday,
@@ -791,10 +823,12 @@ export async function fetchDailyCollections(
     if (entry.status === "cancelled" || matchedQueueIds.has(entry.id)) continue;
 
     const patientName = entry.patient_name?.trim() || "مراجع";
+    const entryDate = entry.queue_date;
     const vk = canonicalVisitKey({
       doctorId: entry.doctor_id,
       patientId: entry.patient_id,
       patientName,
+      day: groupByDay ? entryDate : undefined,
     });
     const visitPaidToday = visitPaidByKey.get(vk) ?? 0;
 
@@ -815,6 +849,7 @@ export async function fetchDailyCollections(
       patientPhone: entry.patient_phone,
       doctorId: entry.doctor_id,
       doctorName: entry.doctor?.full_name_ar?.trim() || "طبيب",
+      visitDate: groupByDay ? entryDate : null,
       sessionLabel: "زيارة",
       paidToday: 0,
       visitPaidToday,
@@ -829,7 +864,7 @@ export async function fetchDailyCollections(
     });
   }
 
-  const mergedSessionRows = mergeRowsByVisit(sessionRows);
+  const mergedSessionRows = mergeRowsByVisit(sessionRows, groupByDay);
 
   const allRows = mergedSessionRows
     .filter((row) =>
@@ -874,11 +909,17 @@ export async function fetchDailyCollections(
   const doctors: DoctorDailySummary[] = [...byDoctor.entries()]
     .map(([doctorId, rows]) => {
       const sorted = rows.sort((a, b) => {
+        if (groupByDay) {
+          const dateCmp = String(b.visitDate ?? "").localeCompare(
+            String(a.visitDate ?? "")
+          );
+          if (dateCmp !== 0) return dateCmp;
+        }
         const paidCmp = b.visitPaidToday - a.visitPaidToday;
         if (paidCmp !== 0) return paidCmp;
         return a.patientName.localeCompare(b.patientName, "ar");
       });
-      const stats = computeStats(sorted);
+      const stats = computeStats(sorted, groupByDay);
       const assistantTotals = assistantByDoctor.get(doctorId);
       if (assistantTotals) {
         applyAssistantPayrollToStats(stats, assistantTotals);
@@ -915,25 +956,29 @@ export async function fetchDailyCollections(
   }
 
   return {
-    date: input.date,
+    date: effectiveFrom,
+    dateFrom: effectiveFrom,
+    dateTo: effectiveTo,
     doctors,
     totals,
   };
 }
 
-async function fetchQueueForDate(
+async function fetchQueueForPeriod(
   supabase: SupabaseClient,
   clinicId: string,
-  date: string,
+  dateFrom: string,
+  dateTo: string,
   doctorId?: string
 ): Promise<QueueRow[]> {
   let query = supabase
     .from("patient_queue")
     .select(
-      "id, patient_id, patient_name, patient_phone, doctor_id, status, doctor:doctors!doctor_id(full_name_ar)"
+      "id, patient_id, patient_name, patient_phone, doctor_id, status, queue_date, doctor:doctors!doctor_id(full_name_ar)"
     )
     .eq("clinic_id", clinicId)
-    .eq("queue_date", date)
+    .gte("queue_date", dateFrom)
+    .lte("queue_date", dateTo)
     .neq("status", "cancelled");
 
   if (doctorId) {
@@ -957,6 +1002,7 @@ async function fetchQueueForDate(
       patient_phone: (r.patient_phone as string | null) ?? null,
       doctor_id: String(r.doctor_id),
       status: String(r.status),
+      queue_date: String(r.queue_date ?? dateFrom),
       doctor,
     };
   });

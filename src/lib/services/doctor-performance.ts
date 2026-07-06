@@ -1,10 +1,23 @@
 export interface DoctorPerformanceRow {
   doctor_id?: string;
   full_name_ar: string;
+  /** إجمالي مدفوعات المراجعين في الفترة */
+  collected: number;
+  /** عدد الجلسات التي دُفع فيها مبلغ */
+  payment_count: number;
   revenue: number;
   clinic_share: number;
   doctor_share: number;
   op_count: number;
+}
+
+/** تقييم الأداء من 100 — نسبي لأعلى طبيب في الفترة */
+export function doctorPerformanceScore(
+  collected: number,
+  maxCollected: number
+): number {
+  if (maxCollected <= 0 || collected <= 0) return 0;
+  return Math.min(100, Math.round((collected / maxCollected) * 100));
 }
 
 export interface InactiveDoctorRow {
@@ -43,14 +56,19 @@ export function normalizeTopPerformersPayload(
   raw: unknown
 ): TopPerformersPayload {
   const data = (raw ?? {}) as Record<string, unknown>;
-  const mapDoctor = (row: Record<string, unknown>): DoctorPerformanceRow => ({
-    doctor_id: row.doctor_id ? String(row.doctor_id) : undefined,
-    full_name_ar: String(row.full_name_ar ?? "طبيب"),
-    revenue: num(row.revenue),
-    clinic_share: num(row.clinic_share),
-    doctor_share: num(row.doctor_share),
-    op_count: num(row.op_count),
-  });
+  const mapDoctor = (row: Record<string, unknown>): DoctorPerformanceRow => {
+    const collected = num(row.collected ?? row.revenue);
+    return {
+      doctor_id: row.doctor_id ? String(row.doctor_id) : undefined,
+      full_name_ar: String(row.full_name_ar ?? "طبيب"),
+      collected,
+      payment_count: num(row.payment_count),
+      revenue: num(row.revenue),
+      clinic_share: num(row.clinic_share),
+      doctor_share: num(row.doctor_share),
+      op_count: num(row.op_count),
+    };
+  };
 
   return {
     top_doctors: Array.isArray(data.top_doctors)
@@ -86,7 +104,7 @@ export function buildDoctorPerformanceHighlights(
     };
   }
 
-  const topByRevenue = ranking[0] ?? null;
+  const topByRevenue = [...ranking].sort((a, b) => b.collected - a.collected)[0] ?? null;
   const topByClinicShare = [...ranking].sort(
     (a, b) => b.clinic_share - a.clinic_share
   )[0];

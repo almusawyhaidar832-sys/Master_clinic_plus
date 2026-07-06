@@ -16,6 +16,7 @@ import {
   type ExecutiveSnapshotCore,
   type ReportAlignedProfitMetrics,
 } from "@/lib/services/executive-snapshot";
+import { doctorPerformanceScore } from "@/lib/services/doctor-performance";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { OutstandingDebtPanel } from "@/components/accountant/OutstandingDebtPanel";
@@ -62,6 +63,8 @@ interface Snapshot {
 interface TopPerformers {
   top_doctors: Array<{
     full_name_ar: string;
+    collected: number;
+    payment_count: number;
     revenue: number;
     clinic_share?: number;
     doctor_share: number;
@@ -270,43 +273,79 @@ function SmartAlerts({ snap }: { snap: Snapshot }) {
 }
 
 // ─────────────────────────────────────────────
-// Top Doctors
+// Top Doctors — تقييم من 100 حسب مدفوعات المراجعين
 // ─────────────────────────────────────────────
-function TopDoctorsCard({ doctors }: { doctors: TopPerformers["top_doctors"] }) {
-  const { t, formatMoney } = useLanguage();
+function TopDoctorsCard({
+  doctors,
+  periodLabel,
+}: {
+  doctors: TopPerformers["top_doctors"];
+  periodLabel: string;
+}) {
+  const { t } = useLanguage();
   if (!doctors.length) return null;
-  const max = doctors[0].revenue;
+
+  const ranked = [...doctors].sort(
+    (a, b) =>
+      (b.collected ?? b.revenue ?? 0) - (a.collected ?? a.revenue ?? 0) ||
+      (b.payment_count ?? 0) - (a.payment_count ?? 0)
+  );
+  const maxCollected = Math.max(
+    ...ranked.map((d) => d.collected ?? d.revenue ?? 0),
+    0
+  );
+
   return (
     <div className="rounded-2xl border border-slate-border bg-surface-card p-5 shadow-card">
-      <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-text">
-        <Star className="h-5 w-5 text-premium-500" />
-        {t("topDoctors")}
-      </h3>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 font-bold text-slate-text">
+          <Star className="h-5 w-5 text-premium-500" />
+          {t("topDoctors")}
+        </h3>
+        <span className="rounded-lg bg-surface px-2.5 py-1 text-xs font-medium text-slate-muted">
+          {periodLabel}
+        </span>
+      </div>
       <div className="space-y-3">
-        {doctors.map((d, i) => (
-          <div key={d.full_name_ar}>
-            <div className="mb-1 flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2 font-medium text-slate-text">
-                {i === 0 && <span className="text-base">🥇</span>}
-                {i === 1 && <span className="text-base">🥈</span>}
-                {i === 2 && <span className="text-base">🥉</span>}
-                {i > 2 && <span className="w-5 text-center text-xs text-slate-muted">{i + 1}</span>}
-                {d.full_name_ar}
-              </span>
-              <span className="font-bold text-slate-text tabular-nums">{fmt(d.revenue)}</span>
+        {ranked.map((d, i) => {
+          const collected = d.collected ?? d.revenue ?? 0;
+          const score = doctorPerformanceScore(collected, maxCollected);
+          const payments = d.payment_count ?? 0;
+          return (
+            <div key={d.full_name_ar}>
+              <div className="mb-1 flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 font-medium text-slate-text">
+                  {i === 0 && <span className="text-base">🥇</span>}
+                  {i === 1 && <span className="text-base">🥈</span>}
+                  {i === 2 && <span className="text-base">🥉</span>}
+                  {i > 2 && (
+                    <span className="w-5 text-center text-xs text-slate-muted">
+                      {i + 1}
+                    </span>
+                  )}
+                  {d.full_name_ar}
+                </span>
+                <span className="font-bold tabular-nums text-premium-600">
+                  {score}
+                  <span className="text-xs font-medium text-slate-muted">
+                    /100
+                  </span>
+                </span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-surface">
+                <div
+                  className="h-full rounded-full bg-mc-gold transition-all duration-300"
+                  style={{ width: `${score}%` }}
+                />
+              </div>
+              <p className="mt-0.5 text-xs text-slate-muted">
+                {payments > 0
+                  ? `${payments} ${t("execTopDoctorPayments")}`
+                  : t("execTopDoctorNoPayments")}
+              </p>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-surface">
-              <div
-                className="h-full rounded-full bg-mc-gold"
-                style={{ width: `${(d.revenue / max) * 100}%` }}
-              />
-            </div>
-            <p className="mt-0.5 text-xs text-slate-muted">
-              {d.op_count} {t("execTopDoctorOps")} ·{" "}
-              {formatMoney(d.clinic_share ?? 0)} {t("clinicNetShare")}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -651,7 +690,10 @@ export function ExecutiveDashboard() {
           {/* Row 3: top performers */}
           {top && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <TopDoctorsCard doctors={top.top_doctors} />
+              <TopDoctorsCard
+                doctors={top.top_doctors}
+                periodLabel={PERIODS.find((p) => p.key === period)?.label ?? ""}
+              />
               <TopServicesCard services={top.top_services} />
             </div>
           )}

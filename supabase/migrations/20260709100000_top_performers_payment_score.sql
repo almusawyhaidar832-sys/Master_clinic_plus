@@ -1,5 +1,4 @@
--- أفضل الأطباء: الترتيب حسب مدفوعات المراجعين (paid_amount)
--- شغّل في Supabase SQL Editor
+-- أفضل الأطباء: الترتيب حسب مدفوعات المراجعين (paid_amount) وليس إجمالي الجلسات
 
 CREATE OR REPLACE FUNCTION public.get_top_performers(
   p_clinic_id UUID,

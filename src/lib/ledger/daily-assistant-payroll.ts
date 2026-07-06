@@ -44,11 +44,11 @@ type TxRow = {
   transaction_date: string;
 };
 
-/** أجور مساعدي الأطباء في يوم محدد — صرف مؤكّد + تسجيل أجر يومي */
+/** أجور مساعدي الأطباء في فترة محددة — صرف مؤكّد + تسجيل أجر يومي */
 export async function fetchDailyAssistantPayrollLines(
   supabase: SupabaseClient,
   clinicId: string,
-  date: string,
+  input: { dateFrom: string; dateTo: string },
   doctorId?: string
 ): Promise<DailyAssistantPayrollLine[]> {
   const txQuery = supabase
@@ -57,7 +57,8 @@ export async function fetchDailyAssistantPayrollLines(
       "id, doctor_id, amount, type, reference_type, reference_id, description_ar, transaction_date"
     )
     .eq("clinic_id", clinicId)
-    .eq("transaction_date", date)
+    .gte("transaction_date", input.dateFrom)
+    .lte("transaction_date", input.dateTo)
     .in("type", ["assistant_payroll_doctor", "assistant_payroll_clinic"]);
 
   const entriesQuery = supabase
@@ -71,7 +72,8 @@ export async function fetchDailyAssistantPayrollLines(
     `
     )
     .eq("clinic_id", clinicId)
-    .eq("entry_date", date)
+    .gte("entry_date", input.dateFrom)
+    .lte("entry_date", input.dateTo)
     .not("assistant_id", "is", null);
 
   const [txRes, entriesRes] = await Promise.all([txQuery, entriesQuery]);

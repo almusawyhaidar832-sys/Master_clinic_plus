@@ -129,6 +129,13 @@ export function todayISO(): string {
   return localDateISO();
 }
 
+/** Add calendar days to a YYYY-MM-DD date (local timezone). */
+export function addDaysISO(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return localDateISO(d);
+}
+
 /** Local calendar day(s) as UTC instants for Supabase `created_at` filters */
 export function localPeriodUtcBounds(
   from: string,

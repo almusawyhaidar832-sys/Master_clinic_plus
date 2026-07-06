@@ -115,6 +115,8 @@ function buildCaseInfoFromRow(row: Record<string, unknown>): TodayCaseInfo {
 
 export type LedgerOperationsFilters = {
   date?: string;
+  dateFrom?: string;
+  dateTo?: string;
   doctorId?: string;
   limit?: number;
 };
@@ -129,9 +131,11 @@ export async function fetchLedgerOperationsForDate(
   caseInfoById: Map<string, TodayCaseInfo>;
   patientPrimaryCaseId: Map<string, string>;
 }> {
-  const date = filters.date ?? todayISO();
-  const limit = filters.limit ?? 500;
-  const { startIso, endIso } = localPeriodUtcBounds(date, date);
+  const dateFrom = filters.dateFrom ?? filters.date ?? todayISO();
+  const dateTo = filters.dateTo ?? filters.date ?? dateFrom;
+  const singleDay = dateFrom === dateTo;
+  const limit = filters.limit ?? (singleDay ? 500 : 2000);
+  const { startIso, endIso } = localPeriodUtcBounds(dateFrom, dateTo);
 
   const selectCols =
     "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar), invoices(paid_amount, total_amount, remaining_amount)";
@@ -140,7 +144,8 @@ export async function fetchLedgerOperationsForDate(
     .from("patient_operations")
     .select(selectCols)
     .eq("clinic_id", clinicId)
-    .eq("operation_date", date)
+    .gte("operation_date", dateFrom)
+    .lte("operation_date", dateTo)
     .order("created_at", { ascending: false })
     .limit(limit);
 

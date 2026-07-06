@@ -24,7 +24,7 @@ import type { DailyAssistantPayrollLine } from "@/lib/ledger/daily-assistant-pay
 import { OutstandingDebtPanel } from "@/components/accountant/OutstandingDebtPanel";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
-import { cn, formatCurrency, formatDate, todayISO } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, todayISO, addDaysISO } from "@/lib/utils";
 import {
   Calendar,
   ChevronDown,
@@ -128,6 +128,11 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
             </p>
           )}
         <p className="mt-0.5 text-xs text-slate-muted">{row.sessionLabel}</p>
+        {row.visitDate && (
+          <p className="mt-0.5 text-[11px] text-slate-muted">
+            {formatDate(new Date(row.visitDate + "T12:00:00"))}
+          </p>
+        )}
         {row.patientPhone && (
           <p className="mt-0.5 text-xs text-slate-muted" dir="ltr">
             {row.patientPhone}
@@ -366,7 +371,8 @@ function DoctorSection({
 
 export function DailyCollectionsPanel() {
   const { clinicId, loading: clinicLoading } = useActiveClinicId();
-  const [date, setDate] = useState(todayISO());
+  const [dateFrom, setDateFrom] = useState(todayISO());
+  const [dateTo, setDateTo] = useState(todayISO());
   const [doctorId, setDoctorId] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<CollectionStatusFilter>("all");
@@ -375,7 +381,10 @@ export function DailyCollectionsPanel() {
   const [loading, setLoading] = useState(true);
   const [repairMsg, setRepairMsg] = useState<string | null>(null);
   const [repairing, setRepairing] = useState(false);
-  const [appliedDate, setAppliedDate] = useState(todayISO());
+  const [appliedFrom, setAppliedFrom] = useState(todayISO());
+  const [appliedTo, setAppliedTo] = useState(todayISO());
+
+  const effectiveTo = dateTo >= dateFrom ? dateTo : dateFrom;
 
   const loadDoctors = useCallback(async () => {
     if (!clinicId) {
@@ -401,14 +410,16 @@ export function DailyCollectionsPanel() {
     setLoading(true);
     const supabase = createClient();
     const data = await fetchDailyCollections(supabase, clinicId, {
-      date,
+      dateFrom,
+      dateTo: effectiveTo,
       doctorId: doctorId || undefined,
       statusFilter,
     });
     setResult(data);
-    setAppliedDate(date);
+    setAppliedFrom(dateFrom);
+    setAppliedTo(effectiveTo);
     setLoading(false);
-  }, [clinicId, date, doctorId, statusFilter]);
+  }, [clinicId, dateFrom, effectiveTo, doctorId, statusFilter]);
 
   useEffect(() => {
     if (clinicLoading) return;
@@ -427,10 +438,24 @@ export function DailyCollectionsPanel() {
     enabled: !clinicLoading && !!clinicId,
   });
 
-  const dateLabel = useMemo(
-    () => formatDate(new Date(appliedDate + "T12:00:00")),
-    [appliedDate]
-  );
+  const periodLabel = useMemo(() => {
+    if (appliedFrom === appliedTo) {
+      return formatDate(new Date(appliedFrom + "T12:00:00"));
+    }
+    return `${formatDate(new Date(appliedFrom + "T12:00:00"))} — ${formatDate(new Date(appliedTo + "T12:00:00"))}`;
+  }, [appliedFrom, appliedTo]);
+
+  const setToday = () => {
+    const today = todayISO();
+    setDateFrom(today);
+    setDateTo(today);
+  };
+
+  const setLast7Days = () => {
+    const today = todayISO();
+    setDateFrom(addDaysISO(today, -6));
+    setDateTo(today);
+  };
 
   const repairDoctorShares = useCallback(async () => {
     if (!doctorId) return;
@@ -470,17 +495,26 @@ export function DailyCollectionsPanel() {
         </h2>
         <p className="mc-page-subtitle">
           لكل مراجع: ما دفعه، حصة الطبيب من المدفوع، والمتبقي. الملخص =
-          مجموع اليوم فقط — مو الرصيد التراكمي للطبيب.
+          مجموع الفترة المحددة — مو الرصيد التراكمي للطبيب.
         </p>
       </div>
 
       <Card>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Input
-            label="التاريخ"
+            label="من تاريخ"
             type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            dir="ltr"
+            className="text-left"
+          />
+          <Input
+            label="إلى تاريخ"
+            type="date"
+            value={dateTo}
+            min={dateFrom}
+            onChange={(e) => setDateTo(e.target.value)}
             dir="ltr"
             className="text-left"
           />
@@ -494,7 +528,7 @@ export function DailyCollectionsPanel() {
               label: d.full_name_ar,
             }))}
           />
-          <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-2">
+          <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-1">
             <Button
               type="button"
               onClick={() => void loadCollections()}
@@ -525,6 +559,23 @@ export function DailyCollectionsPanel() {
               </Button>
             )}
           </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={setToday}
+            className="rounded-full border border-slate-border px-3 py-1 text-xs font-medium text-slate-muted hover:bg-surface"
+          >
+            اليوم
+          </button>
+          <button
+            type="button"
+            onClick={setLast7Days}
+            className="rounded-full border border-slate-border px-3 py-1 text-xs font-medium text-slate-muted hover:bg-surface"
+          >
+            آخر 7 أيام
+          </button>
         </div>
 
         {repairMsg && (
@@ -560,7 +611,7 @@ export function DailyCollectionsPanel() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Users className="h-4 w-4 text-primary" />
-              ملخص {dateLabel}
+              ملخص {periodLabel}
             </CardTitle>
           </CardHeader>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10">
@@ -630,7 +681,7 @@ export function DailyCollectionsPanel() {
 
       {!loading && result && result.doctors.length === 0 && (
         <Alert variant="info">
-          لا توجد بيانات مالية لـ {dateLabel}
+          لا توجد بيانات مالية لـ {periodLabel}
           {doctorId ? " لهذا الطبيب" : ""}.
         </Alert>
       )}

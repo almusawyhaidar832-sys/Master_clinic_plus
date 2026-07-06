@@ -374,6 +374,8 @@ const translations = {
     execLoadSummaryError:         "تعذر تحميل ملخص الأرباح — شغّل supabase/scripts/21-fix-doctor-percentage-cast.sql في Supabase",
     execDoctorPctHint:            "الأرباح ما انحذفت — ما زالت في هذه الصفحة. إذا ظهر خطأ نسبة الطبيب، شغّل سكربت 29 في Supabase ثم حدّث الصفحة.",
     execTopDoctorOps:             "عملية · حصة الطبيب",
+    execTopDoctorPayments:        "دفعة مدفوعة",
+    execTopDoctorNoPayments:      "لا دفعات في هذه الفترة",
     execServiceTimes:             "مرة · متوسط",
     execMarginPct:                "هامش",
 
@@ -1105,6 +1107,8 @@ const translations = {
     execLoadSummaryError:         "Failed to load profit summary — run supabase/scripts/21-fix-doctor-percentage-cast.sql in Supabase",
     execDoctorPctHint:            "Profits are still here. If you see a doctor percentage error, run script 29 in Supabase then refresh.",
     execTopDoctorOps:             "sessions · doctor share",
+    execTopDoctorPayments:        "paid sessions",
+    execTopDoctorNoPayments:      "no payments in this period",
     execServiceTimes:             "times · avg",
     execMarginPct:                "margin",
 
