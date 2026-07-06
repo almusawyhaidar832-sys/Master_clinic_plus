@@ -6,7 +6,8 @@ import {
 } from "@/lib/services/patient-treatment-cases";
 import { fetchPatientFinancialPlansBatch } from "@/lib/services/patient-financial-plan";
 import { localDateISO, localPeriodUtcBounds } from "@/lib/utils";
-import { opDebt, type PatientOperation } from "@/types";
+import { opDebt, opName, type PatientOperation } from "@/types";
+import type { TopPerformersPayload } from "@/lib/services/doctor-performance";
 
 function num(v: unknown): number {
   const n = Number(v ?? 0);
@@ -516,6 +517,11 @@ export interface ReportAlignedProfitMetrics {
   reviewFees: number;
   salariesDeducted: number;
   doctorShareTotal: number;
+  revenue: number;
+  collected: number;
+  operationCount: number;
+  patientCount: number;
+  newPatients: number;
 }
 
 /** محاذاة اللوحة التنفيذية مع التقرير — حصة العيادة من clinic_share_amount وليس calc_clinic_operation_earned */
@@ -525,11 +531,16 @@ export function applyReportAlignedProfitMetrics<T extends ExecutiveSnapshotCore>
 ): T {
   return {
     ...snap,
+    revenue: aligned.revenue,
+    collected: aligned.collected,
     clinic_shares: aligned.clinicShareTotal,
     expenses: aligned.totalExpenses,
     review_fees: aligned.reviewFees,
     net_profit: aligned.netProfit,
     doctor_shares: aligned.doctorShareTotal,
+    operation_count: aligned.operationCount,
+    patient_count: aligned.patientCount,
+    new_patients: aligned.newPatients,
   };
 }
 
@@ -594,27 +605,14 @@ export async function fetchReviewFeesInPeriod(
   from: string,
   to: string
 ): Promise<{ total: number; count: number }> {
-  const { data, error } = await supabase
-    .from("patient_operations")
-    .select("review_fee_amount")
-    .eq("clinic_id", clinicId)
-    .gte("operation_date", from)
-    .lte("operation_date", to);
-
-  if (error) {
-    if (
-      error.message?.includes("review_fee_amount") ||
-      error.code === "PGRST205"
-    ) {
-      return { total: 0, count: 0 };
-    }
-    return { total: 0, count: 0 };
-  }
+  const ops = await loadOperationsInPeriod(supabase, clinicId, from, to);
 
   let total = 0;
   let count = 0;
-  for (const row of data ?? []) {
-    const fee = Number(row.review_fee_amount ?? 0);
+  for (const row of ops) {
+    const fee = Number(
+      (row as unknown as Record<string, unknown>).review_fee_amount ?? 0
+    );
     if (fee > 0) {
       total += fee;
       count += 1;
@@ -623,7 +621,7 @@ export async function fetchReviewFeesInPeriod(
   return { total, count };
 }
 
-/** جلب كل جلسات الفترة (تاريخ العملية + وقت الإنشاء + توسيع لليوم) */
+/** جلب كل جلسات الفترة (تاريخ العملية + وقت الإنشاء — تقويم محلي) */
 export async function loadOperationsInPeriod(
   supabase: SupabaseClient,
   clinicId: string,
@@ -631,6 +629,7 @@ export async function loadOperationsInPeriod(
   to: string
 ): Promise<PatientOperation[]> {
   const seen = new Map<string, PatientOperation>();
+  const { startIso, endIso } = localPeriodUtcBounds(from, to);
 
   const addRows = (rows: PatientOperation[] | null) => {
     for (const op of rows ?? []) {
@@ -640,43 +639,226 @@ export async function loadOperationsInPeriod(
     }
   };
 
-  const { data: byOpDate } = await supabase
-    .from("patient_operations")
-    .select("*")
-    .eq("clinic_id", clinicId)
-    .gte("operation_date", from)
-    .lte("operation_date", to);
-  addRows((byOpDate ?? []) as PatientOperation[]);
-
-  const fromMs = new Date(`${from}T12:00:00`).getTime();
-  const toMs = new Date(`${to}T12:00:00`).getTime();
-  const daySpan = Math.max(0, (toMs - fromMs) / 86400000);
-
-  if (daySpan <= 7) {
-    const lookback = new Date(fromMs);
-    lookback.setDate(lookback.getDate() - 14);
-    const { data: recent } = await supabase
+  const [byOpDateRes, byCreatedRes] = await Promise.all([
+    supabase
       .from("patient_operations")
       .select("*")
       .eq("clinic_id", clinicId)
-      .gte("created_at", lookback.toISOString())
+      .gte("operation_date", from)
+      .lte("operation_date", to),
+    supabase
+      .from("patient_operations")
+      .select("*")
+      .eq("clinic_id", clinicId)
+      .gte("created_at", startIso)
+      .lte("created_at", endIso)
       .order("created_at", { ascending: false })
-      .limit(800);
-    addRows((recent ?? []) as PatientOperation[]);
-  }
+      .limit(2000),
+  ]);
 
-  if (seen.size === 0 && from === to) {
-    const monthFrom = `${from.slice(0, 7)}-01`;
-    const { data: monthOps } = await supabase
-      .from("patient_operations")
-      .select("*")
-      .eq("clinic_id", clinicId)
-      .gte("operation_date", monthFrom)
-      .lte("operation_date", to);
-    addRows((monthOps ?? []) as PatientOperation[]);
-  }
+  addRows((byOpDateRes.data ?? []) as PatientOperation[]);
+  addRows((byCreatedRes.data ?? []) as PatientOperation[]);
 
   return [...seen.values()];
+}
+
+/** أفضل الأطباء والخدمات — نفس منطق الكشف المالي (operation_date + created_at) */
+export async function fetchTopPerformersForPeriod(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<TopPerformersPayload> {
+  const [ops, expensesRes, doctorsRes] = await Promise.all([
+    loadOperationsInPeriod(supabase, clinicId, from, to),
+    supabase
+      .from("expenses")
+      .select("amount, expense_kind, expense_categories(name_ar)")
+      .eq("clinic_id", clinicId)
+      .gte("expense_date", from)
+      .lte("expense_date", to),
+    supabase
+      .from("doctors")
+      .select("id, full_name_ar")
+      .eq("clinic_id", clinicId)
+      .eq("is_active", true)
+      .order("full_name_ar"),
+  ]);
+
+  type DoctorAgg = {
+    doctor_id: string;
+    full_name_ar: string;
+    collected: number;
+    payment_count: number;
+    revenue: number;
+    clinic_share: number;
+    doctor_share: number;
+    op_count: number;
+  };
+
+  const doctorById = new Map<string, DoctorAgg>();
+  for (const doc of doctorsRes.data ?? []) {
+    doctorById.set(String(doc.id), {
+      doctor_id: String(doc.id),
+      full_name_ar: String(doc.full_name_ar ?? "طبيب"),
+      collected: 0,
+      payment_count: 0,
+      revenue: 0,
+      clinic_share: 0,
+      doctor_share: 0,
+      op_count: 0,
+    });
+  }
+
+  type ServiceAgg = {
+    service_name: string;
+    count: number;
+    revenue: number;
+    clinic_margin_total: number;
+  };
+  const serviceByName = new Map<string, ServiceAgg>();
+
+  const doctorsWithPayments = new Set<string>();
+
+  for (const op of ops) {
+    const doctorId = op.doctor_id ? String(op.doctor_id) : "";
+    if (!doctorId) continue;
+
+    let agg = doctorById.get(doctorId);
+    if (!agg) {
+      agg = {
+        doctor_id: doctorId,
+        full_name_ar: "طبيب",
+        collected: 0,
+        payment_count: 0,
+        revenue: 0,
+        clinic_share: 0,
+        doctor_share: 0,
+        op_count: 0,
+      };
+      doctorById.set(doctorId, agg);
+    }
+
+    const paid = num(op.paid_amount);
+    const total = num(op.total_amount);
+    agg.op_count += 1;
+    agg.revenue += total;
+    agg.clinic_share += num(op.clinic_share_amount);
+    agg.doctor_share += num(op.doctor_share_amount);
+    if (paid > 0) {
+      agg.collected += paid;
+      agg.payment_count += 1;
+      doctorsWithPayments.add(doctorId);
+    }
+
+    const serviceName = opName(op).trim() || "جلسة";
+    const svc = serviceByName.get(serviceName) ?? {
+      service_name: serviceName,
+      count: 0,
+      revenue: 0,
+      clinic_margin_total: 0,
+    };
+    svc.count += 1;
+    svc.revenue += total;
+    if (total > 0) {
+      svc.clinic_margin_total +=
+        (num(op.clinic_share_amount) / total) * 100;
+    }
+    serviceByName.set(serviceName, svc);
+  }
+
+  const top_doctors = [...doctorById.values()]
+    .filter((d) => d.op_count > 0)
+    .sort(
+      (a, b) =>
+        b.collected - a.collected ||
+        b.payment_count - a.payment_count ||
+        b.op_count - a.op_count
+    )
+    .map((d) => ({
+      ...d,
+      collected: roundMoney(d.collected),
+      revenue: roundMoney(d.revenue),
+      clinic_share: roundMoney(d.clinic_share),
+      doctor_share: roundMoney(d.doctor_share),
+    }));
+
+  const top_services = [...serviceByName.values()]
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5)
+    .map((s) => ({
+      service_name: s.service_name,
+      count: s.count,
+      revenue: roundMoney(s.revenue),
+      avg_price: roundMoney(s.count > 0 ? s.revenue / s.count : 0),
+      clinic_margin_pct:
+        s.count > 0 ? roundMoney(s.clinic_margin_total / s.count) : 0,
+    }));
+
+  type ExpenseRow = {
+    amount: number;
+    expense_kind?: string | null;
+    expense_categories?: { name_ar?: string | null } | null;
+  };
+  const expenseByCategory = new Map<
+    string,
+    { category: string; total: number; count: number }
+  >();
+  for (const row of (expensesRes.data ?? []) as ExpenseRow[]) {
+    if ((row.expense_kind ?? "general") === "doctor_salary") continue;
+    const category =
+      row.expense_categories?.name_ar?.trim() || "غير مصنف";
+    const entry = expenseByCategory.get(category) ?? {
+      category,
+      total: 0,
+      count: 0,
+    };
+    entry.total += num(row.amount);
+    entry.count += 1;
+    expenseByCategory.set(category, entry);
+  }
+
+  const top_expenses = [...expenseByCategory.values()]
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5)
+    .map((e) => ({
+      category: e.category,
+      total: roundMoney(e.total),
+      count: e.count,
+    }));
+
+  const inactive_doctors = [...doctorById.values()]
+    .filter((d) => !doctorsWithPayments.has(d.doctor_id))
+    .map((d) => ({
+      doctor_id: d.doctor_id,
+      full_name_ar: d.full_name_ar,
+    }))
+    .sort((a, b) => a.full_name_ar.localeCompare(b.full_name_ar, "ar"));
+
+  return {
+    top_doctors,
+    top_services,
+    top_expenses,
+    inactive_doctors,
+  };
+}
+
+/** عدد المرضى الجدد في الفترة — تقويم محلي */
+export async function fetchNewPatientsInPeriod(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<number> {
+  const { startIso, endIso } = localPeriodUtcBounds(from, to);
+  const { count } = await supabase
+    .from("patients")
+    .select("*", { count: "exact", head: true })
+    .eq("clinic_id", clinicId)
+    .gte("created_at", startIso)
+    .lte("created_at", endIso);
+
+  return count ?? 0;
 }
 
 /** ديون المراجعين الذين زاروا خلال الفترة (ذمتهم الكاملة، ليس جلسات اليوم فقط) */

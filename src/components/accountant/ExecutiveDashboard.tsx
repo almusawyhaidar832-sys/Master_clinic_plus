@@ -316,14 +316,9 @@ export function ExecutiveDashboard() {
     const { from, to } = getRange();
 
     try {
-    const [snapRes, topRes, supplementRes] = await Promise.all([
+    const [snapRes, supplementRes] = await Promise.all([
       supabase.rpc("get_clinic_financial_snapshot", {
         p_clinic_id: clinicId, p_from: from, p_to: to,
-      }),
-      supabase.rpc("get_top_performers", {
-        p_clinic_id: clinicId,
-        p_from: from,
-        p_to: to,
       }),
       fetch(`/api/executive/supplement?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
         credentials: "include",
@@ -339,6 +334,7 @@ export function ExecutiveDashboard() {
           visitorDebt?: { debt: number; visitorCount: number };
           totalDebt?: { debt: number; debtorCount: number };
           reportAligned?: ReportAlignedProfitMetrics;
+          topPerformers?: TopPerformers;
           error?: string;
         })
       : null;
@@ -350,6 +346,7 @@ export function ExecutiveDashboard() {
       visitorDebt = { debt: 0, visitorCount: 0 },
       totalDebt = { debt: 0, debtorCount: 0 },
       reportAligned,
+      topPerformers,
     } = supplementJson ?? {};
 
     const salariesDeducted = reportAligned
@@ -418,7 +415,8 @@ export function ExecutiveDashboard() {
           : baseSnap.patient_count,
     });
 
-    if (topRes.data) setTop(topRes.data as TopPerformers);
+    if (topPerformers) setTop(topPerformers);
+    else setTop(null);
     } catch (err) {
       setFetchError(
         err instanceof Error ? err.message : t("execLoadProfitError")
@@ -426,7 +424,7 @@ export function ExecutiveDashboard() {
     } finally {
     setLoading(false);
     }
-  }, [clinicId, getRange, supabase, t]);
+  }, [clinicId, getRange, period, supabase, t]);
 
   useEffect(() => {
     if (clinicLoading || clinicId === undefined) return;

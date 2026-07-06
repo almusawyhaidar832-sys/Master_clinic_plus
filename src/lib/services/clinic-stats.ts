@@ -44,21 +44,19 @@ export async function fetchDaySummary(
     return { operationsCount: 0, totalRemainingDebt: 0, totalCollected: 0 };
   }
 
-  const [visitorResult, opsRes] = await Promise.all([
+  const { loadOperationsInPeriod, fetchPeriodVisitorDebt } = await import(
+    "@/lib/services/executive-snapshot"
+  );
+
+  const [visitorResult, ops] = await Promise.all([
     fetchPeriodVisitorDebt(supabase, active.clinicId, date, date),
-    supabase
-      .from("patient_operations")
-      .select("paid_amount", { count: "exact" })
-      .eq("clinic_id", active.clinicId)
-      .eq("operation_date", date),
+    loadOperationsInPeriod(supabase, active.clinicId, date, date),
   ]);
 
-  const rows = opsRes.data ?? [];
-
   return {
-    operationsCount: opsRes.count ?? rows.length,
+    operationsCount: ops.length,
     totalRemainingDebt: visitorResult.debt,
-    totalCollected: rows.reduce(
+    totalCollected: ops.reduce(
       (s, op) => s + Number(op.paid_amount ?? 0),
       0
     ),
@@ -93,25 +91,19 @@ export async function fetchClinicProfitStatsForPeriod(
   const { fetchTotalRefundsAmount } = await import(
     "@/lib/services/session-refunds"
   );
-  const { fetchResolvedSalaryDeductionForPeriod, fetchReviewFeesInPeriod } =
+  const { fetchResolvedSalaryDeductionForPeriod, loadOperationsInPeriod } =
     await import("@/lib/services/executive-snapshot");
 
   const [
-    opsRes,
+    ops,
     expensesRes,
     totalSalariesPaid,
     totalRefunds,
     clinicExpenseShareRes,
     visitorDebt,
-    reviewFees,
     balanceTopups,
   ] = await Promise.all([
-    supabase
-      .from("patient_operations")
-      .select("paid_amount, clinic_share_amount, doctor_share_amount")
-      .eq("clinic_id", clinicId)
-      .gte("operation_date", from)
-      .lte("operation_date", to),
+    loadOperationsInPeriod(supabase, clinicId, from, to),
     supabase
       .from("expenses")
       .select("amount, expense_kind")
@@ -129,11 +121,9 @@ export async function fetchClinicProfitStatsForPeriod(
       .gte("transaction_date", from)
       .lte("transaction_date", to),
     fetchPeriodVisitorDebt(supabase, clinicId, from, to),
-    fetchReviewFeesInPeriod(supabase, clinicId, from, to),
     fetchClinicBalanceTopupsForPeriod(supabase, clinicId, from, to),
   ]);
 
-  const ops = opsRes.data ?? [];
   const cashInflow = ops.reduce((s, r) => s + Number(r.paid_amount ?? 0), 0);
   const clinicShareTotal = ops.reduce(
     (s, r) => s + Number(r.clinic_share_amount ?? 0),
@@ -153,7 +143,13 @@ export async function fetchClinicProfitStatsForPeriod(
   const totalExpenses = generalExpenses + clinicExpenseShare;
   const outstandingDebts = visitorDebt.debt;
   const refundsRounded = Math.round(totalRefunds * 100) / 100;
-  const reviewFeesTotal = reviewFees.total;
+  let reviewFeesTotal = 0;
+  for (const row of ops) {
+    const fee = Number(
+      (row as unknown as Record<string, unknown>).review_fee_amount ?? 0
+    );
+    if (fee > 0) reviewFeesTotal += fee;
+  }
   const netProfit = Math.round(
     (clinicShareTotal + reviewFeesTotal - totalExpenses - totalSalariesPaid + balanceTopups) *
       100
