@@ -1130,6 +1130,9 @@ export function QuickEntryForm({
     const isNewCase = forceNewPlan || !selectedCaseId;
     const entryAmount =
       billingMode === "examination" ? examinationFeeLive : paid;
+    const reviewAddon =
+      isReviewStatement && billingMode !== "examination" ? reviewFeeLive : 0;
+    const sessionPaidTotal = entryAmount + reviewAddon;
 
     const phoneReady = await ensurePatientPhoneOnRecord(
       supabase,
@@ -1439,7 +1442,7 @@ export function QuickEntryForm({
       } else {
         const paymentCols: Record<string, unknown> = {
           total_amount: 0,
-          paid_amount: entryAmount,
+          paid_amount: sessionPaidTotal,
           doctor_share_amount: sessionPaymentShares.doctorShare,
           clinic_share_amount: sessionPaymentShares.clinicShare,
         };
@@ -1517,7 +1520,7 @@ export function QuickEntryForm({
         if (entryAmount > 0) {
           const paymentCols: Record<string, unknown> = {
             total_amount: 0,
-            paid_amount: entryAmount,
+            paid_amount: sessionPaidTotal,
             doctor_share_amount: sessionPaymentShares.doctorShare,
             clinic_share_amount: sessionPaymentShares.clinicShare,
           };
@@ -1584,7 +1587,7 @@ export function QuickEntryForm({
         patientId: patientId!,
         treatmentName: pickedCase?.treatment_name_ar ?? operationLabel,
         plan: activePlan,
-        paidDelta: entryAmount,
+        paidDelta: sessionPaidTotal,
         additionalDiscount,
         caseId: syncCaseId,
       });

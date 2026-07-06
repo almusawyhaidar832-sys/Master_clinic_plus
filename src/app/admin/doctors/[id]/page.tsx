@@ -28,7 +28,7 @@ export default function AdminDoctorLedgerDetailPage() {
     async function load() {
       if (!id || !clinicId) return;
 
-      const repairKey = `mc:doctor-shares-auto-repair:v8:${clinicId}:${id}`;
+      const repairKey = `mc:doctor-shares-auto-repair:v10:${clinicId}:${id}`;
       const needSync =
         typeof window !== "undefined" && !sessionStorage.getItem(repairKey);
 

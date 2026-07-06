@@ -201,7 +201,7 @@ export function resolveOperationPaymentSplit(
 
   const storedDoc = num(op.doctor_share_amount);
   const storedClinic = num(op.clinic_share_amount);
-  if (!reviewOnly && (storedDoc > 0 || storedClinic > 0)) {
+  if (!reviewOnly && !doctor && (storedDoc > 0 || storedClinic > 0)) {
     if (storedDoc > 0 && storedClinic > 0) {
       return {
         doctorShare: roundMoney(storedDoc),

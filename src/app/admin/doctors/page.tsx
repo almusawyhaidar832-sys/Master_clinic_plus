@@ -22,7 +22,7 @@ export default function AdminDoctorsLedgerPage() {
         return;
       }
 
-      const repairKey = `mc:doctor-shares-auto-repair:v8:${clinicId}`;
+      const repairKey = `mc:doctor-shares-auto-repair:v10:${clinicId}`;
       const needSync =
         typeof window !== "undefined" && !sessionStorage.getItem(repairKey);
 

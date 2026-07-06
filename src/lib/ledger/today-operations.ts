@@ -197,14 +197,24 @@ function reviewFeeOnOp(op: PatientOperation): number {
 /** المدفوع في الجلسة — يشمل الكشفية حتى لو paid_amount صفر في قاعدة البيانات */
 export function ledgerPaidToday(op: TodayOperationRow | PatientOperation): number {
   const fromPaid = Math.max(0, resolveSessionPaidAmount(op));
-  if (fromPaid > FINANCIAL_EPSILON) return fromPaid;
-
   const row = op as PatientOperation & {
     review_fee_amount?: number;
     is_review_statement?: boolean;
     clinic_share_amount?: number;
   };
   const reviewFee = reviewFeeOnOp(row);
+
+  if (fromPaid > FINANCIAL_EPSILON) {
+    if (
+      reviewFee > FINANCIAL_EPSILON &&
+      row.is_review_statement &&
+      fromPaid > reviewFee + FINANCIAL_EPSILON &&
+      fromPaid / reviewFee <= 10.5
+    ) {
+      return fromPaid + reviewFee;
+    }
+    return fromPaid;
+  }
   if (reviewFee > FINANCIAL_EPSILON) {
     if (row.is_review_statement || reviewFee > 0) return reviewFee;
   }

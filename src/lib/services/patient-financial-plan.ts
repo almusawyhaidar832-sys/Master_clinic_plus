@@ -7,7 +7,10 @@ import {
   type DoctorShareInput,
 } from "@/lib/finance";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
-import { isReviewFeeOnlyPayment } from "@/lib/services/doctor-wallet";
+import {
+  isReviewFeeOnlyPayment,
+  treatmentPaidForDoctorShare,
+} from "@/lib/services/doctor-wallet";
 import type { Doctor, DoctorPercentage, MaterialsCostShare } from "@/types";
 
 export type SessionKind = "plan" | "payment";
@@ -745,10 +748,14 @@ export function previewPaidSessionSplit(opts: {
     return { paidAmount: paid, doctorShare: 0, clinicShare: roundMoney(paid) };
   }
 
-  const treatmentPaid =
-    reviewFee > FINANCIAL_EPSILON && paid > reviewFee + FINANCIAL_EPSILON
-      ? paid - reviewFee
-      : paid;
+  const treatmentPaid = treatmentPaidForDoctorShare(
+    {
+      paid_amount: paid,
+      review_fee_amount: reviewFee,
+      is_review_statement: opts.isReviewStatement,
+    },
+    0
+  );
 
   const finalPrice = Math.max(0, opts.caseFinalPrice);
   let caseDoc = Math.max(0, opts.caseDoctorShare);

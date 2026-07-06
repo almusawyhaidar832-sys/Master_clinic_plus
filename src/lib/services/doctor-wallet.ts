@@ -136,7 +136,12 @@ export function isReviewFeeOnlyPayment(
   return false;
 }
 
-/** مبلغ العلاج فقط — الكشفية كاملة للعيادة ولا تدخل حصة الطبيب */
+/**
+ * مبلغ العلاج لحساب حصة الطبيب.
+ * - كشفية فقط → 0
+ * - علاج + كشفية مسجّلة: مبلغ المدفوع في الإدخال السريع = العلاج، والكشفية تُضاف فوقه (+5,000)
+ * - إذا المدفوع كبير ويشمل الكشفية ضمنه (مثلاً 55,000 = 50,000 + 5,000) → نطرح الكشفية
+ */
 export function treatmentPaidForDoctorShare(
   row: {
     paid_amount?: number | string | null;
@@ -148,6 +153,7 @@ export function treatmentPaidForDoctorShare(
   const paid = Number(row.paid_amount ?? 0);
   if (paid <= FINANCIAL_EPSILON) return 0;
 
+  const storedReview = Number(row.review_fee_amount ?? 0);
   const reviewFee = resolveReviewFeeOnOperation(row, clinicDefaultReviewFee);
 
   if (
@@ -161,6 +167,18 @@ export function treatmentPaidForDoctorShare(
     )
   ) {
     return 0;
+  }
+
+  if (
+    storedReview > FINANCIAL_EPSILON &&
+    row.is_review_statement &&
+    paid > storedReview + FINANCIAL_EPSILON
+  ) {
+    // إدخال سريع قديم: paid_amount = مبلغ العلاج فقط (50,000 + كشفية 5,000)
+    if (paid / storedReview <= 10.5) {
+      return paid;
+    }
+    return Math.max(0, paid - storedReview);
   }
 
   if (reviewFee > FINANCIAL_EPSILON) {

@@ -81,7 +81,7 @@ export default function DoctorFinancialLedgerPage() {
     setDoctorId(doctor.id);
     setSalaryDoctor(isSalaryDoctor(doctor));
 
-    const repairKey = `mc:doctor-shares-auto-repair:v8:${doctor.id}`;
+    const repairKey = `mc:doctor-shares-auto-repair:v10:${doctor.id}`;
     const needSync =
       typeof window !== "undefined" && !sessionStorage.getItem(repairKey);
     const walletUrl = needSync
