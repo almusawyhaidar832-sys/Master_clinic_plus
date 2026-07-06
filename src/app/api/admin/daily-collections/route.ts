@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveDoctorFromApiRequest } from "@/lib/auth/resolve-doctor-api";
+import { getApiCallerProfile } from "@/lib/auth/api-session";
+import { isApiStaffRole } from "@/lib/auth/api-portal";
+import { getAdminClient } from "@/lib/supabase/admin";
 import {
   fetchDailyCollections,
   type CollectionStatusFilter,
@@ -14,21 +16,21 @@ const VALID_FILTERS: CollectionStatusFilter[] = [
   "debtors",
 ];
 
-/** GET /api/doctor/daily-collections — كشف مالي للطبيب الحالي فقط */
+/** GET /api/admin/daily-collections — كشف مالي للإدارة/المحاسب (نفس منطق الطبيب) */
 export async function GET(req: NextRequest) {
   try {
-    const resolved = await resolveDoctorFromApiRequest(req);
-    if (!resolved.ok) {
-      return NextResponse.json(
-        { error: resolved.error },
-        { status: resolved.status }
-      );
+    const profile = await getApiCallerProfile(req);
+    if (!profile?.clinic_id) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+    }
+    if (!isApiStaffRole(profile.role)) {
+      return NextResponse.json({ error: "غير مصرح" }, { status: 403 });
     }
 
-    const { ctx } = resolved;
     const { searchParams } = new URL(req.url);
     const dateFrom = searchParams.get("date_from") ?? undefined;
     const dateTo = searchParams.get("date_to") ?? undefined;
+    const doctorId = searchParams.get("doctor_id")?.trim() || undefined;
     const rawFilter = searchParams.get("status_filter") ?? "all";
     const statusFilter = VALID_FILTERS.includes(
       rawFilter as CollectionStatusFilter
@@ -37,22 +39,24 @@ export async function GET(req: NextRequest) {
       : "all";
     const syncShares = searchParams.get("sync_shares") === "1";
 
+    const admin = getAdminClient();
+
     if (syncShares) {
-      await repairDoctorOperationShares(ctx.admin, ctx.clinicId, {
-        doctorId: ctx.doctorId,
+      await repairDoctorOperationShares(admin, profile.clinic_id, {
+        doctorId,
       });
     }
 
-    const result = await fetchDailyCollections(ctx.admin, ctx.clinicId, {
+    const result = await fetchDailyCollections(admin, profile.clinic_id, {
       dateFrom,
       dateTo,
-      doctorId: ctx.doctorId,
+      doctorId,
       statusFilter,
     });
 
     return NextResponse.json({ success: true, result });
   } catch (err) {
-    console.error("[api/doctor/daily-collections]", err);
+    console.error("[api/admin/daily-collections]", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "خطأ" },
       { status: 500 }

@@ -274,11 +274,21 @@ export function DoctorDailyCollectionsPanel({
     setLoading(true);
     setError("");
 
+    const repairKey =
+      clinicId && doctorId
+        ? `mc:doctor-shares-auto-repair:v4:${clinicId}:${doctorId}`
+        : "";
+    const needSync =
+      repairKey &&
+      typeof window !== "undefined" &&
+      !sessionStorage.getItem(repairKey);
+
     const params = new URLSearchParams({
       date_from: dateFrom,
       date_to: effectiveTo,
       status_filter: statusFilter,
     });
+    if (needSync) params.set("sync_shares", "1");
 
     try {
       const res = await fetch(`/api/doctor/daily-collections?${params}`, {
@@ -296,6 +306,10 @@ export function DoctorDailyCollectionsPanel({
         return;
       }
 
+      if (needSync && res.ok && typeof window !== "undefined") {
+        sessionStorage.setItem(repairKey, "1");
+      }
+
       setResult(json.result ?? null);
       setAppliedFrom(dateFrom);
       setAppliedTo(effectiveTo);
@@ -305,7 +319,7 @@ export function DoctorDailyCollectionsPanel({
     } finally {
       setLoading(false);
     }
-  }, [doctorId, dateFrom, effectiveTo, statusFilter, t]);
+  }, [doctorId, clinicId, dateFrom, effectiveTo, statusFilter, t]);
 
   useEffect(() => {
     if (!doctorId) return;

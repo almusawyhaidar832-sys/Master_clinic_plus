@@ -15,7 +15,6 @@ import { buildLedgerPayUrl } from "@/lib/ledger/navigation";
 import {
   collectionStatusClass,
   collectionStatusLabel,
-  fetchDailyCollections,
   type CollectionStatusFilter,
   type DailyCollectionsResult,
   type DailyCollectionRow,
@@ -37,6 +36,16 @@ import {
 } from "lucide-react";
 
 type DoctorOption = { id: string; full_name_ar: string };
+
+function staffPortalForCollections(): "accountant" | "admin" {
+  if (
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/admin")
+  ) {
+    return "admin";
+  }
+  return "accountant";
+}
 
 const STATUS_TABS: { id: CollectionStatusFilter; label: string }[] = [
   { id: "all", label: "الكل" },
@@ -415,17 +424,45 @@ export function DailyCollectionsPanel() {
       return;
     }
     setLoading(true);
-    const supabase = createClient();
-    const data = await fetchDailyCollections(supabase, clinicId, {
-      dateFrom,
-      dateTo: effectiveTo,
-      doctorId: selectedDoctorId,
-      statusFilter,
-    });
-    setResult(data);
-    setAppliedFrom(dateFrom);
-    setAppliedTo(effectiveTo);
-    setLoading(false);
+    try {
+      const repairKey = `mc:doctor-shares-auto-repair:v4:${clinicId}`;
+      const needSync =
+        typeof window !== "undefined" && !sessionStorage.getItem(repairKey);
+
+      const params = new URLSearchParams({
+        date_from: dateFrom,
+        date_to: effectiveTo,
+        status_filter: statusFilter,
+      });
+      if (selectedDoctorId) params.set("doctor_id", selectedDoctorId);
+      if (needSync) params.set("sync_shares", "1");
+
+      const res = await fetch(`/api/admin/daily-collections?${params}`, {
+        credentials: "include",
+        headers: authPortalHeaders(staffPortalForCollections()),
+      });
+      const json = (await res.json()) as {
+        result?: DailyCollectionsResult;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        setResult(null);
+        return;
+      }
+
+      if (needSync && res.ok && typeof window !== "undefined") {
+        sessionStorage.setItem(repairKey, "1");
+      }
+
+      setResult(json.result ?? null);
+      setAppliedFrom(dateFrom);
+      setAppliedTo(effectiveTo);
+    } catch {
+      setResult(null);
+    } finally {
+      setLoading(false);
+    }
   }, [clinicId, dateFrom, effectiveTo, selectedDoctorId, statusFilter]);
 
   useEffect(() => {
@@ -435,27 +472,7 @@ export function DailyCollectionsPanel() {
 
   useEffect(() => {
     if (clinicLoading || !clinicId) return;
-    void (async () => {
-      const repairKey = `mc:doctor-shares-auto-repair:v3:${clinicId}`;
-      if (typeof window !== "undefined" && !sessionStorage.getItem(repairKey)) {
-        try {
-          const res = await fetch("/api/admin/repair-doctor-shares", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...authPortalHeaders("accountant"),
-            },
-            body: JSON.stringify({}),
-          });
-          if (res.ok && typeof window !== "undefined") {
-            sessionStorage.setItem(repairKey, "1");
-          }
-        } catch {
-          /* إصلاح خلفي — العرض يعتمد نسبة الطبيب حتى لو فشل */
-        }
-      }
-      await loadCollections();
-    })();
+    void loadCollections();
   }, [clinicLoading, clinicId, loadCollections]);
 
   useClinicSync({
@@ -489,29 +506,37 @@ export function DailyCollectionsPanel() {
     setRepairing(true);
     setRepairMsg(null);
     try {
-      const res = await fetch("/api/admin/repair-doctor-shares", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...authPortalHeaders("accountant"),
-        },
-        body: JSON.stringify({
-          doctorId: selectedDoctorId,
-        }),
+      const params = new URLSearchParams({
+        date_from: dateFrom,
+        date_to: effectiveTo,
+        status_filter: statusFilter,
+        sync_shares: "1",
       });
-      const data = (await res.json()) as { message?: string; error?: string };
+      if (selectedDoctorId) params.set("doctor_id", selectedDoctorId);
+
+      const res = await fetch(`/api/admin/daily-collections?${params}`, {
+        credentials: "include",
+        headers: authPortalHeaders(staffPortalForCollections()),
+      });
+      const data = (await res.json()) as {
+        message?: string;
+        error?: string;
+        result?: DailyCollectionsResult;
+      };
       if (!res.ok) {
         setRepairMsg(data.error ?? "تعذر إصلاح الحصص");
         return;
       }
-      setRepairMsg(data.message ?? "تم الإصلاح");
-      await loadCollections();
+      setResult(data.result ?? null);
+      setRepairMsg("تم تصحيح الحصص وتحديث الكشف");
+      setAppliedFrom(dateFrom);
+      setAppliedTo(effectiveTo);
     } catch {
       setRepairMsg("تعذر الاتصال بالخادم");
     } finally {
       setRepairing(false);
     }
-  }, [clinicId, selectedDoctorId, loadCollections]);
+  }, [clinicId, dateFrom, effectiveTo, selectedDoctorId, statusFilter]);
 
   return (
     <div className="space-y-6">
