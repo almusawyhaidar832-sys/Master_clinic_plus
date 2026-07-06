@@ -138,7 +138,7 @@ export async function createAssistantAppointment(
       assistant_id: ctx.assistantId,
       patient_id: patientProfile.patientId,
       patient_name_ar: patientProfile.name,
-      patient_phone: patientProfile.phone ?? phoneCheck.normalized,
+      patient_phone: phoneCheck.normalized,
       appointment_date: input.appointment_date,
       start_time: input.start_time,
       end_time: input.end_time,
@@ -155,7 +155,7 @@ export async function createAssistantAppointment(
   const whatsapp = await sendAppointmentUpdate(admin, {
     clinicId: ctx.clinicId,
     appointmentId: data.id as string,
-    patientPhone: data.patient_phone as string,
+    patientPhone: phoneCheck.normalized,
     patientName: data.patient_name_ar as string,
     doctorName,
     appointmentDate: data.appointment_date as string,

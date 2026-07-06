@@ -65,7 +65,10 @@ export async function sendAppointmentUpdate(
     messageType: `appointment_${input.action}`,
   });
 
-  if (input.appointmentId && outcome.ok) {
+  const delivered =
+    outcome.ok && outcome.status === "sent" && !outcome.deliveryWarning;
+
+  if (input.appointmentId && delivered) {
     await admin
       .from("appointments")
       .update({ whatsapp_sent: true } as Record<string, boolean>)
@@ -90,10 +93,21 @@ export async function sendAppointmentUpdate(
     };
   }
 
+  if (!delivered) {
+    const warn =
+      outcome.deliveryWarning ?? outcome.providerError ?? "evolution_pending_delivery";
+    return {
+      sent: false,
+      error: warn,
+      messageBody,
+      deliveryWarning: outcome.deliveryWarning ?? warn,
+      providerMessageStatus: outcome.providerMessageStatus,
+    };
+  }
+
   return {
     sent: true,
     messageBody,
-    deliveryWarning: outcome.deliveryWarning,
     providerMessageStatus: outcome.providerMessageStatus,
   };
 }

@@ -192,15 +192,20 @@ export async function deliverWhatsAppMessage(
       }
     }
 
+    const finalStatus: WhatsAppDeliveryStatus = deliveryWarning
+      ? "pending"
+      : "sent";
+
     await logWhatsAppRow(supabase, {
       ...params,
       recipient_phone: normalizedPhone,
-      status: "sent",
+      status: finalStatus,
+      error_message: deliveryWarning,
     });
     return {
       ok: true,
       normalizedPhone,
-      status: "sent",
+      status: finalStatus,
       configured: true,
       providerMessageStatus,
       deliveryWarning,
@@ -379,6 +384,7 @@ async function logWhatsAppRow(
     error_message?: string;
   }
 ) {
+  // error_message on pending rows = delivery warning code for support/debug
   const row: Record<string, unknown> = {
     clinic_id: params.clinicId,
     message_type: params.messageType,

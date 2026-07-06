@@ -98,13 +98,15 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "تعذر إتمام الحجز");
 
-      if (data.whatsapp?.sent) {
+      if (data.whatsapp?.sent && !data.whatsapp?.deliveryWarning) {
         setSuccess(
           `تم تسجيل طلب الحجز في ${data.clinicName} — وصلتك رسالة واتساب بالتفاصيل. سيتواصل معك الفريق قريباً للتأكيد.`
         );
       } else {
         setSuccess(
-          `تم تسجيل موعدك في ${data.clinicName}. لم تصل رسالة واتساب: ${describeWhatsAppDeliveryError(data.whatsapp?.error)}`
+          `تم تسجيل موعدك في ${data.clinicName}. لم تصل رسالة واتساب: ${describeWhatsAppDeliveryError(
+            data.whatsapp?.deliveryWarning ?? data.whatsapp?.error
+          )}`
         );
       }
       setPatientName("");

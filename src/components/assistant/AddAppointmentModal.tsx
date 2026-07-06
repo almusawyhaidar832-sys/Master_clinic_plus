@@ -118,12 +118,14 @@ export function AddAppointmentModal({
 
     if ("whatsapp" in result && result.whatsapp) {
       const wa = result.whatsapp;
-      if (wa.sent) {
+      if (wa.sent && !wa.deliveryWarning) {
         onSaved("تم حفظ الموعد وأُرسلت رسالة واتساب للمراجع.");
         onClose();
         return;
       }
-      const notice = `تم حفظ الموعد، لكن لم تصل رسالة واتساب للمراجع: ${describeWhatsAppDeliveryError(wa.error)}`;
+      const notice = `تم حفظ الموعد، لكن لم تصل رسالة واتساب للمراجع: ${describeWhatsAppDeliveryError(
+        wa.deliveryWarning ?? wa.error
+      )}`;
       setWhatsappNotice(notice);
       onSaved(notice);
       return;

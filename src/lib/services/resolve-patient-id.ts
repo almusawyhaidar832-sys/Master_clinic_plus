@@ -167,6 +167,12 @@ export async function ensurePatientProfileForBooking(
   const name = input.name.trim();
   if (!name) throw new Error("اسم المريض مطلوب");
 
+  const formPhoneCheck = input.phone?.trim()
+    ? validatePatientPhone(input.phone.trim())
+    : null;
+  const formPhone =
+    formPhoneCheck?.ok === true ? formPhoneCheck.normalized : null;
+
   const selectedId = input.patientId?.trim();
   if (selectedId) {
     const selected = await loadPatientBookingProfile(
@@ -174,7 +180,9 @@ export async function ensurePatientProfileForBooking(
       clinicId,
       selectedId
     );
-    if (selected) return selected;
+    if (selected) {
+      return formPhone ? { ...selected, phone: formPhone } : selected;
+    }
   }
 
   const existingId = await resolveExistingPatientId(supabase, clinicId, {
@@ -187,7 +195,9 @@ export async function ensurePatientProfileForBooking(
       clinicId,
       existingId
     );
-    if (existing) return existing;
+    if (existing) {
+      return formPhone ? { ...existing, phone: formPhone } : existing;
+    }
   }
 
   const phoneRaw = input.phone?.trim() ?? "";
