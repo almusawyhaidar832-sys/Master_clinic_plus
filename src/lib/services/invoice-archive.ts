@@ -8,6 +8,12 @@ import {
   parseMaterialsCost,
 } from "@/lib/invoices/lab-session-details";
 import { doctorShareFromExpense } from "@/lib/services/assistant-payroll";
+import { doctorPaymentPct } from "@/lib/services/patient-financial-plan";
+import {
+  calcOperationEarned,
+} from "@/lib/services/doctor-wallet";
+import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import type { Doctor } from "@/types";
 import { opName } from "@/types";
 
 export type InvoiceLifecycleStatus = "pending" | "archived";
@@ -68,14 +74,16 @@ type ArchiveOperationRow = {
   operation_date?: string | null;
   doctor_share_amount?: number | string | null;
   clinic_share_amount?: number | string | null;
+  review_fee_amount?: number | string | null;
+  is_review_statement?: boolean | null;
   invoice_status?: string | null;
 };
 
 const OP_SELECT_ARCHIVE =
-  "id, clinic_id, patient_id, doctor_id, total_amount, paid_amount, operation_date, operation_name_ar, doctor_share_amount, clinic_share_amount, invoice_status";
+  "id, clinic_id, patient_id, doctor_id, total_amount, paid_amount, operation_date, operation_name_ar, doctor_share_amount, clinic_share_amount, review_fee_amount, is_review_statement, invoice_status";
 
 const OP_SELECT_ARCHIVE_BASE =
-  "id, clinic_id, patient_id, doctor_id, total_amount, paid_amount, operation_date, operation_name_ar, doctor_share_amount, clinic_share_amount";
+  "id, clinic_id, patient_id, doctor_id, total_amount, paid_amount, operation_date, operation_name_ar, doctor_share_amount, clinic_share_amount, review_fee_amount, is_review_statement";
 
 async function fetchOperationForArchive(
   admin: SupabaseClient,
@@ -162,14 +170,21 @@ async function resolveDoctorShareForArchive(
   doctorId: string | null,
   op: Pick<
     ArchiveOperationRow,
-    "doctor_share_amount" | "clinic_share_amount" | "paid_amount"
+    | "doctor_share_amount"
+    | "clinic_share_amount"
+    | "paid_amount"
+    | "review_fee_amount"
+    | "is_review_statement"
   >,
   paid: number
 ): Promise<{ doctorShare: number; clinicShare: number }> {
   const storedDoc = roundMoney(Number(op.doctor_share_amount ?? 0));
   const storedClinic = roundMoney(Number(op.clinic_share_amount ?? 0));
+  const hasReviewFee =
+    Boolean(op.is_review_statement) ||
+    Number(op.review_fee_amount ?? 0) > 0;
 
-  if (storedDoc !== 0 || storedClinic !== 0) {
+  if ((storedDoc !== 0 || storedClinic !== 0) && !hasReviewFee) {
     return {
       doctorShare: storedDoc,
       clinicShare:
@@ -181,14 +196,31 @@ async function resolveDoctorShareForArchive(
     return { doctorShare: 0, clinicShare: roundMoney(paid) };
   }
 
-  const { data: doctor } = await admin
+  const { data: doctorRaw } = await admin
     .from("doctors")
-    .select("percentage")
+    .select(
+      "id, percentage, payment_type, financial_agreement, materials_share"
+    )
     .eq("id", doctorId)
     .maybeSingle();
 
-  const pct = Number(doctor?.percentage ?? 50) / 100;
-  const doctorShare = roundMoney(paid * pct);
+  const doctor = (doctorRaw as Doctor | null) ?? null;
+  const doctorPct = doctorPaymentPct(doctor);
+  const salaryDoctor = isSalaryDoctor(doctor ?? {});
+
+  const doctorShare = calcOperationEarned(
+    {
+      doctor_share_amount: op.doctor_share_amount,
+      clinic_share_amount: op.clinic_share_amount,
+      paid_amount: paid,
+      review_fee_amount: op.review_fee_amount,
+      is_review_statement: op.is_review_statement,
+    },
+    doctorPct,
+    salaryDoctor,
+    doctor
+  );
+
   return {
     doctorShare,
     clinicShare: roundMoney(Math.max(paid - doctorShare, 0)),

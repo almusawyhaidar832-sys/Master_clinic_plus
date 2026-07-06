@@ -5,6 +5,7 @@ import {
   labDetailsFromSnapshot,
 } from "@/lib/invoices/lab-session-details";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import { doctorPaymentPct } from "@/lib/services/patient-financial-plan";
 import {
   calcOperationEarned,
   filterWithdrawalsInPeriod,
@@ -19,7 +20,7 @@ import type { SalaryEntryType } from "@/types";
 import type { InvoiceHistoryRow } from "@/lib/services/invoice-archive";
 import { fetchInvoiceHistory } from "@/lib/services/invoice-history-query";
 import { doctorExpenseHasAttachmentHint } from "@/lib/services/doctor-expense-invoice-file";
-import { opName, type PatientOperation } from "@/types";
+import { opName, type Doctor, type PatientOperation } from "@/types";
 import type { WithdrawalStatus } from "@/types";
 
 export interface DoctorLedgerDateFilters {
@@ -210,16 +211,20 @@ async function loadPatientNames(
 async function loadDoctorPaymentMeta(
   admin: SupabaseClient,
   doctorId: string
-): Promise<{ pct: number; salaryDoctor: boolean }> {
+): Promise<{ pct: number; salaryDoctor: boolean; doctor: Doctor | null }> {
   const { data } = await admin
     .from("doctors")
-    .select("percentage, payment_type, financial_agreement")
+    .select(
+      "id, percentage, payment_type, financial_agreement, materials_share"
+    )
     .eq("id", doctorId)
     .maybeSingle();
 
+  const doctor = (data as Doctor | null) ?? null;
   return {
-    pct: Number(data?.percentage ?? 50) / 100,
+    pct: doctorPaymentPct(doctor),
     salaryDoctor: isSalaryDoctor(data ?? {}),
+    doctor,
   };
 }
 
@@ -233,13 +238,13 @@ type OperationEarningSource = {
 };
 
 const OPS_SELECT_WITH_CASE =
-  "id, patient_id, paid_amount, doctor_share_amount, operation_date, created_at, operation_name_ar, operation_type, total_amount, session_kind, treatment_case_id, materials_cost, lab_notes, patient_treatment_cases(doctor_share_total, final_price)";
+  "id, patient_id, paid_amount, doctor_share_amount, clinic_share_amount, review_fee_amount, is_review_statement, operation_date, created_at, operation_name_ar, operation_type, total_amount, session_kind, treatment_case_id, materials_cost, lab_notes, patient_treatment_cases(doctor_share_total, clinic_share_total, final_price)";
 
 const OPS_SELECT_BASE =
-  "id, patient_id, paid_amount, doctor_share_amount, operation_date, created_at, operation_name_ar, operation_type, total_amount, session_kind, materials_cost, lab_notes";
+  "id, patient_id, paid_amount, doctor_share_amount, clinic_share_amount, review_fee_amount, is_review_statement, operation_date, created_at, operation_name_ar, operation_type, total_amount, session_kind, materials_cost, lab_notes";
 
 const OPS_SELECT_WITH_CASE_NO_LAB =
-  "id, patient_id, paid_amount, doctor_share_amount, operation_date, created_at, operation_name_ar, operation_type, total_amount, session_kind, treatment_case_id, patient_treatment_cases(doctor_share_total, final_price)";
+  "id, patient_id, paid_amount, doctor_share_amount, clinic_share_amount, review_fee_amount, is_review_statement, operation_date, created_at, operation_name_ar, operation_type, total_amount, session_kind, treatment_case_id, patient_treatment_cases(doctor_share_total, clinic_share_total, final_price)";
 
 const OPS_SELECT_BASE_NO_LAB =
   "id, patient_id, paid_amount, doctor_share_amount, operation_date, created_at, operation_name_ar, operation_type, total_amount, session_kind";
@@ -499,7 +504,7 @@ async function fetchDoctorSessionPayments(
 ): Promise<SessionPaymentRow[]> {
   const seenOps = new Set<string>();
   const rows: SessionPaymentRow[] = [];
-  const { pct: doctorPct, salaryDoctor } = await loadDoctorPaymentMeta(
+  const { pct: doctorPct, salaryDoctor, doctor } = await loadDoctorPaymentMeta(
     admin,
     doctorId
   );
@@ -536,7 +541,7 @@ async function fetchDoctorSessionPayments(
     );
 
     for (const raw of opsRes.data) {
-      const op = raw as PatientOperation & OperationEarningSource;
+      const op = raw as unknown as PatientOperation & OperationEarningSource;
       if (seenOps.has(op.id)) continue;
       if (!isPaidSessionOperation(op, doctorPct, salaryDoctor)) continue;
 
@@ -547,7 +552,12 @@ async function fetchDoctorSessionPayments(
       if (!paymentDate) continue;
 
       const paid = Number(op.paid_amount ?? 0);
-      const doctorShare = calcOperationEarned(op, doctorPct, salaryDoctor);
+      const doctorShare = calcOperationEarned(
+        op,
+        doctorPct,
+        salaryDoctor,
+        doctor
+      );
 
       const patientName =
         (patientMap.get(op.patient_id) ??

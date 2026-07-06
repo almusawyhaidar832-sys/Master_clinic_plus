@@ -1,9 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import {
+  doctorPaymentPct,
   previewPaidSessionSplit,
   previewTreatmentSplitWithReview,
 } from "@/lib/services/patient-financial-plan";
+import { treatmentPaidForDoctorShare } from "@/lib/services/doctor-wallet";
 import {
   isPersistedTreatmentCaseId,
   processCasePayment,
@@ -20,17 +22,28 @@ function roundMoney(n: number): number {
 }
 
 function doctorPctFromRow(doctor: Doctor | null): number {
-  return Number(doctor?.percentage ?? 50) / 100;
+  return doctorPaymentPct(doctor);
 }
 
 function capDoctorShare(
   paid: number,
   doctor: Doctor | null,
-  share: number
+  share: number,
+  op?: Pick<OperationRow, "review_fee_amount" | "is_review_statement">
 ): number {
-  if (paid <= 0) return 0;
+  const treatmentPaid = op
+    ? treatmentPaidForDoctorShare({
+        paid_amount: paid,
+        review_fee_amount: num(op.review_fee_amount),
+        is_review_statement: op.is_review_statement,
+      })
+    : paid;
+  if (treatmentPaid <= 0) return 0;
   if (doctor && isSalaryDoctor(doctor)) return 0;
-  return Math.min(Math.max(0, roundMoney(share)), roundMoney(paid * doctorPctFromRow(doctor)));
+  return Math.min(
+    Math.max(0, roundMoney(share)),
+    roundMoney(treatmentPaid * doctorPctFromRow(doctor))
+  );
 }
 
 type OperationRow = Record<string, unknown> & {
@@ -44,6 +57,7 @@ type OperationRow = Record<string, unknown> & {
   materials_cost?: unknown;
   session_kind?: string | null;
   review_fee_amount?: unknown;
+  is_review_statement?: boolean | null;
   doctor_share_amount?: unknown;
   clinic_share_amount?: unknown;
   remaining_debt?: unknown;
@@ -133,8 +147,10 @@ async function recalculateOperationShares(
     const remainingDebt = Math.max(0, planTotal - patientPaid);
 
     return {
-      doctorShare: capDoctorShare(paid, doctor, doctorShare),
-      clinicShare: roundMoney(Math.max(0, paid - capDoctorShare(paid, doctor, doctorShare))),
+      doctorShare: capDoctorShare(paid, doctor, doctorShare, op),
+      clinicShare: roundMoney(
+        Math.max(0, paid - capDoctorShare(paid, doctor, doctorShare, op))
+      ),
       remainingDebt,
     };
   }
@@ -157,15 +173,18 @@ async function recalculateOperationShares(
           : Math.max(0, total - paid);
 
     return {
-      doctorShare: capDoctorShare(paid, doctor, split.doctorShare),
+      doctorShare: capDoctorShare(paid, doctor, split.doctorShare, op),
       clinicShare: roundMoney(
-        Math.max(0, paid - capDoctorShare(paid, doctor, split.doctorShare))
+        Math.max(
+          0,
+          paid - capDoctorShare(paid, doctor, split.doctorShare, op)
+        )
       ),
       remainingDebt: roundMoney(remainingDebt),
     };
   }
 
-  const fallbackDoc = capDoctorShare(paid, doctor, 0);
+  const fallbackDoc = capDoctorShare(paid, doctor, 0, op);
   return {
     doctorShare: fallbackDoc,
     clinicShare: roundMoney(Math.max(0, paid - fallbackDoc)),

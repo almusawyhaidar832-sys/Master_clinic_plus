@@ -2,9 +2,11 @@ import type { Doctor } from "@/types";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import {
   FINANCIAL_EPSILON,
+  doctorPaymentPct,
   previewPaidSessionSplit,
   type PatientFinancialPlan,
 } from "@/lib/services/patient-financial-plan";
+import { treatmentPaidForDoctorShare } from "@/lib/services/doctor-wallet";
 
 /** نوع تسجيل الجلسة — بدون سعر كلي */
 export type SessionBillingMode =
@@ -170,6 +172,8 @@ export function resolveOperationPaymentSplit(
     doctor_share_amount?: number | string | null;
     clinic_share_amount?: number | string | null;
     materials_cost?: number | string | null;
+    review_fee_amount?: number | string | null;
+    is_review_statement?: boolean | null;
   },
   doctor: Doctor | null,
   caseRow?: {
@@ -232,8 +236,17 @@ export function resolveOperationPaymentSplit(
     return { doctorShare: 0, clinicShare: roundMoney(paid), paid };
   }
 
-  const pct = (num(doctor.percentage) || 50) / 100;
-  const doctorShare = roundMoney(paid * pct);
+  const treatmentPaid = treatmentPaidForDoctorShare({
+    paid_amount: op.paid_amount,
+    review_fee_amount: op.review_fee_amount,
+    is_review_statement: op.is_review_statement,
+  });
+  if (treatmentPaid <= 0) {
+    return { doctorShare: 0, clinicShare: roundMoney(paid), paid };
+  }
+
+  const pct = doctorPaymentPct(doctor);
+  const doctorShare = roundMoney(treatmentPaid * pct);
   return {
     doctorShare,
     clinicShare: roundMoney(Math.max(0, paid - doctorShare)),

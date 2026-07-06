@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizeDoctorPercentage } from "@/lib/constants";
 import {
   calculateDoctorShareForDoctor,
   deductLabCostFromSessionShares,
@@ -622,10 +623,10 @@ function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function doctorPaymentPct(doctor: Doctor | null): number {
+/** نسبة الطبيب (0–1) من ملفه — لا تستخدم 50% إلا عند غياب الطبيب أو نسبة غير صالحة */
+export function doctorPaymentPct(doctor: Doctor | null): number {
   if (!doctor) return 0.5;
-  const raw = Number(doctor.percentage ?? 50);
-  return (Number.isFinite(raw) && raw > 0 ? raw : 50) / 100;
+  return Number(normalizeDoctorPercentage(doctor.percentage, "50")) / 100;
 }
 
 /**

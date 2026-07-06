@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
+import {
+  FINANCIAL_EPSILON,
+  doctorPaymentPct,
+  previewPaidSessionSplit,
+} from "@/lib/services/patient-financial-plan";
 import {
   isDailyWageAssistant,
   normalizeAssistantCompensationMode,
@@ -16,7 +20,7 @@ import {
   BALANCE_TOPUP_DOCTOR_TYPE,
 } from "@/lib/services/balance-topup";
 import { currentMonthYear, monthDateRange } from "@/lib/utils";
-import type { PayrollRecord } from "@/types";
+import type { Doctor, PayrollRecord } from "@/types";
 
 export interface DoctorWalletStats {
   totalEarnings: number;
@@ -71,28 +75,91 @@ function sumWithdrawalsByStatus(
 
 type OperationEarningRow = {
   doctor_share_amount?: number | string | null;
+  clinic_share_amount?: number | string | null;
   paid_amount?: number | string | null;
+  materials_cost?: number | string | null;
+  review_fee_amount?: number | string | null;
+  is_review_statement?: boolean | null;
   patient_treatment_cases?:
-    | { doctor_share_total?: number; final_price?: number }
-    | { doctor_share_total?: number; final_price?: number }[]
+    | {
+        doctor_share_total?: number;
+        clinic_share_total?: number;
+        final_price?: number;
+      }
+    | {
+        doctor_share_total?: number;
+        clinic_share_total?: number;
+        final_price?: number;
+      }[]
     | null;
 };
+
+/** مبلغ العلاج فقط — الكشفية كاملة للعيادة ولا تدخل حصة الطبيب */
+export function treatmentPaidForDoctorShare(row: {
+  paid_amount?: number | string | null;
+  review_fee_amount?: number | string | null;
+  is_review_statement?: boolean | null;
+}): number {
+  const paid = Number(row.paid_amount ?? 0);
+  if (paid <= FINANCIAL_EPSILON) return 0;
+
+  const reviewFee = Number(row.review_fee_amount ?? 0);
+  if (row.is_review_statement) {
+    return 0;
+  }
+  if (reviewFee > FINANCIAL_EPSILON) {
+    if (paid <= reviewFee + FINANCIAL_EPSILON) {
+      return 0;
+    }
+    return Math.max(0, paid - reviewFee);
+  }
+  return paid;
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
 
 export function calcOperationEarned(
   row: OperationEarningRow,
   doctorPct: number,
-  salaryDoctor = false
+  salaryDoctor = false,
+  doctor?: Doctor | null
 ): number {
   if (salaryDoctor) return 0;
 
   const paid = Number(row.paid_amount ?? 0);
   if (paid <= 0) return 0;
 
-  const maxShare = Math.round(paid * doctorPct * 100) / 100;
+  const treatmentPaid = treatmentPaidForDoctorShare(row);
+  if (treatmentPaid <= FINANCIAL_EPSILON) return 0;
+
+  const maxShare = roundMoney(treatmentPaid * doctorPct);
+  const reviewFee = Number(row.review_fee_amount ?? 0);
+  const hasReviewFee =
+    Boolean(row.is_review_statement) || reviewFee > FINANCIAL_EPSILON;
 
   const direct = Number(row.doctor_share_amount ?? 0);
-  if (direct !== 0) {
-    return Math.min(Math.round(direct * 100) / 100, maxShare);
+  if (direct !== 0 && !hasReviewFee) {
+    const scaled =
+      paid > 0 ? roundMoney(direct * (treatmentPaid / paid)) : 0;
+    return Math.min(scaled, maxShare);
+  }
+
+  if (doctor) {
+    const tc = row.patient_treatment_cases;
+    const caseRow = Array.isArray(tc) ? tc[0] : tc;
+    const split = previewPaidSessionSplit({
+      paidAmount: treatmentPaid,
+      caseFinalPrice: Number(caseRow?.final_price ?? 0),
+      caseDoctorShare: Number(caseRow?.doctor_share_total ?? 0),
+      caseClinicShare: Number(caseRow?.clinic_share_total ?? 0),
+      doctor,
+      materialsCost: Number(row.materials_cost ?? 0),
+    });
+    if (split) {
+      return Math.min(split.doctorShare, maxShare);
+    }
   }
 
   const tc = row.patient_treatment_cases;
@@ -102,7 +169,7 @@ export function calcOperationEarned(
 
   if (finalPrice > 0 && caseDoc > 0 && caseDoc <= finalPrice) {
     return Math.min(
-      Math.round(paid * (caseDoc / finalPrice) * 100) / 100,
+      roundMoney(treatmentPaid * (caseDoc / finalPrice)),
       maxShare
     );
   }
@@ -140,22 +207,33 @@ export function calcClinicOperationEarned(
   return Math.round((paid - doctorEarned) * 100) / 100;
 }
 
-/** حصة الطبيب لزيارة واحدة — لا تتجاوز النسبة × إجمالي المدفوع */
+/** حصة الطبيب لزيارة واحدة — لا تتجاوز النسبة × مبلغ العلاج (بدون الكشفية) */
 export function computeVisitDoctorShare(
   ops: OperationEarningRow[],
   doctorPct: number,
   visitPaidTotal: number,
-  salaryDoctor = false
+  salaryDoctor = false,
+  doctor?: Doctor | null
 ): number {
-  if (salaryDoctor || visitPaidTotal <= FINANCIAL_EPSILON || ops.length === 0) {
+  if (salaryDoctor || ops.length === 0) {
     return 0;
   }
-  const maxShare = Math.round(visitPaidTotal * doctorPct * 100) / 100;
-  const fromOps = ops.reduce(
-    (sum, row) => sum + calcOperationEarned(row, doctorPct, salaryDoctor),
+
+  const treatmentVisitPaid = ops.reduce(
+    (sum, row) => sum + treatmentPaidForDoctorShare(row),
     0
   );
-  return Math.min(Math.round(fromOps * 100) / 100, maxShare);
+  if (treatmentVisitPaid <= FINANCIAL_EPSILON) {
+    return 0;
+  }
+
+  const maxShare = roundMoney(treatmentVisitPaid * doctorPct);
+  const fromOps = ops.reduce(
+    (sum, row) =>
+      sum + calcOperationEarned(row, doctorPct, salaryDoctor, doctor),
+    0
+  );
+  return Math.min(roundMoney(fromOps), maxShare);
 }
 
 export interface WalletStatsOptions {
@@ -485,14 +563,14 @@ export function computeWalletStats(
 }
 
 const OPERATION_EARNINGS_SELECT =
-  "doctor_share_amount, paid_amount, treatment_case_id, operation_date, patient_treatment_cases(doctor_share_total, final_price)";
+  "doctor_share_amount, clinic_share_amount, paid_amount, materials_cost, review_fee_amount, is_review_statement, treatment_case_id, operation_date, patient_treatment_cases(doctor_share_total, clinic_share_total, final_price)";
 
 const OPERATION_EARNINGS_BATCH_SELECT =
-  "doctor_id, doctor_share_amount, paid_amount, treatment_case_id, operation_date, patient_treatment_cases(doctor_share_total, final_price)";
+  "doctor_id, doctor_share_amount, clinic_share_amount, paid_amount, materials_cost, review_fee_amount, is_review_statement, treatment_case_id, operation_date, patient_treatment_cases(doctor_share_total, clinic_share_total, final_price)";
 
 type OperationEarningBatchRow = OperationEarningRow & { doctor_id: string };
 
-type DoctorPaymentMeta = { pct: number; isSalary: boolean };
+type DoctorPaymentMeta = { pct: number; isSalary: boolean; doctor: Doctor | null };
 
 async function fetchDoctorPaymentMap(
   supabase: SupabaseClient,
@@ -503,13 +581,20 @@ async function fetchDoctorPaymentMap(
 
   const { data } = await supabase
     .from("doctors")
-    .select("id, percentage, payment_type")
+    .select(
+      "id, percentage, payment_type, financial_agreement, materials_share"
+    )
     .in("id", doctorIds);
 
   for (const row of data ?? []) {
+    const doctor = row as Doctor;
     map.set(row.id, {
-      pct: Number(row.percentage ?? 50) / 100,
-      isSalary: isSalaryDoctor({ payment_type: row.payment_type }),
+      pct: doctorPaymentPct(doctor),
+      isSalary: isSalaryDoctor({
+        payment_type: doctor.payment_type,
+        financial_agreement: doctor.financial_agreement,
+      }),
+      doctor,
     });
   }
   return map;
@@ -546,11 +631,16 @@ export async function computeEarningsFromOperationsForDoctors(
   ]);
 
   for (const row of (opsRes.data ?? []) as OperationEarningBatchRow[]) {
-    const meta = paymentMap.get(row.doctor_id) ?? { pct: 0.5, isSalary: false };
+    const meta = paymentMap.get(row.doctor_id) ?? {
+      pct: 0.5,
+      isSalary: false,
+      doctor: null,
+    };
     const prev = sums.get(row.doctor_id) ?? 0;
     sums.set(
       row.doctor_id,
-      prev + calcOperationEarned(row, meta.pct, meta.isSalary)
+      prev +
+        calcOperationEarned(row, meta.pct, meta.isSalary, meta.doctor)
     );
   }
 
@@ -795,10 +885,12 @@ export async function fetchWithdrawalSumsByDoctor(
 function sumOperationEarnings(
   rows: OperationEarningRow[] | null | undefined,
   doctorPct: number,
-  salaryDoctor = false
+  salaryDoctor = false,
+  doctor?: Doctor | null
 ): number {
   return (rows ?? []).reduce(
-    (sum, row) => sum + calcOperationEarned(row, doctorPct, salaryDoctor),
+    (sum, row) =>
+      sum + calcOperationEarned(row, doctorPct, salaryDoctor, doctor),
     0
   );
 }
@@ -815,16 +907,20 @@ export async function computeEarningsFromOperations(
       .eq("doctor_id", doctorId),
     supabase
       .from("doctors")
-      .select("percentage, payment_type")
+      .select(
+        "id, percentage, payment_type, financial_agreement, materials_share"
+      )
       .eq("id", doctorId)
       .maybeSingle(),
   ]);
 
-  const pct = Number(doctorRes.data?.percentage ?? 50) / 100;
+  const doctorRow = (doctorRes.data as Doctor | null) ?? null;
+  const pct = doctorPaymentPct(doctorRow);
   const salaryDoctor = isSalaryDoctor({
-    payment_type: doctorRes.data?.payment_type,
+    payment_type: doctorRow?.payment_type,
+    financial_agreement: doctorRow?.financial_agreement,
   });
-  return sumOperationEarnings(opsRes.data, pct, salaryDoctor);
+  return sumOperationEarnings(opsRes.data, pct, salaryDoctor, doctorRow);
 }
 
 /** أرباح الطبيب لفترة محددة — للتقارير والتسوية الشهرية */
@@ -842,16 +938,22 @@ export async function computeEarningsFromOperationsForPeriod(
   if (from) opsQuery = opsQuery.gte("operation_date", from);
   if (to) opsQuery = opsQuery.lte("operation_date", to);
 
-  const { data: doctor } = await supabase
+  const { data: doctorRaw } = await supabase
     .from("doctors")
-    .select("percentage, payment_type")
+    .select(
+      "id, percentage, payment_type, financial_agreement, materials_share"
+    )
     .eq("id", doctorId)
     .maybeSingle();
 
-  const pct = Number(doctor?.percentage ?? 50) / 100;
-  const salaryDoctor = isSalaryDoctor({ payment_type: doctor?.payment_type });
+  const doctorRow = (doctorRaw as Doctor | null) ?? null;
+  const pct = doctorPaymentPct(doctorRow);
+  const salaryDoctor = isSalaryDoctor({
+    payment_type: doctorRow?.payment_type,
+    financial_agreement: doctorRow?.financial_agreement,
+  });
   const { data: ops } = await opsQuery;
-  return sumOperationEarnings(ops, pct, salaryDoctor);
+  return sumOperationEarnings(ops, pct, salaryDoctor, doctorRow);
 }
 
 /** مستحقات الطبيب — من حصة كل دفعة (نسبة من doctor_share_total للحالة) */

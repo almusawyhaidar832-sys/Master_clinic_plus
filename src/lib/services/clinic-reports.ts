@@ -53,6 +53,8 @@ import {
   withdrawalSourceLabel,
 } from "@/lib/withdrawals/display";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import { doctorPaymentPct } from "@/lib/services/patient-financial-plan";
+import type { Doctor } from "@/types";
 import { currentMonthYear, monthDateRange, todayISO } from "@/lib/utils";
 import type { ConfirmedPayrollPayoutLine } from "@/lib/services/payroll-paid-portions";
 import { fetchConfirmedPayrollPayoutLines } from "@/lib/services/payroll-paid-portions";
@@ -626,7 +628,7 @@ export async function fetchDoctorLedgerDetail(
     .from("patient_operations")
     .select(
       `*, patient:patients!patient_id(full_name_ar),
-       patient_treatment_cases(doctor_share_total, final_price)`
+       patient_treatment_cases(doctor_share_total, clinic_share_total, final_price)`
     )
     .eq("doctor_id", doctorId)
     .order("operation_date", { ascending: false })
@@ -688,17 +690,25 @@ export async function fetchDoctorLedgerDetail(
     ]);
 
   const operations = opsRes.data ?? [];
-  const doctorPct = Number(doctor?.percentage ?? 50) / 100;
+  const doctorRow = (doctor as Doctor | null) ?? null;
+  const doctorPct = doctorPaymentPct(doctorRow);
+  const salaryDoctor = isSalaryDoctor(doctorRow ?? {});
   const totalDoctorIncome = operations.reduce(
     (s, r) =>
       s +
       calcOperationEarned(
         {
           doctor_share_amount: r.doctor_share_amount,
+          clinic_share_amount: r.clinic_share_amount,
           paid_amount: r.paid_amount,
+          materials_cost: r.materials_cost,
+          review_fee_amount: r.review_fee_amount,
+          is_review_statement: r.is_review_statement,
           patient_treatment_cases: r.patient_treatment_cases,
         },
-        doctorPct
+        doctorPct,
+        salaryDoctor,
+        doctorRow
       ),
     0
   );

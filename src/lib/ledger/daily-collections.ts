@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
+import { FINANCIAL_EPSILON, doctorPaymentPct } from "@/lib/services/patient-financial-plan";
 import { CLINICAL_SESSION_LABEL } from "@/lib/clinical/constants";
 import {
   fetchLedgerOperationsForDate,
@@ -362,7 +362,7 @@ function patientSawDoctorToday(
 }
 
 const PAYMENT_OPS_SELECT =
-  "*, patient:patients!patient_id(full_name_ar, phone, phone_number), doctor:doctors!doctor_id(full_name_ar), invoices(paid_amount, total_amount, remaining_amount)";
+  "*, patient:patients!patient_id(full_name_ar, phone, phone_number), doctor:doctors!doctor_id(full_name_ar), patient_treatment_cases(doctor_share_total, clinic_share_total, final_price), invoices(paid_amount, total_amount, remaining_amount)";
 
 async function fetchPatientPaymentOpsForPeriod(
   supabase: SupabaseClient,
@@ -509,6 +509,7 @@ function resolvePaymentStatus(input: {
 type DoctorPaymentMeta = {
   pct: number;
   salary: boolean;
+  doctor: Doctor | null;
 };
 
 function computeVisitDoctorShares(
@@ -545,13 +546,18 @@ function computeVisitDoctorShares(
   const byDoctor = new Map<string, number>();
   const byVisit = new Map<string, number>();
   for (const { doctorId, vk, ops } of groups.values()) {
-    const meta = metaByDoctor.get(doctorId) ?? { pct: 0.5, salary: false };
+    const meta = metaByDoctor.get(doctorId) ?? {
+      pct: 0.5,
+      salary: false,
+      doctor: null,
+    };
     const visitPaid = visitPaidByKey.get(vk) ?? 0;
     const earned = computeVisitDoctorShare(
       ops,
       meta.pct,
       visitPaid,
-      meta.salary
+      meta.salary,
+      meta.doctor
     );
     byVisit.set(vk, earned);
     byDoctor.set(doctorId, (byDoctor.get(doctorId) ?? 0) + earned);
@@ -918,7 +924,9 @@ export async function fetchDailyCollections(
     fetchQueueForPeriod(supabase, clinicId, effectiveFrom, effectiveTo, input.doctorId),
     supabase
       .from("doctors")
-      .select("id, full_name_ar, percentage, payment_type, financial_agreement")
+      .select(
+        "id, full_name_ar, percentage, payment_type, financial_agreement, materials_share"
+      )
       .eq("clinic_id", clinicId)
       .eq("is_active", true)
       .order("full_name_ar"),
@@ -962,27 +970,33 @@ export async function fetchDailyCollections(
 
   const metaByDoctor = new Map<string, DoctorPaymentMeta>();
   for (const doc of doctorsRes.data ?? []) {
+    const doctor = doc as Doctor;
     metaByDoctor.set(String(doc.id), {
-      pct: Number(doc.percentage ?? 50) / 100,
+      pct: doctorPaymentPct(doctor),
       salary: isSalaryDoctor({
         payment_type: doc.payment_type,
         financial_agreement: doc.financial_agreement,
       }),
+      doctor,
     });
   }
   if (input.doctorId && !metaByDoctor.has(input.doctorId)) {
     const { data: doc } = await supabase
       .from("doctors")
-      .select("id, percentage, payment_type, financial_agreement")
+      .select(
+        "id, full_name_ar, percentage, payment_type, financial_agreement, materials_share"
+      )
       .eq("id", input.doctorId)
       .maybeSingle();
     if (doc) {
+      const doctor = doc as Doctor;
       metaByDoctor.set(input.doctorId, {
-        pct: Number(doc.percentage ?? 50) / 100,
+        pct: doctorPaymentPct(doctor),
         salary: isSalaryDoctor({
           payment_type: doc.payment_type,
           financial_agreement: doc.financial_agreement,
         }),
+        doctor,
       });
     }
   }
@@ -1371,10 +1385,13 @@ function isReviewFeeOnlyOperation(op: TodayOperationRow): boolean {
     is_review_statement?: boolean | null;
     review_fee_amount?: number | string | null;
   };
+  if (Boolean(raw.is_review_statement)) return true;
+  const paid = num(op.paid_amount);
+  const reviewFee = num(raw.review_fee_amount);
   return (
-    Boolean(raw.is_review_statement) ||
-    (num(raw.review_fee_amount) > FINANCIAL_EPSILON &&
-      num(op.paid_amount) <= FINANCIAL_EPSILON)
+    reviewFee > FINANCIAL_EPSILON &&
+    paid > FINANCIAL_EPSILON &&
+    paid <= reviewFee + FINANCIAL_EPSILON
   );
 }
 
@@ -1386,13 +1403,23 @@ function doctorShareByLivePercentage(
   if (paid <= FINANCIAL_EPSILON || !doctor || isSalaryDoctor(doctor)) {
     return 0;
   }
-  const pct = (num(doctor.percentage) || 50) / 100;
-  let share = paid * pct;
+
+  const reviewFee = reviewFeeAmountOnOp(op);
+  const treatmentPaid =
+    op.is_review_statement || (reviewFee > 0 && paid <= reviewFee + FINANCIAL_EPSILON)
+      ? 0
+      : reviewFee > 0
+        ? Math.max(0, paid - reviewFee)
+        : paid;
+  if (treatmentPaid <= FINANCIAL_EPSILON) return 0;
+
+  const pct = doctorPaymentPct(doctor);
+  let share = treatmentPaid * pct;
   const materials = num(op.materials_cost);
   if (materials > FINANCIAL_EPSILON) {
     share -= materials * ((num(doctor.materials_share) || 0) / 100);
   }
-  return roundMoney(Math.max(0, Math.min(paid, share)));
+  return roundMoney(Math.max(0, Math.min(treatmentPaid, share)));
 }
 
 /** حصص الأطباء/العيادة للوحة التنفيذية — حسب طبيب الحالة ونسبة الطبيب الحالية */
