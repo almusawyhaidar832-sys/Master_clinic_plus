@@ -114,6 +114,10 @@ function sessionKindLabel(op: PatientOperation, clinicalView: boolean): string {
   if (Number(op.remaining_debt) > 0 && Number(op.paid_amount) <= 0) {
     return "تسجيل دين";
   }
+  if (op.is_review_statement || Number((op as { review_fee_amount?: number }).review_fee_amount ?? 0) > 0) {
+    const fee = Number((op as { review_fee_amount?: number }).review_fee_amount ?? op.paid_amount ?? 0);
+    return fee > 0 ? "كشفية مراجع" : "كشف";
+  }
   if (op.session_kind === "plan" || Number(op.total_amount) > 0) {
     return "فتح ملف / سعر الحالة";
   }

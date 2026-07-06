@@ -23,7 +23,7 @@ import {
 } from "@/lib/ledger/daily-assistant-payroll";
 import { getPatientDisplayPhone } from "@/lib/phone";
 import { opName } from "@/types";
-import { todayISO } from "@/lib/utils";
+import { formatCurrency, todayISO } from "@/lib/utils";
 
 export type CollectionPaymentStatus =
   | "paid_full"
@@ -120,9 +120,28 @@ function phoneFromPatientJoin(
   );
 }
 
+function reviewFeeAmountOnOp(op: TodayOperationRow): number {
+  const row = op as TodayOperationRow & { review_fee_amount?: number | string | null };
+  return num(row.review_fee_amount);
+}
+
+function isReviewFeeCollection(op: TodayOperationRow): boolean {
+  if (op.is_review_statement) return true;
+  if (reviewFeeAmountOnOp(op) > 0) return true;
+  const label = opName(op);
+  return label.includes("كشفية") || label.includes("كشف +");
+}
+
 function sessionLabelFromOp(op: TodayOperationRow): string {
   if (num(op.remaining_debt) > 0 && num(op.paid_amount) <= 0) {
     return `${opName(op)} — تسجيل دين`;
+  }
+  if (isReviewFeeCollection(op)) {
+    const fee = reviewFeeAmountOnOp(op) || ledgerPaidToday(op);
+    const base = opName(op).replace(/\s*—\s*كشف\s*\+\s*كشفية/i, "").trim() || "كشف";
+    return fee > 0
+      ? `${base} — كشفية ${formatCurrency(fee)}`
+      : `${base} — كشف`;
   }
   if (op.session_kind === "plan" || num(op.total_amount) > 0) {
     return opName(op);
@@ -846,6 +865,21 @@ export async function fetchDailyCollections(
       day: groupByDay ? entryDate : undefined,
     });
     const visitPaidToday = visitPaidByKey.get(vk) ?? 0;
+
+    const patientDebtForQueue = entry.patient_id
+      ? patientDebtMap.get(entry.patient_id)
+      : undefined;
+    const queuePatientDebt = patientDebtForQueue?.total ?? 0;
+
+    // زيارة دُفعت (كشفية أو دفعة) لكن الطابور لم يُغلق — لا نكرر صف «تحصيل»
+    if (
+      visitPaidToday > FINANCIAL_EPSILON &&
+      queuePatientDebt <= FINANCIAL_EPSILON &&
+      (entry.status === "ready_for_billing" ||
+        entry.status === "ready_for_payment")
+    ) {
+      continue;
+    }
 
     const paymentStatus = resolvePaymentStatus({
       paidToday: 0,

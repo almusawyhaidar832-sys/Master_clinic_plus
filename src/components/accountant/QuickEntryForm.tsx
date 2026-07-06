@@ -1922,7 +1922,7 @@ export function QuickEntryForm({
           whatsappNote = " — تعذر تشغيل إرسال واتساب تلقائياً.";
         }
 
-        if (visitQueueEntryId && activeClinic.clinicId && paid > 0) {
+        if (visitQueueEntryId && activeClinic.clinicId && entryAmount > 0) {
           try {
             await fetch("/api/operations/complete-visit", {
               method: "POST",
