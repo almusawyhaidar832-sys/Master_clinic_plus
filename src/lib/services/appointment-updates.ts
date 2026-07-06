@@ -65,8 +65,27 @@ export async function sendAppointmentUpdate(
     messageType: `appointment_${input.action}`,
   });
 
+  let finalOutcome = outcome;
+  if (
+    !outcome.ok &&
+    outcome.configured &&
+    (outcome.providerError === "whatsapp_not_linked" ||
+      outcome.providerError?.includes("disconnected") ||
+      outcome.providerError?.includes("not connected"))
+  ) {
+    await new Promise((r) => setTimeout(r, 1500));
+    finalOutcome = await deliverWhatsAppMessage(admin, {
+      clinicId: input.clinicId,
+      rawPhone: phone,
+      messageBody,
+      messageType: `appointment_${input.action}_retry`,
+    });
+  }
+
   const delivered =
-    outcome.ok && outcome.status === "sent" && !outcome.deliveryWarning;
+    finalOutcome.ok &&
+    finalOutcome.status === "sent" &&
+    !finalOutcome.deliveryWarning;
 
   if (input.appointmentId && delivered) {
     await admin
@@ -76,7 +95,7 @@ export async function sendAppointmentUpdate(
       .eq("clinic_id", input.clinicId);
   }
 
-  if (!outcome.configured) {
+  if (!finalOutcome.configured) {
     return {
       sent: false,
       skipped: true,
@@ -85,29 +104,31 @@ export async function sendAppointmentUpdate(
     };
   }
 
-  if (!outcome.ok) {
+  if (!finalOutcome.ok) {
     return {
       sent: false,
-      error: outcome.providerError ?? "whatsapp_send_failed",
+      error: finalOutcome.providerError ?? "whatsapp_send_failed",
       messageBody,
     };
   }
 
   if (!delivered) {
     const warn =
-      outcome.deliveryWarning ?? outcome.providerError ?? "evolution_pending_delivery";
+      finalOutcome.deliveryWarning ??
+      finalOutcome.providerError ??
+      "evolution_pending_delivery";
     return {
       sent: false,
       error: warn,
       messageBody,
-      deliveryWarning: outcome.deliveryWarning ?? warn,
-      providerMessageStatus: outcome.providerMessageStatus,
+      deliveryWarning: finalOutcome.deliveryWarning ?? warn,
+      providerMessageStatus: finalOutcome.providerMessageStatus,
     };
   }
 
   return {
     sent: true,
     messageBody,
-    providerMessageStatus: outcome.providerMessageStatus,
+    providerMessageStatus: finalOutcome.providerMessageStatus,
   };
 }

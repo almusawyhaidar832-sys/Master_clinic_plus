@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createPublicBooking } from "@/lib/booking/server";
 
+export const maxDuration = 30;
+
 const bodySchema = z.object({
   clinic: z.string().min(1, "رمز العيادة مطلوب"),
   doctorId: z.string().uuid("معرّف الطبيب غير صالح"),

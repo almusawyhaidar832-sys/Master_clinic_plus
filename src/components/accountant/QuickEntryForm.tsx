@@ -600,6 +600,7 @@ export function QuickEntryForm({
 
   const paymentPreviewSplit = useMemo(() => {
     if (!selectedDoctor) return null;
+    if (billingMode === "debt") return null;
     if (billingMode === "examination") {
       if (examinationFeeLive <= 0) return null;
       return {
@@ -1459,6 +1460,8 @@ export function QuickEntryForm({
               total_amount: 0,
               paid_amount: 0,
               remaining_debt: entryAmount,
+              doctor_share_amount: 0,
+              clinic_share_amount: 0,
             },
             `${operationLabel} — تسجيل دين`
           );
@@ -2394,7 +2397,9 @@ export function QuickEntryForm({
                   const mode = e.target.value as SessionBillingMode;
                   setBillingMode(mode);
                   if (mode === "examination") {
-                    setApplyExaminationFee(false);
+                    setApplyExaminationFee(
+                      reviewFeeEnabled && clinicReviewFeeAmount > 0
+                    );
                     setPaidAmount("");
                     if (!operationName.trim()) setOperationName("كشف");
                   }
@@ -2679,7 +2684,7 @@ export function QuickEntryForm({
         </div>
         )}
 
-        {formSchema.showFinancialPreview && (
+        {formSchema.showFinancialPreview && billingMode !== "debt" && (
         <FinancialPreview
           className="sm:col-span-2"
           paymentSplitOnly

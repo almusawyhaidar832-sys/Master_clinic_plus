@@ -131,6 +131,9 @@ export interface CreatePublicBookingResult {
   appointmentId: string;
   clinicId: string;
   clinicName: string;
+  appointmentDate: string;
+  startTime: string;
+  endTime: string;
   whatsapp: SendAppointmentUpdateResult;
 }
 
@@ -237,7 +240,7 @@ export async function createPublicBooking(
   const whatsapp = await sendAppointmentUpdate(admin, {
     clinicId,
     appointmentId: inserted.id as string,
-    patientPhone: inserted.patient_phone as string,
+    patientPhone: phoneCheck.normalized,
     patientName: inserted.patient_name_ar as string,
     doctorName: doctor.fullNameAr,
     appointmentDate: inserted.appointment_date as string,
@@ -262,6 +265,9 @@ export async function createPublicBooking(
     appointmentId: inserted.id as string,
     clinicId: inserted.clinic_id as string,
     clinicName: clinic.nameAr || clinic.name,
+    appointmentDate: inserted.appointment_date as string,
+    startTime: inserted.start_time as string,
+    endTime: inserted.end_time as string,
     whatsapp,
   };
 }

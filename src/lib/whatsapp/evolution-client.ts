@@ -848,7 +848,7 @@ async function pollEvolutionMessageDeliveryStatus(
   instanceName: string,
   messageId: string,
   remoteJid: string,
-  maxMs = 18_000
+  maxMs = 6_000
 ): Promise<string | null> {
   const started = Date.now();
   while (Date.now() - started < maxMs) {

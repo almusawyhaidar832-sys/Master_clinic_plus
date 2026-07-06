@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Building2, Calendar, CheckCircle2 } from "lucide-react";
+import { ArrowRight, Building2, Calendar, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
 import { validatePatientPhone } from "@/lib/phone";
 import { describeWhatsAppDeliveryError } from "@/lib/whatsapp/delivery-errors";
-import { todayISO } from "@/lib/utils";
+import { todayISO, formatDate, formatTime } from "@/lib/utils";
 import type { ResolvedBookingClinic } from "@/lib/booking/types";
 
 interface BookingFormProps {
@@ -29,7 +29,10 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
   const [endTime, setEndTime] = useState("10:30");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{
+    text: string;
+    whatsappOk: boolean;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,16 +101,29 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "تعذر إتمام الحجز");
 
-      if (data.whatsapp?.sent && !data.whatsapp?.deliveryWarning) {
-        setSuccess(
-          `تم تسجيل طلب الحجز في ${data.clinicName} — وصلتك رسالة واتساب بالتفاصيل. سيتواصل معك الفريق قريباً للتأكيد.`
-        );
+      const bookedDate = formatDate(data.appointmentDate ?? date);
+      const bookedTime = formatTime(data.startTime ?? startTime);
+      const bookedEnd = formatTime(data.endTime ?? endTime);
+      const timeLine =
+        bookedEnd && bookedEnd !== bookedTime
+          ? `${bookedTime} – ${bookedEnd}`
+          : bookedTime;
+      const bookingLine = `موعدكم: ${bookedDate} الساعة ${timeLine}`;
+      const whatsappOk =
+        Boolean(data.whatsapp?.sent) && !data.whatsapp?.deliveryWarning;
+
+      if (whatsappOk) {
+        setSuccess({
+          whatsappOk: true,
+          text: `تم تسجيل حجزكم في ${data.clinicName}.\n${bookingLine}\nوصلتكم رسالة واتساب بالتفاصيل — سيتواصل معكم الفريق قريباً للتأكيد.`,
+        });
       } else {
-        setSuccess(
-          `تم تسجيل موعدك في ${data.clinicName}. لم تصل رسالة واتساب: ${describeWhatsAppDeliveryError(
+        setSuccess({
+          whatsappOk: false,
+          text: `تم تسجيل حجزكم في ${data.clinicName}.\n${bookingLine}\n\nلم تصل رسالة واتساب للجوال: ${describeWhatsAppDeliveryError(
             data.whatsapp?.deliveryWarning ?? data.whatsapp?.error
-          )}`
-        );
+          )}\n\nاحتفظوا بوقت الموعد أعلاه. للتأكيد تواصلوا مع العيادة.`,
+        });
       }
       setPatientName("");
       setPatientPhone("");
@@ -187,9 +203,25 @@ export function BookingForm({ clinicRef }: BookingFormProps) {
       </div>
 
       {success ? (
-        <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center">
-          <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-green-600" />
-          <p className="font-medium text-green-800">{success}</p>
+        <div
+          className={`rounded-xl border p-6 text-center ${
+            success.whatsappOk
+              ? "border-green-200 bg-green-50"
+              : "border-amber-200 bg-amber-50"
+          }`}
+        >
+          {success.whatsappOk ? (
+            <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-green-600" />
+          ) : (
+            <AlertTriangle className="mx-auto mb-3 h-12 w-12 text-amber-600" />
+          )}
+          <p
+            className={`whitespace-pre-line font-medium ${
+              success.whatsappOk ? "text-green-800" : "text-amber-900"
+            }`}
+          >
+            {success.text}
+          </p>
           <Button
             type="button"
             variant="outline"

@@ -80,7 +80,7 @@ export function appointmentUpdateMessage(params: {
     rejected: "نعتذر — تم رفض طلب الحجز",
     modified: "تم تعديل موعدكم",
     created: "تم تسجيل موعدكم",
-    submitted: "تم استلام طلب حجزكم — قيد المراجعة",
+    submitted: "تم تسجيل حجزكم — موعدكم المطلوب",
   };
 
   let body = `مرحباً ${params.patientName}،
@@ -96,7 +96,7 @@ ${actionIntro[params.action]} في ${clinicName} مع ${doctor}:
   if (params.action === "rejected") {
     body += "\n\nللاستفسار أو حجز موعد آخر يرجى الرد على هذه الرسالة.";
   } else if (params.action === "submitted") {
-    body += "\n\nسيتواصل معكم فريق العيادة قريباً لتأكيد الموعد.";
+    body += "\n\nاحتفظوا بهذه الرسالة. سيتواصل معكم فريق العيادة قريباً لتأكيد الموعد.";
   } else {
     body += "\n\nنتطلع لرؤيتكم. للاستفسار يرجى الرد على هذه الرسالة.";
   }

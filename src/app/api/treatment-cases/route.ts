@@ -143,12 +143,8 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (sessionOnly && paid <= 0) {
-      return NextResponse.json(
-        { error: "أدخل المبلغ المدفوع في الجلسة الأولى" },
-        { status: 400 }
-      );
-    }
+    // sessionOnly: المدفوع يُسجَّل في patient_operations وليس على صف الحالة
+    // (total_paid على الحالة يبقى 0). كشف بدون كشفية أو دين أولي = paid صفر ومسموح.
 
     const admin = getAdminClient();
     const { data: patient } = await admin
