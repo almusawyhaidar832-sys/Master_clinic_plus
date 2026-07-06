@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import {
+  clinicSharesRepairKey,
+  markSharesRepairDone,
+  needsSharesRepair,
+} from "@/lib/finance/doctor-shares-repair-session";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import type { DoctorLedgerSummary } from "@/lib/services/clinic-reports";
 import { formatCurrency, currentMonthYear } from "@/lib/utils";
@@ -22,9 +27,8 @@ export default function AdminDoctorsLedgerPage() {
         return;
       }
 
-      const repairKey = `mc:doctor-shares-auto-repair:v10:${clinicId}`;
-      const needSync =
-        typeof window !== "undefined" && !sessionStorage.getItem(repairKey);
+      const repairKey = clinicSharesRepairKey(clinicId);
+      const needSync = needsSharesRepair(repairKey);
 
       const params = new URLSearchParams({
         month_year: currentMonthYear(),
@@ -41,8 +45,8 @@ export default function AdminDoctorsLedgerPage() {
       };
 
       if (res.ok) {
-        if (needSync && typeof window !== "undefined") {
-          sessionStorage.setItem(repairKey, "1");
+        if (needSync) {
+          markSharesRepairDone({ clinicId });
         }
         setDoctors(json.doctors ?? []);
       } else {

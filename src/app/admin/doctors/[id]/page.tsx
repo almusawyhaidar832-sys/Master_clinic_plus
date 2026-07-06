@@ -5,6 +5,11 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import {
+  doctorClinicSharesRepairKey,
+  markSharesRepairDone,
+  needsSharesRepair,
+} from "@/lib/finance/doctor-shares-repair-session";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { fetchDoctorLedgerDetail } from "@/lib/services/clinic-reports";
 import { DoctorPayoutStatement } from "@/components/branding/DoctorPayoutStatement";
@@ -28,9 +33,8 @@ export default function AdminDoctorLedgerDetailPage() {
     async function load() {
       if (!id || !clinicId) return;
 
-      const repairKey = `mc:doctor-shares-auto-repair:v10:${clinicId}:${id}`;
-      const needSync =
-        typeof window !== "undefined" && !sessionStorage.getItem(repairKey);
+      const repairKey = doctorClinicSharesRepairKey(clinicId, id);
+      const needSync = needsSharesRepair(repairKey);
 
       const params = new URLSearchParams({
         doctor_id: id,
@@ -48,8 +52,8 @@ export default function AdminDoctorLedgerDetailPage() {
       };
 
       if (res.ok && json.data) {
-        if (needSync && typeof window !== "undefined") {
-          sessionStorage.setItem(repairKey, "1");
+        if (needSync) {
+          markSharesRepairDone({ clinicId, doctorId: id });
         }
         setData(json.data);
       } else {

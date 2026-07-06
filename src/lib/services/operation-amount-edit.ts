@@ -446,6 +446,21 @@ export function buildOperationAmountAuditNote(
   return parts.length ? `تعديل مبلغ — ${parts.join(" · ")}` : undefined;
 }
 
+/** جلسات قديمة: paid_amount = علاج فقط والكشفية فوقه — نجمعها للمدفوع الكلي */
+function applyLegacyAdditiveReviewPaidBump(op: OperationRow): OperationRow {
+  const paid = num(op.paid_amount);
+  const review = num(op.review_fee_amount);
+  if (
+    review > FINANCIAL_EPSILON &&
+    op.is_review_statement &&
+    paid > review + FINANCIAL_EPSILON &&
+    paid / review <= 10.5
+  ) {
+    return { ...op, paid_amount: roundMoney(paid + review) };
+  }
+  return op;
+}
+
 /** إصلاح حصص جلسات طبيب — يصحّح doctor_share_amount المبالغ فيها */
 export async function repairDoctorOperationShares(
   admin: SupabaseClient,
@@ -481,19 +496,24 @@ export async function repairDoctorOperationShares(
       continue;
     }
 
+    const bumped = applyLegacyAdditiveReviewPaidBump(op);
     const normalized = await normalizeOperationReviewFee(
       admin,
       clinicId,
-      op
+      bumped
     );
     const shares = await recalculateOperationShares(admin, normalized, clinicId);
     const beforeDoc = num(op.doctor_share_amount);
     const beforeReview = num(op.review_fee_amount);
+    const beforePaid = num(op.paid_amount);
     const patch: Record<string, unknown> = {
       doctor_share_amount: shares.doctorShare,
       clinic_share_amount: shares.clinicShare,
       remaining_debt: shares.remainingDebt,
     };
+    if (num(bumped.paid_amount) !== beforePaid) {
+      patch.paid_amount = num(bumped.paid_amount);
+    }
     if (num(normalized.review_fee_amount) !== beforeReview) {
       patch.review_fee_amount = normalized.review_fee_amount;
       patch.is_review_statement = normalized.is_review_statement ?? true;
@@ -501,7 +521,8 @@ export async function repairDoctorOperationShares(
     if (
       Math.abs(beforeDoc - shares.doctorShare) > 0.01 ||
       Math.abs(num(op.clinic_share_amount) - shares.clinicShare) > 0.01 ||
-      num(normalized.review_fee_amount) !== beforeReview
+      num(normalized.review_fee_amount) !== beforeReview ||
+      num(bumped.paid_amount) !== beforePaid
     ) {
       await admin.from("patient_operations").update(patch).eq("id", op.id);
       repaired += 1;

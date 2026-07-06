@@ -12,6 +12,11 @@ import {
   type DoctorWalletStats,
 } from "@/lib/services/doctor-wallet";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import {
+  doctorSharesRepairKey,
+  markSharesRepairDone,
+  needsSharesRepair,
+} from "@/lib/finance/doctor-shares-repair-session";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/Button";
 import { DoctorPrivateBalance } from "@/components/doctor/DoctorPrivateBalance";
@@ -68,9 +73,8 @@ export default function DoctorWalletPage() {
     }
 
     let live: DoctorWalletStats | null = null;
-    const repairKey = `mc:doctor-shares-auto-repair:v10:${doctor.id}`;
-    const needSync =
-      typeof window !== "undefined" && !sessionStorage.getItem(repairKey);
+    const repairKey = doctorSharesRepairKey(doctor.id);
+    const needSync = needsSharesRepair(repairKey);
     const walletUrl = needSync
       ? "/api/doctor/wallet-stats?sync_shares=1"
       : "/api/doctor/wallet-stats";
@@ -81,8 +85,11 @@ export default function DoctorWalletPage() {
       });
       if (res.ok) {
         live = (await res.json()) as DoctorWalletStats;
-        if (needSync && typeof window !== "undefined") {
-          sessionStorage.setItem(repairKey, "1");
+        if (needSync) {
+          markSharesRepairDone({
+            doctorId: doctor.id,
+            clinicId: (doctor as { clinic_id?: string }).clinic_id ?? null,
+          });
         }
       }
     } catch {

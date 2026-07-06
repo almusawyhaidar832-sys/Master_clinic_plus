@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import {
+  clinicSharesRepairKey,
+  doctorClinicSharesRepairKey,
+  markSharesRepairDone,
+  needsSharesRepair,
+} from "@/lib/finance/doctor-shares-repair-session";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { useClinicSync } from "@/hooks/useClinicSync";
@@ -276,12 +282,9 @@ export function DoctorDailyCollectionsPanel({
 
     const repairKey =
       clinicId && doctorId
-        ? `mc:doctor-shares-auto-repair:v10:${clinicId}:${doctorId}`
+        ? doctorClinicSharesRepairKey(clinicId, doctorId)
         : "";
-    const needSync =
-      repairKey &&
-      typeof window !== "undefined" &&
-      !sessionStorage.getItem(repairKey);
+    const needSync = repairKey ? needsSharesRepair(repairKey) : false;
 
     const params = new URLSearchParams({
       date_from: dateFrom,
@@ -306,8 +309,8 @@ export function DoctorDailyCollectionsPanel({
         return;
       }
 
-      if (needSync && res.ok && typeof window !== "undefined") {
-        sessionStorage.setItem(repairKey, "1");
+      if (needSync && res.ok) {
+        markSharesRepairDone({ clinicId, doctorId });
       }
 
       setResult(json.result ?? null);

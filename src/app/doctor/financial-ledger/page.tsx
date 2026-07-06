@@ -6,6 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import {
+  doctorSharesRepairKey,
+  markSharesRepairDone,
+  needsSharesRepair,
+} from "@/lib/finance/doctor-shares-repair-session";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { TranslationKey } from "@/i18n/translations";
@@ -81,9 +86,8 @@ export default function DoctorFinancialLedgerPage() {
     setDoctorId(doctor.id);
     setSalaryDoctor(isSalaryDoctor(doctor));
 
-    const repairKey = `mc:doctor-shares-auto-repair:v10:${doctor.id}`;
-    const needSync =
-      typeof window !== "undefined" && !sessionStorage.getItem(repairKey);
+    const repairKey = doctorSharesRepairKey(doctor.id);
+    const needSync = needsSharesRepair(repairKey);
     const walletUrl = needSync
       ? "/api/doctor/wallet-stats?sync_shares=1"
       : "/api/doctor/wallet-stats";
@@ -96,8 +100,11 @@ export default function DoctorFinancialLedgerPage() {
       if (res.ok) {
         const stats = (await res.json()) as { availableBalance: number };
         setBalance(stats.availableBalance);
-        if (needSync && typeof window !== "undefined") {
-          sessionStorage.setItem(repairKey, "1");
+        if (needSync) {
+          markSharesRepairDone({
+            doctorId: doctor.id,
+            clinicId: (doctor as { clinic_id?: string }).clinic_id ?? null,
+          });
         }
         return;
       }
