@@ -2743,8 +2743,9 @@ export default function SalaryPage() {
           onClose={() => setEditingEntry(null)}
           onSaved={(result) => {
             applyEntryMutationResult(result);
+            const base = result.deleted ? "تم حذف الحركة" : "تم تحديث الحركة";
             showMessage(
-              result.deleted ? "تم حذف الحركة" : "تم تحديث الحركة",
+              result.notice ? `${base} — ${result.notice}` : base,
               true
             );
           }}

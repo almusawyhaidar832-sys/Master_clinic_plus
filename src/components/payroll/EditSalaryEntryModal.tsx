@@ -32,6 +32,7 @@ type EditSalaryEntryModalProps = {
     slip?: SalarySlip | null;
     payrollRecord?: PayrollRecord | null;
     deleted?: boolean;
+    notice?: string;
   }) => void;
 };
 
@@ -98,6 +99,7 @@ export function EditSalaryEntryModal({
       });
       const json = (await res.json()) as {
         error?: string;
+        warning?: string;
         entries?: SalaryEntry[];
         slip?: SalarySlip | null;
         payroll_record?: PayrollRecord | null;
@@ -112,6 +114,7 @@ export function EditSalaryEntryModal({
         entries: json.entries ?? [],
         slip: json.slip,
         payrollRecord: json.payroll_record,
+        notice: json.warning,
       });
       onClose();
     } finally {
@@ -144,6 +147,7 @@ export function EditSalaryEntryModal({
         entries?: SalaryEntry[];
         slip?: SalarySlip | null;
         payroll_record?: PayrollRecord | null;
+        warning?: string;
       };
 
       if (!res.ok) {
@@ -156,6 +160,7 @@ export function EditSalaryEntryModal({
         slip: json.slip,
         payrollRecord: json.payroll_record,
         deleted: true,
+        notice: json.warning,
       });
       onClose();
     } finally {

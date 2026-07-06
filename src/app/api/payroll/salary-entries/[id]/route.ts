@@ -62,7 +62,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       slip: result.slip,
       payroll_record: result.payrollRecord,
       net_payout: result.netPayout,
-      warning: result.error,
+      warning: result.notice ?? result.error,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
@@ -97,7 +97,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
       slip: result.slip,
       payroll_record: result.payrollRecord,
       net_payout: result.netPayout,
-      warning: result.error,
+      warning: result.notice ?? result.error,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
