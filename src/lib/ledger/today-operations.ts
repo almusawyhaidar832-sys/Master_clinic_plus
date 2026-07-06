@@ -23,7 +23,11 @@ export type TodayCaseInfo = {
 };
 
 export type TodayOperationRow = PatientOperation & {
-  patient?: { full_name_ar: string };
+  patient?: {
+    full_name_ar: string;
+    phone?: string | null;
+    phone_number?: string | null;
+  };
   doctor?: { full_name_ar: string };
   invoices?: { paid_amount: number; total_amount: number; remaining_amount: number }[] | null;
 };
@@ -138,7 +142,7 @@ export async function fetchLedgerOperationsForDate(
   const { startIso, endIso } = localPeriodUtcBounds(dateFrom, dateTo);
 
   const selectCols =
-    "*, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar), invoices(paid_amount, total_amount, remaining_amount)";
+    "*, patient:patients!patient_id(full_name_ar, phone, phone_number), doctor:doctors!doctor_id(full_name_ar), invoices(paid_amount, total_amount, remaining_amount)";
 
   let byOpDateQuery = supabase
     .from("patient_operations")

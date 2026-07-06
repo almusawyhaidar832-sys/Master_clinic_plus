@@ -21,7 +21,7 @@ import {
 } from "@/lib/ledger/daily-collections";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
-import { getPatientDisplayPhone } from "@/lib/phone";
+import { getPatientDisplayPhone, phoneToLocalDisplay } from "@/lib/phone";
 import {
   cn,
   formatCurrency,
@@ -41,23 +41,33 @@ const STATUS_TABS: { id: CollectionStatusFilter; label: string }[] = [
   { id: "at_accountant", label: "عند المحاسب" },
 ];
 
+function formatVisitPhone(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  return phoneToLocalDisplay(raw) || raw.trim();
+}
+
 async function enrichPatientPhones(
   rows: DailyCollectionRow[]
 ): Promise<DailyCollectionRow[]> {
-  const missingIds = [
+  const patientIds = [
     ...new Set(
       rows
-        .filter((r) => r.patientId && !r.patientPhone)
+        .filter((r) => r.patientId)
         .map((r) => r.patientId as string)
     ),
   ];
-  if (missingIds.length === 0) return rows;
+  if (patientIds.length === 0) {
+    return rows.map((r) => ({
+      ...r,
+      patientPhone: formatVisitPhone(r.patientPhone),
+    }));
+  }
 
   const supabase = createClient();
   const { data } = await supabase
     .from("patients")
     .select("id, phone, phone_number")
-    .in("id", missingIds);
+    .in("id", patientIds);
 
   const phoneById = new Map<string, string>();
   for (const row of data ?? []) {
@@ -67,10 +77,14 @@ async function enrichPatientPhones(
     if (phone) phoneById.set(String(row.id), phone);
   }
 
-  return rows.map((r) => ({
-    ...r,
-    patientPhone: r.patientPhone ?? (r.patientId ? phoneById.get(r.patientId) ?? null : null),
-  }));
+  return rows.map((r) => {
+    const fromRecord = r.patientId ? phoneById.get(r.patientId) : undefined;
+    const phone = r.patientPhone?.trim() || fromRecord || null;
+    return {
+      ...r,
+      patientPhone: formatVisitPhone(phone),
+    };
+  });
 }
 
 function flattenVisitRows(result: DailyCollectionsResult): DailyCollectionRow[] {
@@ -220,15 +234,21 @@ export function PatientDailyVisitsPanel() {
         key: "patient",
         header: "المراجع",
         render: (row) => (
-          <div>
-            <p className="font-semibold text-slate-text">{row.patientName}</p>
-            {row.patientPhone && (
-              <p className="text-xs text-slate-muted" dir="ltr">
-                {row.patientPhone}
-              </p>
-            )}
-          </div>
+          <p className="font-semibold text-slate-text">{row.patientName}</p>
         ),
+      },
+      {
+        key: "phone",
+        header: "الهاتف",
+        className: "whitespace-nowrap",
+        render: (row) =>
+          row.patientPhone ? (
+            <span className="font-medium tabular-nums text-slate-text" dir="ltr">
+              {row.patientPhone}
+            </span>
+          ) : (
+            <span className="text-slate-400">—</span>
+          ),
       },
       {
         key: "doctor",

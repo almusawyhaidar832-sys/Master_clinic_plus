@@ -18,6 +18,7 @@ import {
   sumAssistantPayrollByDoctor,
   type DailyAssistantPayrollLine,
 } from "@/lib/ledger/daily-assistant-payroll";
+import { getPatientDisplayPhone } from "@/lib/phone";
 import { opName } from "@/types";
 import { todayISO } from "@/lib/utils";
 
@@ -106,6 +107,15 @@ type QueueRow = {
   queue_date: string;
   doctor?: { full_name_ar: string } | null;
 };
+
+function phoneFromPatientJoin(
+  patient: TodayOperationRow["patient"] | null | undefined
+): string | null {
+  if (!patient || typeof patient !== "object") return null;
+  return getPatientDisplayPhone(
+    patient as { phone?: string | null; phone_number?: string | null }
+  );
+}
 
 function sessionLabelFromOp(op: TodayOperationRow): string {
   if (num(op.remaining_debt) > 0 && num(op.paid_amount) <= 0) {
@@ -801,7 +811,10 @@ export async function fetchDailyCollections(
       id: `op-${op.id}`,
       patientId,
       patientName,
-      patientPhone: queue?.patient_phone ?? null,
+      patientPhone:
+        queue?.patient_phone?.trim() ||
+        phoneFromPatientJoin(op.patient) ||
+        null,
       doctorId,
       doctorName: op.doctor?.full_name_ar?.trim() || "طبيب",
       visitDate: groupByDay ? opDate : null,
