@@ -12,6 +12,18 @@ import {
   Volume2,
 } from "lucide-react";
 
+/** أقصى عدد مراجعين «مطلوبين الآن» على شاشة الانتظار */
+export const MAX_CALLED_ON_SCREEN = 10;
+
+function calledGridColumns(count: number): string {
+  const n = Math.min(count, MAX_CALLED_ON_SCREEN);
+  if (n <= 1) return "1fr";
+  if (n === 2) return "repeat(2, minmax(0, 1fr))";
+  if (n <= 4) return "repeat(3, minmax(0, 1fr))";
+  if (n <= 9) return "repeat(3, minmax(0, 1fr))";
+  return "repeat(5, minmax(0, 1fr))";
+}
+
 export interface QueueScreenEntry {
   id: string;
   ticket_number: number;
@@ -53,6 +65,7 @@ function CalledCard({
   isLive,
   isRecall,
   compact = false,
+  dense = false,
   resolvePatientName,
   resolveDoctorName,
   onRepeatCall,
@@ -62,6 +75,7 @@ function CalledCard({
   isLive: boolean;
   isRecall: boolean;
   compact?: boolean;
+  dense?: boolean;
   resolvePatientName: (entry: QueueScreenEntry) => string;
   resolveDoctorName: (entry: QueueScreenEntry) => string;
   onRepeatCall: (entry: QueueScreenEntry) => void;
@@ -77,6 +91,7 @@ function CalledCard({
       className={cn(
         "qs-enter qs-call-card relative overflow-hidden rounded-[2rem] border-[3px] px-5 py-6 lg:px-8 lg:py-8",
         compact && "qs-call-card-compact rounded-2xl border-2 px-4 py-4",
+        dense && "qs-call-card-dense",
         isInProgress
           ? "qs-call-card-progress"
           : isRecall
@@ -169,18 +184,20 @@ function CalledCard({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => onRepeatCall(entry)}
-          className={cn(
-            "qs-repeat-btn mt-6 flex items-center gap-2 rounded-xl border border-slate-border bg-surface-card px-5 py-2.5 text-sm font-semibold text-slate-muted shadow-sm transition-colors hover:bg-primary-50 hover:text-primary-700",
-            compact && "mt-3 px-3 py-1.5 text-xs"
-          )}
-          title="إعادة النداء"
-        >
-          <RotateCcw className="h-5 w-5" />
-          إعادة النداء
-        </button>
+        {!dense && (
+          <button
+            type="button"
+            onClick={() => onRepeatCall(entry)}
+            className={cn(
+              "qs-repeat-btn mt-6 flex items-center gap-2 rounded-xl border border-slate-border bg-surface-card px-5 py-2.5 text-sm font-semibold text-slate-muted shadow-sm transition-colors hover:bg-primary-50 hover:text-primary-700",
+              compact && "mt-3 px-3 py-1.5 text-xs"
+            )}
+            title="إعادة النداء"
+          >
+            <RotateCcw className="h-5 w-5" />
+            إعادة النداء
+          </button>
+        )}
       </div>
     </div>
   );
@@ -207,7 +224,9 @@ export function QueueScreenDisplay({
   onInstalled,
   onCopyDiagnostics,
 }: QueueScreenDisplayProps) {
-  const multiCall = called.length > 1;
+  const displayedCalled = called.slice(0, MAX_CALLED_ON_SCREEN);
+  const multiCall = displayedCalled.length > 1;
+  const denseCall = displayedCalled.length >= 5;
 
   return (
     <div className="qs-bg-mesh qs-tv-display-root relative flex h-full min-h-0 flex-col overflow-hidden">
@@ -292,7 +311,7 @@ export function QueueScreenDisplay({
             <span className="qs-sparkle-dot" aria-hidden />
           </h2>
 
-          {called.length === 0 ? (
+          {displayedCalled.length === 0 ? (
             <div className="qs-glass qs-icon-float flex flex-1 flex-col items-center justify-center rounded-[2rem] px-8 py-10 text-center">
               <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-primary-100 to-primary-50 shadow-glow ring-4 ring-primary/10">
                 <Clock className="h-12 w-12 text-primary-600" />
@@ -307,9 +326,10 @@ export function QueueScreenDisplay({
           ) : (
             <div
               className="qs-called-grid min-h-0 flex-1 overflow-hidden"
-              data-count={String(Math.min(called.length, 4))}
+              data-count={String(displayedCalled.length)}
+              style={{ gridTemplateColumns: calledGridColumns(displayedCalled.length) }}
             >
-              {called.slice(0, 3).map((entry) => (
+              {displayedCalled.map((entry) => (
                 <CalledCard
                   key={`${entry.id}-${entry.id === liveCallEntryId ? liveCallTick : 0}`}
                   animationKey={`${entry.id}-${entry.id === liveCallEntryId ? liveCallTick : 0}`}
@@ -317,12 +337,18 @@ export function QueueScreenDisplay({
                   isLive={entry.id === liveCallEntryId}
                   isRecall={entry.id === liveCallEntryId && Boolean(liveCallRecall)}
                   compact={multiCall}
+                  dense={denseCall}
                   resolvePatientName={resolvePatientName}
                   resolveDoctorName={resolveDoctorName}
                   onRepeatCall={onRepeatCall}
                 />
               ))}
             </div>
+          )}
+          {called.length > MAX_CALLED_ON_SCREEN && (
+            <p className="shrink-0 py-1 text-center text-sm font-medium text-slate-muted">
+              +{called.length - MAX_CALLED_ON_SCREEN} مراجعين آخرين مطلوبين
+            </p>
           )}
         </section>
 
