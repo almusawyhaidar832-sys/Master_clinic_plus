@@ -161,6 +161,16 @@ export interface ConfirmedPayrollPayoutLine {
   descriptionAr: string;
 }
 
+/** خصم من الربح: سالب = صرف، موجب = تصحيح/استرداد */
+export function payrollProfitDeductionFromTransactionAmount(
+  amount: number
+): number {
+  const amt = Number(amount);
+  if (amt < 0) return roundMoney(Math.abs(amt));
+  if (amt > 0) return roundMoney(-amt);
+  return 0;
+}
+
 /** حركات صرف مؤكَّدة ضمن الفترة — transaction_date (تقويم محلي عند التأكيد) */
 export async function fetchConfirmedPayrollProfitDeduction(
   supabase: SupabaseClient,
@@ -168,13 +178,24 @@ export async function fetchConfirmedPayrollProfitDeduction(
   from: string,
   to: string
 ): Promise<number> {
-  const lines = await fetchConfirmedPayrollPayoutLines(
-    supabase,
-    clinicId,
-    from,
-    to
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("amount")
+    .eq("clinic_id", clinicId)
+    .gte("transaction_date", from)
+    .lte("transaction_date", to)
+    .in("type", [...PAYROLL_DEDUCTION_TYPES]);
+
+  if (error || !data?.length) return 0;
+
+  return roundMoney(
+    data.reduce(
+      (sum, row) =>
+        sum +
+        payrollProfitDeductionFromTransactionAmount(Number(row.amount ?? 0)),
+      0
+    )
   );
-  return roundMoney(lines.reduce((sum, row) => sum + row.amount, 0));
 }
 
 /** تفاصيل صرف الرواتب المؤكَّد — للتقارير */
@@ -198,13 +219,18 @@ export async function fetchConfirmedPayrollPayoutLines(
   return data
     .map((row) => {
       const amt = Number(row.amount ?? 0);
-      if (amt >= 0) return null;
+      if (amt === 0) return null;
       const type = String(row.type ?? "");
+      const netDeduction = payrollProfitDeductionFromTransactionAmount(amt);
+      if (netDeduction === 0) return null;
+      const isCredit = amt > 0;
       return {
         id: row.id as string,
         type,
-        typeLabel: CONFIRMED_PAYROLL_TYPE_LABELS[type] ?? type,
-        amount: roundMoney(Math.abs(amt)),
+        typeLabel: isCredit
+          ? `${CONFIRMED_PAYROLL_TYPE_LABELS[type] ?? type} — تصحيح`
+          : (CONFIRMED_PAYROLL_TYPE_LABELS[type] ?? type),
+        amount: netDeduction,
         transactionDate: String(row.transaction_date ?? ""),
         descriptionAr: String(row.description_ar ?? "").trim(),
       };

@@ -2743,6 +2743,17 @@ export default function SalaryPage() {
           onClose={() => setEditingEntry(null)}
           onSaved={(result) => {
             applyEntryMutationResult(result);
+            notifyClinicProfitRefresh(clinicId ?? undefined);
+            const affectedDoctorId =
+              result.payrollRecord?.doctor_id ??
+              editingEntry.doctor_id ??
+              selectedAssistantRecord?.doctor_id;
+            if (clinicId) {
+              notifyFinancialMutation({
+                clinicId,
+                ...(affectedDoctorId ? { doctorId: affectedDoctorId } : {}),
+              });
+            }
             const base = result.deleted ? "تم حذف الحركة" : "تم تحديث الحركة";
             showMessage(
               result.notice ? `${base} — ${result.notice}` : base,
