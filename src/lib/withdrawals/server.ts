@@ -3,7 +3,7 @@ import { translateDbError } from "@/lib/db-errors";
 import {
   computeWalletStats,
   fetchDoctorExpenseDeductionsTotal,
-  fetchDoctorPayrollDeductionsTotal,
+  fetchDoctorTotalPayrollDeductions,
   fetchDoctorTotalEarnings,
 } from "@/lib/services/doctor-wallet";
 
@@ -29,7 +29,7 @@ export async function computeDoctorWalletBreakdown(
         .eq("doctor_id", doctorId)
         .neq("status", "rejected"),
       fetchDoctorExpenseDeductionsTotal(admin, doctorId),
-      fetchDoctorPayrollDeductionsTotal(admin, doctorId),
+      fetchDoctorTotalPayrollDeductions(admin, doctorId),
     ]);
 
   return computeWalletStats(totalEarnings, wdsRes.data ?? [], {

@@ -1,11 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
+import {
+  isDailyWageAssistant,
+  normalizeAssistantCompensationMode,
+} from "@/lib/services/assistant-compensation";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import { assistantPendingDoctorShare } from "@/lib/services/payroll-paid-portions";
 import {
   fetchDoctorMonthSalaryBreakdown,
   fetchDoctorSalaryBreakdownsBatch,
 } from "@/lib/services/salary-entry-display";
 import { currentMonthYear, monthDateRange } from "@/lib/utils";
+import type { PayrollRecord } from "@/types";
 
 export interface DoctorWalletStats {
   totalEarnings: number;
@@ -231,7 +237,7 @@ export async function fetchDoctorExpenseDeductionsTotal(
   );
 }
 
-/** خصومات رواتب المساعدين من الحركات المالية */
+/** خصومات رواتب المساعدين من الحركات المالية (صرف مؤكّد) */
 export async function fetchDoctorPayrollDeductionsTotal(
   supabase: SupabaseClient,
   doctorId: string
@@ -247,6 +253,132 @@ export async function fetchDoctorPayrollDeductionsTotal(
     (s, t) => s + Math.abs(Number(t.amount ?? 0)),
     0
   );
+}
+
+/** حصة الطبيب من أجور مساعديه المسجّلة ولم تُصرف بعد */
+export async function fetchDoctorPendingAssistantPayrollDeductions(
+  supabase: SupabaseClient,
+  doctorId: string
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("payroll_records")
+    .select(
+      `
+      doctor_share_amount,
+      paid_doctor_share_amount,
+      clinic_share_amount,
+      paid_clinic_share_amount,
+      total_salary,
+      paid_total_salary,
+      status,
+      assistant:assistants!assistant_id(compensation_mode)
+    `
+    )
+    .eq("doctor_id", doctorId);
+
+  if (error || !data?.length) return 0;
+
+  let total = 0;
+  for (const row of data) {
+    const assistantRaw = row.assistant;
+    const assistant = Array.isArray(assistantRaw)
+      ? assistantRaw[0]
+      : assistantRaw;
+    const dailyWage = isDailyWageAssistant(
+      normalizeAssistantCompensationMode(
+        (assistant as { compensation_mode?: string } | null)
+          ?.compensation_mode
+      )
+    );
+    total += assistantPendingDoctorShare(
+      row as Pick<
+        PayrollRecord,
+        | "doctor_share_amount"
+        | "paid_doctor_share_amount"
+        | "clinic_share_amount"
+        | "paid_clinic_share_amount"
+        | "total_salary"
+        | "paid_total_salary"
+        | "status"
+      >,
+      { dailyWage }
+    );
+  }
+
+  return Math.round(total * 100) / 100;
+}
+
+/** خصومات مساعدين — مؤكّدة + مسجّلة (أجر يومي قبل الصرف) */
+export async function fetchDoctorTotalPayrollDeductions(
+  supabase: SupabaseClient,
+  doctorId: string
+): Promise<number> {
+  const [confirmed, pending] = await Promise.all([
+    fetchDoctorPayrollDeductionsTotal(supabase, doctorId),
+    fetchDoctorPendingAssistantPayrollDeductions(supabase, doctorId),
+  ]);
+  return Math.round((confirmed + pending) * 100) / 100;
+}
+
+async function fetchPendingAssistantPayrollByDoctor(
+  supabase: SupabaseClient,
+  doctorIds: string[]
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (!doctorIds.length) return map;
+
+  const { data, error } = await supabase
+    .from("payroll_records")
+    .select(
+      `
+      doctor_id,
+      doctor_share_amount,
+      paid_doctor_share_amount,
+      clinic_share_amount,
+      paid_clinic_share_amount,
+      total_salary,
+      paid_total_salary,
+      status,
+      assistant:assistants!assistant_id(compensation_mode)
+    `
+    )
+    .in("doctor_id", doctorIds);
+
+  if (error || !data?.length) return map;
+
+  for (const row of data) {
+    const doctorId = String(row.doctor_id ?? "");
+    if (!doctorId) continue;
+    const assistantRaw = row.assistant;
+    const assistant = Array.isArray(assistantRaw)
+      ? assistantRaw[0]
+      : assistantRaw;
+    const dailyWage = isDailyWageAssistant(
+      normalizeAssistantCompensationMode(
+        (assistant as { compensation_mode?: string } | null)
+          ?.compensation_mode
+      )
+    );
+    const pending = assistantPendingDoctorShare(
+      row as Pick<
+        PayrollRecord,
+        | "doctor_share_amount"
+        | "paid_doctor_share_amount"
+        | "clinic_share_amount"
+        | "paid_clinic_share_amount"
+        | "total_salary"
+        | "paid_total_salary"
+        | "status"
+      >,
+      {
+        dailyWage,
+      }
+    );
+    if (pending <= FINANCIAL_EPSILON) continue;
+    map.set(doctorId, Math.round(((map.get(doctorId) ?? 0) + pending) * 100) / 100);
+  }
+
+  return map;
 }
 
 export function computeWalletStats(
@@ -445,6 +577,7 @@ export async function fetchDoctorWalletStatsBatch(
     withdrawalsRes,
     expenseRows,
     payrollRows,
+    pendingPayrollByDoctor,
     paymentMap,
     salaryPayoutsMap,
     doctorsRes,
@@ -472,6 +605,7 @@ export async function fetchDoctorWalletStatsBatch(
       .in("doctor_id", doctorIds)
       .eq("type", "assistant_payroll_doctor")
       .lt("amount", 0),
+    fetchPendingAssistantPayrollByDoctor(supabase, doctorIds),
     fetchDoctorPaymentMap(supabase, doctorIds),
     fetchDoctorSalaryPayoutsByDoctor(
       supabase,
@@ -514,6 +648,11 @@ export async function fetchDoctorWalletStatsBatch(
 
   for (const doctorId of doctorIds) {
     const meta = paymentMap.get(doctorId) ?? { pct: 0.5, isSalary: false };
+    const payrollDeductions = Math.round(
+      ((payrollByDoctor.get(doctorId) ?? 0) +
+        (pendingPayrollByDoctor.get(doctorId) ?? 0)) *
+        100
+    ) / 100;
 
     if (meta.isSalary) {
       const earned =
@@ -526,7 +665,7 @@ export async function fetchDoctorWalletStatsBatch(
           salaryLedger: true,
           salaryWithdrawn: salaryPayoutsMap.get(doctorId) ?? 0,
           expenseDeductions: expenseByDoctor.get(doctorId) ?? 0,
-          payrollDeductions: payrollByDoctor.get(doctorId) ?? 0,
+          payrollDeductions,
         })
       );
       continue;
@@ -539,7 +678,7 @@ export async function fetchDoctorWalletStatsBatch(
         withdrawalsByDoctor.get(doctorId) ?? [],
         {
           expenseDeductions: expenseByDoctor.get(doctorId) ?? 0,
-          payrollDeductions: payrollByDoctor.get(doctorId) ?? 0,
+          payrollDeductions,
         }
       )
     );
@@ -671,7 +810,7 @@ export async function fetchDoctorWalletStats(
           range.to
         ),
         fetchDoctorExpenseDeductionsTotal(supabase, doctorId),
-        fetchDoctorPayrollDeductionsTotal(supabase, doctorId),
+        fetchDoctorTotalPayrollDeductions(supabase, doctorId),
         doctor?.clinic_id
           ? fetchDoctorMonthSalaryBreakdown(
               supabase,
@@ -702,7 +841,7 @@ export async function fetchDoctorWalletStats(
         .eq("doctor_id", doctorId)
         .neq("status", "rejected"),
       fetchDoctorExpenseDeductionsTotal(supabase, doctorId),
-      fetchDoctorPayrollDeductionsTotal(supabase, doctorId),
+      fetchDoctorTotalPayrollDeductions(supabase, doctorId),
     ]);
 
   return computeWalletStats(totalEarnings, withdrawalsRes.data ?? [], {

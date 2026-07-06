@@ -16,8 +16,11 @@ import {
 import { validateSalaryEntryReason } from "@/lib/services/salary-entry-reason";
 import {
   assistantIsFullyPaid,
+  assistantPaidTotalSalary,
   slipIsFullyPaid,
+  slipPaidNet,
 } from "@/lib/services/payroll-paid-portions";
+import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { isMonthClosed } from "@/lib/services/salary-payroll";
 import { calculateSalaryNet, monthDateRange } from "@/lib/utils";
 import type { PayrollRecord, SalaryEntry, SalaryEntryType, SalarySlip } from "@/types";
@@ -1159,5 +1162,646 @@ export async function createSalaryEntry(
     netPayout,
     error: recordErr,
     notice,
+  };
+}
+
+export type SalaryEntryMutationResult = {
+  entries: SalaryEntry[];
+  slip: SalarySlip | null;
+  payrollRecord: PayrollRecord | null;
+  netPayout: number;
+  error?: string;
+};
+
+type LoadedSalaryEntry = SalaryEntry & { clinic_id: string };
+
+function monthYearFromEntryDate(entryDate: string): string {
+  return entryDate.slice(0, 7);
+}
+
+async function fetchSalaryEntryForMutation(
+  admin: SupabaseClient,
+  clinicId: string,
+  entryId: string
+): Promise<{ entry: LoadedSalaryEntry } | { error: string }> {
+  const { data, error } = await admin
+    .from("salary_entries")
+    .select("*")
+    .eq("id", entryId)
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+
+  if (error) {
+    return { error: error.message };
+  }
+  if (!data) {
+    return { error: "الحركة غير موجودة" };
+  }
+
+  return { entry: data as LoadedSalaryEntry };
+}
+
+async function assertSalaryEntryEditable(
+  admin: SupabaseClient,
+  clinicId: string,
+  entry: LoadedSalaryEntry,
+  monthYear: string
+): Promise<string | null> {
+  if (await isMonthClosed(admin, clinicId, monthYear)) {
+    return "الشهر مُغلق — لا يمكن تعديل الحركات";
+  }
+
+  const staffId = entry.staff_id?.trim() ?? "";
+  const assistantId = entry.assistant_id?.trim() ?? "";
+  const doctorId = entry.doctor_id?.trim() ?? "";
+
+  if (assistantId) {
+    const base = await loadAssistantPayrollBase(admin, clinicId, assistantId);
+    if (base.error) return base.error;
+
+    const { data: record } = await admin
+      .from("payroll_records")
+      .select("status, paid_total_salary, total_salary")
+      .eq("clinic_id", clinicId)
+      .eq("assistant_id", assistantId)
+      .eq("month_year", monthYear)
+      .maybeSingle();
+
+    if (
+      record &&
+      !isDailyWageAssistant(base.compensationMode) &&
+      assistantIsFullyPaid(record as PayrollRecord, { dailyWage: false })
+    ) {
+      return "راتب هذا المساعد مُصرف — لا يمكن تعديل الحركات";
+    }
+    return null;
+  }
+
+  if (staffId) {
+    const { data: staff } = await admin
+      .from("staff_members")
+      .select("compensation_mode")
+      .eq("id", staffId)
+      .eq("clinic_id", clinicId)
+      .maybeSingle();
+
+    const compensationMode = normalizeCompensationMode(
+      staff?.compensation_mode as string | undefined
+    );
+
+    const { data: slip } = await admin
+      .from("salary_slips")
+      .select("status, paid_net_payout, net_payout")
+      .eq("clinic_id", clinicId)
+      .eq("staff_id", staffId)
+      .eq("month_year", monthYear)
+      .maybeSingle();
+
+    if (
+      slip?.status === "paid" &&
+      !isDailyWage(compensationMode) &&
+      slipIsFullyPaid(slip as SalarySlip, { dailyWage: false })
+    ) {
+      return "راتب هذا الموظف مُصرف — لا يمكن تعديل الحركات";
+    }
+    return null;
+  }
+
+  if (doctorId) {
+    const { data: slip } = await admin
+      .from("salary_slips")
+      .select("status, paid_net_payout, net_payout")
+      .eq("clinic_id", clinicId)
+      .eq("doctor_id", doctorId)
+      .eq("month_year", monthYear)
+      .maybeSingle();
+
+    if (slip?.status === "paid" && slipIsFullyPaid(slip as SalarySlip)) {
+      return "راتب هذا الطبيب مُصرف — لا يمكن تعديل الحركات";
+    }
+    return null;
+  }
+
+  return "حركة غير صالحة";
+}
+
+async function assertNetCoversConfirmedPay(
+  admin: SupabaseClient,
+  clinicId: string,
+  monthYear: string,
+  entry: LoadedSalaryEntry,
+  projectedEntries: SalaryEntry[]
+): Promise<string | null> {
+  const staffId = entry.staff_id?.trim() ?? "";
+  const assistantId = entry.assistant_id?.trim() ?? "";
+  const doctorId = entry.doctor_id?.trim() ?? "";
+
+  if (assistantId) {
+    const base = await loadAssistantPayrollBase(admin, clinicId, assistantId);
+    if (base.error) return base.error;
+
+    const { netPayout: fullNet } = computeAssistantNetPay(
+      base.compensationMode,
+      base.baseSalary,
+      projectedEntries
+    );
+
+    const { data: record } = await admin
+      .from("payroll_records")
+      .select("paid_total_salary")
+      .eq("clinic_id", clinicId)
+      .eq("assistant_id", assistantId)
+      .eq("month_year", monthYear)
+      .maybeSingle();
+
+    const paidTotal = assistantPaidTotalSalary(record as PayrollRecord | null);
+    if (
+      isDailyWageAssistant(base.compensationMode) &&
+      paidTotal > FINANCIAL_EPSILON &&
+      fullNet + FINANCIAL_EPSILON < paidTotal
+    ) {
+      return "المبلغ المؤكَّد أكبر من الراتب بعد التعديل — ألغِ تأكيد الصرف أولاً";
+    }
+    return null;
+  }
+
+  if (staffId) {
+    const { data: staff } = await admin
+      .from("staff_members")
+      .select("base_salary, compensation_mode")
+      .eq("id", staffId)
+      .eq("clinic_id", clinicId)
+      .maybeSingle();
+
+    const compensationMode = normalizeCompensationMode(
+      staff?.compensation_mode as string | undefined
+    );
+    const baseSalary = isDailyWage(compensationMode)
+      ? 0
+      : Number(staff?.base_salary ?? 0);
+    const { netPayout: fullNet } = computeStaffNetPay(
+      baseSalary,
+      projectedEntries,
+      compensationMode
+    );
+
+    const { data: slip } = await admin
+      .from("salary_slips")
+      .select("paid_net_payout")
+      .eq("clinic_id", clinicId)
+      .eq("staff_id", staffId)
+      .eq("month_year", monthYear)
+      .maybeSingle();
+
+    const paidNet = slipPaidNet(slip as SalarySlip | null);
+    if (
+      isDailyWage(compensationMode) &&
+      paidNet > FINANCIAL_EPSILON &&
+      fullNet + FINANCIAL_EPSILON < paidNet
+    ) {
+      return "المبلغ المؤكَّد أكبر من الراتب بعد التعديل — ألغِ تأكيد الصرف أولاً";
+    }
+    return null;
+  }
+
+  if (doctorId) {
+    const { data: doctor } = await admin
+      .from("doctors")
+      .select("salary_amount")
+      .eq("id", doctorId)
+      .eq("clinic_id", clinicId)
+      .maybeSingle();
+
+    const baseSalary = Number(doctor?.salary_amount ?? 0);
+    const { netPayout: fullNet } = computeStaffNetPay(baseSalary, projectedEntries);
+
+    const { data: slip } = await admin
+      .from("salary_slips")
+      .select("paid_net_payout, status")
+      .eq("clinic_id", clinicId)
+      .eq("doctor_id", doctorId)
+      .eq("month_year", monthYear)
+      .maybeSingle();
+
+    const paidNet = slipPaidNet(slip as SalarySlip | null);
+    if (
+      paidNet > FINANCIAL_EPSILON &&
+      fullNet + FINANCIAL_EPSILON < paidNet
+    ) {
+      return "المبلغ المؤكَّد أكبر من الراتب بعد التعديل — ألغِ تأكيد الصرف أولاً";
+    }
+    return null;
+  }
+
+  return "حركة غير صالحة";
+}
+
+async function syncPersonAfterEntryChange(
+  admin: SupabaseClient,
+  clinicId: string,
+  entry: LoadedSalaryEntry,
+  monthYear: string
+): Promise<SalaryEntryMutationResult> {
+  const staffId = entry.staff_id?.trim() ?? "";
+  const assistantId = entry.assistant_id?.trim() ?? "";
+  const doctorId = entry.doctor_id?.trim() ?? "";
+
+  const personOpts = staffId
+    ? { staffId }
+    : assistantId
+      ? { assistantId }
+      : { doctorId };
+
+  const { entries, error: listErr } = await listSalaryEntriesForPersonMonth(
+    admin,
+    clinicId,
+    monthYear,
+    personOpts
+  );
+  if (listErr) {
+    return {
+      entries: [],
+      slip: null,
+      payrollRecord: null,
+      netPayout: 0,
+      error: listErr,
+    };
+  }
+
+  if (staffId) {
+    const { data: staff } = await admin
+      .from("staff_members")
+      .select("base_salary, compensation_mode")
+      .eq("id", staffId)
+      .eq("clinic_id", clinicId)
+      .maybeSingle();
+
+    const compensationMode = normalizeCompensationMode(
+      staff?.compensation_mode as string | undefined
+    );
+    const baseSalary = isDailyWage(compensationMode)
+      ? 0
+      : Number(staff?.base_salary ?? 0);
+    const { netPayout } = computeStaffNetPay(
+      baseSalary,
+      entries,
+      compensationMode
+    );
+    const { slip, error } = await syncStaffSalarySlipDraft(
+      admin,
+      clinicId,
+      staffId,
+      monthYear
+    );
+    return { entries, slip, payrollRecord: null, netPayout, error };
+  }
+
+  if (doctorId) {
+    const { data: doctor } = await admin
+      .from("doctors")
+      .select("salary_amount")
+      .eq("id", doctorId)
+      .eq("clinic_id", clinicId)
+      .maybeSingle();
+
+    const baseSalary = Number(doctor?.salary_amount ?? 0);
+    const { netPayout } = computeStaffNetPay(baseSalary, entries);
+    const { slip, error } = await syncDoctorSalarySlipDraft(
+      admin,
+      clinicId,
+      doctorId,
+      monthYear,
+      baseSalary
+    );
+    return { entries, slip, payrollRecord: null, netPayout, error };
+  }
+
+  const base = await loadAssistantPayrollBase(admin, clinicId, assistantId);
+  const { netPayout } = computeAssistantNetPay(
+    base.compensationMode,
+    base.baseSalary,
+    entries
+  );
+  const { record, error } = await syncAssistantPayrollRecord(
+    admin,
+    clinicId,
+    assistantId,
+    monthYear,
+    base.baseSalary
+  );
+  return { entries, slip: null, payrollRecord: record, netPayout, error };
+}
+
+/** حذف حركة راتب — يُعاد حساب القسيمة/سجل المساعد */
+export async function deleteSalaryEntry(
+  admin: SupabaseClient,
+  clinicId: string,
+  entryId: string
+): Promise<SalaryEntryMutationResult & { deleted?: boolean }> {
+  const loaded = await fetchSalaryEntryForMutation(admin, clinicId, entryId);
+  if ("error" in loaded) {
+    return {
+      entries: [],
+      slip: null,
+      payrollRecord: null,
+      netPayout: 0,
+      error: loaded.error,
+    };
+  }
+
+  const entry = loaded.entry;
+  const monthYear = monthYearFromEntryDate(entry.entry_date);
+
+  const editableErr = await assertSalaryEntryEditable(
+    admin,
+    clinicId,
+    entry,
+    monthYear
+  );
+  if (editableErr) {
+    return {
+      entries: [],
+      slip: null,
+      payrollRecord: null,
+      netPayout: 0,
+      error: editableErr,
+    };
+  }
+
+  const { entries: currentEntries, error: listErr } =
+    await listSalaryEntriesForPersonMonth(
+      admin,
+      clinicId,
+      monthYear,
+      entry.staff_id
+        ? { staffId: entry.staff_id }
+        : entry.assistant_id
+          ? { assistantId: entry.assistant_id! }
+          : { doctorId: entry.doctor_id! }
+    );
+  if (listErr) {
+    return {
+      entries: [],
+      slip: null,
+      payrollRecord: null,
+      netPayout: 0,
+      error: listErr,
+    };
+  }
+
+  const projected = currentEntries.filter((row) => row.id !== entryId);
+  const netErr = await assertNetCoversConfirmedPay(
+    admin,
+    clinicId,
+    monthYear,
+    entry,
+    projected
+  );
+  if (netErr) {
+    return {
+      entries: [],
+      slip: null,
+      payrollRecord: null,
+      netPayout: 0,
+      error: netErr,
+    };
+  }
+
+  const { error: deleteErr } = await admin
+    .from("salary_entries")
+    .delete()
+    .eq("id", entryId)
+    .eq("clinic_id", clinicId);
+
+  if (deleteErr) {
+    return {
+      entries: [],
+      slip: null,
+      payrollRecord: null,
+      netPayout: 0,
+      error: mapInsertError(deleteErr.message ?? "تعذر الحذف"),
+    };
+  }
+
+  const synced = await syncPersonAfterEntryChange(
+    admin,
+    clinicId,
+    entry,
+    monthYear
+  );
+  return { ...synced, deleted: true };
+}
+
+/** تعديل مبلغ/تاريخ/ملاحظات حركة راتب */
+export async function updateSalaryEntry(
+  admin: SupabaseClient,
+  clinicId: string,
+  entryId: string,
+  input: {
+    amount?: number;
+    entryDate?: string;
+    notesAr?: string | null;
+  }
+): Promise<SalaryEntryMutationResult & { entry?: SalaryEntry | null }> {
+  const loaded = await fetchSalaryEntryForMutation(admin, clinicId, entryId);
+  if ("error" in loaded) {
+    return {
+      entries: [],
+      slip: null,
+      payrollRecord: null,
+      netPayout: 0,
+      error: loaded.error,
+    };
+  }
+
+  const entry = loaded.entry;
+  const oldMonthYear = monthYearFromEntryDate(entry.entry_date);
+  const nextDate = input.entryDate?.trim() || entry.entry_date;
+  const nextMonthYear = monthYearFromEntryDate(nextDate);
+  const nextAmount =
+    input.amount != null ? roundMoney(input.amount) : Number(entry.amount);
+  const nextNotes =
+    input.notesAr !== undefined ? input.notesAr?.trim() || null : entry.notes_ar;
+
+  if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+    return {
+      entries: [],
+      slip: null,
+      payrollRecord: null,
+      netPayout: 0,
+      error: "أدخل مبلغاً أكبر من صفر",
+    };
+  }
+
+  const reasonError = validateSalaryEntryReason(entry.entry_type, nextNotes);
+  if (reasonError) {
+    return {
+      entries: [],
+      slip: null,
+      payrollRecord: null,
+      netPayout: 0,
+      error: reasonError,
+    };
+  }
+
+  for (const monthYear of [oldMonthYear, nextMonthYear]) {
+    const editableErr = await assertSalaryEntryEditable(
+      admin,
+      clinicId,
+      entry,
+      monthYear
+    );
+    if (editableErr) {
+      return {
+        entries: [],
+        slip: null,
+        payrollRecord: null,
+        netPayout: 0,
+        error: editableErr,
+      };
+    }
+  }
+
+  const personOpts = entry.staff_id
+    ? { staffId: entry.staff_id }
+    : entry.assistant_id
+      ? { assistantId: entry.assistant_id! }
+      : { doctorId: entry.doctor_id! };
+
+  const { entries: currentEntries, error: listErr } =
+    await listSalaryEntriesForPersonMonth(
+      admin,
+      clinicId,
+      oldMonthYear,
+      personOpts
+    );
+  if (listErr) {
+    return {
+      entries: [],
+      slip: null,
+      payrollRecord: null,
+      netPayout: 0,
+      error: listErr,
+    };
+  }
+
+  const projected = currentEntries.map((row) =>
+    row.id === entryId
+      ? {
+          ...row,
+          amount: nextAmount,
+          entry_date: nextDate,
+          notes_ar: nextNotes,
+        }
+      : row
+  );
+
+  if (oldMonthYear === nextMonthYear) {
+    const netErr = await assertNetCoversConfirmedPay(
+      admin,
+      clinicId,
+      oldMonthYear,
+      entry,
+      projected
+    );
+    if (netErr) {
+      return {
+        entries: [],
+        slip: null,
+        payrollRecord: null,
+        netPayout: 0,
+        error: netErr,
+      };
+    }
+  } else {
+    const oldProjected = projected.filter(
+      (row) => monthYearFromEntryDate(row.entry_date) === oldMonthYear
+    );
+    const oldNetErr = await assertNetCoversConfirmedPay(
+      admin,
+      clinicId,
+      oldMonthYear,
+      entry,
+      oldProjected
+    );
+    if (oldNetErr) {
+      return {
+        entries: [],
+        slip: null,
+        payrollRecord: null,
+        netPayout: 0,
+        error: oldNetErr,
+      };
+    }
+
+    const { entries: nextMonthEntries } = await listSalaryEntriesForPersonMonth(
+      admin,
+      clinicId,
+      nextMonthYear,
+      personOpts
+    );
+    const nextProjected = [
+      ...nextMonthEntries.filter((row) => row.id !== entryId),
+      {
+        ...entry,
+        amount: nextAmount,
+        entry_date: nextDate,
+        notes_ar: nextNotes,
+      },
+    ];
+    const nextNetErr = await assertNetCoversConfirmedPay(
+      admin,
+      clinicId,
+      nextMonthYear,
+      entry,
+      nextProjected
+    );
+    if (nextNetErr) {
+      return {
+        entries: [],
+        slip: null,
+        payrollRecord: null,
+        netPayout: 0,
+        error: nextNetErr,
+      };
+    }
+  }
+
+  const { data: updated, error: updateErr } = await admin
+    .from("salary_entries")
+    .update({
+      amount: nextAmount,
+      entry_date: nextDate,
+      notes_ar: nextNotes,
+    })
+    .eq("id", entryId)
+    .eq("clinic_id", clinicId)
+    .select("*")
+    .single();
+
+  if (updateErr) {
+    return {
+      entries: [],
+      slip: null,
+      payrollRecord: null,
+      netPayout: 0,
+      error: mapInsertError(updateErr.message ?? "تعذر الحفظ"),
+    };
+  }
+
+  if (oldMonthYear !== nextMonthYear) {
+    await syncPersonAfterEntryChange(admin, clinicId, entry, oldMonthYear);
+  }
+
+  const synced = await syncPersonAfterEntryChange(
+    admin,
+    clinicId,
+    entry,
+    nextMonthYear
+  );
+
+  return {
+    ...synced,
+    entry: updated as SalaryEntry,
   };
 }

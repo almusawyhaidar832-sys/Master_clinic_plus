@@ -48,6 +48,7 @@ import {
 } from "@/lib/services/payroll-persons";
 import { EmployeePayrollProfileCard } from "@/components/payroll/EmployeePayrollProfileCard";
 import { EditEmployeeSalaryModal } from "@/components/payroll/EditEmployeeSalaryModal";
+import { EditSalaryEntryModal } from "@/components/payroll/EditSalaryEntryModal";
 import { DeactivateEmployeeDialog } from "@/components/payroll/DeactivateEmployeeDialog";
 import {
   isSalaryReasonRequired,
@@ -264,6 +265,7 @@ export default function SalaryPage() {
     text: string;
     ok: boolean;
   } | null>(null);
+  const [editingEntry, setEditingEntry] = useState<SalaryEntry | null>(null);
   const entryFormRef = useRef<HTMLDivElement>(null);
   const payrollEntryFormRef = useRef<HTMLDivElement>(null);
 
@@ -384,6 +386,26 @@ export default function SalaryPage() {
 
   const payrollBaseSalary =
     selectedStaff?.base_salary ?? selectedPerson?.base_salary ?? 0;
+
+  function applyEntryMutationResult(result: {
+    entries: SalaryEntry[];
+    slip?: SalarySlip | null;
+    payrollRecord?: PayrollRecord | null;
+  }) {
+    setEntries(result.entries);
+    if (result.slip) {
+      setSlips((prev) => {
+        const rest = prev.filter((s) => s.id !== result.slip!.id);
+        return [result.slip as SalarySlip, ...rest];
+      });
+    }
+    if (result.payrollRecord) {
+      setPayrollRecords((prev) => {
+        const rest = prev.filter((r) => r.id !== result.payrollRecord!.id);
+        return [result.payrollRecord as PayrollRecord, ...rest];
+      });
+    }
+  }
 
   function showMessage(text: string, ok: boolean) {
     setMessage(text);
@@ -2581,9 +2603,9 @@ export default function SalaryPage() {
               return (
                 <li
                   key={e.id}
-                  className="flex justify-between border-b border-slate-border/40 py-2"
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-border/40 py-2"
                 >
-                  <span>
+                  <span className="min-w-0 flex-1">
                     {typeLabel} — {e.entry_date}
                     {e.notes_ar ? (
                       <span className="block text-xs text-slate-muted">
@@ -2593,12 +2615,24 @@ export default function SalaryPage() {
                       </span>
                     ) : null}
                   </span>
-                  <span
-                    className={`font-medium ${isBonus ? "text-emerald-700" : ""}`}
-                  >
-                    {isBonus ? "+" : "−"}
-                    {formatCurrency(e.amount)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`font-medium ${isBonus ? "text-emerald-700" : ""}`}
+                    >
+                      {isBonus ? "+" : "−"}
+                      {formatCurrency(e.amount)}
+                    </span>
+                    {!boardLocked && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditingEntry(e)}
+                      >
+                        تعديل
+                      </Button>
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -2692,6 +2726,27 @@ export default function SalaryPage() {
             setSelectedPerson(null);
             await refreshAfterEmployeeChange();
             showMessage(`تم إيقاف ${name} — لن يظهر في الرواتب`, true);
+          }}
+        />
+      )}
+
+      {editingEntry && (
+        <EditSalaryEntryModal
+          entry={editingEntry}
+          typeLabel={
+            entryTypeLabels.find((t) => t.value === editingEntry.entry_type)
+              ?.label ?? editingEntry.entry_type
+          }
+          monthFrom={monthFrom}
+          monthTo={monthTo}
+          boardLocked={boardLocked}
+          onClose={() => setEditingEntry(null)}
+          onSaved={(result) => {
+            applyEntryMutationResult(result);
+            showMessage(
+              result.deleted ? "تم حذف الحركة" : "تم تحديث الحركة",
+              true
+            );
           }}
         />
       )}
