@@ -77,13 +77,18 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
     patientPhone: row.patientPhone,
   });
 
-  const showCollect =
-    row.paymentStatus === "unpaid" ||
-    row.paymentStatus === "partial" ||
-    row.paymentStatus === "at_accountant" ||
-    row.paymentStatus === "debtor";
-
   const debtAmount = Math.max(row.caseDebtTotal, row.remaining);
+  const reviewFeePaidToday =
+    row.sessionLabel.includes("كشفية") &&
+    row.visitPaidToday > FINANCIAL_EPSILON &&
+    row.requiredToday <= FINANCIAL_EPSILON;
+
+  const showCollect =
+    !reviewFeePaidToday &&
+    (row.paymentStatus === "unpaid" ||
+      row.paymentStatus === "partial" ||
+      row.paymentStatus === "at_accountant" ||
+      row.paymentStatus === "debtor");
 
   return (
     <div className="flex flex-col gap-3 border-b border-slate-border/60 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">

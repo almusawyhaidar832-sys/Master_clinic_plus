@@ -233,17 +233,65 @@ function visitKey(
   return rowKey(doctorId, patientId, patientName);
 }
 
-/** مفتاح موحّد — طبيب + مراجع (يدعم عائلة برقم هاتف واحد) */
+/** مفتاح زيارة — طبيب + اسم المراجع (يوحّد الطابور والجلسة حتى لو اختلف patient_id) */
 function canonicalVisitKey(input: {
   doctorId: string;
   patientId: string | null;
   patientName: string;
   day?: string;
 }): string {
-  const base = input.patientId
-    ? `${input.doctorId}:${input.patientId}`
-    : `${input.doctorId}:name:${normalizePatientName(input.patientName)}`;
+  const name = normalizePatientName(input.patientName || "مراجع");
+  const base = `${input.doctorId}:name:${name}`;
   return input.day ? `${base}:${input.day}` : base;
+}
+
+function lookupVisitPaidToday(
+  visitPaidByKey: Map<string, number>,
+  input: {
+    doctorId: string;
+    patientId: string | null;
+    patientName: string;
+    day?: string;
+  }
+): number {
+  const vk = canonicalVisitKey(input);
+  const direct = visitPaidByKey.get(vk) ?? 0;
+  if (direct > FINANCIAL_EPSILON) return direct;
+  if (input.patientId) {
+    const legacy = visitPaidByKey.get(
+      `${input.doctorId}:${input.patientId}${input.day ? `:${input.day}` : ""}`
+    );
+    if (legacy && legacy > FINANCIAL_EPSILON) return legacy;
+  }
+  return 0;
+}
+
+function isReviewFeeSettledVisit(
+  op: TodayOperationRow,
+  remaining: number,
+  requiredToday: number
+): boolean {
+  if (requiredToday > FINANCIAL_EPSILON) return false;
+  if (!isReviewFeeCollection(op)) return false;
+  if (ledgerPaidToday(op) <= FINANCIAL_EPSILON) return false;
+  return remaining <= FINANCIAL_EPSILON;
+}
+
+function debtForCollectionStatus(opts: {
+  remaining: number;
+  patientDebtTotal: number;
+  reviewFeeSettled: boolean;
+  visitPaidToday: number;
+  requiredToday: number;
+}): number {
+  if (
+    opts.reviewFeeSettled &&
+    opts.visitPaidToday > FINANCIAL_EPSILON &&
+    opts.requiredToday <= FINANCIAL_EPSILON
+  ) {
+    return opts.remaining;
+  }
+  return Math.max(opts.remaining, opts.patientDebtTotal);
 }
 
 function sumVisitPaidToday(
@@ -277,11 +325,16 @@ function resolvePaymentStatus(input: {
   requiredToday: number;
   queueStatus: string | null;
   hasOperation: boolean;
+  reviewFeeSettled?: boolean;
 }): CollectionPaymentStatus {
   const { paidToday, visitPaidToday, remaining, caseDebtTotal, requiredToday, queueStatus, hasOperation } =
     input;
   const paid = Math.max(paidToday, visitPaidToday);
   const debt = Math.max(remaining, caseDebtTotal);
+
+  if (input.reviewFeeSettled && paid > FINANCIAL_EPSILON) {
+    return "paid_full";
+  }
 
   if (debt > FINANCIAL_EPSILON) {
     if (paid > FINANCIAL_EPSILON) {
@@ -541,6 +594,14 @@ function mergeRowsByVisit(
         ? sessionLabels[0]!
         : `${primary.sessionLabel} (+${sessionLabels.length - 1} سجل)`;
 
+    const reviewFeeSettled = group.some(
+      (r) =>
+        r.sessionLabel.includes("كشفية") &&
+        r.visitPaidToday > FINANCIAL_EPSILON &&
+        r.requiredToday <= FINANCIAL_EPSILON &&
+        r.remaining <= FINANCIAL_EPSILON
+    );
+
     merged.push({
       id: `visit-${key}`,
       patientId: group.find((r) => r.patientId)?.patientId ?? primary.patientId,
@@ -565,6 +626,7 @@ function mergeRowsByVisit(
         requiredToday,
         queueStatus,
         hasOperation,
+        reviewFeeSettled,
       }),
       queueEntryId,
       operationIds,
@@ -806,10 +868,27 @@ export async function fetchDailyCollections(
       patientName,
       day: groupByDay ? opDate : undefined,
     });
-    const visitPaidToday = visitPaidByKey.get(vk) ?? paidToday;
+    const visitPaidToday = lookupVisitPaidToday(visitPaidByKey, {
+      doctorId,
+      patientId,
+      patientName,
+      day: groupByDay ? opDate : undefined,
+    });
 
     const patientDebt = patientId ? patientDebtMap.get(patientId) : undefined;
-    const caseDebtTotal = patientDebt?.total ?? remaining;
+    const patientDebtTotal = patientDebt?.total ?? 0;
+    const reviewFeeSettled = isReviewFeeSettledVisit(
+      op,
+      remaining,
+      requiredToday
+    );
+    const caseDebtTotal = debtForCollectionStatus({
+      remaining,
+      patientDebtTotal,
+      reviewFeeSettled,
+      visitPaidToday: Math.max(visitPaidToday, paidToday),
+      requiredToday,
+    });
     const debtCases: DebtorCaseDetail[] =
       patientDebt?.cases.map((c) => ({
         caseId: "",
@@ -826,6 +905,7 @@ export async function fetchDailyCollections(
       requiredToday,
       queueStatus: queue?.status ?? null,
       hasOperation: true,
+      reviewFeeSettled,
     });
 
     sessionRows.push({
@@ -864,7 +944,12 @@ export async function fetchDailyCollections(
       patientName,
       day: groupByDay ? entryDate : undefined,
     });
-    const visitPaidToday = visitPaidByKey.get(vk) ?? 0;
+    const visitPaidToday = lookupVisitPaidToday(visitPaidByKey, {
+      doctorId: entry.doctor_id,
+      patientId: entry.patient_id,
+      patientName,
+      day: groupByDay ? entryDate : undefined,
+    });
 
     const patientDebtForQueue = entry.patient_id
       ? patientDebtMap.get(entry.patient_id)
