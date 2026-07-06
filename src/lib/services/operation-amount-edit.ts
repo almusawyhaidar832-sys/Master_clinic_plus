@@ -158,6 +158,8 @@ async function recalculateOperationShares(
 
   const split = previewPaidSessionSplit({
     paidAmount: paid,
+    reviewFee,
+    isReviewStatement: Boolean(op.is_review_statement),
     caseFinalPrice: caseFinal || agreed,
     caseDoctorShare: caseDoc || patientDoc,
     caseClinicShare: caseClinic || patientClinic,

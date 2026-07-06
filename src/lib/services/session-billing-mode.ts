@@ -138,12 +138,16 @@ export function previewSessionBillingTotals(
 /** حصة الطبيب/العيادة لجلسة بدون سعر كلي */
 export function resolveSessionPaymentShares(opts: {
   paidAmount: number;
+  reviewFee?: number;
+  isReviewStatement?: boolean;
   materialsCost: number;
   doctor: Doctor | null;
   plan: PatientFinancialPlan;
 }): { doctorShare: number; clinicShare: number } {
   const split = previewPaidSessionSplit({
     paidAmount: opts.paidAmount,
+    reviewFee: opts.reviewFee,
+    isReviewStatement: opts.isReviewStatement,
     caseFinalPrice: opts.plan.final_price,
     caseDoctorShare: opts.plan.doctor_share_total,
     caseClinicShare: opts.plan.clinic_share_total,
@@ -187,9 +191,14 @@ export function resolveOperationPaymentSplit(
     return { doctorShare: 0, clinicShare: 0, paid: 0 };
   }
 
+  const reviewFee = num(op.review_fee_amount);
+  const isReviewStatement = Boolean(op.is_review_statement);
+  const hasReviewComponent =
+    isReviewStatement || reviewFee > FINANCIAL_EPSILON;
+
   const storedDoc = num(op.doctor_share_amount);
   const storedClinic = num(op.clinic_share_amount);
-  if (storedDoc > 0 || storedClinic > 0) {
+  if (!hasReviewComponent && (storedDoc > 0 || storedClinic > 0)) {
     if (storedDoc > 0 && storedClinic > 0) {
       return {
         doctorShare: roundMoney(storedDoc),
@@ -213,6 +222,8 @@ export function resolveOperationPaymentSplit(
 
   const split = previewPaidSessionSplit({
     paidAmount: paid,
+    reviewFee,
+    isReviewStatement,
     caseFinalPrice: num(caseRow?.final_price),
     caseDoctorShare: num(caseRow?.doctor_share_total),
     caseClinicShare: num(caseRow?.clinic_share_total),

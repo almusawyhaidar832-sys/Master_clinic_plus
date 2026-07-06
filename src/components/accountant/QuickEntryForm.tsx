@@ -593,6 +593,12 @@ export function QuickEntryForm({
       ? { doctorShare: 0, clinicShare: examinationFeeLive }
       : resolveSessionPaymentShares({
           paidAmount: entryAmountLive,
+          reviewFee:
+            isReviewStatement && billingMode !== "examination"
+              ? reviewFeeLive
+              : 0,
+          isReviewStatement:
+            isReviewStatement && billingMode !== "examination",
           materialsCost: materials,
           doctor: selectedDoctor,
           plan,
@@ -612,6 +618,8 @@ export function QuickEntryForm({
     if (entryAmountLive <= 0 && materials <= 0) return null;
     return previewPaidSessionSplit({
       paidAmount: entryAmountLive,
+      reviewFee: isReviewStatement ? reviewFeeLive : 0,
+      isReviewStatement,
       caseFinalPrice: plan.final_price,
       caseDoctorShare: plan.doctor_share_total,
       caseClinicShare: plan.clinic_share_total,
@@ -627,6 +635,8 @@ export function QuickEntryForm({
     plan.final_price,
     plan.doctor_share_total,
     plan.clinic_share_total,
+    isReviewStatement,
+    reviewFeeLive,
   ]);
 
   const treatmentOnly = Math.max(0, finalPriceLive - reviewFeeLive);

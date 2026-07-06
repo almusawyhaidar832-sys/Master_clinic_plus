@@ -712,6 +712,9 @@ function splitPaidByDoctorPercentage(
  */
 export function previewPaidSessionSplit(opts: {
   paidAmount: number;
+  /** مبلغ الكشفية ضمن هذه الدفعة — لا يدخل حصة الطبيب */
+  reviewFee?: number;
+  isReviewStatement?: boolean;
   caseFinalPrice: number;
   caseDoctorShare: number;
   caseClinicShare: number;
@@ -725,8 +728,23 @@ export function previewPaidSessionSplit(opts: {
   labClinicShare?: number;
 } | null {
   const paid = Math.max(0, opts.paidAmount);
+  const reviewFee = Math.max(0, opts.reviewFee ?? 0);
   const materials = Math.max(0, opts.materialsCost ?? 0);
   if (paid <= 0 && materials <= 0) return null;
+
+  // كشفية فقط — 100% للعيادة
+  if (
+    opts.isReviewStatement ||
+    (reviewFee > FINANCIAL_EPSILON && paid <= reviewFee + FINANCIAL_EPSILON)
+  ) {
+    if (paid <= FINANCIAL_EPSILON) return null;
+    return { paidAmount: paid, doctorShare: 0, clinicShare: roundMoney(paid) };
+  }
+
+  const treatmentPaid =
+    reviewFee > FINANCIAL_EPSILON && paid > reviewFee + FINANCIAL_EPSILON
+      ? paid - reviewFee
+      : paid;
 
   const finalPrice = Math.max(0, opts.caseFinalPrice);
   let caseDoc = Math.max(0, opts.caseDoctorShare);
@@ -747,23 +765,23 @@ export function previewPaidSessionSplit(opts: {
   let baseDoc = 0;
   let baseClinic = 0;
 
-  if (finalPrice > 0 && paid > 0) {
+  if (finalPrice > 0 && treatmentPaid > 0) {
     if (opts.doctor && !isSalaryDoctor(opts.doctor)) {
-      const live = splitPaidByDoctorPercentage(paid, opts.doctor);
+      const live = splitPaidByDoctorPercentage(treatmentPaid, opts.doctor);
       baseDoc = live.doctorShare;
       baseClinic = live.clinicShare;
     } else if (caseDoc > 0 || caseClinic > 0) {
       if (caseDoc > finalPrice || caseClinic > finalPrice) {
-        const live = splitPaidByDoctorPercentage(paid, opts.doctor);
+        const live = splitPaidByDoctorPercentage(treatmentPaid, opts.doctor);
         baseDoc = live.doctorShare;
         baseClinic = live.clinicShare;
       } else {
-        baseDoc = roundMoney((paid * caseDoc) / finalPrice);
-        baseClinic = roundMoney((paid * caseClinic) / finalPrice);
+        baseDoc = roundMoney((treatmentPaid * caseDoc) / finalPrice);
+        baseClinic = roundMoney((treatmentPaid * caseClinic) / finalPrice);
       }
     }
-  } else if (opts.doctor && finalPrice <= 0 && paid > 0) {
-    const live = splitPaidByDoctorPercentage(paid, opts.doctor);
+  } else if (opts.doctor && finalPrice <= 0 && treatmentPaid > 0) {
+    const live = splitPaidByDoctorPercentage(treatmentPaid, opts.doctor);
     baseDoc = live.doctorShare;
     baseClinic = live.clinicShare;
   }
@@ -778,17 +796,17 @@ export function previewPaidSessionSplit(opts: {
     return {
       paidAmount: paid,
       doctorShare: withLab.doctorShare,
-      clinicShare: withLab.clinicShare,
+      clinicShare: roundMoney(Math.max(0, paid - withLab.doctorShare)),
       labDoctorShare: withLab.labDoctorShare,
       labClinicShare: withLab.labClinicShare,
     };
   }
 
-  if (paid > 0 && (baseDoc > 0 || baseClinic > 0 || finalPrice > 0)) {
+  if (treatmentPaid > 0 && (baseDoc > 0 || baseClinic > 0 || finalPrice > 0)) {
     return {
       paidAmount: paid,
       doctorShare: baseDoc,
-      clinicShare: baseClinic,
+      clinicShare: roundMoney(Math.max(0, paid - baseDoc)),
     };
   }
 

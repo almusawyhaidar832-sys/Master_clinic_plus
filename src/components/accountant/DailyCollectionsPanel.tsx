@@ -425,7 +425,7 @@ export function DailyCollectionsPanel() {
     }
     setLoading(true);
     try {
-      const repairKey = `mc:doctor-shares-auto-repair:v5:${clinicId}`;
+      const repairKey = `mc:doctor-shares-auto-repair:v6:${clinicId}`;
       const needSync =
         typeof window !== "undefined" && !sessionStorage.getItem(repairKey);
 
