@@ -5,13 +5,9 @@ import {
   computeOutstandingDebtFromOperations,
 } from "@/lib/services/patient-treatment-cases";
 import { fetchPatientFinancialPlansBatch } from "@/lib/services/patient-financial-plan";
-import { isSalaryDoctor } from "@/lib/services/doctor-payment";
-import {
-  calcClinicOperationEarned,
-  calcOperationEarned,
-} from "@/lib/services/doctor-wallet";
+import { resolveOperationPaymentSplit } from "@/lib/services/session-billing-mode";
 import { localDateISO, localPeriodUtcBounds } from "@/lib/utils";
-import { opDebt, opName, type PatientOperation } from "@/types";
+import { opDebt, opName, type Doctor, type PatientOperation } from "@/types";
 import type { TopPerformersPayload } from "@/lib/services/doctor-performance";
 
 function num(v: unknown): number {
@@ -674,7 +670,9 @@ export async function summarizePeriodOperationFinancials(
     doctorIds.length
       ? supabase
           .from("doctors")
-          .select("id, percentage, payment_type, financial_agreement")
+          .select(
+            "id, percentage, payment_type, financial_agreement, materials_share, salary_amount"
+          )
           .in("id", doctorIds)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
   ]);
@@ -682,19 +680,9 @@ export async function summarizePeriodOperationFinancials(
   const caseById = new Map(
     (casesRes.data ?? []).map((row) => [String(row.id), row])
   );
-  const doctorMeta = new Map<
-    string,
-    { pct: number; salary: boolean }
-  >();
+  const doctorById = new Map<string, Doctor>();
   for (const doc of doctorsRes.data ?? []) {
-    const id = String(doc.id);
-    doctorMeta.set(id, {
-      pct: num(doc.percentage) / 100 || 0.5,
-      salary: isSalaryDoctor({
-        payment_type: doc.payment_type,
-        financial_agreement: doc.financial_agreement,
-      }),
-    });
+    doctorById.set(String(doc.id), doc as Doctor);
   }
 
   let revenue = 0;
@@ -704,38 +692,20 @@ export async function summarizePeriodOperationFinancials(
 
   for (const op of ops) {
     const paid = num(op.paid_amount);
+    if (paid <= 0) continue;
+
     const total = num(op.total_amount);
     collected += paid;
     revenue += total > 0 ? total : paid;
 
     const doctorId = op.doctor_id ? String(op.doctor_id) : "";
-    const meta = doctorMeta.get(doctorId) ?? { pct: 0.5, salary: false };
+    const doctor = doctorId ? doctorById.get(doctorId) ?? null : null;
     const caseId = op.treatment_case_id?.trim();
     const caseRow = caseId ? caseById.get(caseId) : undefined;
 
-    const earningRow = {
-      clinic_share_amount: op.clinic_share_amount,
-      doctor_share_amount: op.doctor_share_amount,
-      paid_amount: op.paid_amount,
-      patient_treatment_cases: caseRow
-        ? {
-            final_price: caseRow.final_price,
-            clinic_share_total: caseRow.clinic_share_total,
-            doctor_share_total: caseRow.doctor_share_total,
-          }
-        : null,
-    };
-
-    clinicShareTotal += calcClinicOperationEarned(
-      earningRow,
-      meta.pct,
-      meta.salary
-    );
-    doctorShareTotal += calcOperationEarned(
-      earningRow,
-      meta.pct,
-      meta.salary
-    );
+    const split = resolveOperationPaymentSplit(op, doctor, caseRow ?? null);
+    clinicShareTotal += split.clinicShare;
+    doctorShareTotal += split.doctorShare;
   }
 
   return {
@@ -794,21 +764,62 @@ export async function fetchTopPerformersForPeriod(
   from: string,
   to: string
 ): Promise<TopPerformersPayload> {
-  const [ops, expensesRes, doctorsRes] = await Promise.all([
-    loadOperationsInPeriod(supabase, clinicId, from, to),
-    supabase
-      .from("expenses")
-      .select("amount, expense_kind, expense_categories(name_ar)")
-      .eq("clinic_id", clinicId)
-      .gte("expense_date", from)
-      .lte("expense_date", to),
-    supabase
-      .from("doctors")
-      .select("id, full_name_ar")
-      .eq("clinic_id", clinicId)
-      .eq("is_active", true)
-      .order("full_name_ar"),
-  ]);
+  const ops = await loadOperationsInPeriod(supabase, clinicId, from, to);
+
+  const caseIds = [
+    ...new Set(
+      ops
+        .map((o) => o.treatment_case_id?.trim())
+        .filter((id): id is string => !!id)
+    ),
+  ];
+  const paymentDoctorIds = [
+    ...new Set(
+      ops
+        .filter((o) => num(o.paid_amount) > 0 && o.doctor_id)
+        .map((o) => String(o.doctor_id))
+    ),
+  ];
+
+  const [expensesRes, doctorsRes, casesRes, paymentDoctorsRes] =
+    await Promise.all([
+      supabase
+        .from("expenses")
+        .select("amount, expense_kind, expense_categories(name_ar)")
+        .eq("clinic_id", clinicId)
+        .gte("expense_date", from)
+        .lte("expense_date", to),
+      supabase
+        .from("doctors")
+        .select("id, full_name_ar")
+        .eq("clinic_id", clinicId)
+        .eq("is_active", true)
+        .order("full_name_ar"),
+      caseIds.length
+        ? supabase
+            .from("patient_treatment_cases")
+            .select(
+              "id, clinic_share_total, doctor_share_total, final_price"
+            )
+            .in("id", caseIds)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      paymentDoctorIds.length
+        ? supabase
+            .from("doctors")
+            .select(
+              "id, percentage, payment_type, financial_agreement, materials_share, salary_amount"
+            )
+            .in("id", paymentDoctorIds)
+        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    ]);
+
+  const caseById = new Map(
+    (casesRes.data ?? []).map((row) => [String(row.id), row])
+  );
+  const paymentDoctorById = new Map<string, Doctor>();
+  for (const doc of paymentDoctorsRes.data ?? []) {
+    paymentDoctorById.set(String(doc.id), doc as Doctor);
+  }
 
   type DoctorAgg = {
     doctor_id: string;
@@ -867,12 +878,18 @@ export async function fetchTopPerformersForPeriod(
     const paid = num(op.paid_amount);
     const total = num(op.total_amount);
     agg.op_count += 1;
-    agg.revenue += total;
-    agg.clinic_share += num(op.clinic_share_amount);
-    agg.doctor_share += num(op.doctor_share_amount);
+    agg.revenue += total > 0 ? total : paid;
+
     if (paid > 0) {
+      const caseId = op.treatment_case_id?.trim();
+      const caseRow = caseId ? caseById.get(caseId) : undefined;
+      const doctor = paymentDoctorById.get(doctorId) ?? null;
+      const split = resolveOperationPaymentSplit(op, doctor, caseRow ?? null);
+
       agg.collected += paid;
       agg.payment_count += 1;
+      agg.clinic_share += split.clinicShare;
+      agg.doctor_share += split.doctorShare;
       doctorsWithPayments.add(doctorId);
     }
 
@@ -884,10 +901,17 @@ export async function fetchTopPerformersForPeriod(
       clinic_margin_total: 0,
     };
     svc.count += 1;
-    svc.revenue += total;
-    if (total > 0) {
+    const svcRevenue = total > 0 ? total : paid;
+    svc.revenue += svcRevenue;
+    if (svcRevenue > 0 && paid > 0) {
+      const caseId = op.treatment_case_id?.trim();
+      const caseRow = caseId ? caseById.get(caseId) : undefined;
+      const doctor = paymentDoctorById.get(doctorId) ?? null;
+      const split = resolveOperationPaymentSplit(op, doctor, caseRow ?? null);
+      svc.clinic_margin_total += (split.clinicShare / svcRevenue) * 100;
+    } else if (svcRevenue > 0) {
       svc.clinic_margin_total +=
-        (num(op.clinic_share_amount) / total) * 100;
+        (num(op.clinic_share_amount) / svcRevenue) * 100;
     }
     serviceByName.set(serviceName, svc);
   }

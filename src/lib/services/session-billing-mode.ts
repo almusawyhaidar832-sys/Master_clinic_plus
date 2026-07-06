@@ -1,4 +1,5 @@
 import type { Doctor } from "@/types";
+import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import {
   FINANCIAL_EPSILON,
   previewPaidSessionSplit,
@@ -150,5 +151,67 @@ export function resolveSessionPaymentShares(opts: {
   return {
     doctorShare: split?.doctorShare ?? 0,
     clinicShare: split?.clinicShare ?? 0,
+  };
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function num(v: unknown): number {
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** حصة الطبيب/العيادة من جلسة محفوظة — نفس منطق إدخال الجلسة (نسبة الطبيب 40%/50%…) */
+export function resolveOperationPaymentSplit(
+  op: {
+    paid_amount?: number | string | null;
+    materials_cost?: number | string | null;
+  },
+  doctor: Doctor | null,
+  caseRow?: {
+    final_price?: number | string | null;
+    doctor_share_total?: number | string | null;
+    clinic_share_total?: number | string | null;
+  } | null
+): { doctorShare: number; clinicShare: number; paid: number } {
+  const paid = num(op.paid_amount);
+  if (paid <= 0) {
+    return { doctorShare: 0, clinicShare: 0, paid: 0 };
+  }
+
+  const split = previewPaidSessionSplit({
+    paidAmount: paid,
+    caseFinalPrice: num(caseRow?.final_price),
+    caseDoctorShare: num(caseRow?.doctor_share_total),
+    caseClinicShare: num(caseRow?.clinic_share_total),
+    doctor,
+    materialsCost: num(op.materials_cost),
+  });
+
+  if (split) {
+    return {
+      doctorShare: split.doctorShare,
+      clinicShare: split.clinicShare,
+      paid,
+    };
+  }
+
+  if (!doctor) {
+    const half = roundMoney(paid / 2);
+    return { doctorShare: half, clinicShare: half, paid };
+  }
+
+  if (isSalaryDoctor(doctor)) {
+    return { doctorShare: 0, clinicShare: roundMoney(paid), paid };
+  }
+
+  const pct = (num(doctor.percentage) || 50) / 100;
+  const doctorShare = roundMoney(paid * pct);
+  return {
+    doctorShare,
+    clinicShare: roundMoney(Math.max(0, paid - doctorShare)),
+    paid,
   };
 }
