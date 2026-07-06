@@ -657,7 +657,6 @@ export async function fetchDailyCollections(
       dateFrom: effectiveFrom,
       dateTo: effectiveTo,
       doctorId: input.doctorId,
-      limit: groupByDay ? 2000 : 500,
     }),
     fetchQueueForPeriod(supabase, clinicId, effectiveFrom, effectiveTo, input.doctorId),
     supabase

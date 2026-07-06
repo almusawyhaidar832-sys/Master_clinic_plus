@@ -138,7 +138,10 @@ export async function fetchLedgerOperationsForDate(
   const dateFrom = filters.dateFrom ?? filters.date ?? todayISO();
   const dateTo = filters.dateTo ?? filters.date ?? dateFrom;
   const singleDay = dateFrom === dateTo;
-  const limit = filters.limit ?? (singleDay ? 500 : 2000);
+  const allDoctors = !filters.doctorId;
+  const limit =
+    filters.limit ??
+    (allDoctors ? undefined : singleDay ? 500 : 2000);
   const { startIso, endIso } = localPeriodUtcBounds(dateFrom, dateTo);
 
   const selectCols =
@@ -150,8 +153,7 @@ export async function fetchLedgerOperationsForDate(
     .eq("clinic_id", clinicId)
     .gte("operation_date", dateFrom)
     .lte("operation_date", dateTo)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .order("created_at", { ascending: false });
 
   let byCreatedQuery = supabase
     .from("patient_operations")
@@ -159,8 +161,12 @@ export async function fetchLedgerOperationsForDate(
     .eq("clinic_id", clinicId)
     .gte("created_at", startIso)
     .lte("created_at", endIso)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .order("created_at", { ascending: false });
+
+  if (limit != null) {
+    byOpDateQuery = byOpDateQuery.limit(limit);
+    byCreatedQuery = byCreatedQuery.limit(limit);
+  }
 
   if (filters.doctorId) {
     byOpDateQuery = byOpDateQuery.eq("doctor_id", filters.doctorId);

@@ -401,6 +401,8 @@ export function DailyCollectionsPanel() {
     setDoctors((data as DoctorOption[]) ?? []);
   }, [clinicId]);
 
+  const selectedDoctorId = doctorId.trim() || undefined;
+
   const loadCollections = useCallback(async () => {
     if (!clinicId) {
       setResult(null);
@@ -412,14 +414,14 @@ export function DailyCollectionsPanel() {
     const data = await fetchDailyCollections(supabase, clinicId, {
       dateFrom,
       dateTo: effectiveTo,
-      doctorId: doctorId || undefined,
+      doctorId: selectedDoctorId,
       statusFilter,
     });
     setResult(data);
     setAppliedFrom(dateFrom);
     setAppliedTo(effectiveTo);
     setLoading(false);
-  }, [clinicId, dateFrom, effectiveTo, doctorId, statusFilter]);
+  }, [clinicId, dateFrom, effectiveTo, selectedDoctorId, statusFilter]);
 
   useEffect(() => {
     if (clinicLoading) return;
@@ -458,7 +460,7 @@ export function DailyCollectionsPanel() {
   };
 
   const repairDoctorShares = useCallback(async () => {
-    if (!doctorId) return;
+    if (!selectedDoctorId) return;
     setRepairing(true);
     setRepairMsg(null);
     try {
@@ -468,7 +470,7 @@ export function DailyCollectionsPanel() {
           "Content-Type": "application/json",
           ...authPortalHeaders("accountant"),
         },
-        body: JSON.stringify({ doctorId }),
+        body: JSON.stringify({ doctorId: selectedDoctorId }),
       });
       const data = (await res.json()) as { message?: string; error?: string };
       if (!res.ok) {
@@ -482,7 +484,7 @@ export function DailyCollectionsPanel() {
     } finally {
       setRepairing(false);
     }
-  }, [doctorId, loadCollections]);
+  }, [selectedDoctorId, loadCollections]);
 
   return (
     <div className="space-y-6">
@@ -542,7 +544,7 @@ export function DailyCollectionsPanel() {
               )}
               <span className="mr-2">تحديث</span>
             </Button>
-            {doctorId && (
+            {selectedDoctorId && (
               <Button
                 type="button"
                 variant="outline"
@@ -686,6 +688,12 @@ export function DailyCollectionsPanel() {
         </Alert>
       )}
 
+      {!loading && result && result.doctors.length > 0 && !selectedDoctorId && (
+        <p className="text-sm font-medium text-slate-muted">
+          {result.doctors.length} طبيب في هذه الفترة
+        </p>
+      )}
+
       {!loading &&
         result?.doctors.map((group, index) => (
           <DoctorSection
@@ -694,12 +702,12 @@ export function DailyCollectionsPanel() {
             stats={group.stats}
             rows={group.rows}
             assistantPayroll={group.assistantPayroll}
-            defaultOpen={index === 0 || !!doctorId}
+            defaultOpen={!!selectedDoctorId || index < 5}
           />
         ))}
 
       {!loading && clinicId && (
-        <OutstandingDebtPanel clinicId={clinicId} doctorId={doctorId || undefined} />
+        <OutstandingDebtPanel clinicId={clinicId} doctorId={selectedDoctorId} />
       )}
     </div>
   );
