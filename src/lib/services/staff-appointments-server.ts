@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { validatePatientPhone } from "@/lib/phone";
 import { translateDbError } from "@/lib/db-errors";
+import { ensurePatientIdForBooking } from "@/lib/services/resolve-patient-id";
 import {
   sendAppointmentUpdate,
   type SendAppointmentUpdateResult,
@@ -363,12 +364,19 @@ export async function createStaffAppointment(
     input.end_time
   );
 
+  const patientId = await ensurePatientIdForBooking(admin, clinicId, {
+    name,
+    phone: phoneCheck.normalized,
+    primaryDoctorId: input.doctor_id,
+  });
+
   const { data, error } = await admin
     .from("appointments")
     .insert({
       clinic_id: clinicId,
       doctor_id: input.doctor_id,
       assistant_id: null,
+      patient_id: patientId,
       patient_name_ar: name,
       patient_phone: phoneCheck.normalized,
       appointment_date: input.appointment_date,

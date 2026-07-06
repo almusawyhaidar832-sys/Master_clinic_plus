@@ -1,11 +1,12 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  patientPhoneColumns,
-  validatePatientPhone,
-} from "@/lib/phone";
 import { ensureAppointmentPatient } from "@/lib/services/ensure-appointment-patient";
+import {
+  ensurePatientIdForBooking,
+  findPatientIdByName,
+  findPatientIdByPhone,
+} from "@/lib/services/resolve-patient-id";
 
 export interface QueueEntryPatientContext {
   queueEntryId: string;
@@ -15,44 +16,6 @@ export interface QueueEntryPatientContext {
   patientName: string;
   patientPhone: string | null;
   appointmentId: string | null;
-}
-
-async function findPatientIdByPhone(
-  admin: SupabaseClient,
-  clinicId: string,
-  phone: string
-): Promise<string | null> {
-  const digits = phone.replace(/\D/g, "");
-  if (!digits) return null;
-
-  const { data } = await admin
-    .from("patients")
-    .select("id")
-    .eq("clinic_id", clinicId)
-    .or(`phone.ilike.%${digits}%,phone_number.ilike.%${digits}%`)
-    .limit(1)
-    .maybeSingle();
-
-  return (data?.id as string | undefined) ?? null;
-}
-
-async function findPatientIdByName(
-  admin: SupabaseClient,
-  clinicId: string,
-  name: string
-): Promise<string | null> {
-  const trimmed = name.trim();
-  if (!trimmed) return null;
-
-  const { data } = await admin
-    .from("patients")
-    .select("id")
-    .eq("clinic_id", clinicId)
-    .eq("full_name_ar", trimmed)
-    .limit(1)
-    .maybeSingle();
-
-  return (data?.id as string | undefined) ?? null;
 }
 
 /** يضمن وجود ملف مريض مربوط بدور الطابور — للسجل البصري والفوترة */
@@ -105,30 +68,11 @@ export async function ensureQueueEntryPatient(
       );
     }
 
-    const phoneCheck = queuePhone ? validatePatientPhone(queuePhone) : null;
-    const insertPayload: Record<string, unknown> = {
-      clinic_id: clinicId,
-      full_name_ar: name,
-      primary_doctor_id: entry.doctor_id,
-    };
-
-    if (phoneCheck?.ok) {
-      Object.assign(insertPayload, patientPhoneColumns(phoneCheck.normalized));
-    } else if (queuePhone) {
-      insertPayload.phone = queuePhone;
-    }
-
-    const { data: newPatient, error: patientErr } = await admin
-      .from("patients")
-      .insert(insertPayload)
-      .select("id")
-      .single();
-
-    if (patientErr || !newPatient) {
-      throw new Error(patientErr?.message ?? "تعذر إنشاء ملف المريض");
-    }
-
-    patientId = newPatient.id as string;
+    patientId = await ensurePatientIdForBooking(admin, clinicId, {
+      name,
+      phone: queuePhone || null,
+      primaryDoctorId: entry.doctor_id as string,
+    });
   }
 
   if (!entry.patient_id) {

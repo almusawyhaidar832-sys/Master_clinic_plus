@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { validatePatientPhone } from "@/lib/phone";
 import { translateDbError } from "@/lib/db-errors";
+import { ensurePatientIdForBooking } from "@/lib/services/resolve-patient-id";
 import {
   sendAppointmentUpdate,
   type SendAppointmentUpdateResult,
@@ -121,12 +122,19 @@ export async function createAssistantAppointment(
     input.end_time
   );
 
+  const patientId = await ensurePatientIdForBooking(admin, ctx.clinicId, {
+    name,
+    phone: phoneCheck.normalized,
+    primaryDoctorId: ctx.doctorId,
+  });
+
   const { data, error } = await admin
     .from("appointments")
     .insert({
       clinic_id: ctx.clinicId,
       doctor_id: ctx.doctorId,
       assistant_id: ctx.assistantId,
+      patient_id: patientId,
       patient_name_ar: name,
       patient_phone: phoneCheck.normalized,
       appointment_date: input.appointment_date,

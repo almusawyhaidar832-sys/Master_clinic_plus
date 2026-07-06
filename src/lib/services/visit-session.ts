@@ -12,7 +12,7 @@ const ACTIVE_QUEUE_STATUSES: QueueStatus[] = [
   "ready_for_payment",
 ];
 
-const CLINICAL_SESSION_LABEL = "جلسة كشف — سجل بصري";
+export const CLINICAL_SESSION_LABEL = "جلسة كشف — سجل بصري";
 
 function isMissingColumnError(message: string, column: string): boolean {
   const msg = message.toLowerCase();

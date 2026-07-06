@@ -2,8 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildPlanFromCaseRow,
   computedCaseRemaining,
+  FINANCIAL_EPSILON,
 } from "@/lib/services/patient-financial-plan";
 import { resolveSessionPaidAmount } from "@/lib/services/patient-operations-profile";
+import {
+  normalizePatientNameForMatch,
+  patientPhoneDigits,
+} from "@/lib/services/resolve-patient-id";
+import { CLINICAL_SESSION_LABEL } from "@/lib/services/visit-session";
 import { opDebt, operationLabelForCase, type PatientOperation } from "@/types";
 import { localPeriodUtcBounds, todayISO } from "@/lib/utils";
 
@@ -31,6 +37,131 @@ export type TodayOperationRow = PatientOperation & {
   doctor?: { full_name_ar: string };
   invoices?: { paid_amount: number; total_amount: number; remaining_amount: number }[] | null;
 };
+
+/** صف مدمج — زيارة واحدة (كشف + علاج + دفعة) بدل تكرار الاسم */
+export type ConsolidatedTodayOperationRow = TodayOperationRow & {
+  visitPaidToday: number;
+  clinicalOperationId: string | null;
+  visitOperationIds: string[];
+};
+
+function patientPhoneFromOp(op: TodayOperationRow): string | null {
+  const patient = op.patient;
+  if (!patient || typeof patient !== "object") return null;
+  const raw =
+    (patient.phone as string | null | undefined) ??
+    (patient.phone_number as string | null | undefined);
+  const digits = patientPhoneDigits(raw);
+  return digits.length >= 8 ? digits : null;
+}
+
+/** مفتاح زيارة — طبيب + هاتف أو اسم (لا patient_id — يمنع تكرار نفس المراجع بملفين) */
+function canonicalVisitKey(input: {
+  doctorId: string;
+  patientName: string;
+  patientPhone?: string | null;
+}): string {
+  const phone = patientPhoneDigits(input.patientPhone);
+  if (phone.length >= 8) {
+    return `${input.doctorId}:phone:${phone}`;
+  }
+  return `${input.doctorId}:name:${normalizePatientNameForMatch(input.patientName)}`;
+}
+
+function isClinicalCheckupOperation(op: TodayOperationRow): boolean {
+  const label = String(op.operation_name_ar ?? op.operation_type ?? "");
+  return label === CLINICAL_SESSION_LABEL;
+}
+
+function shouldSkipStandaloneLedgerRow(op: TodayOperationRow): boolean {
+  if (op.session_kind !== "discount") return false;
+  return (
+    ledgerPaidToday(op) <= FINANCIAL_EPSILON &&
+    num(op.total_amount) <= FINANCIAL_EPSILON
+  );
+}
+
+/** أولوية العرض — العلاج/الحالة قبل الكشف البصري أو سجل الدفعة المنفصل */
+function ledgerOperationDisplayPriority(op: TodayOperationRow): number {
+  const paid = ledgerPaidToday(op);
+  const total = num(op.total_amount);
+
+  if (op.session_kind === "plan" && total > FINANCIAL_EPSILON) return 0;
+  if (total > FINANCIAL_EPSILON) return 1;
+  if (op.session_kind === "payment" && paid > FINANCIAL_EPSILON) return 2;
+  if (isClinicalCheckupOperation(op)) return 4;
+  if (op.session_kind === "payment") return 3;
+  if (op.session_kind === "discount") return 5;
+  return 3;
+}
+
+/**
+ * صف واحد لكل مراجع + طبيب في اليوم — يمنع تكرار الاسم
+ * (جلسة كشف + علاج + دفعة = صف واحد بمجموع المدفوع).
+ */
+export function consolidateLedgerOperationsByVisit(
+  operations: TodayOperationRow[]
+): ConsolidatedTodayOperationRow[] {
+  const groups = new Map<string, TodayOperationRow[]>();
+
+  for (const op of operations) {
+    if (shouldSkipStandaloneLedgerRow(op)) continue;
+    const doctorId = op.doctor_id;
+    if (!doctorId) continue;
+
+    const key = canonicalVisitKey({
+      doctorId,
+      patientName: op.patient?.full_name_ar?.trim() || "مراجع",
+      patientPhone: patientPhoneFromOp(op),
+    });
+    const list = groups.get(key) ?? [];
+    list.push(op);
+    groups.set(key, list);
+  }
+
+  const merged: ConsolidatedTodayOperationRow[] = [];
+
+  for (const group of groups.values()) {
+    const visitPaidToday = group.reduce(
+      (sum, op) => sum + ledgerPaidToday(op),
+      0
+    );
+    const visitOperationIds = group.map((op) => op.id);
+    const clinicalOperationId =
+      group.find((op) => isClinicalCheckupOperation(op))?.id ??
+      group.find((op) => op.queue_entry_id)?.id ??
+      null;
+
+    if (group.length === 1) {
+      const op = group[0]!;
+      merged.push({
+        ...op,
+        visitPaidToday,
+        clinicalOperationId: clinicalOperationId ?? op.id,
+        visitOperationIds,
+      });
+      continue;
+    }
+
+    const sorted = [...group].sort(
+      (a, b) =>
+        ledgerOperationDisplayPriority(a) -
+        ledgerOperationDisplayPriority(b)
+    );
+    const primary = sorted[0]!;
+
+    merged.push({
+      ...primary,
+      visitPaidToday,
+      clinicalOperationId,
+      visitOperationIds,
+    });
+  }
+
+  return merged.sort((a, b) =>
+    String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))
+  );
+}
 
 export function sessionKindLabel(kind: PatientOperation["session_kind"]): string {
   switch (kind) {
@@ -74,6 +205,16 @@ export function ledgerCaseName(
 /** المدفوع في الجلسة — نفس منطق ملف المراجع (يشمل الفاتورة المؤرشفة) */
 export function ledgerPaidToday(op: TodayOperationRow | PatientOperation): number {
   return Math.max(0, resolveSessionPaidAmount(op));
+}
+
+/** المدفوع في الزيارة — مجموع كل السجلات (كشف + علاج + دفعة) */
+export function ledgerVisitPaidToday(
+  op: ConsolidatedTodayOperationRow | TodayOperationRow
+): number {
+  if ("visitPaidToday" in op && typeof op.visitPaidToday === "number") {
+    return Math.max(0, op.visitPaidToday);
+  }
+  return ledgerPaidToday(op);
 }
 
 /** المتبقي المعروض في جدول جلسات اليوم — ذمة الحالة إن وُجدت */
@@ -253,10 +394,16 @@ export async function fetchTodayLedgerOperations(
   supabase: SupabaseClient,
   clinicId: string
 ): Promise<{
-  operations: TodayOperationRow[];
+  operations: ConsolidatedTodayOperationRow[];
   caseRemainingById: Map<string, number>;
   caseInfoById: Map<string, TodayCaseInfo>;
   patientPrimaryCaseId: Map<string, string>;
 }> {
-  return fetchLedgerOperationsForDate(supabase, clinicId, { date: todayISO() });
+  const ledger = await fetchLedgerOperationsForDate(supabase, clinicId, {
+    date: todayISO(),
+  });
+  return {
+    ...ledger,
+    operations: consolidateLedgerOperationsByVisit(ledger.operations),
+  };
 }

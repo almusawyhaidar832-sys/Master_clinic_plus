@@ -17,11 +17,11 @@ import {
   fetchTodayLedgerOperations,
   ledgerCaseName,
   ledgerDisplayRemaining,
-  ledgerPaidToday,
+  ledgerVisitPaidToday,
   resolveOperationCaseId,
   sessionKindLabel,
+  type ConsolidatedTodayOperationRow,
   type TodayCaseInfo,
-  type TodayOperationRow,
 } from "@/lib/ledger/today-operations";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { ensureAppointmentPatientClient } from "@/lib/services/ensure-appointment-patient-client";
@@ -32,7 +32,7 @@ import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-case
 import { RefreshCw, NotebookPen } from "lucide-react";
 import { VisualMedicalRecord } from "@/components/clinical/VisualMedicalRecord";
 
-type RowWithJoins = TodayOperationRow;
+type RowWithJoins = ConsolidatedTodayOperationRow;
 
 interface LedgerPatientContext {
   patientId: string;
@@ -352,7 +352,7 @@ function LedgerPageContent() {
       key: "paid_today",
       header: "دفع اليوم",
       render: (row) => {
-        const paid = ledgerPaidToday(row);
+        const paid = ledgerVisitPaidToday(row);
         return (
           <span
             className={
@@ -402,7 +402,7 @@ function LedgerPageContent() {
       header: "السجل البصري",
       render: (row) => (
         <VisualMedicalRecord
-          operationId={row.id}
+          operationId={row.clinicalOperationId ?? row.id}
           portal="accountant"
           collapsible
           defaultOpen={false}

@@ -1,24 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getPatientDisplayPhone } from "@/lib/phone";
-
-async function findPatientIdByPhone(
-  supabase: SupabaseClient,
-  clinicId: string,
-  phone: string
-): Promise<string | null> {
-  const digits = phone.replace(/\D/g, "");
-  if (!digits) return null;
-
-  const { data } = await supabase
-    .from("patients")
-    .select("id")
-    .eq("clinic_id", clinicId)
-    .or(`phone.ilike.%${digits}%,phone_number.ilike.%${digits}%`)
-    .limit(1)
-    .maybeSingle();
-
-  return (data?.id as string | undefined) ?? null;
-}
+import {
+  ensurePatientIdForBooking,
+  findPatientIdByPhone,
+  resolveExistingPatientId,
+} from "@/lib/services/resolve-patient-id";
 
 /** مسار ملف المريض من الموعد — بحث بالهاتف ثم إنشاء/ربط عند الحاجة */
 export async function resolveAppointmentPatientProfileHref(
@@ -83,21 +69,18 @@ export async function ensureAppointmentPatientClient(
     const name = (appt.patient_name_ar as string | null)?.trim();
     if (!name) throw new Error("اسم المراجع مطلوب لفتح إدخال الجلسة");
 
-    const { data: newPatient, error: insertErr } = await supabase
-      .from("patients")
-      .insert({
-        clinic_id: clinicId,
-        full_name_ar: name,
-        phone: appt.patient_phone ?? null,
-      })
-      .select("id")
-      .single();
+    patientId = await resolveExistingPatientId(supabase, clinicId, {
+      name,
+      phone: (appt.patient_phone as string | null) ?? null,
+    });
 
-    if (insertErr || !newPatient) {
-      throw new Error(insertErr?.message ?? "تعذر إنشاء ملف المريض");
+    if (!patientId) {
+      patientId = await ensurePatientIdForBooking(supabase, clinicId, {
+        name,
+        phone: (appt.patient_phone as string | null) ?? null,
+        primaryDoctorId: appt.doctor_id as string,
+      });
     }
-
-    patientId = newPatient.id as string;
 
     await supabase
       .from("appointments")

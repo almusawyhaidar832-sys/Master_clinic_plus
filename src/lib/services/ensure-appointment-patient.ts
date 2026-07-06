@@ -1,6 +1,10 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  ensurePatientIdForBooking,
+  resolveExistingPatientId,
+} from "@/lib/services/resolve-patient-id";
 
 export interface AppointmentPatientContext {
   appointmentId: string;
@@ -38,21 +42,18 @@ export async function ensureAppointmentPatient(
       throw new Error("اسم المراجع مطلوب لفتح إدخال الجلسة");
     }
 
-    const { data: newPatient, error: patientErr } = await admin
-      .from("patients")
-      .insert({
-        clinic_id: clinicId,
-        full_name_ar: name,
-        phone: appointment.patient_phone ?? null,
-      })
-      .select("id")
-      .single();
+    patientId = await resolveExistingPatientId(admin, clinicId, {
+      name,
+      phone: (appointment.patient_phone as string | null) ?? null,
+    });
 
-    if (patientErr || !newPatient) {
-      throw new Error(patientErr?.message ?? "تعذر إنشاء ملف المريض");
+    if (!patientId) {
+      patientId = await ensurePatientIdForBooking(admin, clinicId, {
+        name,
+        phone: (appointment.patient_phone as string | null) ?? null,
+        primaryDoctorId: appointment.doctor_id as string,
+      });
     }
-
-    patientId = newPatient.id as string;
 
     await admin
       .from("appointments")
