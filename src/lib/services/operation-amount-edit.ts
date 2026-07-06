@@ -446,18 +446,53 @@ export function buildOperationAmountAuditNote(
   return parts.length ? `تعديل مبلغ — ${parts.join(" · ")}` : undefined;
 }
 
-/** جلسات قديمة: paid_amount = علاج فقط والكشفية فوقه — نجمعها للمدفوع الكلي */
-function applyLegacyAdditiveReviewPaidBump(op: OperationRow): OperationRow {
+/** تصحيح paid_amount للجلسات القديمة (علاج فقط) أو المضاعفة خطأً */
+async function normalizeCombinedReviewPaidAmount(
+  admin: SupabaseClient,
+  op: OperationRow
+): Promise<OperationRow> {
   const paid = num(op.paid_amount);
   const review = num(op.review_fee_amount);
   if (
-    review > FINANCIAL_EPSILON &&
-    op.is_review_statement &&
-    paid > review + FINANCIAL_EPSILON &&
-    paid / review <= 10.5
+    review <= FINANCIAL_EPSILON ||
+    !op.is_review_statement ||
+    paid <= review + FINANCIAL_EPSILON
   ) {
-    return { ...op, paid_amount: roundMoney(paid + review) };
+    return op;
   }
+
+  const { data: doctorRaw } = await admin
+    .from("doctors")
+    .select(DOCTOR_FINANCE_SELECT)
+    .eq("id", op.doctor_id)
+    .maybeSingle();
+  const doctor = (doctorRaw as Doctor | null) ?? null;
+  if (!doctor || isSalaryDoctor(doctor)) return op;
+
+  const pct = doctorPaymentPct(doctor);
+  const doc = num(op.doctor_share_amount);
+  const ratio = paid / review;
+  const docIfPaidMinusReview = roundMoney((paid - review) * pct);
+  const docIfPaidMinus2Review = roundMoney((paid - review * 2) * pct);
+
+  // مضاعفة كشفية: 25k علاج → 30k صح → 35k خطأ (نور ريسان: 30k وليس 35k)
+  if (
+    ratio > 5 &&
+    ratio < 8 &&
+    Math.abs(doc - docIfPaidMinusReview) <= 0.02 &&
+    Math.abs(doc - docIfPaidMinus2Review) > 0.02
+  ) {
+    return { ...op, paid_amount: roundMoney(paid - review) };
+  }
+
+  // قديم: paid=25,000 علاج فقط — نرفع إلى 30,000 (علاج + كشفية)
+  if (ratio <= 10.5) {
+    const docIfPaidIsTreatment = roundMoney(paid * pct);
+    if (Math.abs(doc - docIfPaidIsTreatment) > 0.02) {
+      return { ...op, paid_amount: roundMoney(paid + review) };
+    }
+  }
+
   return op;
 }
 
@@ -496,7 +531,7 @@ export async function repairDoctorOperationShares(
       continue;
     }
 
-    const bumped = applyLegacyAdditiveReviewPaidBump(op);
+    const bumped = await normalizeCombinedReviewPaidAmount(admin, op);
     const normalized = await normalizeOperationReviewFee(
       admin,
       clinicId,

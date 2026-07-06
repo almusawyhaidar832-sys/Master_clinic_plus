@@ -205,14 +205,6 @@ export function ledgerPaidToday(op: TodayOperationRow | PatientOperation): numbe
   const reviewFee = reviewFeeOnOp(row);
 
   if (fromPaid > FINANCIAL_EPSILON) {
-    if (
-      reviewFee > FINANCIAL_EPSILON &&
-      row.is_review_statement &&
-      fromPaid > reviewFee + FINANCIAL_EPSILON &&
-      fromPaid / reviewFee <= 10.5
-    ) {
-      return fromPaid + reviewFee;
-    }
     return fromPaid;
   }
   if (reviewFee > FINANCIAL_EPSILON) {

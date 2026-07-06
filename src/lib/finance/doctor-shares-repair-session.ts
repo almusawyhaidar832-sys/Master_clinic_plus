@@ -1,5 +1,5 @@
 /** إصدار إصلاح الحصص — ارفعه عند تغيير منطق الحساب ليعيد الإصلاح تلقائياً */
-export const DOCTOR_SHARES_REPAIR_VERSION = "v10";
+export const DOCTOR_SHARES_REPAIR_VERSION = "v11";
 
 function prefix() {
   return `mc:doctor-shares-auto-repair:${DOCTOR_SHARES_REPAIR_VERSION}`;
