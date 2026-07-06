@@ -622,6 +622,54 @@ function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function doctorPaymentPct(doctor: Doctor | null): number {
+  if (!doctor) return 0.5;
+  const raw = Number(doctor.percentage ?? 50);
+  return (Number.isFinite(raw) && raw > 0 ? raw : 50) / 100;
+}
+
+/**
+ * حالات قديمة/افتراضية 50/50 — نسبة الطبيب الفعلية (40%/50%…) أولى عند توزيع الدفعة.
+ */
+function shouldUseDoctorPercentageForPaymentSplit(
+  doctor: Doctor | null,
+  finalPrice: number,
+  caseDoc: number,
+  caseClinic: number
+): boolean {
+  if (!doctor || isSalaryDoctor(doctor) || finalPrice <= FINANCIAL_EPSILON) {
+    return false;
+  }
+
+  const expectedPct = doctorPaymentPct(doctor);
+  const caseDocRatio = caseDoc / finalPrice;
+  const caseClinicRatio = caseClinic / finalPrice;
+  const pctMismatch = Math.abs(caseDocRatio - expectedPct) > 0.011;
+
+  const fiftyFiftyStored =
+    caseDoc > 0 &&
+    caseClinic > 0 &&
+    Math.abs(caseDoc - caseClinic) <= FINANCIAL_EPSILON;
+
+  const defaultHalfSplit =
+    Math.abs(caseDocRatio - 0.5) <= 0.011 &&
+    Math.abs(caseClinicRatio - 0.5) <= 0.011;
+
+  return pctMismatch && (fiftyFiftyStored || defaultHalfSplit);
+}
+
+function splitPaidByDoctorPercentage(
+  paid: number,
+  doctor: Doctor | null
+): { doctorShare: number; clinicShare: number } {
+  const pct = doctorPaymentPct(doctor);
+  const doctorShare = roundMoney(paid * pct);
+  return {
+    doctorShare,
+    clinicShare: roundMoney(Math.max(0, paid - doctorShare)),
+  };
+}
+
 /**
  * توزيع المبلغ المدفوع في هذه الجلسة — نفس منطق قاعدة البيانات:
  * paid × (حصة الحالة / السعر النهائي) ثم خصم المختبر حسب materials_share
@@ -664,17 +712,29 @@ export function previewPaidSessionSplit(opts: {
   let baseClinic = 0;
 
   if (finalPrice > 0 && (caseDoc > 0 || caseClinic > 0) && paid > 0) {
-    if (caseDoc > finalPrice || caseClinic > finalPrice) {
-      baseDoc = roundMoney(paid * Number(opts.doctor?.percentage ?? 50) / 100);
-      baseClinic = roundMoney(Math.max(0, paid - baseDoc));
+    if (
+      shouldUseDoctorPercentageForPaymentSplit(
+        opts.doctor,
+        finalPrice,
+        caseDoc,
+        caseClinic
+      )
+    ) {
+      const live = splitPaidByDoctorPercentage(paid, opts.doctor);
+      baseDoc = live.doctorShare;
+      baseClinic = live.clinicShare;
+    } else if (caseDoc > finalPrice || caseClinic > finalPrice) {
+      const live = splitPaidByDoctorPercentage(paid, opts.doctor);
+      baseDoc = live.doctorShare;
+      baseClinic = live.clinicShare;
     } else {
       baseDoc = roundMoney((paid * caseDoc) / finalPrice);
       baseClinic = roundMoney((paid * caseClinic) / finalPrice);
     }
   } else if (opts.doctor && finalPrice <= 0 && paid > 0) {
-    const pct = Number(opts.doctor.percentage ?? 50) / 100;
-    baseDoc = roundMoney(paid * pct);
-    baseClinic = roundMoney(Math.max(0, paid - baseDoc));
+    const live = splitPaidByDoctorPercentage(paid, opts.doctor);
+    baseDoc = live.doctorShare;
+    baseClinic = live.clinicShare;
   }
 
   if (materials > 0 && opts.doctor && !isSalaryDoctor(opts.doctor)) {

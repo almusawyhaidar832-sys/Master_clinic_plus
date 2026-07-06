@@ -199,8 +199,7 @@ export function resolveOperationPaymentSplit(
   }
 
   if (!doctor) {
-    const half = roundMoney(paid / 2);
-    return { doctorShare: half, clinicShare: half, paid };
+    return { doctorShare: 0, clinicShare: roundMoney(paid), paid };
   }
 
   if (isSalaryDoctor(doctor)) {
