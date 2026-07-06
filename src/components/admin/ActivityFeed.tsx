@@ -207,9 +207,17 @@ export function ActivityFeed({
                     </span>
                   </p>
                   {item.changes.length > 0 && (
-                    <ul className="mt-1.5 space-y-0.5 text-xs text-slate-muted">
+                    <ul className="mt-1.5 space-y-0.5 rounded-lg bg-slate-50 px-2 py-1.5 text-xs text-slate-muted">
                       {item.changes.map((line) => (
-                        <li key={line} className="font-mono tabular-nums">
+                        <li
+                          key={line}
+                          className={cn(
+                            "font-medium tabular-nums",
+                            line.includes("المدفوع") || line.includes("الإجمالي")
+                              ? "text-slate-text"
+                              : ""
+                          )}
+                        >
                           {line}
                         </li>
                       ))}

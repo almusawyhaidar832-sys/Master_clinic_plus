@@ -1,3 +1,5 @@
+import { formatCurrency } from "@/lib/utils";
+
 const FINANCIAL_KEYS = new Set([
   "total_amount",
   "paid_amount",
@@ -18,10 +20,9 @@ const APPOINTMENT_KEYS = new Set([
 
 function formatVal(key: string, val: unknown): string {
   if (val == null || val === "") return "—";
-  if (FINANCIAL_KEYS.has(key) && typeof val === "number") {
-    return new Intl.NumberFormat("en-US", {
-      maximumFractionDigits: 0,
-    }).format(val);
+  if (FINANCIAL_KEYS.has(key)) {
+    const n = Number(val);
+    if (Number.isFinite(n)) return formatCurrency(n);
   }
   return String(val);
 }
@@ -37,6 +38,8 @@ const KEY_LABELS: Record<string, string> = {
   end_time: "إلى",
   status: "الحالة",
   operation_name_ar: "الإجراء",
+  doctor_share_amount: "حصة الطبيب",
+  clinic_share_amount: "حصة العيادة",
 };
 
 /** استخراج سطور diff للعرض في سجل المراقبة */
@@ -64,7 +67,7 @@ export function buildAuditChangeLines(
     if (bv === av) continue;
     if (bv === undefined && av === undefined) continue;
     const label = KEY_LABELS[key] ?? key;
-    lines.push(`${label}: ${formatVal(key, bv)} ← ${formatVal(key, av)}`);
+    lines.push(`${label}: ${formatVal(key, bv)} → ${formatVal(key, av)}`);
   }
 
   return lines;

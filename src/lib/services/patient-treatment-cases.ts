@@ -851,6 +851,8 @@ export async function createTreatmentCaseViaApi(input: {
   doctorShare: number;
   clinicShare: number;
   doctorId: string;
+  /** جلسة بدون سعر كلي — casePrice يجب أن يكون 0 */
+  sessionOnly?: boolean;
 }): Promise<{ case: PatientTreatmentCase | null; error?: string }> {
   try {
     const { authPortalHeaders } = await import("@/lib/auth/api-portal");
@@ -1212,6 +1214,142 @@ export async function syncTreatmentCaseAfterSessionViaApi(input: {
     return {
       ok: false,
       completed: false,
+      error: e instanceof Error ? e.message : "تعذر الاتصال بالسيرفر",
+    };
+  }
+}
+
+/** تسجيل دين صريح على حالة — بدون سعر كلي (final_price = total_paid + الدين) */
+export async function registerTreatmentCaseDebt(
+  supabase: SupabaseClient,
+  input: {
+    caseId: string;
+    debtAmount: number;
+    /** استبدال الدين السابق بدلاً من إضافته */
+    replace?: boolean;
+  }
+): Promise<{ ok: boolean; error?: string; remainingBalance?: number }> {
+  if (!isPersistedTreatmentCaseId(input.caseId)) {
+    return { ok: false, error: "معرّف الحالة غير صالح" };
+  }
+  const debt = Math.max(0, input.debtAmount);
+  if (debt <= FINANCIAL_EPSILON) {
+    return { ok: false, error: "مبلغ الدين مطلوب" };
+  }
+
+  const bal = await computeCaseBalanceById(supabase, input.caseId);
+  if (!bal) {
+    return { ok: false, error: "تعذر قراءة الحالة" };
+  }
+
+  const totalPaid = bal.totalPaid;
+  const newFinal = input.replace
+    ? totalPaid + debt
+    : Math.max(bal.finalPrice, totalPaid + debt);
+
+  const { error } = await supabase
+    .from("patient_treatment_cases")
+    .update({
+      final_price: newFinal,
+      case_price: Math.max(newFinal, 0),
+      status: "active",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.caseId);
+
+  if (error) return { ok: false, error: error.message };
+
+  return {
+    ok: true,
+    remainingBalance: Math.max(0, newFinal - totalPaid),
+  };
+}
+
+/** إغلاق حالة علاج — بغض النظر عن السعر الكلي */
+export async function completeTreatmentCase(
+  supabase: SupabaseClient,
+  caseId: string
+): Promise<{ ok: boolean; error?: string }> {
+  if (!isPersistedTreatmentCaseId(caseId)) {
+    return { ok: false, error: "معرّف الحالة غير صالح" };
+  }
+
+  const { error } = await supabase
+    .from("patient_treatment_cases")
+    .update({
+      status: "completed",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", caseId);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function registerTreatmentCaseDebtViaApi(input: {
+  caseId: string;
+  debtAmount: number;
+  replace?: boolean;
+}): Promise<{ ok: boolean; error?: string; remainingBalance?: number }> {
+  try {
+    const { authPortalHeaders } = await import("@/lib/auth/api-portal");
+    const res = await fetch("/api/treatment-cases/billing-action", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...authPortalHeaders("accountant"),
+      },
+      body: JSON.stringify({
+        action: "debt",
+        caseId: input.caseId,
+        debtAmount: input.debtAmount,
+        replace: input.replace,
+      }),
+    });
+    const data = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      remainingBalance?: number;
+    };
+    if (!res.ok) {
+      return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    }
+    return {
+      ok: Boolean(data.ok),
+      error: data.error,
+      remainingBalance: data.remainingBalance,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "تعذر الاتصال بالسيرفر",
+    };
+  }
+}
+
+export async function completeTreatmentCaseViaApi(
+  caseId: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { authPortalHeaders } = await import("@/lib/auth/api-portal");
+    const res = await fetch("/api/treatment-cases/billing-action", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...authPortalHeaders("accountant"),
+      },
+      body: JSON.stringify({ action: "complete", caseId }),
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) {
+      return { ok: false, error: data.error ?? `HTTP ${res.status}` };
+    }
+    return { ok: Boolean(data.ok), error: data.error };
+  } catch (e) {
+    return {
+      ok: false,
       error: e instanceof Error ? e.message : "تعذر الاتصال بالسيرفر",
     };
   }

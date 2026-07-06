@@ -127,9 +127,25 @@ export async function POST(req: NextRequest) {
     if (!doctorId) {
       return NextResponse.json({ error: "اختر الطبيب للحالة" }, { status: 400 });
     }
-    if (!Number.isFinite(casePrice) || casePrice <= 0) {
+    const sessionOnly = Boolean(body.sessionOnly);
+    if (!Number.isFinite(casePrice)) {
+      return NextResponse.json({ error: "مبلغ غير صالح" }, { status: 400 });
+    }
+    if (casePrice <= 0 && !sessionOnly) {
       return NextResponse.json(
         { error: "السعر الكلي للحالة مطلوب" },
+        { status: 400 }
+      );
+    }
+    if (sessionOnly && casePrice > 0) {
+      return NextResponse.json(
+        { error: "وضع الجلسة لا يقبل سعراً كلياً" },
+        { status: 400 }
+      );
+    }
+    if (sessionOnly && paid <= 0) {
+      return NextResponse.json(
+        { error: "أدخل المبلغ المدفوع في الجلسة الأولى" },
         { status: 400 }
       );
     }

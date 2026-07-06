@@ -36,6 +36,7 @@ import type { MedicalLog, Patient, PatientOperation } from "@/types";
 import { cn } from "@/lib/utils";
 import { getPatientDisplayPhone } from "@/lib/phone";
 import { TransferDoctorPanel } from "@/components/patients/TransferDoctorPanel";
+import { PatientBasicInfoEditor } from "@/components/patients/PatientBasicInfoEditor";
 import { PatientSpeechNameEditor } from "@/components/patients/PatientSpeechNameEditor";
 import type { PatientPrimaryDoctor } from "@/lib/services/patient-primary-doctor";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
@@ -311,6 +312,12 @@ export default function PatientProfilePage() {
                 {patient.notes && (
                   <p className="mt-1 text-xs text-slate-muted">{patient.notes}</p>
                 )}
+                <PatientBasicInfoEditor
+                  patient={patient}
+                  onSaved={(updates) =>
+                    setPatient((prev) => (prev ? { ...prev, ...updates } : prev))
+                  }
+                />
                 <div className="mt-3 max-w-md">
                   <PatientSpeechNameEditor
                     patientId={patient.id}

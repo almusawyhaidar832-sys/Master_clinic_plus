@@ -115,7 +115,7 @@ export default function DoctorPatientDetailPage() {
   }, [reloadOperations, loadTreatmentCases]);
 
   useClinicSync({
-    topics: ["sessions", "refunds"],
+    topics: ["sessions", "refunds", "financial"],
     doctorId: doctor?.id,
     patientId: id,
     onRefresh: refreshPatientData,

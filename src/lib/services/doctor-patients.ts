@@ -6,12 +6,13 @@ import {
   type PatientTreatmentCase,
 } from "@/lib/services/patient-treatment-cases";
 import {
+  enrichPatientSearchWithDoctors,
   PATIENT_SEARCH_MIN_LENGTH,
   type PatientSearchResult,
 } from "@/lib/services/patient-search";
 
 const PATIENT_SEARCH_COLUMNS =
-  "id, clinic_id, full_name_ar, phone, phone_number, notes, created_at, updated_at";
+  "id, clinic_id, full_name_ar, phone, phone_number, notes, primary_doctor_id, created_at, updated_at";
 
 /** معرّفات المراجعين المرتبطين بطبيب (أساسي / جلسات / خطط علاج) */
 export async function getDoctorPatientIds(
@@ -105,6 +106,8 @@ export async function searchPatientsForDoctor(
       patients = (byPhone as PatientSearchResult[]) ?? [];
     }
   }
+
+  patients = await enrichPatientSearchWithDoctors(supabase, patients);
 
   return { patients };
 }

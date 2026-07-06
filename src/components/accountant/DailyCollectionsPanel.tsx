@@ -285,7 +285,7 @@ export function DailyCollectionsPanel() {
   }, [loadCollections, clinicLoading]);
 
   useClinicSync({
-    topics: ["sessions"],
+    topics: ["sessions", "financial"],
     clinicId,
     onRefresh: loadCollections,
     enabled: !clinicLoading && !!clinicId,

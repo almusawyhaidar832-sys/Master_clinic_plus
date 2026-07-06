@@ -49,6 +49,8 @@ import {
   resolveCaseIdForOp,
   resolvePersistedCaseId,
   syncTreatmentCaseAfterSessionViaApi,
+  registerTreatmentCaseDebtViaApi,
+  completeTreatmentCaseViaApi,
   type PatientTreatmentCase,
 } from "@/lib/services/patient-treatment-cases";
 import {
@@ -90,6 +92,14 @@ import {
   type SessionInvoiceData,
 } from "@/lib/invoices/session-invoice";
 import { computeLabCostSplit } from "@/lib/invoices/lab-session-details";
+import {
+  amountFieldLabel,
+  previewSessionBillingTotals,
+  resolveSessionPaymentShares,
+  SESSION_BILLING_MODE_OPTIONS,
+  validateBillingAmount,
+  type SessionBillingMode,
+} from "@/lib/services/session-billing-mode";
 import { Scan, X } from "lucide-react";
 
 /** Common dental procedure suggestions — user can also type freely */
@@ -131,40 +141,25 @@ const EMPTY_FINANCIAL_PLAN: PatientFinancialPlan = {
 function buildPostSaveFinancialSnap(
   plan: PatientFinancialPlan,
   opts: {
-    entryMode: "plan" | "payment";
-    casePrice: number;
-    discount: number;
+    billingMode: SessionBillingMode;
     paid: number;
+    debtAmount: number;
     additionalDiscount: number;
+    completed?: boolean;
   }
 ): PatientFinancialPlan {
-  if (opts.entryMode === "plan" && opts.casePrice > 0) {
-    const finalPrice = computeFinalPrice(opts.casePrice, opts.discount);
-    const totalPaid = opts.paid;
-    return {
-      ...EMPTY_FINANCIAL_PLAN,
-      case_price: opts.casePrice,
-      discount_total: opts.discount,
-      final_price: finalPrice,
-      agreed_total: finalPrice,
-      original_agreed_total: opts.casePrice,
-      total_paid: totalPaid,
-      remaining_balance: Math.max(0, finalPrice - totalPaid),
-      financial_locked: true,
-      treatment_status:
-        finalPrice > FINANCIAL_EPSILON &&
-        totalPaid >= finalPrice - FINANCIAL_EPSILON
-          ? "completed"
-          : "active",
-    };
+  const paidDelta =
+    opts.billingMode === "session" || opts.billingMode === "complete"
+      ? opts.paid
+      : 0;
+  const totalPaid = plan.total_paid + paidDelta;
+  let finalPrice = plan.final_price;
+
+  if (opts.billingMode === "debt" && opts.debtAmount > 0) {
+    finalPrice = Math.max(finalPrice, totalPaid + opts.debtAmount);
   }
 
-  const finalPrice = computeFinalPriceWithDiscounts(plan, opts.additionalDiscount);
-  const totalPaid = plan.total_paid + opts.paid;
-  const remaining = computePatientDebtRemaining(plan, {
-    additionalDiscount: opts.additionalDiscount,
-    newPayment: opts.paid,
-  });
+  const remaining = Math.max(0, finalPrice - totalPaid);
 
   return {
     ...plan,
@@ -172,10 +167,12 @@ function buildPostSaveFinancialSnap(
     final_price: finalPrice,
     agreed_total: finalPrice,
     total_paid: totalPaid,
-    remaining_balance: remaining,
+    remaining_balance:
+      opts.billingMode === "complete" ? 0 : remaining,
     treatment_status:
-      finalPrice > FINANCIAL_EPSILON &&
-      totalPaid >= finalPrice - FINANCIAL_EPSILON
+      opts.billingMode === "complete" ||
+      (finalPrice > FINANCIAL_EPSILON &&
+        totalPaid >= finalPrice - FINANCIAL_EPSILON)
         ? "completed"
         : "active",
   };
@@ -307,6 +304,7 @@ export function QuickEntryForm({
     return initialCase ? initialCase.treatment_name_ar : "";
   });
   const [totalAmount, setTotalAmount] = useState("");
+  const [billingMode, setBillingMode] = useState<SessionBillingMode>("session");
   const [paidAmount, setPaidAmount] = useState("");
   const [discountAmount, setDiscountAmount] = useState("");
   const [additionalDiscountAmount, setAdditionalDiscountAmount] = useState("");
@@ -376,6 +374,7 @@ export function QuickEntryForm({
     if (!lockDoctorId && draft.doctorId) setDoctorId(draft.doctorId);
     setOperationName(draft.operationName);
     setTotalAmount(draft.totalAmount);
+    setBillingMode(draft.billingMode ?? "session");
     setPaidAmount(draft.paidAmount);
     setDiscountAmount(draft.discountAmount);
     setAdditionalDiscountAmount(draft.additionalDiscountAmount);
@@ -399,6 +398,7 @@ export function QuickEntryForm({
       doctorId,
       operationName,
       totalAmount,
+      billingMode,
       paidAmount,
       discountAmount,
       additionalDiscountAmount,
@@ -419,6 +419,7 @@ export function QuickEntryForm({
       doctorId,
       operationName,
       totalAmount,
+      billingMode,
       paidAmount,
       discountAmount,
       additionalDiscountAmount,
@@ -520,6 +521,7 @@ export function QuickEntryForm({
       setFinancialPlan(EMPTY_FINANCIAL_PLAN);
       setOperationName(prefillTreatmentName?.trim() ?? "");
       setTotalAmount("");
+      setBillingMode("session");
       setPaidAmount("");
       setDiscountAmount("");
       setAdditionalDiscountAmount("");
@@ -556,9 +558,19 @@ export function QuickEntryForm({
     reviewFee: reviewFeeLive,
   });
   const finalPriceLive = financialPreview.finalPrice;
-  const remaining = financialPreview.remainingBalance;
-
   const selectedDoctor = doctors.find((d) => d.id === doctorId) ?? null;
+  const billingPreview = previewSessionBillingTotals(plan, {
+    mode: billingMode,
+    amount: paid,
+    additionalDiscount: additionalDiscountNum,
+  });
+  const remaining = billingPreview.registeredDebt;
+  const sessionPaymentShares = resolveSessionPaymentShares({
+    paidAmount: paid,
+    materialsCost: materials,
+    doctor: selectedDoctor,
+    plan,
+  });
 
   const treatmentOnly = Math.max(0, finalPriceLive - reviewFeeLive);
 
@@ -1036,8 +1048,8 @@ export function QuickEntryForm({
       : await fetchPatientFinancialPlan(supabase, patientId);
     const discount = parseAmount(discountAmount);
     const additionalDiscount = parseAmount(additionalDiscountAmount);
-    const entryMode =
-      forceNewPlan || !selectedCaseId ? "plan" : "payment";
+    const isNewCase = forceNewPlan || !selectedCaseId;
+    const entryAmount = paid;
 
     const phoneReady = await ensurePatientPhoneOnRecord(
       supabase,
@@ -1051,6 +1063,7 @@ export function QuickEntryForm({
     }
 
     if (
+      billingMode !== "complete" &&
       (pickedCase
         ? isTreatmentCaseComplete(caseToFinancialPlan(pickedCase))
         : isTreatmentCaseClosed(activePlan)) &&
@@ -1058,69 +1071,55 @@ export function QuickEntryForm({
     ) {
       setMessage({
         type: "error",
-        text: "تم إكمال العلاج — الحالة مغلقة. فعّل «حالة علاج جديدة» لبدء سعر كلي جديد.",
+        text: "تم إكمال العلاج — الحالة مغلقة. ابدأ «حالة علاج جديدة» للمتابعة.",
       });
       setLoading(false);
       return;
     }
 
-    let casePrice = 0;
-    if (entryMode === "plan") {
-      casePrice = parseAmount(totalAmount);
-      if (casePrice <= 0) {
+    if (isNewCase && !operationName.trim() && billingMode !== "complete") {
+      setMessage({
+        type: "error",
+        text: "أدخل نوع العلاج للحالة الجديدة",
+      });
+      setLoading(false);
+      return;
+    }
+
+    const amountError = validateBillingAmount(billingMode, entryAmount);
+    if (amountError && !(billingMode === "complete" && entryAmount <= 0)) {
+      setMessage({ type: "error", text: amountError });
+      setLoading(false);
+      return;
+    }
+
+    if (
+      !isNewCase &&
+      billingMode === "session" &&
+      !hasTreatmentPlan(activePlan) &&
+      entryAmount <= 0 &&
+      additionalDiscount <= 0
+    ) {
+      setMessage({
+        type: "error",
+        text: "لا توجد حالة — ابدأ بجلسة جديدة أو اختر حالة من القائمة",
+      });
+      setLoading(false);
+      return;
+    }
+
+    if (additionalDiscount > 0 && activePlan.final_price > FINANCIAL_EPSILON) {
+      const maxDisc = Math.max(
+        activePlan.remaining_balance,
+        activePlan.final_price - activePlan.total_paid
+      );
+      if (additionalDiscount > maxDisc) {
         setMessage({
           type: "error",
-          text: "أول جلسة: أدخل السعر الكلي للحالة (مثلاً 150,000)",
+          text: `الخصم الإضافي أكبر من الذمة (${formatCurrency(maxDisc)})`,
         });
         setLoading(false);
         return;
-      }
-      if (discount < 0 || discount >= casePrice) {
-        setMessage({
-          type: "error",
-          text: "الخصم يجب أن يكون أقل من السعر الكلي",
-        });
-        setLoading(false);
-        return;
-      }
-    } else {
-      if (!hasTreatmentPlan(activePlan)) {
-        setMessage({
-          type: "error",
-          text: "لا توجد خطة علاج — سجّل أول جلسة بالسعر الكلي أولاً",
-        });
-        setLoading(false);
-        return;
-      }
-      if (discount > 0) {
-        setMessage({
-          type: "error",
-          text: "الخصم الأولي يُسجّل في أول جلسة فقط",
-        });
-        setLoading(false);
-        return;
-      }
-      if (paid <= 0 && additionalDiscount <= 0) {
-        setMessage({
-          type: "error",
-          text: "أدخل المبلغ المدفوع أو خصماً إضافياً",
-        });
-        setLoading(false);
-        return;
-      }
-      if (additionalDiscount > 0) {
-        const maxDisc = Math.max(
-          activePlan.remaining_balance,
-          activePlan.final_price - activePlan.total_paid
-        );
-        if (additionalDiscount > maxDisc) {
-          setMessage({
-            type: "error",
-            text: `الخصم الإضافي أكبر من الذمة (${formatCurrency(maxDisc)})`,
-          });
-          setLoading(false);
-          return;
-        }
       }
     }
 
@@ -1152,7 +1151,7 @@ export function QuickEntryForm({
       optionalCols.is_review_statement = true;
       if (reviewFeeLive > 0) optionalCols.review_fee_amount = reviewFeeLive;
     }
-    if (entryMode !== "plan") {
+    if (!isNewCase) {
       const persistedCaseId = resolvePersistedCaseId(
         treatmentCases,
         selectedCaseId
@@ -1257,8 +1256,50 @@ export function QuickEntryForm({
 
     let op: PatientOperation | null = null;
     let error: { message: string } | null = null;
+    let savedCaseIdForWa: string | null = null;
 
-    if (!error && entryMode === "payment" && additionalDiscount > 0) {
+    const ensureCaseForEntry = async (): Promise<string | null> => {
+      if (savedCaseIdForWa) return savedCaseIdForWa;
+      const existing = resolvePersistedCaseId(treatmentCases, selectedCaseId);
+      if (existing && isPersistedTreatmentCaseId(existing)) {
+        savedCaseIdForWa = existing;
+        optionalCols.treatment_case_id = existing;
+        return existing;
+      }
+      if (!isNewCase) return null;
+
+      const initialPaid =
+        billingMode === "session" || billingMode === "complete"
+          ? entryAmount
+          : 0;
+      const created = await createTreatmentCaseViaApi({
+        patientId: patientId!,
+        treatmentName: operationLabel,
+        casePrice: 0,
+        discount: 0,
+        paid: initialPaid,
+        doctorShare: sessionPaymentShares.doctorShare,
+        clinicShare: sessionPaymentShares.clinicShare,
+        doctorId,
+        sessionOnly: true,
+      });
+      if (!created.case?.id) {
+        error = {
+          message: created.error ?? "تعذر إنشاء حالة العلاج الجديدة",
+        };
+        return null;
+      }
+      savedCaseIdForWa = created.case.id;
+      optionalCols.treatment_case_id = created.case.id;
+      setSelectedCaseId(created.case.id);
+      return created.case.id;
+    };
+
+    if (
+      !error &&
+      additionalDiscount > 0 &&
+      activePlan.final_price > FINANCIAL_EPSILON
+    ) {
       const discRes = await insertSession(
         "discount",
         {
@@ -1282,86 +1323,90 @@ export function QuickEntryForm({
       activePlan = await fetchPatientFinancialPlan(supabase, patientId!);
     }
 
-    let savedCaseIdForWa: string | null = null;
-
-    if (!error && entryMode === "plan") {
-      const treatmentFinal = computeFinalPrice(casePrice, discount);
-      const split = previewTreatmentSplitWithReview(
-        treatmentFinal,
-        reviewFeeLive,
-        materials,
-        selectedDoctor
-      );
-
-      let newCaseId: string | undefined;
-      const created = await createTreatmentCaseViaApi({
-        patientId: patientId!,
-        treatmentName: operationLabel,
-        casePrice,
-        discount,
-        paid,
-        doctorShare: split?.doctorShare ?? 0,
-        clinicShare: split?.clinicShare ?? 0,
-        doctorId,
-      });
-      if (created.case) {
-        newCaseId = created.case.id;
-        savedCaseIdForWa = created.case.id;
-        setSelectedCaseId(created.case.id);
-        optionalCols.treatment_case_id = created.case.id;
-      } else {
-        setMessage({
-          type: "error",
-          text: `تعذر إنشاء حالة العلاج الجديدة: ${created.error ?? "خطأ غير معروف"}`,
-        });
+    if (!error && billingMode === "session" && entryAmount > 0) {
+      await ensureCaseForEntry();
+      if (error) {
+        setMessage({ type: "error", text: error.message });
         setLoading(false);
         return;
       }
-
-      const planCols: Record<string, unknown> = {
-        total_amount: casePrice,
-        discount_amount: discount,
-        paid_amount: paid,
-        materials_cost: materials,
-      };
-      if (newCaseId) optionalCols.treatment_case_id = newCaseId;
-
-      const res = await insertSession("plan", planCols);
-      op = res.op;
-      error = res.error;
-
-      if (error) {
-        const fb = await saveFirstSessionPlanFallback(
-          supabase,
-          patientId!,
-          activeClinic.clinicId,
-          casePrice,
-          discount,
-          paid,
-          split?.doctorShare ?? 0,
-          split?.clinicShare ?? 0
-        );
-        if (fb.ok) {
-          error = null;
-          if (paid > 0) {
-            const payRes = await insertSession("payment", {
-              total_amount: 0,
-              paid_amount: paid,
-            });
-            op = payRes.op;
-            error = payRes.error;
-          }
-        }
-      }
-    } else if (!error && entryMode === "payment" && paid > 0) {
       const paymentCols: Record<string, unknown> = {
         total_amount: 0,
-        paid_amount: paid,
+        paid_amount: entryAmount,
+        doctor_share_amount: sessionPaymentShares.doctorShare,
+        clinic_share_amount: sessionPaymentShares.clinicShare,
       };
       if (materials > 0) paymentCols.materials_cost = materials;
       const res = await insertSession("payment", paymentCols);
       op = res.op;
       error = res.error;
+    }
+
+    if (!error && billingMode === "debt" && entryAmount > 0) {
+      const caseId = await ensureCaseForEntry();
+      if (error) {
+        setMessage({ type: "error", text: error.message });
+        setLoading(false);
+        return;
+      }
+      if (!caseId) {
+        error = { message: "اختر حالة أو ابدأ حالة جديدة قبل تسجيل الدين" };
+      } else {
+        const debtRes = await registerTreatmentCaseDebtViaApi({
+          caseId,
+          debtAmount: entryAmount,
+        });
+        if (!debtRes.ok) {
+          error = { message: debtRes.error ?? "تعذر تسجيل الدين" };
+        } else {
+          const res = await insertSession(
+            "payment",
+            {
+              total_amount: 0,
+              paid_amount: 0,
+              remaining_debt: entryAmount,
+            },
+            `${operationLabel} — تسجيل دين`
+          );
+          op = res.op;
+          error = res.error;
+        }
+      }
+    }
+
+    if (!error && billingMode === "complete") {
+      const caseId = await ensureCaseForEntry();
+      if (error) {
+        setMessage({ type: "error", text: error.message });
+        setLoading(false);
+        return;
+      }
+      if (entryAmount > 0) {
+        const paymentCols: Record<string, unknown> = {
+          total_amount: 0,
+          paid_amount: entryAmount,
+          doctor_share_amount: sessionPaymentShares.doctorShare,
+          clinic_share_amount: sessionPaymentShares.clinicShare,
+        };
+        if (materials > 0) paymentCols.materials_cost = materials;
+        const res = await insertSession("payment", paymentCols);
+        op = res.op;
+        error = res.error;
+      } else if (!op?.id) {
+        const res = await insertSession(
+          "payment",
+          { total_amount: 0, paid_amount: 0 },
+          `${operationLabel} — إغلاق الحالة`
+        );
+        op = res.op;
+        error = res.error;
+      }
+      if (!error && caseId) {
+        const done = await completeTreatmentCaseViaApi(caseId);
+        if (!done.ok) {
+          error = { message: done.error ?? "تعذر إغلاق الحالة" };
+        }
+      }
     }
 
     if (!error && !op?.id) {
@@ -1371,10 +1416,10 @@ export function QuickEntryForm({
       };
     }
 
-    const persistedCaseIdForLink =
-      entryMode !== "plan"
-        ? resolvePersistedCaseId(treatmentCases, selectedCaseId)
-        : null;
+    const persistedCaseIdForLink = resolvePersistedCaseId(
+      treatmentCases,
+      selectedCaseId
+    );
     let linkedCaseId = savedCaseIdForWa ?? persistedCaseIdForLink;
     if (!error && op?.id) {
       if (!linkedCaseId) {
@@ -1396,15 +1441,14 @@ export function QuickEntryForm({
 
     if (
       !error &&
-      entryMode === "payment" &&
-      hasTreatmentPlan(activePlan) &&
-      (paid > 0 || additionalDiscount > 0)
+      (billingMode === "session" || billingMode === "complete") &&
+      (entryAmount > 0 || additionalDiscount > 0)
     ) {
       const sync = await syncTreatmentCaseAfterSessionViaApi({
         patientId: patientId!,
         treatmentName: pickedCase?.treatment_name_ar ?? operationLabel,
         plan: activePlan,
-        paidDelta: paid,
+        paidDelta: entryAmount,
         additionalDiscount,
         caseId: syncCaseId,
       });
@@ -1442,52 +1486,23 @@ export function QuickEntryForm({
     const savedOp = op!;
 
     let snap = buildPostSaveFinancialSnap(activePlan, {
-      entryMode,
-      casePrice,
-      discount,
-      paid,
+      billingMode,
+      paid: entryAmount,
+      debtAmount: billingMode === "debt" ? entryAmount : 0,
       additionalDiscount,
+      completed: billingMode === "complete",
     });
 
-    if (entryMode === "plan" && casePrice > 0) {
-      const split = previewTreatmentSplitWithReview(
-        computeFinalPrice(casePrice, discount),
-        reviewFeeLive,
-        materials,
-        selectedDoctor
-      );
-      if (split) {
-        snap = {
-          ...snap,
-          doctor_share_total: split.doctorShare,
-          clinic_share_total: split.clinicShare,
-        };
-      }
-    } else {
-      const resolvedShares = resolveCaseFinancialSplit(snap, selectedDoctor, {
-        materialsCost: materials,
-        reviewFee: reviewFeeLive,
-      });
-      if (resolvedShares) {
-        snap = {
-          ...snap,
-          doctor_share_total: resolvedShares.doctorShare,
-          clinic_share_total: resolvedShares.clinicShare,
-        };
-      }
-    }
+    snap = {
+      ...snap,
+      doctor_share_total:
+        activePlan.doctor_share_total + sessionPaymentShares.doctorShare,
+      clinic_share_total:
+        activePlan.clinic_share_total + sessionPaymentShares.clinicShare,
+    };
 
-    const planFinalForWa =
-      entryMode === "plan" && casePrice > 0
-        ? computeFinalPrice(casePrice, discount)
-        : 0;
-    const justCompleted =
-      planFinalForWa > 0
-        ? paid >= planFinalForWa - FINANCIAL_EPSILON
-        : hasTreatmentPlan(snap) &&
-          snap.final_price > FINANCIAL_EPSILON &&
-          snap.total_paid > FINANCIAL_EPSILON &&
-          snap.remaining_balance <= FINANCIAL_EPSILON;
+    const planFinalForWa = snap.final_price;
+    const justCompleted = billingMode === "complete" || snap.treatment_status === "completed";
 
     const waProcedureLabel =
       pickedCase?.treatment_name_ar?.trim() || operationLabel;
@@ -1510,13 +1525,13 @@ export function QuickEntryForm({
             : null);
 
     const messageSnapshot =
-      finalP > 0 || remainingBal > 0 || paid > 0
+      snap.total_paid > 0 || remainingBal > 0 || entryAmount > 0
         ? {
             remainingBalance: remainingBal,
-            sessionNumber: entryMode === "plan" ? 1 : 0,
-            totalSessionsInCase: entryMode === "plan" ? 1 : 0,
+            sessionNumber: isNewCase ? 1 : 0,
+            totalSessionsInCase: isNewCase ? 1 : 0,
             procedureLabel: waProcedureLabel,
-            paidThisSession: paid,
+            paidThisSession: entryAmount,
             caseFinalPrice: finalP,
             caseTotalPaid: totalPaidCase,
           }

@@ -37,6 +37,38 @@ interface PatientSessionsByCaseProps {
 }
 
 function CaseFinancialSummary({ group }: { group: PatientCaseGroup }) {
+  const sessionOnly = group.total <= FINANCIAL_EPSILON && group.totalPaid > 0;
+  const hasDebt = group.remaining > FINANCIAL_EPSILON;
+
+  if (sessionOnly && !hasDebt) {
+    return (
+      <p className="text-xs tabular-nums text-slate-muted leading-relaxed">
+        مجموع المدفوع:{" "}
+        <span className="font-semibold text-primary">
+          {formatCurrency(group.totalPaid)}
+        </span>
+        {" · "}
+        {group.sessions.length} جلسة
+      </p>
+    );
+  }
+
+  if (sessionOnly && hasDebt) {
+    return (
+      <p className="text-xs tabular-nums text-slate-muted leading-relaxed">
+        مجموع المدفوع:{" "}
+        <span className="font-semibold text-primary">
+          {formatCurrency(group.totalPaid)}
+        </span>
+        {" | "}
+        دين مسجّل:{" "}
+        <span className="font-bold text-debt-text">
+          {formatCurrency(group.remaining)}
+        </span>
+      </p>
+    );
+  }
+
   return (
     <p className="text-xs tabular-nums text-slate-muted leading-relaxed">
       الإجمالي:{" "}

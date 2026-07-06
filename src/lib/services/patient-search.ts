@@ -5,13 +5,16 @@ import { getActiveClinicId } from "@/lib/clinic-context";
 import type { Patient } from "@/types";
 
 const PATIENT_SEARCH_COLUMNS =
-  "id, clinic_id, full_name_ar, phone, phone_number, notes, created_at, updated_at";
+  "id, clinic_id, full_name_ar, phone, phone_number, notes, primary_doctor_id, created_at, updated_at";
 
 export type PatientSearchResult = Pick<
   Patient,
   "id" | "clinic_id" | "full_name_ar" | "phone" | "notes"
 > & {
   phone_number?: string | null;
+  primary_doctor_id?: string | null;
+  /** الطبيب المعالج أو آخر طبيب عمل مع المراجع */
+  primary_doctor_name?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -21,6 +24,66 @@ export const PATIENT_SEARCH_DEBOUNCE_MS = 300;
 
 /** clinic = كل مراجعي العيادة؛ doctor = مراجعو الطبيب فقط */
 export type PatientSearchScope = "clinic" | "doctor";
+
+export async function enrichPatientSearchWithDoctors(
+  supabase: SupabaseClient,
+  patients: PatientSearchResult[]
+): Promise<PatientSearchResult[]> {
+  if (patients.length === 0) return patients;
+
+  const doctorIds = new Set<string>();
+  const needsFallback: string[] = [];
+
+  for (const p of patients) {
+    if (p.primary_doctor_id) {
+      doctorIds.add(p.primary_doctor_id);
+    } else {
+      needsFallback.push(p.id);
+    }
+  }
+
+  const fallbackDoctorByPatient = new Map<string, string>();
+
+  if (needsFallback.length > 0) {
+    const { data: ops } = await supabase
+      .from("patient_operations")
+      .select("patient_id, doctor_id, created_at")
+      .in("patient_id", needsFallback)
+      .order("created_at", { ascending: false });
+
+    for (const op of ops ?? []) {
+      const pid = String(op.patient_id);
+      const did = String(op.doctor_id ?? "");
+      if (!did || fallbackDoctorByPatient.has(pid)) continue;
+      fallbackDoctorByPatient.set(pid, did);
+      doctorIds.add(did);
+    }
+  }
+
+  if (doctorIds.size === 0) return patients;
+
+  const { data: doctors } = await supabase
+    .from("doctors")
+    .select("id, full_name_ar")
+    .in("id", [...doctorIds]);
+
+  const doctorNameById = new Map<string, string>();
+  for (const d of doctors ?? []) {
+    doctorNameById.set(String(d.id), String(d.full_name_ar ?? "").trim());
+  }
+
+  return patients.map((p) => {
+    const doctorId =
+      p.primary_doctor_id ?? fallbackDoctorByPatient.get(p.id) ?? null;
+    return {
+      ...p,
+      primary_doctor_id: doctorId,
+      primary_doctor_name: doctorId
+        ? doctorNameById.get(doctorId) ?? null
+        : null,
+    };
+  });
+}
 
 /** Core DB search — clinic_id must be known */
 export async function searchPatientsInClinic(
@@ -66,6 +129,8 @@ export async function searchPatientsInClinic(
       patients = (byPhone as PatientSearchResult[]) ?? [];
     }
   }
+
+  patients = await enrichPatientSearchWithDoctors(supabase, patients);
 
   return { patients };
 }

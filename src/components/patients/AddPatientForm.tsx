@@ -2,13 +2,16 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveClinicId } from "@/lib/clinic-context";
 import {
+  getPatientDisplayPhone,
   patientPhoneColumns,
+  sanitizePatientPhoneInput,
   validatePatientPhone,
 } from "@/lib/phone";
 import { suggestSpeechName } from "@/lib/queue/arabic-name-pronunciation";
@@ -21,6 +24,8 @@ import { useSessionFormDraft } from "@/hooks/useSessionFormDraft";
 import { tryEnqueueAddPatientOffline } from "@/lib/offline/add-patient/enqueue";
 import { getCachedOfflineReference } from "@/lib/offline/reference-cache";
 import { isNetworkFailure } from "@/lib/offline/network";
+import { PatientSearchField } from "@/components/patients/PatientSearchField";
+import type { PatientSearchResult } from "@/lib/services/patient-search";
 import { UserPlus } from "lucide-react";
 
 export function AddPatientForm() {
@@ -28,6 +33,7 @@ export function AddPatientForm() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -54,6 +60,11 @@ export function AddPatientForm() {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+
+    if (selectedPatientId) {
+      router.push(`/dashboard/patients/${selectedPatientId}`);
+      return;
+    }
 
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -210,14 +221,37 @@ export function AddPatientForm() {
           <label className="mb-1 block text-sm font-medium text-slate-text">
             اسم المراجع
           </label>
-          <input
-            type="text"
-            className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+          <PatientSearchField
+            portal="accountant"
             value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="الاسم الكامل"
-            required
+            selectedPatientId={selectedPatientId}
+            searchScope="clinic"
+            placeholder="اكتب حرفين — تظهر الأسماء مع الطبيب السابق"
+            onChange={(value) => {
+              setName(value);
+              setSelectedPatientId(null);
+            }}
+            onSelect={(patient: PatientSearchResult) => {
+              setSelectedPatientId(patient.id);
+              setName(patient.full_name_ar);
+              setPhone(getPatientDisplayPhone(patient) ?? "");
+            }}
           />
+          <p className="mt-1 text-xs text-slate-muted">
+            اكتب حرفين على الأقل — إن كان المراجع موجوداً اختره من القائمة
+          </p>
+          {selectedPatientId && (
+            <Alert variant="info" className="mt-2">
+              هذا المراجع مسجّل مسبقاً —{" "}
+              <Link
+                href={`/dashboard/patients/${selectedPatientId}`}
+                className="font-semibold underline"
+              >
+                افتح ملفه
+              </Link>{" "}
+              أو عدّل اسمه/هاتفه من هناك.
+            </Alert>
+          )}
         </div>
         <div className="sm:col-span-2">
           <label className="mb-1 block text-sm font-medium text-slate-text">
@@ -228,9 +262,10 @@ export function AddPatientForm() {
             dir="ltr"
             className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => setPhone(sanitizePatientPhoneInput(e.target.value))}
             placeholder="07XX XXX XXXX أو +964..."
-            required
+            required={!selectedPatientId}
+            disabled={!!selectedPatientId}
           />
           <p className="mt-1 text-xs text-slate-muted">
             يُحفظ تلقائياً بصيغة +964 — يُستخدم لإشعارات الواتساب
@@ -249,7 +284,11 @@ export function AddPatientForm() {
         </div>
         <div className="sm:col-span-2">
           <Button type="submit" disabled={loading}>
-            {loading ? "جاري الحفظ..." : "حفظ المراجع"}
+            {loading
+              ? "جاري الحفظ..."
+              : selectedPatientId
+                ? "فتح ملف المراجع"
+                : "حفظ المراجع"}
           </Button>
         </div>
       </form>

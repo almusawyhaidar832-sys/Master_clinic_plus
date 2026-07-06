@@ -3,6 +3,11 @@ import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { runSessionSavedAutomation } from "@/lib/automation/run";
+import {
+  buildOperationAmountAuditNote,
+  syncFinancialsAfterOperationEdit,
+  type OperationAmountRow,
+} from "@/lib/services/operation-amount-edit";
 
 const EDITABLE_FIELDS = [
   "paid_amount",
@@ -89,12 +94,36 @@ export async function PATCH(
     const paidDelta = Math.round((afterPaid - beforePaid) * 100) / 100;
     const totalDelta = Math.round((afterTotal - beforeTotal) * 100) / 100;
 
+    if (paidDelta !== 0 || totalDelta !== 0) {
+      const sync = await syncFinancialsAfterOperationEdit(
+        admin,
+        before as OperationAmountRow,
+        after as OperationAmountRow
+      );
+      if (!sync.ok) {
+        return NextResponse.json(
+          { error: sync.error ?? "تعذر مزامنة المبالغ بعد التعديل" },
+          { status: 500 }
+        );
+      }
+
+      const { data: refreshed } = await admin
+        .from("patient_operations")
+        .select("*")
+        .eq("id", id)
+        .single();
+      if (refreshed) {
+        Object.assign(after as Record<string, unknown>, refreshed);
+      }
+    }
+
     const auditNote =
       typeof body.audit_note === "string"
         ? body.audit_note
-        : totalDelta !== 0
-          ? `تعديل فاتورة: الإجمالي ${beforeTotal} ← ${afterTotal}`
-          : undefined;
+        : buildOperationAmountAuditNote(
+            before as OperationAmountRow,
+            after as OperationAmountRow
+          );
 
     await writeAuditLog(admin, {
       clinicId: profile.clinic_id,

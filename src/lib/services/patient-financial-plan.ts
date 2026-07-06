@@ -501,7 +501,10 @@ export function computedCaseRemaining(plan: PatientFinancialPlan): number {
 export function isTreatmentCaseComplete(
   plan: PatientFinancialPlan
 ): boolean {
-  if (plan.final_price <= FINANCIAL_EPSILON) return false;
+  if (plan.treatment_status === "completed") return true;
+  if (plan.final_price <= FINANCIAL_EPSILON) {
+    return plan.total_paid > FINANCIAL_EPSILON && plan.remaining_balance <= FINANCIAL_EPSILON;
+  }
   if (plan.total_paid <= 0) return false;
   return computedCaseRemaining(plan) <= FINANCIAL_EPSILON;
 }

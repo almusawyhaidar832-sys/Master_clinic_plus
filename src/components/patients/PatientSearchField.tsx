@@ -10,6 +10,7 @@ import {
   type PatientSearchScope,
 } from "@/lib/services/patient-search";
 import { getPatientDisplayPhone } from "@/lib/phone";
+import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { cn } from "@/lib/utils";
 
 interface PatientSearchFieldProps {
@@ -126,17 +127,24 @@ export function PatientSearchField({
             <button
               key={p.id}
               type="button"
-              className="flex w-full items-center gap-2 px-4 py-2.5 text-right text-sm hover:bg-primary/5"
+              className="flex w-full flex-col items-start gap-0.5 px-4 py-2.5 text-right text-sm hover:bg-primary/5"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 onSelect(p);
                 setOpen(false);
               }}
             >
-              <span className="font-medium text-slate-text">{p.full_name_ar}</span>
-              {getPatientDisplayPhone(p) && (
-                <span className="text-xs text-slate-muted" dir="ltr">
-                  {getPatientDisplayPhone(p)}
+              <span className="flex w-full flex-wrap items-center gap-2">
+                <span className="font-medium text-slate-text">{p.full_name_ar}</span>
+                {getPatientDisplayPhone(p) && (
+                  <span className="text-xs text-slate-muted" dir="ltr">
+                    {getPatientDisplayPhone(p)}
+                  </span>
+                )}
+              </span>
+              {p.primary_doctor_name && (
+                <span className="text-xs text-primary">
+                  {formatDoctorDisplayName(p.primary_doctor_name)}
                 </span>
               )}
             </button>

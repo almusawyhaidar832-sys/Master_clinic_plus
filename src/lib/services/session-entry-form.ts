@@ -4,6 +4,7 @@ import {
   computeFinalPriceWithDiscounts,
   computePatientDebtRemaining,
   computeRemainingBalance,
+  FINANCIAL_EPSILON,
   hasTreatmentPlan,
   type PatientFinancialPlan,
 } from "@/lib/services/patient-financial-plan";
@@ -17,6 +18,7 @@ export interface SessionEntryFormSchema {
   /** كل جلسات المتابعة: خصم إضافي اختياري */
   showAdditionalDiscount: boolean;
   showPaidAmount: boolean;
+  showBillingMode: boolean;
   showOperation: boolean;
   showNotes: boolean;
   showDoctor: boolean;
@@ -74,10 +76,12 @@ export function buildSessionEntrySchema(opts: {
 
   return {
     mode: isFollowUp ? "follow_up" : "first",
-    showCasePrice: isFirst && !picking,
-    showInitialDiscount: isFirst && !picking,
-    showAdditionalDiscount: isFollowUp,
+    showCasePrice: false,
+    showInitialDiscount: false,
+    showAdditionalDiscount:
+      isFollowUp && opts.plan.final_price > FINANCIAL_EPSILON,
     showPaidAmount: !picking,
+    showBillingMode: !picking,
     showOperation: isFirst && !picking,
     showNotes: !picking,
     showDoctor:
