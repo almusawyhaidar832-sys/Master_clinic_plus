@@ -13,6 +13,7 @@ function num(v: unknown): number {
 
 export type TodayCaseInfo = {
   id: string;
+  patientId: string;
   name: string;
   finalPrice: number;
   totalPaid: number;
@@ -100,6 +101,7 @@ function buildCaseInfoFromRow(row: Record<string, unknown>): TodayCaseInfo {
   const remaining = computedCaseRemaining(plan);
   return {
     id: String(row.id),
+    patientId: String(row.patient_id ?? ""),
     name: String(row.treatment_name_ar ?? "علاج").trim() || "علاج",
     finalPrice,
     totalPaid: num(row.total_paid),
@@ -219,7 +221,7 @@ export async function fetchLedgerOperationsForDate(
     const { data: cases } = await supabase
       .from("patient_treatment_cases")
       .select(
-        "id, treatment_name_ar, case_price, discount_total, final_price, total_paid, doctor_share_total, clinic_share_total, treatment_status, status"
+        "id, patient_id, treatment_name_ar, case_price, discount_total, final_price, total_paid, doctor_share_total, clinic_share_total, treatment_status, status"
       )
       .in("id", [...allCaseIds]);
 

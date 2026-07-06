@@ -318,6 +318,27 @@ export async function processQuickEntryOfflinePayload(
       }
     }
   } else if (!error && payload.entryMode === "payment" && payload.paid > 0) {
+    if (
+      payload.forceNewPlan &&
+      (!linkedCaseId || !isPersistedTreatmentCaseId(linkedCaseId))
+    ) {
+      const created = await createTreatmentCase(admin, {
+        patientId,
+        clinicId,
+        treatmentName: payload.operationLabel,
+        casePrice: 0,
+        discount: 0,
+        paid: payload.paid,
+        doctorShare: 0,
+        clinicShare: payload.paid,
+        primaryDoctorId: payload.sessionDoctorId,
+      });
+      if (created.case?.id) {
+        linkedCaseId = created.case.id;
+        optionalCols.treatment_case_id = created.case.id;
+      }
+    }
+
     const paymentCols: Record<string, unknown> = {
       total_amount: 0,
       paid_amount: payload.paid,

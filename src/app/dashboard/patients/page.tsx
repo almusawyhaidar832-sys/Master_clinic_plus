@@ -167,8 +167,8 @@ export default function PatientsSearchPage() {
                 </div>
                 <div className="flex items-center gap-3 text-left">
                   {(p.total_debt ?? 0) > 0 && (
-                    <span className="rounded-full bg-debt/40 px-2.5 py-1 text-xs font-semibold text-debt-text">
-                      ذمة: {formatCurrency(p.total_debt ?? 0)}
+                    <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold text-orange-900 ring-1 ring-orange-300">
+                      مديون · {formatCurrency(p.total_debt ?? 0)}
                     </span>
                   )}
                   <FileText className="h-4 w-4 text-slate-muted" />

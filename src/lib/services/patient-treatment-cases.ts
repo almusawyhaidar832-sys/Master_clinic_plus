@@ -808,6 +808,8 @@ export async function createTreatmentCase(
     doctorShare: number;
     clinicShare: number;
     primaryDoctorId?: string | null;
+    /** جلسة بدون سعر كلي — لا تخزّن حصصاً على الحالة (تُحسب لكل دفعة) */
+    sessionOnly?: boolean;
   }
 ): Promise<{ case: PatientTreatmentCase | null; error?: string }> {
   const finalPrice = Math.max(0, input.casePrice - input.discount);
@@ -820,9 +822,9 @@ export async function createTreatmentCase(
     case_price: input.casePrice,
     discount_total: input.discount,
     final_price: finalPrice,
-    doctor_share_total: input.doctorShare,
-    clinic_share_total: input.clinicShare,
-    total_paid: input.paid,
+    doctor_share_total: input.sessionOnly ? 0 : input.doctorShare,
+    clinic_share_total: input.sessionOnly ? 0 : input.clinicShare,
+    total_paid: input.sessionOnly ? 0 : input.paid,
     status,
   };
 

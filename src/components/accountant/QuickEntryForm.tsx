@@ -944,6 +944,7 @@ export function QuickEntryForm({
       operationName,
       operationLabel:
         offlineCaseRow?.treatment_name_ar?.trim() || operationName.trim(),
+      billingMode,
       totalAmount,
       paidAmount,
       discountAmount,
@@ -1258,15 +1259,20 @@ export function QuickEntryForm({
     let error: { message: string } | null = null;
     let savedCaseIdForWa: string | null = null;
 
-    const ensureCaseForEntry = async (): Promise<string | null> => {
-      if (savedCaseIdForWa) return savedCaseIdForWa;
+    const ensureCaseForEntry = async (): Promise<{
+      caseId: string | null;
+      error: { message: string } | null;
+    }> => {
+      if (savedCaseIdForWa) {
+        return { caseId: savedCaseIdForWa, error: null };
+      }
       const existing = resolvePersistedCaseId(treatmentCases, selectedCaseId);
       if (existing && isPersistedTreatmentCaseId(existing)) {
         savedCaseIdForWa = existing;
         optionalCols.treatment_case_id = existing;
-        return existing;
+        return { caseId: existing, error: null };
       }
-      if (!isNewCase) return null;
+      if (!isNewCase) return { caseId: null, error: null };
 
       const initialPaid =
         billingMode === "session" || billingMode === "complete"
@@ -1284,15 +1290,17 @@ export function QuickEntryForm({
         sessionOnly: true,
       });
       if (!created.case?.id) {
-        error = {
-          message: created.error ?? "تعذر إنشاء حالة العلاج الجديدة",
+        return {
+          caseId: null,
+          error: {
+            message: created.error ?? "تعذر إنشاء حالة العلاج الجديدة",
+          },
         };
-        return null;
       }
       savedCaseIdForWa = created.case.id;
       optionalCols.treatment_case_id = created.case.id;
       setSelectedCaseId(created.case.id);
-      return created.case.id;
+      return { caseId: created.case.id, error: null };
     };
 
     if (
@@ -1324,36 +1332,32 @@ export function QuickEntryForm({
     }
 
     if (!error && billingMode === "session" && entryAmount > 0) {
-      await ensureCaseForEntry();
-      if (error) {
-        setMessage({ type: "error", text: error.message });
-        setLoading(false);
-        return;
+      const ensured = await ensureCaseForEntry();
+      if (ensured.error) {
+        error = ensured.error;
+      } else {
+        const paymentCols: Record<string, unknown> = {
+          total_amount: 0,
+          paid_amount: entryAmount,
+          doctor_share_amount: sessionPaymentShares.doctorShare,
+          clinic_share_amount: sessionPaymentShares.clinicShare,
+        };
+        if (materials > 0) paymentCols.materials_cost = materials;
+        const res = await insertSession("payment", paymentCols);
+        op = res.op;
+        error = res.error;
       }
-      const paymentCols: Record<string, unknown> = {
-        total_amount: 0,
-        paid_amount: entryAmount,
-        doctor_share_amount: sessionPaymentShares.doctorShare,
-        clinic_share_amount: sessionPaymentShares.clinicShare,
-      };
-      if (materials > 0) paymentCols.materials_cost = materials;
-      const res = await insertSession("payment", paymentCols);
-      op = res.op;
-      error = res.error;
     }
 
     if (!error && billingMode === "debt" && entryAmount > 0) {
-      const caseId = await ensureCaseForEntry();
-      if (error) {
-        setMessage({ type: "error", text: error.message });
-        setLoading(false);
-        return;
-      }
-      if (!caseId) {
+      const ensured = await ensureCaseForEntry();
+      if (ensured.error) {
+        error = ensured.error;
+      } else if (!ensured.caseId) {
         error = { message: "اختر حالة أو ابدأ حالة جديدة قبل تسجيل الدين" };
       } else {
         const debtRes = await registerTreatmentCaseDebtViaApi({
-          caseId,
+          caseId: ensured.caseId,
           debtAmount: entryAmount,
         });
         if (!debtRes.ok) {
@@ -1375,36 +1379,36 @@ export function QuickEntryForm({
     }
 
     if (!error && billingMode === "complete") {
-      const caseId = await ensureCaseForEntry();
-      if (error) {
-        setMessage({ type: "error", text: error.message });
-        setLoading(false);
-        return;
-      }
-      if (entryAmount > 0) {
-        const paymentCols: Record<string, unknown> = {
-          total_amount: 0,
-          paid_amount: entryAmount,
-          doctor_share_amount: sessionPaymentShares.doctorShare,
-          clinic_share_amount: sessionPaymentShares.clinicShare,
-        };
-        if (materials > 0) paymentCols.materials_cost = materials;
-        const res = await insertSession("payment", paymentCols);
-        op = res.op;
-        error = res.error;
-      } else if (!op?.id) {
-        const res = await insertSession(
-          "payment",
-          { total_amount: 0, paid_amount: 0 },
-          `${operationLabel} — إغلاق الحالة`
-        );
-        op = res.op;
-        error = res.error;
-      }
-      if (!error && caseId) {
-        const done = await completeTreatmentCaseViaApi(caseId);
-        if (!done.ok) {
-          error = { message: done.error ?? "تعذر إغلاق الحالة" };
+      const ensured = await ensureCaseForEntry();
+      if (ensured.error) {
+        error = ensured.error;
+      } else {
+        const caseId = ensured.caseId;
+        if (entryAmount > 0) {
+          const paymentCols: Record<string, unknown> = {
+            total_amount: 0,
+            paid_amount: entryAmount,
+            doctor_share_amount: sessionPaymentShares.doctorShare,
+            clinic_share_amount: sessionPaymentShares.clinicShare,
+          };
+          if (materials > 0) paymentCols.materials_cost = materials;
+          const res = await insertSession("payment", paymentCols);
+          op = res.op;
+          error = res.error;
+        } else if (!op?.id) {
+          const res = await insertSession(
+            "payment",
+            { total_amount: 0, paid_amount: 0 },
+            `${operationLabel} — إغلاق الحالة`
+          );
+          op = res.op;
+          error = res.error;
+        }
+        if (!error && caseId) {
+          const done = await completeTreatmentCaseViaApi(caseId);
+          if (!done.ok) {
+            error = { message: done.error ?? "تعذر إغلاق الحالة" };
+          }
         }
       }
     }
@@ -1594,8 +1598,9 @@ export function QuickEntryForm({
     });
 
     setOperationName("");
-    setTotalAmount("");
-    setPaidAmount("");
+      setTotalAmount("");
+      setBillingMode("session");
+      setPaidAmount("");
     setDiscountAmount("");
     setAdditionalDiscountAmount("");
     setMaterialsCost("");
@@ -1676,8 +1681,7 @@ export function QuickEntryForm({
       linkedCaseId && isPersistedTreatmentCaseId(linkedCaseId)
         ? linkedCaseId
         : null;
-    const postSaveIsNewPlanCase =
-      entryMode === "plan" && Boolean(savedCaseIdForWa);
+    const postSaveIsNewPlanCase = isNewCase && Boolean(savedCaseIdForWa);
 
     void (async () => {
       let whatsappNote = "";
@@ -2243,47 +2247,55 @@ export function QuickEntryForm({
         </div>
         )}
 
-        {(formSchema.showCasePrice ||
+        {(formSchema.showBillingMode ||
           formSchema.showPaidAmount ||
           formSchema.showAdditionalDiscount) && (
           <div className="sm:col-span-2 mc-entry-finance space-y-3">
             <div>
-              <h4 className="mc-entry-finance__title">المبالغ المالية</h4>
+              <h4 className="mc-entry-finance__title">التسجيل المالي</h4>
               <p className="mc-entry-finance__subtitle">
-                {isFollowUpSession
-                  ? "المبلغ الذي دفعه المراجع اليوم"
-                  : "السعر الكلي ثم المدفوع"}
+                {SESSION_BILLING_MODE_OPTIONS.find((o) => o.value === billingMode)
+                  ?.hint ?? "اختر نوع التسجيل ثم المبلغ"}
               </p>
             </div>
 
-            {formSchema.showCasePrice && (
-              <CurrencyInput
-                label="السعر الكلي للحالة *"
-                value={totalAmount}
-                onChange={setTotalAmount}
-                placeholder="150,000"
+            {formSchema.showBillingMode && (
+              <Select
+                label="نوع التسجيل *"
+                name="billing_mode"
+                value={billingMode}
+                onChange={(e) =>
+                  setBillingMode(e.target.value as SessionBillingMode)
+                }
+                options={SESSION_BILLING_MODE_OPTIONS.map((o) => ({
+                  value: o.value,
+                  label: o.label,
+                }))}
                 required
-                size="large"
-                tone="total"
+                className="!h-10 !rounded-lg !border-2 !text-sm !font-semibold"
               />
             )}
 
             {formSchema.showPaidAmount && (
               <div className="space-y-1.5">
                 <CurrencyInput
-                  label={
-                    isFollowUpSession
-                      ? "المبلغ المدفوع *"
-                      : "المبلغ المدفوع"
-                  }
+                  label={amountFieldLabel(billingMode)}
                   value={paidAmount}
                   onChange={setPaidAmount}
-                  placeholder="50,000"
-                  required={isFollowUpSession && additionalDiscountNum <= 0}
+                  placeholder={
+                    billingMode === "debt" ? "150,000" : "50,000"
+                  }
+                  required={
+                    billingMode === "session" ||
+                    billingMode === "debt"
+                  }
                   size="large"
-                  tone="paid"
+                  tone={billingMode === "debt" ? "total" : "paid"}
                 />
-                {isFollowUpSession && remaining > 0 && !isCaseClosed && (
+                {billingMode === "session" &&
+                  remaining > FINANCIAL_EPSILON &&
+                  !isCaseClosed &&
+                  isFollowUpSession && (
                   <button
                     type="button"
                     className="w-full rounded-lg border border-primary bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-700"
@@ -2291,19 +2303,10 @@ export function QuickEntryForm({
                       setPaidAmount(String(Math.round(remaining)))
                     }
                   >
-                    دفع الذمة كاملة ({formatCurrency(remaining)})
+                    دفع الدين كاملاً ({formatCurrency(remaining)})
                   </button>
                 )}
               </div>
-            )}
-
-            {formSchema.showInitialDiscount && (
-              <CurrencyInput
-                label="الخصم (اختياري)"
-                value={discountAmount}
-                onChange={setDiscountAmount}
-                placeholder="0"
-              />
             )}
 
             {formSchema.showAdditionalDiscount && (
@@ -2323,19 +2326,25 @@ export function QuickEntryForm({
               </div>
             )}
 
-            {formSchema.showCasePrice && (
+            {billingMode === "session" && paid > 0 && (
               <div className="rounded-lg border border-success-border bg-success px-3 py-2.5">
                 <p className="text-xs font-bold text-success-text">
-                  السعر النهائي بعد الخصم
+                  بعد هذه الجلسة — مجموع المدفوع
                 </p>
                 <p className="mt-0.5 text-xl font-bold tabular-nums text-success-text">
-                  {formatCurrency(finalPriceLive)}
+                  {formatCurrency(billingPreview.totalPaidAfter)}
                 </p>
-                {discountNum > 0 && (
-                  <p className="mt-1 text-xs text-success-text tabular-nums">
-                    {formatCurrency(casePriceNum)} − {formatCurrency(discountNum)}
-                  </p>
-                )}
+              </div>
+            )}
+
+            {billingMode === "debt" && paid > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                <p className="text-xs font-bold text-amber-900">
+                  دين مسجّل على المراجع
+                </p>
+                <p className="mt-0.5 text-xl font-bold tabular-nums text-debt-text">
+                  {formatCurrency(paid)}
+                </p>
               </div>
             )}
           </div>

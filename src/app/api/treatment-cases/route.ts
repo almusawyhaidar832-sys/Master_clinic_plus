@@ -201,6 +201,7 @@ export async function POST(req: NextRequest) {
       doctorShare: Number.isFinite(doctorShare) ? doctorShare : 0,
       clinicShare: Number.isFinite(clinicShare) ? clinicShare : 0,
       primaryDoctorId: effectiveDoctorId,
+      sessionOnly,
     });
 
     if (!created.case) {

@@ -664,8 +664,13 @@ export function previewPaidSessionSplit(opts: {
   let baseClinic = 0;
 
   if (finalPrice > 0 && (caseDoc > 0 || caseClinic > 0) && paid > 0) {
-    baseDoc = roundMoney((paid * caseDoc) / finalPrice);
-    baseClinic = roundMoney((paid * caseClinic) / finalPrice);
+    if (caseDoc > finalPrice || caseClinic > finalPrice) {
+      baseDoc = roundMoney(paid * Number(opts.doctor?.percentage ?? 50) / 100);
+      baseClinic = roundMoney(Math.max(0, paid - baseDoc));
+    } else {
+      baseDoc = roundMoney((paid * caseDoc) / finalPrice);
+      baseClinic = roundMoney((paid * caseClinic) / finalPrice);
+    }
   } else if (opts.doctor && finalPrice <= 0 && paid > 0) {
     const pct = Number(opts.doctor.percentage ?? 50) / 100;
     baseDoc = roundMoney(paid * pct);

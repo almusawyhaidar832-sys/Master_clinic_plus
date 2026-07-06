@@ -19,6 +19,7 @@ import {
   type DailyCollectionsResult,
   type DailyCollectionRow,
 } from "@/lib/ledger/daily-collections";
+import { OutstandingDebtPanel } from "@/components/accountant/OutstandingDebtPanel";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { cn, formatCurrency, formatDate, todayISO } from "@/lib/utils";
 import {
@@ -36,6 +37,7 @@ type DoctorOption = { id: string; full_name_ar: string };
 const STATUS_TABS: { id: CollectionStatusFilter; label: string }[] = [
   { id: "all", label: "الكل" },
   { id: "paid", label: "دفعوا" },
+  { id: "debtors", label: "مديونين" },
   { id: "unpaid", label: "لم يدفعوا" },
   { id: "at_accountant", label: "عند المحاسب" },
 ];
@@ -74,7 +76,10 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
   const showCollect =
     row.paymentStatus === "unpaid" ||
     row.paymentStatus === "partial" ||
-    row.paymentStatus === "at_accountant";
+    row.paymentStatus === "at_accountant" ||
+    row.paymentStatus === "debtor";
+
+  const debtAmount = Math.max(row.caseDebtTotal, row.remaining);
 
   return (
     <div className="flex flex-col gap-3 border-b border-slate-border/60 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
@@ -93,6 +98,20 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
           {row.paymentStatus === "paid_full" && row.visitPaidToday > 0 && (
             <p className="mt-1 text-xs font-semibold text-emerald-700">
               ✓ دفع {formatCurrency(row.visitPaidToday)} — مكتمل
+            </p>
+          )}
+          {row.paymentStatus === "debtor" && debtAmount > 0 && (
+            <p className="mt-1 text-xs font-bold text-debt-text tabular-nums">
+              دين مسجّل: {formatCurrency(debtAmount)}
+              {row.visitPaidToday > 0 &&
+                ` · دفع اليوم: ${formatCurrency(row.visitPaidToday)}`}
+            </p>
+          )}
+          {row.debtCases.length > 0 && (
+            <p className="mt-0.5 text-[11px] text-slate-muted">
+              {row.debtCases
+                .map((c) => `${c.treatmentName}: ${formatCurrency(c.debt)}`)
+                .join(" · ")}
             </p>
           )}
         <p className="mt-0.5 text-xs text-slate-muted">{row.sessionLabel}</p>
@@ -128,14 +147,16 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
           )}
         </div>
         <div className="text-right">
-          <p className="text-[11px] text-slate-muted">المتبقي</p>
+          <p className="text-[11px] text-slate-muted">
+            {row.paymentStatus === "debtor" ? "الدين" : "المتبقي"}
+          </p>
           <p
             className={cn(
               "font-bold tabular-nums",
-              row.remaining > 0 ? "text-debt-text" : "text-success-text"
+              debtAmount > 0 ? "text-debt-text" : "text-success-text"
             )}
           >
-            {formatCurrency(row.remaining)}
+            {formatCurrency(debtAmount)}
           </p>
         </div>
         <div className="flex gap-2">
@@ -200,6 +221,9 @@ function DoctorSection({
         <div className="flex shrink-0 items-center gap-2">
           <span className="hidden rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 sm:inline">
             {stats.paidFull + stats.partial} دفع
+          </span>
+          <span className="hidden rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-bold text-orange-900 sm:inline">
+            {stats.debtors} مديون
           </span>
           <span className="hidden rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700 sm:inline">
             {stats.unpaid} لم يدفع
@@ -374,12 +398,17 @@ export function DailyCollectionsPanel() {
               ملخص {dateLabel}
             </CardTitle>
           </CardHeader>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
             <SummaryChip label="جلسات" value={result.totals.totalPatients} />
             <SummaryChip
               label="دفعوا"
               value={result.totals.paidFull + result.totals.partial}
               className="border-emerald-200 bg-emerald-50/50"
+            />
+            <SummaryChip
+              label="مديونين"
+              value={result.totals.debtors}
+              className="border-orange-200 bg-orange-50/50"
             />
             <SummaryChip
               label="لم يدفعوا"
@@ -432,6 +461,10 @@ export function DailyCollectionsPanel() {
             defaultOpen={index === 0 || !!doctorId}
           />
         ))}
+
+      {!loading && clinicId && (
+        <OutstandingDebtPanel clinicId={clinicId} doctorId={doctorId || undefined} />
+      )}
     </div>
   );
 }

@@ -7,6 +7,12 @@ import {
   sessionKindLabel,
   type TodayOperationRow,
 } from "@/lib/ledger/today-operations";
+import {
+  sumPatientDebtFromCases,
+  type DebtorCaseDetail,
+} from "@/lib/ledger/outstanding-debt";
+import { calcOperationEarned } from "@/lib/services/doctor-wallet";
+import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import { opName } from "@/types";
 
 export type CollectionPaymentStatus =
@@ -14,13 +20,15 @@ export type CollectionPaymentStatus =
   | "partial"
   | "unpaid"
   | "at_accountant"
-  | "in_visit";
+  | "in_visit"
+  | "debtor";
 
 export type CollectionStatusFilter =
   | "all"
   | "paid"
   | "unpaid"
-  | "at_accountant";
+  | "at_accountant"
+  | "debtors";
 
 export type DailyCollectionRow = {
   id: string;
@@ -36,6 +44,9 @@ export type DailyCollectionRow = {
   visitPaidToday: number;
   requiredToday: number;
   remaining: number;
+  /** إجمالي الدين على المراجع (كل الحالات المفتوحة) */
+  caseDebtTotal: number;
+  debtCases: DebtorCaseDetail[];
   paymentStatus: CollectionPaymentStatus;
   queueEntryId: string | null;
   operationIds: string[];
@@ -52,8 +63,11 @@ export type DoctorDailySummary = {
     unpaid: number;
     atAccountant: number;
     inVisit: number;
+    debtors: number;
     totalCollected: number;
     totalRemaining: number;
+    /** حصة الطبيب من المدفوع في هذا اليوم (حسب النسبة) */
+    doctorShareToday: number;
   };
 };
 
@@ -74,6 +88,9 @@ type QueueRow = {
 };
 
 function sessionLabelFromOp(op: TodayOperationRow): string {
+  if (num(op.remaining_debt) > 0 && num(op.paid_amount) <= 0) {
+    return `${opName(op)} — تسجيل دين`;
+  }
   if (op.session_kind === "plan" || num(op.total_amount) > 0) {
     return opName(op);
   }
@@ -185,13 +202,28 @@ function resolvePaymentStatus(input: {
   paidToday: number;
   visitPaidToday: number;
   remaining: number;
+  caseDebtTotal: number;
   requiredToday: number;
   queueStatus: string | null;
   hasOperation: boolean;
 }): CollectionPaymentStatus {
-  const { paidToday, visitPaidToday, remaining, requiredToday, queueStatus, hasOperation } =
+  const { paidToday, visitPaidToday, remaining, caseDebtTotal, requiredToday, queueStatus, hasOperation } =
     input;
   const paid = Math.max(paidToday, visitPaidToday);
+  const debt = Math.max(remaining, caseDebtTotal);
+
+  if (debt > FINANCIAL_EPSILON) {
+    if (paid > FINANCIAL_EPSILON) {
+      return "debtor";
+    }
+    if (
+      queueStatus === "ready_for_billing" ||
+      queueStatus === "ready_for_payment"
+    ) {
+      return "at_accountant";
+    }
+    return "debtor";
+  }
 
   if (paid > FINANCIAL_EPSILON && remaining <= FINANCIAL_EPSILON) {
     return "paid_full";
@@ -231,6 +263,28 @@ function resolvePaymentStatus(input: {
   return "unpaid";
 }
 
+type DoctorPaymentMeta = {
+  pct: number;
+  salary: boolean;
+};
+
+function sumDoctorShareToday(
+  operations: TodayOperationRow[],
+  metaByDoctor: Map<string, DoctorPaymentMeta>
+): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const op of operations) {
+    const doctorId = op.doctor_id;
+    if (!doctorId) continue;
+    const paid = ledgerPaidToday(op);
+    if (paid <= FINANCIAL_EPSILON) continue;
+    const meta = metaByDoctor.get(doctorId) ?? { pct: 0.5, salary: false };
+    const earned = calcOperationEarned(op, meta.pct, meta.salary);
+    totals.set(doctorId, (totals.get(doctorId) ?? 0) + earned);
+  }
+  return totals;
+}
+
 function emptyStats(): DoctorDailySummary["stats"] {
   return {
     totalPatients: 0,
@@ -239,8 +293,10 @@ function emptyStats(): DoctorDailySummary["stats"] {
     unpaid: 0,
     atAccountant: 0,
     inVisit: 0,
+    debtors: 0,
     totalCollected: 0,
     totalRemaining: 0,
+    doctorShareToday: 0,
   };
 }
 
@@ -270,6 +326,9 @@ function computeStats(rows: DailyCollectionRow[]): DoctorDailySummary["stats"] {
       case "in_visit":
         stats.inVisit += 1;
         break;
+      case "debtor":
+        stats.debtors += 1;
+        break;
     }
   }
 
@@ -288,8 +347,10 @@ function mergeStats(
   target.unpaid += source.unpaid;
   target.atAccountant += source.atAccountant;
   target.inVisit += source.inVisit;
+  target.debtors += source.debtors;
   target.totalCollected += source.totalCollected;
   target.totalRemaining += source.totalRemaining;
+  target.doctorShareToday += source.doctorShareToday;
 }
 
 export function matchesCollectionFilter(
@@ -306,6 +367,9 @@ export function matchesCollectionFilter(
   if (filter === "at_accountant") {
     return status === "at_accountant";
   }
+  if (filter === "debtors") {
+    return status === "debtor";
+  }
   return true;
 }
 
@@ -321,6 +385,8 @@ export function collectionStatusLabel(status: CollectionPaymentStatus): string {
       return "عند المحاسب";
     case "in_visit":
       return "عند الطبيب";
+    case "debtor":
+      return "مديون";
     default:
       return "—";
   }
@@ -338,6 +404,8 @@ export function collectionStatusClass(status: CollectionPaymentStatus): string {
       return "bg-violet-100 text-violet-800 ring-1 ring-violet-200";
     case "in_visit":
       return "bg-slate-100 text-slate-600 ring-1 ring-slate-200";
+    case "debtor":
+      return "bg-orange-100 text-orange-900 ring-1 ring-orange-300 font-bold";
     default:
       return "bg-slate-100 text-slate-600";
   }
@@ -361,14 +429,12 @@ export async function fetchDailyCollections(
       limit: 500,
     }),
     fetchQueueForDate(supabase, clinicId, input.date, input.doctorId),
-    input.doctorId
-      ? Promise.resolve({ data: null })
-      : supabase
-          .from("doctors")
-          .select("id, full_name_ar")
-          .eq("clinic_id", clinicId)
-          .eq("is_active", true)
-          .order("full_name_ar"),
+    supabase
+      .from("doctors")
+      .select("id, full_name_ar, percentage, payment_type, financial_agreement")
+      .eq("clinic_id", clinicId)
+      .eq("is_active", true)
+      .order("full_name_ar"),
   ]);
 
   const {
@@ -381,6 +447,36 @@ export async function fetchDailyCollections(
   const queueIndex = buildQueueIndex(queueRes);
   const matchedQueueIds = new Set<string>();
   const visitPaidByKey = sumVisitPaidToday(operations);
+  const patientDebtMap = sumPatientDebtFromCases(caseInfoById);
+
+  const metaByDoctor = new Map<string, DoctorPaymentMeta>();
+  for (const doc of doctorsRes.data ?? []) {
+    metaByDoctor.set(String(doc.id), {
+      pct: Number(doc.percentage ?? 50) / 100,
+      salary: isSalaryDoctor({
+        payment_type: doc.payment_type,
+        financial_agreement: doc.financial_agreement,
+      }),
+    });
+  }
+  if (input.doctorId && !metaByDoctor.has(input.doctorId)) {
+    const { data: doc } = await supabase
+      .from("doctors")
+      .select("id, percentage, payment_type, financial_agreement")
+      .eq("id", input.doctorId)
+      .maybeSingle();
+    if (doc) {
+      metaByDoctor.set(input.doctorId, {
+        pct: Number(doc.percentage ?? 50) / 100,
+        salary: isSalaryDoctor({
+          payment_type: doc.payment_type,
+          financial_agreement: doc.financial_agreement,
+        }),
+      });
+    }
+  }
+  const doctorShareById = sumDoctorShareToday(operations, metaByDoctor);
+
   const sessionRows: DailyCollectionRow[] = [];
 
   for (const op of operations) {
@@ -435,10 +531,21 @@ export async function fetchDailyCollections(
     const vk = visitKey(doctorId, patientId, patientName);
     const visitPaidToday = visitPaidByKey.get(vk) ?? paidToday;
 
+    const patientDebt = patientId ? patientDebtMap.get(patientId) : undefined;
+    const caseDebtTotal = patientDebt?.total ?? remaining;
+    const debtCases: DebtorCaseDetail[] =
+      patientDebt?.cases.map((c) => ({
+        caseId: "",
+        treatmentName: c.name,
+        totalPaid: 0,
+        debt: c.remaining,
+      })) ?? [];
+
     const paymentStatus = resolvePaymentStatus({
       paidToday,
       visitPaidToday,
       remaining,
+      caseDebtTotal,
       requiredToday,
       queueStatus: queue?.status ?? null,
       hasOperation: true,
@@ -455,7 +562,9 @@ export async function fetchDailyCollections(
       paidToday,
       visitPaidToday,
       requiredToday,
-      remaining,
+      remaining: Math.max(remaining, caseDebtTotal),
+      caseDebtTotal,
+      debtCases,
       paymentStatus,
       queueEntryId: queue?.id ?? null,
       operationIds: [op.id],
@@ -473,6 +582,7 @@ export async function fetchDailyCollections(
       paidToday: 0,
       visitPaidToday,
       remaining: 0,
+      caseDebtTotal: 0,
       requiredToday: 0,
       queueStatus: entry.status,
       hasOperation: false,
@@ -490,6 +600,8 @@ export async function fetchDailyCollections(
       visitPaidToday,
       requiredToday: 0,
       remaining: 0,
+      caseDebtTotal: 0,
+      debtCases: [],
       paymentStatus,
       queueEntryId: entry.id,
       operationIds: [],
@@ -545,7 +657,10 @@ export async function fetchDailyCollections(
         doctorId,
         doctorName: doctorNameById.get(doctorId) ?? "طبيب",
         rows: sorted,
-        stats: computeStats(sorted),
+        stats: {
+          ...computeStats(sorted),
+          doctorShareToday: doctorShareById.get(doctorId) ?? 0,
+        },
       };
     })
     .sort((a, b) => a.doctorName.localeCompare(b.doctorName, "ar"));

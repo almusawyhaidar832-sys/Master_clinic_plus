@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import {
   previewPaidSessionSplit,
   previewTreatmentSplitWithReview,
@@ -16,6 +17,20 @@ function num(v: unknown): number {
 
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function doctorPctFromRow(doctor: Doctor | null): number {
+  return Number(doctor?.percentage ?? 50) / 100;
+}
+
+function capDoctorShare(
+  paid: number,
+  doctor: Doctor | null,
+  share: number
+): number {
+  if (paid <= 0) return 0;
+  if (doctor && isSalaryDoctor(doctor)) return 0;
+  return Math.min(Math.max(0, roundMoney(share)), roundMoney(paid * doctorPctFromRow(doctor)));
 }
 
 type OperationRow = Record<string, unknown> & {
@@ -117,7 +132,11 @@ async function recalculateOperationShares(
 
     const remainingDebt = Math.max(0, planTotal - patientPaid);
 
-    return { doctorShare, clinicShare, remainingDebt };
+    return {
+      doctorShare: capDoctorShare(paid, doctor, doctorShare),
+      clinicShare: roundMoney(Math.max(0, paid - capDoctorShare(paid, doctor, doctorShare))),
+      remainingDebt,
+    };
   }
 
   const split = previewPaidSessionSplit({
@@ -138,15 +157,18 @@ async function recalculateOperationShares(
           : Math.max(0, total - paid);
 
     return {
-      doctorShare: split.doctorShare,
-      clinicShare: split.clinicShare,
+      doctorShare: capDoctorShare(paid, doctor, split.doctorShare),
+      clinicShare: roundMoney(
+        Math.max(0, paid - capDoctorShare(paid, doctor, split.doctorShare))
+      ),
       remainingDebt: roundMoney(remainingDebt),
     };
   }
 
+  const fallbackDoc = capDoctorShare(paid, doctor, 0);
   return {
-    doctorShare: 0,
-    clinicShare: roundMoney(Math.max(0, paid)),
+    doctorShare: fallbackDoc,
+    clinicShare: roundMoney(Math.max(0, paid - fallbackDoc)),
     remainingDebt: roundMoney(Math.max(0, (caseFinal || agreed || total) - paid)),
   };
 }
@@ -354,4 +376,69 @@ export function buildOperationAmountAuditNote(
   }
 
   return parts.length ? `تعديل مبلغ — ${parts.join(" · ")}` : undefined;
+}
+
+/** إصلاح حصص جلسات طبيب — يصحّح doctor_share_amount المبالغ فيها */
+export async function repairDoctorOperationShares(
+  admin: SupabaseClient,
+  clinicId: string,
+  opts: { doctorId?: string; date?: string } = {}
+): Promise<{ ok: boolean; repaired: number; error?: string }> {
+  let query = admin
+    .from("patient_operations")
+    .select("*")
+    .eq("clinic_id", clinicId);
+
+  if (opts.doctorId) query = query.eq("doctor_id", opts.doctorId);
+  if (opts.date) query = query.eq("operation_date", opts.date);
+
+  const { data: ops, error } = await query;
+  if (error) return { ok: false, repaired: 0, error: error.message };
+
+  const caseIds = new Set<string>();
+  let repaired = 0;
+
+  for (const row of ops ?? []) {
+    const op = row as OperationRow;
+    const paid = num(op.paid_amount);
+
+    if (paid <= 0) {
+      if (num(op.doctor_share_amount) !== 0 || num(op.clinic_share_amount) !== 0) {
+        await admin
+          .from("patient_operations")
+          .update({ doctor_share_amount: 0, clinic_share_amount: 0 })
+          .eq("id", op.id);
+        repaired += 1;
+      }
+      continue;
+    }
+
+    const shares = await recalculateOperationShares(admin, op);
+    const beforeDoc = num(op.doctor_share_amount);
+    if (
+      Math.abs(beforeDoc - shares.doctorShare) > 0.01 ||
+      Math.abs(num(op.clinic_share_amount) - shares.clinicShare) > 0.01
+    ) {
+      await admin
+        .from("patient_operations")
+        .update({
+          doctor_share_amount: shares.doctorShare,
+          clinic_share_amount: shares.clinicShare,
+          remaining_debt: shares.remainingDebt,
+        })
+        .eq("id", op.id);
+      repaired += 1;
+    }
+
+    const caseId = op.treatment_case_id ? String(op.treatment_case_id) : null;
+    if (caseId && isPersistedTreatmentCaseId(caseId)) {
+      caseIds.add(caseId);
+    }
+  }
+
+  for (const caseId of caseIds) {
+    await processCasePayment(admin, { caseId, paidDelta: 0 });
+  }
+
+  return { ok: true, repaired };
 }

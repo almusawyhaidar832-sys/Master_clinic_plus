@@ -73,23 +73,29 @@ export function calcOperationEarned(
 ): number {
   if (salaryDoctor) return 0;
 
-  const direct = Number(row.doctor_share_amount ?? 0);
-  if (direct !== 0) return Math.round(direct * 100) / 100;
-
   const paid = Number(row.paid_amount ?? 0);
-  if (paid === 0) return 0;
+  if (paid <= 0) return 0;
+
+  const maxShare = Math.round(paid * doctorPct * 100) / 100;
+
+  const direct = Number(row.doctor_share_amount ?? 0);
+  if (direct !== 0) {
+    return Math.min(Math.round(direct * 100) / 100, maxShare);
+  }
 
   const tc = row.patient_treatment_cases;
   const caseRow = Array.isArray(tc) ? tc[0] : tc;
   const finalPrice = Number(caseRow?.final_price ?? 0);
   const caseDoc = Number(caseRow?.doctor_share_total ?? 0);
 
-  if (finalPrice > 0 && caseDoc > 0) {
-    return Math.round(paid * (caseDoc / finalPrice) * 100) / 100;
+  if (finalPrice > 0 && caseDoc > 0 && caseDoc <= finalPrice) {
+    return Math.min(
+      Math.round(paid * (caseDoc / finalPrice) * 100) / 100,
+      maxShare
+    );
   }
 
-  void doctorPct;
-  return 0;
+  return maxShare;
 }
 
 export interface WalletStatsOptions {

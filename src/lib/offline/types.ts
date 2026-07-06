@@ -32,6 +32,7 @@ export interface QuickEntryOfflinePayload {
   forceNewPlan: boolean;
   selectedCaseId: string | null;
   entryMode: "plan" | "payment";
+  billingMode?: "session" | "debt" | "complete";
   operationLabel: string;
   casePrice: number;
   discount: number;

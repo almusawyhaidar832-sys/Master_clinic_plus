@@ -18,6 +18,7 @@ import {
 } from "@/lib/services/executive-snapshot";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { useClinicSync } from "@/hooks/useClinicSync";
+import { OutstandingDebtPanel } from "@/components/accountant/OutstandingDebtPanel";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
@@ -642,6 +643,10 @@ export function ExecutiveDashboard() {
             <NetProfitCard snap={snap} />
             <SmartAlerts snap={snap} />
           </div>
+
+          {snap.debt > 0 && clinicId && (
+            <OutstandingDebtPanel clinicId={clinicId} embedded />
+          )}
 
           {/* Row 3: top performers */}
           {top && (

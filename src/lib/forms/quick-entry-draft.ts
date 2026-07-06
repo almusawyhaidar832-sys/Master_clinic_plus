@@ -1,4 +1,5 @@
 import type { ToothRecordInput } from "@/lib/clinical/constants";
+import type { SessionBillingMode } from "@/lib/services/session-billing-mode";
 
 export interface QuickEntryFormDraft {
   savedAt: string;
@@ -8,6 +9,7 @@ export interface QuickEntryFormDraft {
   doctorId: string;
   operationName: string;
   totalAmount: string;
+  billingMode: SessionBillingMode;
   paidAmount: string;
   discountAmount: string;
   additionalDiscountAmount: string;
@@ -41,7 +43,7 @@ export function hasQuickEntryDraftContent(draft: QuickEntryFormDraft): boolean {
       draft.patientPhone.trim() ||
       draft.selectedPatientId ||
       draft.operationName.trim() ||
-      draft.totalAmount.trim() ||
+      draft.billingMode ||
       draft.paidAmount.trim() ||
       draft.discountAmount.trim() ||
       draft.additionalDiscountAmount.trim() ||

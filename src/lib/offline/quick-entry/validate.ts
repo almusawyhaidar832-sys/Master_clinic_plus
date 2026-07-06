@@ -1,9 +1,13 @@
 import {
-  computeFinalPrice,
+  FINANCIAL_EPSILON,
   hasTreatmentPlan,
   isTreatmentCaseClosed,
   type PatientFinancialPlan,
 } from "@/lib/services/patient-financial-plan";
+import {
+  validateBillingAmount,
+  type SessionBillingMode,
+} from "@/lib/services/session-billing-mode";
 import { validatePatientPhone } from "@/lib/phone";
 import type { QuickEntryOfflinePayload } from "@/lib/offline/types";
 
@@ -20,6 +24,7 @@ export interface QuickEntryOfflineInput {
   selectedCaseId: string | null;
   operationName: string;
   operationLabel: string;
+  billingMode: SessionBillingMode;
   totalAmount: string;
   paidAmount: string;
   discountAmount: string;
@@ -60,10 +65,17 @@ export function validateQuickEntryOffline(
     return { ok: false, message: "اختر الطبيب" };
   }
 
-  const entryMode: "plan" | "payment" =
-    input.forceNewPlan || !input.selectedCaseId ? "plan" : "payment";
+  if (input.billingMode === "debt" || input.billingMode === "complete") {
+    return {
+      ok: false,
+      message: "تسجيل الدين أو إغلاق الحالة يحتاج اتصالاً بالإنترنت",
+    };
+  }
 
-  if (entryMode === "plan" && !input.operationName.trim()) {
+  const isNewCase = input.forceNewPlan || !input.selectedCaseId;
+  const entryMode: "plan" | "payment" = isNewCase ? "plan" : "payment";
+
+  if (isNewCase && !input.operationName.trim()) {
     return {
       ok: false,
       message: "أدخل نوع العلاج للحالة الجديدة",
@@ -76,14 +88,12 @@ export function validateQuickEntryOffline(
   }
 
   const paid = parseAmount(input.paidAmount);
-  const discount = parseAmount(input.discountAmount);
   const additionalDiscount = parseAmount(input.additionalDiscountAmount);
   const materials = parseAmount(input.materialsCost);
-  const casePrice = parseAmount(input.totalAmount);
   const plan = input.financialPlan;
 
   if (
-    entryMode === "payment" &&
+    !isNewCase &&
     plan &&
     isTreatmentCaseClosed(plan) &&
     !input.forceNewPlan
@@ -98,47 +108,34 @@ export function validateQuickEntryOffline(
     return { ok: false, message: "حدد مبلغ الكشفية في إعدادات العيادة" };
   }
 
-  if (entryMode === "plan") {
-    if (casePrice <= 0) {
+  const amountError = validateBillingAmount(input.billingMode, paid);
+  if (amountError) {
+    return { ok: false, message: amountError };
+  }
+
+  if (
+    !isNewCase &&
+    (!plan || !hasTreatmentPlan(plan)) &&
+    paid <= 0 &&
+    additionalDiscount <= 0
+  ) {
+    return {
+      ok: false,
+      message:
+        "لا توجد حالة محفوظة محلياً — اتصل بالنت مرة لتحميل ملف المريض",
+    };
+  }
+
+  if (additionalDiscount > 0 && plan && plan.final_price > FINANCIAL_EPSILON) {
+    const maxDisc = Math.max(
+      plan.remaining_balance,
+      plan.final_price - plan.total_paid
+    );
+    if (additionalDiscount > maxDisc) {
       return {
         ok: false,
-        message: "أول جلسة: أدخل السعر الكلي للحالة",
+        message: `الخصم الإضافي أكبر من الذمة (${maxDisc})`,
       };
-    }
-    if (discount < 0 || discount >= casePrice) {
-      return { ok: false, message: "الخصم يجب أن يكون أقل من السعر الكلي" };
-    }
-  } else {
-    if (!plan || !hasTreatmentPlan(plan)) {
-      return {
-        ok: false,
-        message:
-          "لا توجد خطة علاج محفوظة محلياً — اتصل بالنت مرة لتحميل ملف المريض ثم يمكنك العمل بدون نت",
-      };
-    }
-    if (discount > 0) {
-      return {
-        ok: false,
-        message: "الخصم الأولي يُسجّل في أول جلسة فقط",
-      };
-    }
-    if (paid <= 0 && additionalDiscount <= 0) {
-      return {
-        ok: false,
-        message: "أدخل المبلغ المدفوع أو خصماً إضافياً",
-      };
-    }
-    if (additionalDiscount > 0) {
-      const maxDisc = Math.max(
-        plan.remaining_balance,
-        plan.final_price - plan.total_paid
-      );
-      if (additionalDiscount > maxDisc) {
-        return {
-          ok: false,
-          message: `الخصم الإضافي أكبر من الذمة (${maxDisc})`,
-        };
-      }
     }
   }
 
@@ -152,7 +149,7 @@ export function validateQuickEntryOffline(
   const operationLabel =
     input.operationLabel.trim() || input.operationName.trim();
 
-  if (entryMode === "plan" && !operationLabel) {
+  if (isNewCase && !operationLabel) {
     return { ok: false, message: "أدخل نوع العلاج" };
   }
 
@@ -174,10 +171,11 @@ export function validateQuickEntryOffline(
       doctorShareInput: input.doctorShareInput,
       forceNewPlan: input.forceNewPlan,
       selectedCaseId: input.selectedCaseId,
-      entryMode,
+      entryMode: "payment",
+      billingMode: input.billingMode,
       operationLabel,
-      casePrice,
-      discount: entryMode === "plan" ? discount : 0,
+      casePrice: 0,
+      discount: 0,
       paid,
       additionalDiscount,
       materials,
@@ -196,6 +194,5 @@ export function validateQuickEntryOffline(
 }
 
 export function previewOfflinePlanFinal(payload: QuickEntryOfflinePayload): number {
-  if (payload.entryMode !== "plan") return 0;
-  return computeFinalPrice(payload.casePrice, payload.discount);
+  return payload.paid;
 }

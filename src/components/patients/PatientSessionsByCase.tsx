@@ -111,6 +111,9 @@ function sessionKindLabel(op: PatientOperation, clinicalView: boolean): string {
     return "متابعة";
   }
   if (op.session_kind === "discount") return "خصم إضافي";
+  if (Number(op.remaining_debt) > 0 && Number(op.paid_amount) <= 0) {
+    return "تسجيل دين";
+  }
   if (op.session_kind === "plan" || Number(op.total_amount) > 0) {
     return "فتح ملف / سعر الحالة";
   }
