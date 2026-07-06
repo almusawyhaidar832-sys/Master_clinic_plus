@@ -23,7 +23,7 @@ import {
   type DailyAssistantPayrollLine,
 } from "@/lib/ledger/daily-assistant-payroll";
 import { getPatientDisplayPhone } from "@/lib/phone";
-import { opName } from "@/types";
+import { opName, type Doctor } from "@/types";
 import { formatCurrency, todayISO } from "@/lib/utils";
 
 export type CollectionPaymentStatus =
@@ -1360,7 +1360,42 @@ export type PeriodDoctorEarningRow = {
   clinicShare: number;
 };
 
-/** حصص الأطباء/العيادة — نفس كشف مالي اليوم (زيارة + نسبة الطبيب) */
+type CaseShareRow = {
+  id?: string | null;
+  final_price?: number | string | null;
+  primary_doctor_id?: string | null;
+};
+
+function isReviewFeeOnlyOperation(op: TodayOperationRow): boolean {
+  const raw = op as TodayOperationRow & {
+    is_review_statement?: boolean | null;
+    review_fee_amount?: number | string | null;
+  };
+  return (
+    Boolean(raw.is_review_statement) ||
+    (num(raw.review_fee_amount) > FINANCIAL_EPSILON &&
+      num(op.paid_amount) <= FINANCIAL_EPSILON)
+  );
+}
+
+function doctorShareByLivePercentage(
+  paid: number,
+  doctor: Doctor | null | undefined,
+  op: TodayOperationRow
+): number {
+  if (paid <= FINANCIAL_EPSILON || !doctor || isSalaryDoctor(doctor)) {
+    return 0;
+  }
+  const pct = (num(doctor.percentage) || 50) / 100;
+  let share = paid * pct;
+  const materials = num(op.materials_cost);
+  if (materials > FINANCIAL_EPSILON) {
+    share -= materials * ((num(doctor.materials_share) || 0) / 100);
+  }
+  return roundMoney(Math.max(0, Math.min(paid, share)));
+}
+
+/** حصص الأطباء/العيادة للوحة التنفيذية — حسب طبيب الحالة ونسبة الطبيب الحالية */
 export async function fetchPeriodCollectionFinancialTotals(
   supabase: SupabaseClient,
   clinicId: string,
@@ -1372,29 +1407,105 @@ export async function fetchPeriodCollectionFinancialTotals(
   clinicShareTotal: number;
   byDoctor: PeriodDoctorEarningRow[];
 }> {
-  const result = await fetchDailyCollections(supabase, clinicId, {
+  const { operations } = await fetchLedgerOperationsForDate(supabase, clinicId, {
     dateFrom: from,
     dateTo: to,
-    statusFilter: "all",
   });
 
-  const collected = roundMoney(result.totals.totalCollected);
-  const doctorShareTotal = roundMoney(result.totals.doctorShareToday);
-  const clinicShareTotal = roundMoney(
-    Math.max(0, collected - doctorShareTotal)
+  const caseIds = [
+    ...new Set(
+      operations
+        .map((op) => op.treatment_case_id?.trim())
+        .filter((id): id is string => !!id)
+    ),
+  ];
+
+  const casesRes = caseIds.length
+    ? await supabase
+        .from("patient_treatment_cases")
+        .select("id, final_price, primary_doctor_id")
+        .in("id", caseIds)
+    : { data: [] as CaseShareRow[] };
+
+  const caseById = new Map(
+    ((casesRes.data ?? []) as CaseShareRow[]).map((row) => [
+      String(row.id),
+      row,
+    ])
   );
 
-  const byDoctor = result.doctors.map((d) => {
-    const docCollected = roundMoney(d.stats.totalCollected);
-    const docShare = roundMoney(d.stats.doctorShareToday);
-    return {
-      doctorId: d.doctorId,
-      doctorName: d.doctorName,
-      collected: docCollected,
-      doctorShare: docShare,
-      clinicShare: roundMoney(Math.max(0, docCollected - docShare)),
+  const doctorIds = [
+    ...new Set(
+      operations
+        .map((op) => {
+          const caseId = op.treatment_case_id?.trim();
+          const caseDoctorId = caseId
+            ? caseById.get(caseId)?.primary_doctor_id
+            : null;
+          return caseDoctorId || op.doctor_id;
+        })
+        .filter((id): id is string => !!id)
+    ),
+  ];
+
+  const doctorsRes = doctorIds.length
+    ? await supabase
+        .from("doctors")
+        .select(
+          "id, full_name_ar, percentage, payment_type, financial_agreement, materials_share, salary_amount"
+        )
+        .in("id", doctorIds)
+    : { data: [] as Doctor[] };
+
+  const doctorById = new Map<string, Doctor>();
+  for (const row of (doctorsRes.data ?? []) as Doctor[]) {
+    doctorById.set(String(row.id), row);
+  }
+
+  const byDoctorMap = new Map<string, PeriodDoctorEarningRow>();
+  let collected = 0;
+  let doctorShareTotal = 0;
+
+  for (const op of operations) {
+    const paid = ledgerPaidToday(op);
+    if (paid <= FINANCIAL_EPSILON) continue;
+
+    collected += paid;
+
+    if (isReviewFeeOnlyOperation(op)) {
+      continue;
+    }
+
+    const caseId = op.treatment_case_id?.trim();
+    const caseRow = caseId ? caseById.get(caseId) : undefined;
+    const effectiveDoctorId = caseRow?.primary_doctor_id || op.doctor_id;
+    if (!effectiveDoctorId) continue;
+
+    const doctor = doctorById.get(effectiveDoctorId);
+    const doctorShare = doctorShareByLivePercentage(paid, doctor, op);
+    doctorShareTotal += doctorShare;
+
+    const current = byDoctorMap.get(effectiveDoctorId) ?? {
+      doctorId: effectiveDoctorId,
+      doctorName: String(doctor?.full_name_ar ?? "طبيب"),
+      collected: 0,
+      doctorShare: 0,
+      clinicShare: 0,
     };
-  });
+    current.collected = roundMoney(current.collected + paid);
+    current.doctorShare = roundMoney(current.doctorShare + doctorShare);
+    current.clinicShare = roundMoney(
+      Math.max(0, current.collected - current.doctorShare)
+    );
+    byDoctorMap.set(effectiveDoctorId, current);
+  }
+
+  collected = roundMoney(collected);
+  doctorShareTotal = roundMoney(doctorShareTotal);
+  const clinicShareTotal = roundMoney(Math.max(0, collected - doctorShareTotal));
+  const byDoctor = [...byDoctorMap.values()].sort(
+    (a, b) => b.collected - a.collected || b.doctorShare - a.doctorShare
+  );
 
   return {
     collected,
