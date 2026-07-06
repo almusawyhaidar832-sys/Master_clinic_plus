@@ -28,7 +28,9 @@ export function EditAppointmentModal({
   portal = "assistant",
 }: EditAppointmentModalProps) {
   const [name, setName] = useState(appointment.patient_name_ar ?? "");
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
+    appointment.patient_id ?? null
+  );
   const [phone, setPhone] = useState(phoneToLocalDisplay(appointment.patient_phone));
   const [date, setDate] = useState(appointment.appointment_date);
   const [appointmentTime, setAppointmentTime] = useState(
@@ -66,6 +68,7 @@ export function EditAppointmentModal({
     const payload = {
       patient_name_ar: name.trim(),
       patient_phone: phoneCheck.normalized,
+      patient_id: selectedPatientId,
       appointment_date: date,
       start_time: resolvedStart,
       end_time: resolvedEnd,

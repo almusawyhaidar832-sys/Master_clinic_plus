@@ -18,6 +18,7 @@ async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
 export async function createAssistantAppointmentViaApi(input: {
   patient_name_ar: string;
   patient_phone: string;
+  patient_id?: string | null;
   appointment_date: string;
   start_time: string;
   end_time: string;
@@ -55,6 +56,7 @@ export async function updateAssistantAppointmentViaApi(
   input: {
     patient_name_ar: string;
     patient_phone: string;
+    patient_id?: string | null;
     appointment_date: string;
     start_time: string;
     end_time: string;

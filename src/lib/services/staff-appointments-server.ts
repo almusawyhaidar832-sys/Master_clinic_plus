@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { validatePatientPhone } from "@/lib/phone";
 import { translateDbError } from "@/lib/db-errors";
-import { ensurePatientIdForBooking } from "@/lib/services/resolve-patient-id";
+import { ensurePatientProfileForBooking } from "@/lib/services/resolve-patient-id";
 import {
   sendAppointmentUpdate,
   type SendAppointmentUpdateResult,
@@ -230,6 +230,7 @@ export async function updateStaffAppointment(
   input: {
     patient_name_ar?: string;
     patient_phone?: string;
+    patient_id?: string | null;
     appointment_date?: string;
     start_time?: string;
     end_time?: string;
@@ -264,11 +265,34 @@ export async function updateStaffAppointment(
     appointmentId
   );
 
+  let patientId = (current.patient_id as string | null) ?? null;
+  let patientName =
+    input.patient_name_ar?.trim() ?? (current.patient_name_ar as string);
+  let patientPhone =
+    input.patient_phone?.trim() ?? (current.patient_phone as string | null);
+
+  if (
+    input.patient_id ||
+    input.patient_name_ar ||
+    input.patient_phone
+  ) {
+    const profile = await ensurePatientProfileForBooking(admin, clinicId, {
+      name: patientName,
+      phone: patientPhone,
+      patientId: input.patient_id ?? patientId,
+      primaryDoctorId: current.doctor_id as string,
+    });
+    patientId = profile.patientId;
+    patientName = profile.name;
+    patientPhone = profile.phone ?? patientPhone;
+  }
+
   const { data, error } = await admin
     .from("appointments")
     .update({
-      patient_name_ar: input.patient_name_ar?.trim() ?? current.patient_name_ar,
-      patient_phone: input.patient_phone?.trim() ?? current.patient_phone,
+      patient_id: patientId,
+      patient_name_ar: patientName,
+      patient_phone: patientPhone,
       appointment_date: nextDate,
       start_time: nextStart,
       end_time: nextEnd,
@@ -328,6 +352,7 @@ export async function createStaffAppointment(
     doctor_id: string;
     patient_name_ar: string;
     patient_phone: string;
+    patient_id?: string | null;
     appointment_date: string;
     start_time: string;
     end_time: string;
@@ -364,9 +389,10 @@ export async function createStaffAppointment(
     input.end_time
   );
 
-  const patientId = await ensurePatientIdForBooking(admin, clinicId, {
+  const patientProfile = await ensurePatientProfileForBooking(admin, clinicId, {
     name,
     phone: phoneCheck.normalized,
+    patientId: input.patient_id,
     primaryDoctorId: input.doctor_id,
   });
 
@@ -376,9 +402,9 @@ export async function createStaffAppointment(
       clinic_id: clinicId,
       doctor_id: input.doctor_id,
       assistant_id: null,
-      patient_id: patientId,
-      patient_name_ar: name,
-      patient_phone: phoneCheck.normalized,
+      patient_id: patientProfile.patientId,
+      patient_name_ar: patientProfile.name,
+      patient_phone: patientProfile.phone ?? phoneCheck.normalized,
       appointment_date: input.appointment_date,
       start_time: input.start_time,
       end_time: input.end_time,
@@ -428,6 +454,7 @@ export async function createDoctorAppointment(
   input: {
     patient_name_ar: string;
     patient_phone: string;
+    patient_id?: string | null;
     appointment_date: string;
     start_time: string;
     end_time: string;
@@ -462,14 +489,22 @@ export async function createDoctorAppointment(
     input.end_time
   );
 
+  const patientProfile = await ensurePatientProfileForBooking(admin, clinicId, {
+    name,
+    phone: phoneCheck.normalized,
+    patientId: input.patient_id,
+    primaryDoctorId: doctorId,
+  });
+
   const { data, error } = await admin
     .from("appointments")
     .insert({
       clinic_id: clinicId,
       doctor_id: doctorId,
       assistant_id: null,
-      patient_name_ar: name,
-      patient_phone: phoneCheck.normalized,
+      patient_id: patientProfile.patientId,
+      patient_name_ar: patientProfile.name,
+      patient_phone: patientProfile.phone ?? phoneCheck.normalized,
       appointment_date: input.appointment_date,
       start_time: input.start_time,
       end_time: input.end_time,

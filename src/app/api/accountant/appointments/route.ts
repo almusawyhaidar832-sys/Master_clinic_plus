@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
       caller.clinic_id as string,
       {
         doctor_id: String(body.doctor_id ?? ""),
+        patient_id: body.patient_id ? String(body.patient_id) : null,
         patient_name_ar: String(body.patient_name_ar ?? ""),
         patient_phone: String(body.patient_phone ?? ""),
         appointment_date: String(body.appointment_date ?? ""),

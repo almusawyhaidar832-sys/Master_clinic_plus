@@ -16,9 +16,9 @@ import {
 import { assignPrimaryDoctorForSession } from "@/lib/services/patient-primary-doctor";
 import { completeVisitAfterPayment } from "@/lib/services/session-checkout";
 import {
-  patientPhoneColumns,
   validatePatientPhone,
 } from "@/lib/phone";
+import { ensurePatientIdForBooking, resolveExistingPatientId } from "@/lib/services/resolve-patient-id";
 import { isToothStatus } from "@/lib/clinical/tooth-status";
 import { todayISO } from "@/lib/utils";
 import type { QuickEntryOfflinePayload } from "@/lib/offline/types";
@@ -49,15 +49,12 @@ async function resolvePatientId(
   }
 
   const name = payload.patientQuery.trim();
-  const { data: existing } = await admin
-    .from("patients")
-    .select("id")
-    .eq("full_name_ar", name)
-    .eq("clinic_id", clinicId)
-    .maybeSingle();
-
-  if (existing?.id) {
-    return { patientId: existing.id as string };
+  const existing = await resolveExistingPatientId(admin, clinicId, {
+    name,
+    phone: payload.patientPhone,
+  });
+  if (existing) {
+    return { patientId: existing };
   }
 
   const phoneCheck = validatePatientPhone(payload.patientPhone);
@@ -65,22 +62,18 @@ async function resolvePatientId(
     return { error: phoneCheck.message };
   }
 
-  const { data: created, error } = await admin
-    .from("patients")
-    .insert({
-      full_name_ar: name,
-      clinic_id: clinicId,
-      primary_doctor_id: payload.sessionDoctorId,
-      ...patientPhoneColumns(phoneCheck.normalized),
-    })
-    .select("id")
-    .single();
-
-  if (error || !created?.id) {
-    return { error: error?.message ?? "تعذر إنشاء سجل المريض" };
+  try {
+    const patientId = await ensurePatientIdForBooking(admin, clinicId, {
+      name,
+      phone: phoneCheck.normalized,
+      primaryDoctorId: payload.sessionDoctorId,
+    });
+    return { patientId };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "تعذر إنشاء سجل المريض",
+    };
   }
-
-  return { patientId: created.id as string };
 }
 
 async function insertPatientOperation(

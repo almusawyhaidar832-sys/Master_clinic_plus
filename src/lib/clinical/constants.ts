@@ -1,3 +1,6 @@
+/** تسمية جلسة الكشف البصري — مشتركة بين السيرفر والعميل */
+export const CLINICAL_SESSION_LABEL = "جلسة كشف — سجل بصري";
+
 /** FDI tooth numbering — adult permanent dentition */
 export const UPPER_RIGHT = [18, 17, 16, 15, 14, 13, 12, 11] as const;
 export const UPPER_LEFT = [21, 22, 23, 24, 25, 26, 27, 28] as const;

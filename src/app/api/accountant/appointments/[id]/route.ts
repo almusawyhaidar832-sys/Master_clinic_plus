@@ -25,6 +25,7 @@ export async function PATCH(
       caller.clinic_id as string,
       id,
       {
+        patient_id: body.patient_id ? String(body.patient_id) : null,
         patient_name_ar: body.patient_name_ar,
         patient_phone: body.patient_phone,
         appointment_date: body.appointment_date,

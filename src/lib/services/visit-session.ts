@@ -1,9 +1,12 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { CLINICAL_SESSION_LABEL } from "@/lib/clinical/constants";
 import type { QueueStatus } from "@/lib/queue/server";
 import { ensureQueueEntryPatient } from "@/lib/services/ensure-queue-entry-patient";
 import { todayISO } from "@/lib/utils";
+
+export { CLINICAL_SESSION_LABEL };
 
 const ACTIVE_QUEUE_STATUSES: QueueStatus[] = [
   "called",
@@ -11,8 +14,6 @@ const ACTIVE_QUEUE_STATUSES: QueueStatus[] = [
   "ready_for_billing",
   "ready_for_payment",
 ];
-
-export const CLINICAL_SESSION_LABEL = "جلسة كشف — سجل بصري";
 
 function isMissingColumnError(message: string, column: string): boolean {
   const msg = message.toLowerCase();

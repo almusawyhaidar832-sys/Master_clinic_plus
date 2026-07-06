@@ -94,6 +94,7 @@ export function AddAppointmentModal({
     const payload = {
       patient_name_ar: name.trim(),
       patient_phone: phoneCheck.normalized,
+      patient_id: selectedPatientId,
       appointment_date: date,
       start_time: resolvedStart,
       end_time: resolvedEnd,

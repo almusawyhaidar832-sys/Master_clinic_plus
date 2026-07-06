@@ -15,6 +15,7 @@ import { useQueueListRefresh } from "@/hooks/useQueueListRefresh";
 import { announcePatientCall } from "@/lib/queue/realtime-client";
 import {
   resolveDoctorSpeechName,
+  resolvePatientDisplayName,
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
 import { resolvePatientGender } from "@/lib/queue/patient-gender";
@@ -452,7 +453,7 @@ export default function QueuePage() {
         patientId: entry.patient_id,
         doctorId: entry.doctor_id,
         patientPhone: entry.patient_phone,
-        patientNameAr: entry.patient_name,
+        patientNameAr: resolvePatientDisplayName(entry),
       });
       router.push(href);
     } catch (err) {

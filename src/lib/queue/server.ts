@@ -20,6 +20,7 @@ import {
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
 import { normalizeOptionalPatientPhone, patientPhoneColumns } from "@/lib/phone";
+import { ensurePatientProfileForBooking } from "@/lib/services/resolve-patient-id";
 import { buildQueueAnnounceAudioUrl, warmQueueAnnounceAudio } from "@/lib/queue/queue-announce-audio-url";
 
 export type QueueStatus =
@@ -682,15 +683,32 @@ export async function insertQueueEntry(input: {
     throw new Error(phoneResult.message);
   }
   const normalizedPhone = phoneResult.phone;
+  const trimmedName = input.patient_name?.trim() || null;
+
+  let patientId = input.patient_id ?? null;
+  let patientName = trimmedName;
+  let patientPhone = normalizedPhone;
+
+  if (trimmedName) {
+    const profile = await ensurePatientProfileForBooking(admin, input.clinic_id, {
+      name: trimmedName,
+      phone: normalizedPhone,
+      patientId: input.patient_id,
+      primaryDoctorId: input.doctor_id,
+    });
+    patientId = profile.patientId;
+    patientName = profile.name;
+    patientPhone = profile.phone ?? normalizedPhone;
+  }
 
   const { data, error } = await admin
     .from("patient_queue")
     .insert({
       clinic_id: input.clinic_id,
       doctor_id: input.doctor_id,
-      patient_name: input.patient_name?.trim() || null,
-      patient_phone: normalizedPhone,
-      patient_id: input.patient_id ?? null,
+      patient_name: patientName,
+      patient_phone: patientPhone,
+      patient_id: patientId,
       appointment_id: input.appointment_id ?? null,
       queue_date: queueDate,
       status: "waiting",
@@ -709,7 +727,7 @@ export async function insertQueueEntry(input: {
     await admin
       .from("patients")
       .update(patientPhoneColumns(normalizedPhone))
-      .eq("id", input.patient_id)
+      .eq("id", patientId)
       .eq("clinic_id", input.clinic_id)
       .then(({ error: phoneErr }) => {
         if (phoneErr) {
@@ -718,9 +736,8 @@ export async function insertQueueEntry(input: {
       });
   }
 
-  if (!input.patient_id && entryId) {
-    const hasIdentity =
-      Boolean(input.patient_name?.trim()) || Boolean(normalizedPhone);
+  if (!patientId && entryId) {
+    const hasIdentity = Boolean(trimmedName) || Boolean(normalizedPhone);
     if (hasIdentity) {
       const { ensureQueueEntryPatient } = await import(
         "@/lib/services/ensure-queue-entry-patient"

@@ -12,6 +12,7 @@ import {
   sanitizePatientPhoneInput,
 } from "@/lib/phone";
 import { suggestSpeechName } from "@/lib/queue/arabic-name-pronunciation";
+import { syncPatientIdentitySnapshots } from "@/lib/services/resolve-patient-id";
 import { Pencil, Save } from "lucide-react";
 import type { Patient } from "@/types";
 
@@ -95,6 +96,11 @@ export function PatientBasicInfoEditor({
       setError(updateErr.message);
       return;
     }
+
+    await syncPatientIdentitySnapshots(supabase, patient.id, {
+      name: trimmedName,
+      phone: phoneCheck.phone,
+    });
 
     setSaved(true);
     setEditing(false);

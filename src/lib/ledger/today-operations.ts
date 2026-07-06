@@ -9,7 +9,7 @@ import {
   normalizePatientNameForMatch,
   patientPhoneDigits,
 } from "@/lib/services/resolve-patient-id";
-import { CLINICAL_SESSION_LABEL } from "@/lib/services/visit-session";
+import { CLINICAL_SESSION_LABEL } from "@/lib/clinical/constants";
 import { opDebt, operationLabelForCase, type PatientOperation } from "@/types";
 import { localPeriodUtcBounds, todayISO } from "@/lib/utils";
 

@@ -70,6 +70,7 @@ export default function DoctorSchedulePage() {
     const result = await createDoctorAppointmentViaApi({
       patient_name_ar: patientName.trim(),
       patient_phone: patientPhone.trim(),
+      patient_id: selectedPatientId,
       appointment_date: date,
       start_time: startTime,
       end_time: endTime,

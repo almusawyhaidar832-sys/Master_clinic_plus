@@ -19,6 +19,7 @@ export async function createAccountantAppointmentViaApi(input: {
   doctor_id: string;
   patient_name_ar: string;
   patient_phone: string;
+  patient_id?: string | null;
   appointment_date: string;
   start_time: string;
   end_time: string;
@@ -56,6 +57,7 @@ export async function updateAccountantAppointmentViaApi(
   input: {
     patient_name_ar: string;
     patient_phone: string;
+    patient_id?: string | null;
     appointment_date: string;
     start_time: string;
     end_time: string;

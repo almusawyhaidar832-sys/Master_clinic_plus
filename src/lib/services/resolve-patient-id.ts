@@ -1,8 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  getPatientDisplayPhone,
   patientPhoneColumns,
   validatePatientPhone,
 } from "@/lib/phone";
+import { todayISO } from "@/lib/utils";
 
 export function normalizePatientNameForMatch(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
@@ -117,4 +119,120 @@ export async function ensurePatientIdForBooking(
   }
 
   return created.id as string;
+}
+
+export type PatientBookingProfile = {
+  patientId: string;
+  name: string;
+  phone: string | null;
+};
+
+async function loadPatientBookingProfile(
+  supabase: SupabaseClient,
+  clinicId: string,
+  patientId: string
+): Promise<PatientBookingProfile | null> {
+  const { data } = await supabase
+    .from("patients")
+    .select("id, clinic_id, full_name_ar, phone, phone_number")
+    .eq("id", patientId)
+    .maybeSingle();
+
+  if (!data || String(data.clinic_id) !== clinicId) return null;
+
+  return {
+    patientId: data.id as string,
+    name: String(data.full_name_ar ?? "").trim() || "مراجع",
+    phone: getPatientDisplayPhone(
+      data as { phone?: string | null; phone_number?: string | null }
+    ),
+  };
+}
+
+/**
+ * عند الحجز — يربط ملفاً موجوداً ويُرجع الاسم/الهاتف من السجل (بعد أي تعديل).
+ */
+export async function ensurePatientProfileForBooking(
+  supabase: SupabaseClient,
+  clinicId: string,
+  input: {
+    name: string;
+    phone?: string | null;
+    patientId?: string | null;
+    primaryDoctorId?: string | null;
+  }
+): Promise<PatientBookingProfile> {
+  const name = input.name.trim();
+  if (!name) throw new Error("اسم المريض مطلوب");
+
+  const selectedId = input.patientId?.trim();
+  if (selectedId) {
+    const selected = await loadPatientBookingProfile(
+      supabase,
+      clinicId,
+      selectedId
+    );
+    if (selected) return selected;
+  }
+
+  const existingId = await resolveExistingPatientId(supabase, clinicId, {
+    name,
+    phone: input.phone,
+  });
+  if (existingId) {
+    const existing = await loadPatientBookingProfile(
+      supabase,
+      clinicId,
+      existingId
+    );
+    if (existing) return existing;
+  }
+
+  const phoneRaw = input.phone?.trim() ?? "";
+  const phoneCheck = phoneRaw ? validatePatientPhone(phoneRaw) : null;
+  const newId = await ensurePatientIdForBooking(supabase, clinicId, {
+    name,
+    phone: phoneCheck?.ok ? phoneCheck.normalized : phoneRaw || null,
+    primaryDoctorId: input.primaryDoctorId,
+  });
+
+  const created = await loadPatientBookingProfile(supabase, clinicId, newId);
+  if (created) return created;
+
+  throw new Error("تعذر تحميل ملف المراجع بعد الحجز");
+}
+
+/** بعد تعديل اسم/هاتف المراجع — تحديث المواعيد والطابور المفتوح */
+export async function syncPatientIdentitySnapshots(
+  supabase: SupabaseClient,
+  patientId: string,
+  input: { name: string; phone?: string | null }
+): Promise<void> {
+  const name = input.name.trim();
+  if (!name) return;
+
+  const today = todayISO();
+  const apptPayload: Record<string, unknown> = { patient_name_ar: name };
+  const queuePayload: Record<string, unknown> = { patient_name: name };
+
+  if (input.phone !== undefined) {
+    apptPayload.patient_phone = input.phone;
+    queuePayload.patient_phone = input.phone;
+  }
+
+  await supabase
+    .from("appointments")
+    .update(apptPayload)
+    .eq("patient_id", patientId)
+    .gte("appointment_date", today)
+    .neq("status", "cancelled")
+    .neq("status", "completed");
+
+  await supabase
+    .from("patient_queue")
+    .update(queuePayload)
+    .eq("patient_id", patientId)
+    .gte("queue_date", today)
+    .neq("status", "done")
+    .neq("status", "cancelled");
 }

@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { appointment, whatsapp } = await createAssistantAppointment(admin, ctx, {
+      patient_id: body.patient_id ? String(body.patient_id) : null,
       patient_name_ar: String(body.patient_name_ar ?? ""),
       patient_phone: String(body.patient_phone ?? ""),
       appointment_date: String(body.appointment_date ?? ""),

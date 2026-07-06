@@ -27,6 +27,7 @@ export async function PATCH(
 
     const body = await req.json();
     const appointment = await updateAssistantAppointment(admin, ctx, id, {
+      patient_id: body.patient_id ? String(body.patient_id) : null,
       patient_name_ar: body.patient_name_ar,
       patient_phone: body.patient_phone,
       appointment_date: body.appointment_date,

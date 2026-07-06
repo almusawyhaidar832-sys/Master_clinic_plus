@@ -14,6 +14,7 @@ import { broadcastPatientSentToDoctor } from "@/lib/queue/broadcast";
 import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { normalizeAppointmentRows } from "@/lib/appointments/normalize-row";
+import { APPOINTMENT_TODAY_SELECT } from "@/lib/appointments/select";
 import { cn, formatTime, todayISO } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAppointmentStatusLabels } from "@/i18n/localized-labels";
@@ -91,10 +92,7 @@ export function TodayAppointmentsPanel({
 
     const { data, error } = await supabase
       .from("appointments")
-      .select(
-        `*,
-        doctor:doctors!doctor_id ( full_name_ar, percentage, materials_share, payment_type )`
-      )
+      .select(APPOINTMENT_TODAY_SELECT)
       .eq("clinic_id", active.clinicId)
       .eq("appointment_date", todayISO())
       .neq("status", "cancelled")

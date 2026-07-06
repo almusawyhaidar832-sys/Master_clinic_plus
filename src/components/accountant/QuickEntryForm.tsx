@@ -93,6 +93,7 @@ import {
   type SessionInvoiceData,
 } from "@/lib/invoices/session-invoice";
 import { computeLabCostSplit } from "@/lib/invoices/lab-session-details";
+import { resolveExistingPatientId } from "@/lib/services/resolve-patient-id";
 import {
   amountFieldLabel,
   examinationFeeAmount,
@@ -1065,6 +1066,14 @@ export function QuickEntryForm({
       if (existing?.id) {
         patientId = existing.id;
       } else {
+        const byPhoneOrName = await resolveExistingPatientId(
+          supabase,
+          activeClinic.clinicId,
+          { name, phone: patientPhone }
+        );
+        if (byPhoneOrName) {
+          patientId = byPhoneOrName;
+        } else {
         const phoneCheck = validatePatientPhone(patientPhone);
         if (!phoneCheck.ok) {
           setMessage({ type: "error", text: phoneCheck.message });
@@ -1087,6 +1096,7 @@ export function QuickEntryForm({
           return;
         }
         patientId = newP.id;
+        }
       }
     }
 
