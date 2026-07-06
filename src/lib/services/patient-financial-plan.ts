@@ -623,10 +623,35 @@ function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-/** نسبة الطبيب (0–1) من ملفه — لا تستخدم 50% إلا عند غياب الطبيب أو نسبة غير صالحة */
+/** نسبة الطبيب (0–1) من ملفه — يدعم 0–100 بما فيها 0% */
 export function doctorPaymentPct(doctor: Doctor | null): number {
   if (!doctor) return 0.5;
-  return Number(normalizeDoctorPercentage(doctor.percentage, "50")) / 100;
+  const raw = doctor.percentage;
+  if (raw !== null && raw !== undefined && String(raw).trim() !== "") {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 0 && n <= 100) {
+      return n / 100;
+    }
+  }
+  return Number(normalizeDoctorPercentage(raw, "50")) / 100;
+}
+
+/** حصة الطبيب من مبلغ العلاج فقط — حسب نسبته الحالية في الملف */
+export function computeLiveDoctorShare(
+  treatmentPaid: number,
+  doctor: Doctor,
+  materialsCost = 0
+): number {
+  if (treatmentPaid <= FINANCIAL_EPSILON || isSalaryDoctor(doctor)) {
+    return 0;
+  }
+  const pct = doctorPaymentPct(doctor);
+  let share = treatmentPaid * pct;
+  const materials = Math.max(0, materialsCost);
+  if (materials > FINANCIAL_EPSILON) {
+    share -= materials * (Number(doctor.materials_share ?? 0) / 100);
+  }
+  return roundMoney(Math.max(0, Math.min(share, treatmentPaid)));
 }
 
 /**

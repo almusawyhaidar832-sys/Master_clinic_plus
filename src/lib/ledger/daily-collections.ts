@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { FINANCIAL_EPSILON, doctorPaymentPct } from "@/lib/services/patient-financial-plan";
+import { FINANCIAL_EPSILON, computeLiveDoctorShare, doctorPaymentPct } from "@/lib/services/patient-financial-plan";
 import { CLINICAL_SESSION_LABEL } from "@/lib/clinical/constants";
 import {
   fetchLedgerOperationsForDate,
@@ -373,8 +373,7 @@ async function fetchPatientPaymentOpsForPeriod(
   existing: TodayOperationRow[]
 ): Promise<TodayOperationRow[]> {
   if (!patientIds.length) return existing;
-  const seen = new Set(existing.map((o) => o.id));
-  const merged = [...existing];
+  const byId = new Map(existing.map((o) => [o.id, o]));
 
   const { data } = await supabase
     .from("patient_operations")
@@ -386,12 +385,10 @@ async function fetchPatientPaymentOpsForPeriod(
 
   for (const row of data ?? []) {
     const op = row as TodayOperationRow;
-    if (!seen.has(op.id)) {
-      merged.push(op);
-      seen.add(op.id);
-    }
+    const prev = byId.get(op.id);
+    byId.set(op.id, prev ? { ...prev, ...op } : op);
   }
-  return merged;
+  return [...byId.values()];
 }
 
 function sumVisitPaidToday(
@@ -928,7 +925,6 @@ export async function fetchDailyCollections(
         "id, full_name_ar, percentage, payment_type, financial_agreement, materials_share"
       )
       .eq("clinic_id", clinicId)
-      .eq("is_active", true)
       .order("full_name_ar"),
   ]);
 
@@ -991,6 +987,33 @@ export async function fetchDailyCollections(
     if (doc) {
       const doctor = doc as Doctor;
       metaByDoctor.set(input.doctorId, {
+        pct: doctorPaymentPct(doctor),
+        salary: isSalaryDoctor({
+          payment_type: doc.payment_type,
+          financial_agreement: doc.financial_agreement,
+        }),
+        doctor,
+      });
+    }
+  }
+
+  const missingDoctorIds = [
+    ...new Set(
+      opsForVisitPaid
+        .map((op) => op.doctor_id)
+        .filter((id): id is string => !!id && !metaByDoctor.has(id))
+    ),
+  ];
+  if (missingDoctorIds.length) {
+    const { data: extraDocs } = await supabase
+      .from("doctors")
+      .select(
+        "id, full_name_ar, percentage, payment_type, financial_agreement, materials_share"
+      )
+      .in("id", missingDoctorIds);
+    for (const doc of extraDocs ?? []) {
+      const doctor = doc as Doctor;
+      metaByDoctor.set(String(doc.id), {
         pct: doctorPaymentPct(doctor),
         salary: isSalaryDoctor({
           payment_type: doc.payment_type,
@@ -1413,13 +1436,11 @@ function doctorShareByLivePercentage(
         : paid;
   if (treatmentPaid <= FINANCIAL_EPSILON) return 0;
 
-  const pct = doctorPaymentPct(doctor);
-  let share = treatmentPaid * pct;
-  const materials = num(op.materials_cost);
-  if (materials > FINANCIAL_EPSILON) {
-    share -= materials * ((num(doctor.materials_share) || 0) / 100);
-  }
-  return roundMoney(Math.max(0, Math.min(treatmentPaid, share)));
+  return computeLiveDoctorShare(
+    treatmentPaid,
+    doctor,
+    num(op.materials_cost)
+  );
 }
 
 /** حصص الأطباء/العيادة للوحة التنفيذية — حسب طبيب الحالة ونسبة الطبيب الحالية */

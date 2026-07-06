@@ -434,9 +434,29 @@ export function DailyCollectionsPanel() {
   }, [loadDoctors, clinicLoading]);
 
   useEffect(() => {
-    if (clinicLoading) return;
-    void loadCollections();
-  }, [loadCollections, clinicLoading]);
+    if (clinicLoading || !clinicId) return;
+    void (async () => {
+      const repairKey = `mc:doctor-shares-auto-repair:v3:${clinicId}`;
+      if (typeof window !== "undefined" && !sessionStorage.getItem(repairKey)) {
+        try {
+          const res = await fetch("/api/admin/repair-doctor-shares", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...authPortalHeaders("accountant"),
+            },
+            body: JSON.stringify({}),
+          });
+          if (res.ok && typeof window !== "undefined") {
+            sessionStorage.setItem(repairKey, "1");
+          }
+        } catch {
+          /* إصلاح خلفي — العرض يعتمد نسبة الطبيب حتى لو فشل */
+        }
+      }
+      await loadCollections();
+    })();
+  }, [clinicLoading, clinicId, loadCollections]);
 
   useClinicSync({
     topics: ["sessions", "financial"],
@@ -465,7 +485,7 @@ export function DailyCollectionsPanel() {
   };
 
   const repairDoctorShares = useCallback(async () => {
-    if (!selectedDoctorId) return;
+    if (!clinicId) return;
     setRepairing(true);
     setRepairMsg(null);
     try {
@@ -475,7 +495,9 @@ export function DailyCollectionsPanel() {
           "Content-Type": "application/json",
           ...authPortalHeaders("accountant"),
         },
-        body: JSON.stringify({ doctorId: selectedDoctorId }),
+        body: JSON.stringify({
+          doctorId: selectedDoctorId,
+        }),
       });
       const data = (await res.json()) as { message?: string; error?: string };
       if (!res.ok) {
@@ -489,7 +511,7 @@ export function DailyCollectionsPanel() {
     } finally {
       setRepairing(false);
     }
-  }, [selectedDoctorId, loadCollections]);
+  }, [clinicId, selectedDoctorId, loadCollections]);
 
   return (
     <div className="space-y-6">
@@ -549,22 +571,24 @@ export function DailyCollectionsPanel() {
               )}
               <span className="mr-2">تحديث</span>
             </Button>
-            {selectedDoctorId && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void repairDoctorShares()}
-                disabled={loading || repairing}
-                className="w-full sm:w-auto"
-              >
-                {repairing ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Stethoscope className="h-4 w-4" />
-                )}
-                <span className="mr-2">إصلاح حصص الطبيب (كل الجلسات)</span>
-              </Button>
-            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void repairDoctorShares()}
+              disabled={loading || repairing}
+              className="w-full sm:w-auto"
+            >
+              {repairing ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Stethoscope className="h-4 w-4" />
+              )}
+              <span className="mr-2">
+                {selectedDoctorId
+                  ? "إصلاح حصص الطبيب (كل الجلسات)"
+                  : "إصلاح حصص كل الأطباء"}
+              </span>
+            </Button>
           </div>
         </div>
 

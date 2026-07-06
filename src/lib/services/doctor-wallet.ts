@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   FINANCIAL_EPSILON,
+  computeLiveDoctorShare,
   doctorPaymentPct,
-  previewPaidSessionSplit,
 } from "@/lib/services/patient-financial-plan";
 import {
   isDailyWageAssistant,
@@ -134,34 +134,16 @@ export function calcOperationEarned(
   const treatmentPaid = treatmentPaidForDoctorShare(row);
   if (treatmentPaid <= FINANCIAL_EPSILON) return 0;
 
-  const maxShare = roundMoney(treatmentPaid * doctorPct);
-  const reviewFee = Number(row.review_fee_amount ?? 0);
-  const hasReviewFee =
-    Boolean(row.is_review_statement) || reviewFee > FINANCIAL_EPSILON;
-
-  const direct = Number(row.doctor_share_amount ?? 0);
-  if (direct !== 0 && !hasReviewFee) {
-    const scaled =
-      paid > 0 ? roundMoney(direct * (treatmentPaid / paid)) : 0;
-    return Math.min(scaled, maxShare);
-  }
-
+  // نسبة الطبيب من ملفه أولاً — لا نعتمد حصة مخزّنة 50/50 خاطئة
   if (doctor) {
-    const tc = row.patient_treatment_cases;
-    const caseRow = Array.isArray(tc) ? tc[0] : tc;
-    const split = previewPaidSessionSplit({
-      paidAmount: treatmentPaid,
-      caseFinalPrice: Number(caseRow?.final_price ?? 0),
-      caseDoctorShare: Number(caseRow?.doctor_share_total ?? 0),
-      caseClinicShare: Number(caseRow?.clinic_share_total ?? 0),
+    return computeLiveDoctorShare(
+      treatmentPaid,
       doctor,
-      materialsCost: Number(row.materials_cost ?? 0),
-    });
-    if (split) {
-      return Math.min(split.doctorShare, maxShare);
-    }
+      Number(row.materials_cost ?? 0)
+    );
   }
 
+  const maxShare = roundMoney(treatmentPaid * doctorPct);
   const tc = row.patient_treatment_cases;
   const caseRow = Array.isArray(tc) ? tc[0] : tc;
   const finalPrice = Number(caseRow?.final_price ?? 0);
