@@ -36,6 +36,7 @@ import type { MedicalLog, Patient, PatientOperation } from "@/types";
 import { cn } from "@/lib/utils";
 import { getPatientDisplayPhone } from "@/lib/phone";
 import { TransferDoctorPanel } from "@/components/patients/TransferDoctorPanel";
+import { DeletePatientPanel } from "@/components/patients/DeletePatientPanel";
 import { PatientBasicInfoEditor } from "@/components/patients/PatientBasicInfoEditor";
 import { PatientSpeechNameEditor } from "@/components/patients/PatientSpeechNameEditor";
 import type { PatientPrimaryDoctor } from "@/lib/services/patient-primary-doctor";
@@ -371,12 +372,16 @@ export default function PatientProfilePage() {
           </div>
         </div>
 
-        <div className="px-4 pb-4">
+        <div className="space-y-4 px-4 pb-4">
           <TransferDoctorPanel
             patientId={id}
             clinicId={patient.clinic_id}
             treatmentCases={treatmentCases}
             onTransferred={handleDoctorTransferred}
+          />
+          <DeletePatientPanel
+            patientId={id}
+            patientName={patient.full_name_ar}
           />
         </div>
 

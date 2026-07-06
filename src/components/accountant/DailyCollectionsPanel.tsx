@@ -7,6 +7,7 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { useClinicSync } from "@/hooks/useClinicSync";
@@ -213,8 +214,15 @@ function DoctorSection({
             </p>
             <p className="mt-0.5 text-xs text-slate-muted">
               {stats.totalPatients} جلسة · محصّل{" "}
-              {formatCurrency(stats.totalCollected)} · متبقي{" "}
-              {formatCurrency(stats.totalRemaining)}
+              {formatCurrency(stats.totalCollected)}
+              {stats.doctorShareToday > 0 && (
+                <>
+                  {" "}
+                  · حصة الطبيب {formatCurrency(stats.doctorShareToday)}
+                </>
+              )}
+              {" "}
+              · متبقي {formatCurrency(stats.totalRemaining)}
             </p>
           </div>
         </div>
@@ -263,6 +271,8 @@ export function DailyCollectionsPanel() {
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
   const [result, setResult] = useState<DailyCollectionsResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [repairMsg, setRepairMsg] = useState<string | null>(null);
+  const [repairing, setRepairing] = useState(false);
   const [appliedDate, setAppliedDate] = useState(todayISO());
 
   const loadDoctors = useCallback(async () => {
@@ -320,6 +330,33 @@ export function DailyCollectionsPanel() {
     [appliedDate]
   );
 
+  const repairDoctorShares = useCallback(async () => {
+    if (!doctorId) return;
+    setRepairing(true);
+    setRepairMsg(null);
+    try {
+      const res = await fetch("/api/admin/repair-doctor-shares", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authPortalHeaders("accountant"),
+        },
+        body: JSON.stringify({ doctorId }),
+      });
+      const data = (await res.json()) as { message?: string; error?: string };
+      if (!res.ok) {
+        setRepairMsg(data.error ?? "تعذر إصلاح الحصص");
+        return;
+      }
+      setRepairMsg(data.message ?? "تم الإصلاح");
+      await loadCollections();
+    } catch {
+      setRepairMsg("تعذر الاتصال بالخادم");
+    } finally {
+      setRepairing(false);
+    }
+  }, [doctorId, loadCollections]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -354,7 +391,7 @@ export function DailyCollectionsPanel() {
               label: d.full_name_ar,
             }))}
           />
-          <div className="flex items-end sm:col-span-2 lg:col-span-2">
+          <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-2">
             <Button
               type="button"
               onClick={() => void loadCollections()}
@@ -368,8 +405,33 @@ export function DailyCollectionsPanel() {
               )}
               <span className="mr-2">تحديث</span>
             </Button>
+            {doctorId && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void repairDoctorShares()}
+                disabled={loading || repairing}
+                className="w-full sm:w-auto"
+              >
+                {repairing ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Stethoscope className="h-4 w-4" />
+                )}
+                <span className="mr-2">إصلاح حصص الطبيب (كل الجلسات)</span>
+              </Button>
+            )}
           </div>
         </div>
+
+        {repairMsg && (
+          <Alert
+            variant={repairMsg.includes("تعذر") ? "error" : "success"}
+            className="mt-4"
+          >
+            {repairMsg}
+          </Alert>
+        )}
 
         <div className="mt-4 flex flex-wrap gap-2">
           {STATUS_TABS.map((tab) => (
@@ -423,6 +485,11 @@ export function DailyCollectionsPanel() {
             <SummaryChip
               label="محصّل"
               value={formatCurrency(result.totals.totalCollected)}
+            />
+            <SummaryChip
+              label="حصة الأطباء"
+              value={formatCurrency(result.totals.doctorShareToday)}
+              className="border-primary/30 bg-primary/5"
             />
             <SummaryChip
               label="متبقي"

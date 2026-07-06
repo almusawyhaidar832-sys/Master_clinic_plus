@@ -334,7 +334,7 @@ function computeStats(rows: DailyCollectionRow[]): DoctorDailySummary["stats"] {
 
   stats.totalCollected = [...visitCollected.values()].reduce((s, n) => s + n, 0);
 
-  return stats;
+  return { ...stats, doctorShareToday: 0 };
 }
 
 function mergeStats(
