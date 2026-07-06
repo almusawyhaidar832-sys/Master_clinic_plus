@@ -65,7 +65,8 @@ export type DoctorLedgerOperationKind =
   | "salary_payout"
   | "salary_adjustment"
   | "expense_deduction"
-  | "payroll_deduction";
+  | "payroll_deduction"
+  | "balance_credit";
 
 export interface DoctorLedgerOperationRow {
   id: string;
@@ -721,7 +722,7 @@ export async function fetchDoctorLedgerFinancialOps(
     .select(txSelectFull)
     .eq("clinic_id", clinicId)
     .eq("doctor_id", doctorId)
-    .in("type", ["doctor_salary_paid", "assistant_payroll_doctor"])
+    .in("type", ["doctor_salary_paid", "assistant_payroll_doctor", "balance_topup_doctor"])
     .order("transaction_date", { ascending: false })
     .limit(150);
 
@@ -740,6 +741,7 @@ export async function fetchDoctorLedgerFinancialOps(
         "doctor_salary_paid",
         "doctor_expense_doctor",
         "assistant_payroll_doctor",
+        "balance_topup_doctor",
       ])
       .order("transaction_date", { ascending: false })
       .limit(150);
@@ -813,6 +815,10 @@ export async function fetchDoctorLedgerFinancialOps(
       case "assistant_payroll_doctor":
         kind = "payroll_deduction";
         label = (txRow.description_ar as string) || "خصم راتب مساعد";
+        break;
+      case "balance_topup_doctor":
+        kind = "balance_credit";
+        label = (txRow.description_ar as string) || "شحن رصيد";
         break;
       default:
         continue;

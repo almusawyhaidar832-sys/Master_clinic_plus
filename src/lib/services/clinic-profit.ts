@@ -13,7 +13,9 @@ export type FinancialTransactionType =
   | "assistant_payroll_doctor"
   | "assistant_payroll_clinic"
   | "doctor_expense_doctor"
-  | "doctor_expense_clinic";
+  | "doctor_expense_clinic"
+  | "balance_topup_clinic"
+  | "balance_topup_doctor";
 
 export interface RecordTransactionInput {
   clinicId: string;

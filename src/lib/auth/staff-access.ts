@@ -101,3 +101,20 @@ export async function assertCanRecordCashWithdrawal(
 
   return { user, profile, doctor, admin };
 }
+
+/** Verify accountant/owner can manage clinic finances (top-up, etc.) */
+export async function assertCanManageClinicFinance(req?: Request) {
+  const user = await getApiSessionUser(req);
+  if (!user) {
+    throw new StaffAccessError(401, "يجب تسجيل الدخول");
+  }
+
+  const admin = getAdminClient();
+  const profile = await loadStaffProfile(user.id);
+
+  if (!profile.clinic_id) {
+    throw new StaffAccessError(400, "حسابك غير مربوط بعيادة");
+  }
+
+  return { user, profile, admin, clinicId: profile.clinic_id as string };
+}

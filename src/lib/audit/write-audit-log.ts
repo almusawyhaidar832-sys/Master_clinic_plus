@@ -9,7 +9,8 @@ export type AuditEntityType =
   | "operation_tooth_records"
   | "expense"
   | "withdrawal"
-  | "payroll";
+  | "payroll"
+  | "financial_transaction";
 
 export type AuditAction = "create" | "update" | "delete" | "refund";
 

@@ -23,7 +23,7 @@ interface DoctorLedgerOperationsTabProps {
 
 const KIND_KEYS: Record<
   DoctorLedgerOperationKind,
-  { labelKey: "docKindWithdraw" | "docKindSalary" | "docKindSalaryEntry" | "docKindExpenseDeduction" | "docKindAssistant"; color: string; icon: typeof ArrowDownToLine }
+  { labelKey: "docKindWithdraw" | "docKindSalary" | "docKindSalaryEntry" | "docKindExpenseDeduction" | "docKindAssistant" | "docKindBalanceTopUp"; color: string; icon: typeof ArrowDownToLine }
 > = {
   withdrawal: {
     labelKey: "docKindWithdraw",
@@ -49,6 +49,11 @@ const KIND_KEYS: Record<
     labelKey: "docKindAssistant",
     color: "bg-slate-100 text-slate-700",
     icon: Users,
+  },
+  balance_credit: {
+    labelKey: "docKindBalanceTopUp",
+    color: "bg-emerald-100 text-emerald-800",
+    icon: Banknote,
   },
 };
 
@@ -174,7 +179,8 @@ export function DoctorLedgerOperationsTab({
             const Icon = meta.icon;
             const isSalaryBonus =
               row.kind === "salary_adjustment" && row.status === "bonus";
-            const showAsCredit = isSalaryBonus;
+            const showAsCredit =
+              isSalaryBonus || row.kind === "balance_credit";
             return (
               <div
                 key={`${row.kind}-${row.id}`}

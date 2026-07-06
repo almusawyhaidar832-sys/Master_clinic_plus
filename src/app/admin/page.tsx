@@ -20,15 +20,18 @@ import {
   ChevronLeft,
   Activity,
   Crown,
+  Calendar,
 } from "lucide-react";
 import { ActivityFeed } from "@/components/admin/ActivityFeed";
 import { AdminDoctorPerformance } from "@/components/admin/AdminDoctorPerformance";
+import { BalanceTopUpButton } from "@/components/finance/BalanceTopUpModal";
 
 export default function AdminHomePage() {
   const [stats, setStats] = useState<ClinicProfitStats | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [doctorCount, setDoctorCount] = useState(0);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -56,7 +59,9 @@ export default function AdminHomePage() {
       setPendingCount(pending.count ?? 0);
     }
     load();
-  }, []);
+  }, [refreshKey]);
+
+  const reloadStats = () => setRefreshKey((k) => k + 1);
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -64,10 +69,13 @@ export default function AdminHomePage() {
         title="لوحة المالك"
         subtitle="متابعة مالية كاملة من الجوال"
         actions={
-          <span className="mc-badge-premium">
-            <Crown className="h-3 w-3" />
-            المالك
-          </span>
+          <div className="flex items-center gap-2">
+            <BalanceTopUpButton portal="admin" onSuccess={reloadStats} size="sm" />
+            <span className="mc-badge-premium">
+              <Crown className="h-3 w-3" />
+              المالك
+            </span>
+          </div>
         }
       />
 
@@ -86,6 +94,15 @@ export default function AdminHomePage() {
       )}
 
       <div className="grid grid-cols-2 gap-3">
+        <Link href="/admin/daily-collections">
+          <Card hoverable className="p-3 active:scale-[0.98]">
+            <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <Calendar className="h-5 w-5 text-primary" />
+            </div>
+            <p className="text-xs font-semibold text-slate-text">كشف مالي</p>
+            <p className="text-[10px] text-slate-muted">مدفوعات وحصص الأطباء</p>
+          </Card>
+        </Link>
         <Link href="/admin/profits">
           <Card hoverable className="p-3 active:scale-[0.98]">
             <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">

@@ -6,6 +6,7 @@ import {
   fetchDoctorTotalPayrollDeductions,
   fetchDoctorTotalEarnings,
 } from "@/lib/services/doctor-wallet";
+import { fetchDoctorBalanceTopupsTotal } from "@/lib/services/balance-topup";
 
 /** Max amount available for a new withdrawal (reserves pending requests) */
 export async function computeDoctorWithdrawableLimit(
@@ -20,7 +21,7 @@ export async function computeDoctorWalletBreakdown(
   admin: SupabaseClient,
   doctorId: string
 ) {
-  const [totalEarnings, wdsRes, expenseDeductions, payrollDeductions] =
+  const [totalEarnings, wdsRes, expenseDeductions, payrollDeductions, balanceCredits] =
     await Promise.all([
       fetchDoctorTotalEarnings(admin, doctorId),
       admin
@@ -30,11 +31,13 @@ export async function computeDoctorWalletBreakdown(
         .neq("status", "rejected"),
       fetchDoctorExpenseDeductionsTotal(admin, doctorId),
       fetchDoctorTotalPayrollDeductions(admin, doctorId),
+      fetchDoctorBalanceTopupsTotal(admin, doctorId),
     ]);
 
   return computeWalletStats(totalEarnings, wdsRes.data ?? [], {
     expenseDeductions,
     payrollDeductions,
+    balanceCredits,
   });
 }
 

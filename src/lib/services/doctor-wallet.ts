@@ -10,6 +10,11 @@ import {
   fetchDoctorMonthSalaryBreakdown,
   fetchDoctorSalaryBreakdownsBatch,
 } from "@/lib/services/salary-entry-display";
+import {
+  fetchDoctorBalanceTopupsTotal,
+  groupDoctorBalanceTopupsByDoctor,
+  BALANCE_TOPUP_DOCTOR_TYPE,
+} from "@/lib/services/balance-topup";
 import { currentMonthYear, monthDateRange } from "@/lib/utils";
 import type { PayrollRecord } from "@/types";
 
@@ -126,6 +131,8 @@ export function computeVisitDoctorShare(
 export interface WalletStatsOptions {
   expenseDeductions?: number;
   payrollDeductions?: number;
+  /** شحن رصيد يدوي — يُضاف للرصيد المتاح */
+  balanceCredits?: number;
   /** مبالغ راتب مُصرفة — تُحسب كـ «مسحوب» لأطباء الراتب */
   salaryWithdrawn?: number;
   /** محاسبة راتب ثابت — لا تُستخدم طلبات السحب التقليدية */
@@ -416,6 +423,7 @@ export function computeWalletStats(
   const earned = round(totalEarnings);
   const expenseDeductions = round(options?.expenseDeductions ?? 0);
   const payrollDeductions = round(options?.payrollDeductions ?? 0);
+  const balanceCredits = round(options?.balanceCredits ?? 0);
 
   const netAccounting = round(
     earned -
@@ -424,10 +432,12 @@ export function computeWalletStats(
       expenseDeductions -
       payrollDeductions
   );
+  const effectiveNet = round(netAccounting + balanceCredits);
 
-  const withdrawableLimit = salaryLedger
+  const baseWithdrawable = salaryLedger
     ? computeSalaryDoctorWithdrawable(earned, totalWithdrawn)
-    : Math.max(0, netAccounting - pendingAmount);
+    : netAccounting - pendingAmount;
+  const withdrawableLimit = round(Math.max(0, baseWithdrawable + balanceCredits));
 
   return {
     totalEarnings: earned,
@@ -436,9 +446,11 @@ export function computeWalletStats(
     approvedAmount: round(approvedAmount),
     expenseDeductions,
     payrollDeductions,
-    availableBalance: salaryLedger ? withdrawableLimit : netAccounting,
-    withdrawableLimit: round(withdrawableLimit),
-    isDebtor: netAccounting < 0,
+    availableBalance: salaryLedger
+      ? round(baseWithdrawable + balanceCredits)
+      : effectiveNet,
+    withdrawableLimit,
+    isDebtor: effectiveNet < 0,
   };
 }
 
@@ -600,6 +612,7 @@ export async function fetchDoctorWalletStatsBatch(
     withdrawalsRes,
     expenseRows,
     payrollRows,
+    topupRows,
     pendingPayrollByDoctor,
     paymentMap,
     salaryPayoutsMap,
@@ -627,6 +640,12 @@ export async function fetchDoctorWalletStatsBatch(
       .select("doctor_id, amount")
       .in("doctor_id", doctorIds)
       .eq("type", "assistant_payroll_doctor"),
+    supabase
+      .from("transactions")
+      .select("doctor_id, amount")
+      .in("doctor_id", doctorIds)
+      .eq("type", BALANCE_TOPUP_DOCTOR_TYPE)
+      .gt("amount", 0),
     fetchPendingAssistantPayrollByDoctor(supabase, doctorIds),
     fetchDoctorPaymentMap(supabase, doctorIds),
     fetchDoctorSalaryPayoutsByDoctor(
@@ -667,6 +686,7 @@ export async function fetchDoctorWalletStatsBatch(
   const withdrawalsByDoctor = groupWithdrawalsByDoctor(withdrawalsRes.data);
   const expenseByDoctor = groupDeductionsByDoctor(expenseRows.data);
   const payrollByDoctor = groupPayrollDeductionsByDoctor(payrollRows.data);
+  const topupByDoctor = groupDoctorBalanceTopupsByDoctor(topupRows.data);
 
   for (const doctorId of doctorIds) {
     const meta = paymentMap.get(doctorId) ?? { pct: 0.5, isSalary: false };
@@ -675,6 +695,7 @@ export async function fetchDoctorWalletStatsBatch(
         (pendingPayrollByDoctor.get(doctorId) ?? 0)) *
         100
     ) / 100;
+    const balanceCredits = topupByDoctor.get(doctorId) ?? 0;
 
     if (meta.isSalary) {
       const earned =
@@ -688,6 +709,7 @@ export async function fetchDoctorWalletStatsBatch(
           salaryWithdrawn: salaryPayoutsMap.get(doctorId) ?? 0,
           expenseDeductions: expenseByDoctor.get(doctorId) ?? 0,
           payrollDeductions,
+          balanceCredits,
         })
       );
       continue;
@@ -701,6 +723,7 @@ export async function fetchDoctorWalletStatsBatch(
         {
           expenseDeductions: expenseByDoctor.get(doctorId) ?? 0,
           payrollDeductions,
+          balanceCredits,
         }
       )
     );
@@ -823,7 +846,7 @@ export async function fetchDoctorWalletStats(
     .maybeSingle();
 
   if (isSalaryDoctor({ payment_type: doctor?.payment_type })) {
-    const [salaryPaid, expenseDeductions, payrollDeductions, breakdown] =
+    const [salaryPaid, expenseDeductions, payrollDeductions, balanceCredits, breakdown] =
       await Promise.all([
         fetchDoctorSalaryPayoutsTotal(
           supabase,
@@ -833,6 +856,7 @@ export async function fetchDoctorWalletStats(
         ),
         fetchDoctorExpenseDeductionsTotal(supabase, doctorId),
         fetchDoctorTotalPayrollDeductions(supabase, doctorId),
+        fetchDoctorBalanceTopupsTotal(supabase, doctorId),
         doctor?.clinic_id
           ? fetchDoctorMonthSalaryBreakdown(
               supabase,
@@ -851,10 +875,11 @@ export async function fetchDoctorWalletStats(
       salaryWithdrawn: salaryPaid,
       expenseDeductions,
       payrollDeductions,
+      balanceCredits,
     });
   }
 
-  const [totalEarnings, withdrawalsRes, expenseDeductions, payrollDeductions] =
+  const [totalEarnings, withdrawalsRes, expenseDeductions, payrollDeductions, balanceCredits] =
     await Promise.all([
       computeEarningsFromOperations(supabase, doctorId),
       supabase
@@ -864,11 +889,13 @@ export async function fetchDoctorWalletStats(
         .neq("status", "rejected"),
       fetchDoctorExpenseDeductionsTotal(supabase, doctorId),
       fetchDoctorTotalPayrollDeductions(supabase, doctorId),
+      fetchDoctorBalanceTopupsTotal(supabase, doctorId),
     ]);
 
   return computeWalletStats(totalEarnings, withdrawalsRes.data ?? [], {
     expenseDeductions,
     payrollDeductions,
+    balanceCredits,
   });
 }
 

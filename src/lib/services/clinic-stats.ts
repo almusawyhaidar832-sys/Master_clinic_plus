@@ -9,6 +9,7 @@ import {
   fetchPeriodVisitorDebt,
 } from "@/lib/services/executive-snapshot";
 import { getActiveClinicId } from "@/lib/clinic-context";
+import { fetchClinicBalanceTopupsForPeriod, fetchClinicBalanceTopupsTotal } from "@/lib/services/balance-topup";
 import { formatCurrency, todayISO } from "@/lib/utils";
 
 export interface TodaySummary {
@@ -103,6 +104,7 @@ export async function fetchClinicProfitStatsForPeriod(
     clinicExpenseShareRes,
     visitorDebt,
     reviewFees,
+    balanceTopups,
   ] = await Promise.all([
     supabase
       .from("patient_operations")
@@ -128,6 +130,7 @@ export async function fetchClinicProfitStatsForPeriod(
       .lte("transaction_date", to),
     fetchPeriodVisitorDebt(supabase, clinicId, from, to),
     fetchReviewFeesInPeriod(supabase, clinicId, from, to),
+    fetchClinicBalanceTopupsForPeriod(supabase, clinicId, from, to),
   ]);
 
   const ops = opsRes.data ?? [];
@@ -152,7 +155,7 @@ export async function fetchClinicProfitStatsForPeriod(
   const refundsRounded = Math.round(totalRefunds * 100) / 100;
   const reviewFeesTotal = reviewFees.total;
   const netProfit = Math.round(
-    (clinicShareTotal + reviewFeesTotal - totalExpenses - totalSalariesPaid) *
+    (clinicShareTotal + reviewFeesTotal - totalExpenses - totalSalariesPaid + balanceTopups) *
       100
   ) / 100;
 
@@ -170,6 +173,9 @@ export async function fetchClinicProfitStatsForPeriod(
       { label: "حصة العيادة من العمليات", amount: clinicShareTotal },
       ...(reviewFeesTotal > 0
         ? [{ label: "كشفيات المراجعين", amount: reviewFeesTotal }]
+        : []),
+      ...(balanceTopups > 0
+        ? [{ label: "شحن رصيد العيادة", amount: balanceTopups }]
         : []),
       { label: "صرفيات العيادة", amount: -generalExpenses },
       {
@@ -205,6 +211,7 @@ export async function fetchClinicProfitStats(
     outstandingDebts,
     totalRefunds,
     clinicExpenseShare,
+    balanceTopups,
   ] = await Promise.all([
     supabase
       .from("patient_operations")
@@ -220,6 +227,7 @@ export async function fetchClinicProfitStats(
     fetchOutstandingDebts(supabase, clinicId),
     fetchTotalRefundsAmount(supabase, { clinicId }),
     fetchClinicShareExpenseTotal(supabase, clinicId),
+    fetchClinicBalanceTopupsTotal(supabase, clinicId),
   ]);
 
   const ops = opsRes.data ?? [];
@@ -247,7 +255,7 @@ export async function fetchClinicProfitStats(
   const refundsRounded = Math.round(totalRefunds * 100) / 100;
   // paid_amount يشمل قيود الإرجاع السالبة — لا نطرح session_refunds مرة ثانية
   const netProfit = Math.round(
-    (cashInflow - totalExpenses - totalSalariesPaid) * 100
+    (cashInflow - totalExpenses - totalSalariesPaid + balanceTopups) * 100
   ) / 100;
 
   return {
@@ -261,6 +269,9 @@ export async function fetchClinicProfitStats(
     totalSalariesPaid,
     breakdown: [
       { label: "صافي المحصّل (بعد المرتجعات)", amount: cashInflow },
+      ...(balanceTopups > 0
+        ? [{ label: "شحن رصيد العيادة", amount: balanceTopups }]
+        : []),
       { label: "صرفيات العيادة", amount: -generalExpenses },
       {
         label: "حصة العيادة من صرفيات الأطباء",

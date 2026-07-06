@@ -15,13 +15,13 @@ import {
   Stethoscope,
   Wallet,
   FileText,
-  Users,
   UserCog,
   LogOut,
   Activity,
   Sun,
   Moon,
   Languages,
+  Calendar,
   Crown,
 } from "lucide-react";
 
@@ -30,14 +30,14 @@ const adminNav: Array<{
   labelKey: TranslationKey;
   icon: React.ComponentType<{ className?: string }>;
 }> = [
-  { href: "/admin",            labelKey: "adminNavHome",     icon: Home        },
-  { href: "/admin/activity",   labelKey: "adminNavMonitor",  icon: Activity    },
-  { href: "/admin/profits",    labelKey: "adminNavProfits",  icon: TrendingUp  },
-  { href: "/admin/doctors",    labelKey: "adminNavDoctors",  icon: Stethoscope },
-  { href: "/admin/team",       labelKey: "adminNavTeam",     icon: Users       },
-  { href: "/admin/withdrawals",labelKey: "adminNavWithdraw", icon: Wallet      },
-  { href: "/admin/report",     labelKey: "adminNavReport",   icon: FileText    },
-  { href: "/admin/profile",    labelKey: "adminNavAccount",  icon: UserCog     },
+  { href: "/admin",                     labelKey: "adminNavHome",        icon: Home        },
+  { href: "/admin/daily-collections",   labelKey: "adminNavCollections", icon: Calendar    },
+  { href: "/admin/profits",             labelKey: "adminNavProfits",     icon: TrendingUp  },
+  { href: "/admin/doctors",             labelKey: "adminNavDoctors",     icon: Stethoscope },
+  { href: "/admin/withdrawals",         labelKey: "adminNavWithdraw",    icon: Wallet      },
+  { href: "/admin/report",              labelKey: "adminNavReport",      icon: FileText    },
+  { href: "/admin/activity",            labelKey: "adminNavMonitor",     icon: Activity    },
+  { href: "/admin/profile",             labelKey: "adminNavAccount",     icon: UserCog     },
 ];
 
 interface AdminMobileShellProps {

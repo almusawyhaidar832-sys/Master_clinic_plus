@@ -1,28 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { Card } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
-import { cn, formatCurrency, localDateISO, todayISO } from "@/lib/utils";
+import { cn, localDateISO, todayISO } from "@/lib/utils";
 import {
-  buildDoctorPerformanceHighlights,
-  type DoctorPerformanceHighlights,
-  type DoctorPerformanceRow,
+  normalizeTopPerformersPayload,
   type TopPerformersPayload,
 } from "@/lib/services/doctor-performance";
 import {
-  Award,
-  ChevronLeft,
-  Crown,
-  Moon,
-  Star,
-  Stethoscope,
-  TrendingUp,
-  Zap,
-} from "lucide-react";
+  TopDoctorsCard,
+  TopServicesCard,
+} from "@/components/reports/TopPerformersCards";
+import { ChevronLeft, Moon, Stethoscope } from "lucide-react";
 
 type Period = "today" | "week" | "month";
 
@@ -52,102 +45,11 @@ function getRange(period: Period): { from: string; to: string } {
   }
 }
 
-function HighlightCard({
-  title,
-  subtitle,
-  doctor,
-  metric,
-  metricLabel,
-  icon: Icon,
-}: {
-  title: string;
-  subtitle: string;
-  doctor: DoctorPerformanceRow | null;
-  metric: string;
-  metricLabel: string;
-  icon: typeof Crown;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-border bg-surface-card p-4 shadow-card">
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold text-slate-muted">{title}</p>
-          <p className="text-[11px] text-slate-muted">{subtitle}</p>
-        </div>
-        <div className="rounded-xl bg-primary/10 p-2 text-primary">
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-      {doctor ? (
-        <>
-          <p className="truncate text-base font-bold text-slate-text">
-            {doctor.full_name_ar}
-          </p>
-          <p className="mt-1 text-lg font-bold tabular-nums text-primary">
-            {metric}
-          </p>
-          <p className="text-xs text-slate-muted">{metricLabel}</p>
-          <p className="mt-2 text-[11px] text-slate-muted">
-            {doctor.op_count} عملية · إيراد {formatCurrency(doctor.revenue)}
-          </p>
-        </>
-      ) : (
-        <p className="py-4 text-sm text-slate-muted">لا توجد بيانات في هذه الفترة</p>
-      )}
-    </div>
-  );
-}
-
-function RankingRow({
-  doctor,
-  index,
-  maxRevenue,
-}: {
-  doctor: DoctorPerformanceRow;
-  index: number;
-  maxRevenue: number;
-}) {
-  const width =
-    maxRevenue > 0 ? Math.max(8, (doctor.revenue / maxRevenue) * 100) : 0;
-  const medals = ["🥇", "🥈", "🥉"];
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="flex min-w-0 items-center gap-2 font-medium text-slate-800">
-          {index < 3 ? (
-            <span className="text-base">{medals[index]}</span>
-          ) : (
-            <span className="w-5 text-center text-xs text-slate-400">
-              {index + 1}
-            </span>
-          )}
-          <span className="truncate">{doctor.full_name_ar}</span>
-        </span>
-        <span className="shrink-0 font-bold tabular-nums text-slate-900">
-          {formatCurrency(doctor.revenue)}
-        </span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-primary to-primary-700"
-          style={{ width: `${width}%` }}
-        />
-      </div>
-      <p className="text-[11px] text-slate-muted">
-        {doctor.op_count} عملية · حصة العيادة {formatCurrency(doctor.clinic_share)}{" "}
-        · حصة الطبيب {formatCurrency(doctor.doctor_share)}
-      </p>
-    </div>
-  );
-}
-
 export function AdminDoctorPerformance() {
   const { clinicId, clinicName, loading: clinicLoading } = useActiveClinicId();
   const [period, setPeriod] = useState<Period>("month");
   const [resolvedClinicName, setResolvedClinicName] = useState("");
-  const [highlights, setHighlights] =
-    useState<DoctorPerformanceHighlights | null>(null);
+  const [payload, setPayload] = useState<TopPerformersPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -170,10 +72,10 @@ export function AdminDoctorPerformance() {
 
       if (!res.ok) {
         setError(json.error ?? "تعذر تحميل أداء الأطباء");
-        setHighlights(null);
+        setPayload(null);
       } else if (json.payload) {
         setResolvedClinicName(json.clinicName ?? clinicName);
-        setHighlights(buildDoctorPerformanceHighlights(json.payload));
+        setPayload(normalizeTopPerformersPayload(json.payload));
       }
       setLoading(false);
     },
@@ -196,22 +98,15 @@ export function AdminDoctorPerformance() {
     enabled: !!clinicId,
   });
 
-  const maxRevenue = useMemo(
-    () =>
-      highlights?.ranking.reduce(
-        (m, d) => Math.max(m, d.revenue),
-        0
-      ) ?? 0,
-    [highlights]
-  );
+  const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? "";
 
   if (clinicLoading || loading) {
     return (
       <Card className="p-4">
         <div className="mb-3 h-6 w-40 animate-pulse rounded bg-slate-100" />
-        <div className="grid gap-3 sm:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-28 animate-pulse rounded-2xl bg-slate-100" />
+        <div className="grid gap-3 lg:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="h-48 animate-pulse rounded-2xl bg-slate-100" />
           ))}
         </div>
       </Card>
@@ -230,13 +125,13 @@ export function AdminDoctorPerformance() {
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-text">
-                أداء الأطباء
+                أفضل الأطباء والخدمات
               </h3>
               <p className="text-xs text-slate-muted">
                 {resolvedClinicName || clinicName
                   ? `عيادة: ${resolvedClinicName || clinicName} · `
                   : ""}
-                إيراد · حصة العيادة · النشاط · الخمول
+                تقييم من 100 حسب مدفوعات المراجعين
               </p>
             </div>
           </div>
@@ -270,75 +165,36 @@ export function AdminDoctorPerformance() {
           </Alert>
         )}
 
-        {highlights && (
+        {payload && (
           <>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <HighlightCard
-                title="أعلى إيراد"
-                subtitle="إجمالي فواتير الجلسات"
-                doctor={highlights.topByRevenue}
-                metric={
-                  highlights.topByRevenue
-                    ? formatCurrency(highlights.topByRevenue.revenue)
-                    : "—"
-                }
-                metricLabel="إيراد الفترة"
-                icon={Crown}
-              />
-              <HighlightCard
-                title="أفضل لربح العيادة"
-                subtitle="أعلى حصة عيادة من العمليات"
-                doctor={highlights.topByClinicShare}
-                metric={
-                  highlights.topByClinicShare
-                    ? formatCurrency(highlights.topByClinicShare.clinic_share)
-                    : "—"
-                }
-                metricLabel="حصة العيادة"
-                icon={TrendingUp}
-              />
-              <HighlightCard
-                title="الأكثر نشاطاً"
-                subtitle="أكثر عدد عمليات"
-                doctor={highlights.mostActive}
-                metric={
-                  highlights.mostActive
-                    ? String(highlights.mostActive.op_count)
-                    : "—"
-                }
-                metricLabel="عملية في الفترة"
-                icon={Zap}
-              />
-              <HighlightCard
-                title="الأقل نشاطاً"
-                subtitle="أقل عمليات (ضمن النشطين)"
-                doctor={highlights.leastActive}
-                metric={
-                  highlights.leastActive
-                    ? String(highlights.leastActive.op_count)
-                    : highlights.inactive.length > 0
-                      ? "0"
-                      : "—"
-                }
-                metricLabel={
-                  highlights.leastActive
-                    ? "عملية في الفترة"
-                    : "لا يوجد طبيب نشط للمقارنة"
-                }
-                icon={Award}
-              />
-            </div>
+            {(payload.top_doctors.length > 0 || payload.top_services.length > 0) && (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <TopDoctorsCard
+                  doctors={payload.top_doctors}
+                  periodLabel={periodLabel}
+                />
+                <TopServicesCard services={payload.top_services} />
+              </div>
+            )}
 
-            {highlights.inactive.length > 0 && (
+            {payload.top_doctors.length === 0 &&
+              payload.top_services.length === 0 &&
+              payload.inactive_doctors.length === 0 && (
+                <p className="py-6 text-center text-sm text-slate-muted">
+                  لا توجد عمليات مسجّلة في هذه الفترة
+                </p>
+              )}
+
+            {payload.inactive_doctors.length > 0 && (
               <div className="rounded-xl border border-slate-border bg-primary/5 p-4">
                 <div className="mb-2 flex items-center gap-2">
                   <Moon className="h-4 w-4 text-primary" />
                   <p className="text-sm font-bold text-slate-text">
-                    أطباء بدون عمليات في الفترة ({highlights.inactive.length})
+                    أطباء بدون دفعات في الفترة ({payload.inactive_doctors.length})
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {highlights.inactive.map((d) => (
+                  {payload.inactive_doctors.map((d) => (
                     <span
                       key={d.doctor_id ?? d.full_name_ar}
                       className="rounded-full border border-slate-border bg-surface-card px-3 py-1 text-xs font-medium text-slate-text"
@@ -348,39 +204,6 @@ export function AdminDoctorPerformance() {
                   ))}
                 </div>
               </div>
-            )}
-
-            {highlights.ranking.length > 0 ? (
-              <div>
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="flex items-center gap-1.5 text-sm font-bold text-slate-text">
-                    <Star className="h-4 w-4 text-primary" />
-                    ترتيب الأطباء
-                  </p>
-                  <Link
-                    href="/admin/doctors"
-                    className="text-xs font-semibold text-primary"
-                  >
-                    كل الحسابات ←
-                  </Link>
-                </div>
-                <div className="space-y-4">
-                  {highlights.ranking.map((doctor, index) => (
-                    <RankingRow
-                      key={doctor.doctor_id ?? doctor.full_name_ar}
-                      doctor={doctor}
-                      index={index}
-                      maxRevenue={maxRevenue}
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : (
-              !highlights.inactive.length && (
-                <p className="py-6 text-center text-sm text-slate-muted">
-                  لا توجد عمليات مسجّلة في هذه الفترة
-                </p>
-              )
             )}
           </>
         )}
