@@ -5,6 +5,7 @@ import {
   labDetailsFromSnapshot,
 } from "@/lib/invoices/lab-session-details";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import { DOCTOR_FINANCE_SELECT } from "@/lib/services/doctor-db-select";
 import { doctorPaymentPct } from "@/lib/services/patient-financial-plan";
 import {
   calcOperationEarned,
@@ -215,7 +216,7 @@ async function loadDoctorPaymentMeta(
   const { data } = await admin
     .from("doctors")
     .select(
-      "id, percentage, payment_type, financial_agreement, materials_share"
+      DOCTOR_FINANCE_SELECT
     )
     .eq("id", doctorId)
     .maybeSingle();

@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
-import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { TranslationKey } from "@/i18n/translations";
@@ -81,8 +81,31 @@ export default function DoctorFinancialLedgerPage() {
     setDoctorId(doctor.id);
     setSalaryDoctor(isSalaryDoctor(doctor));
 
-    const stats = await fetchDoctorWalletStats(supabase, doctor.id);
-    setBalance(stats.availableBalance);
+    const repairKey = `mc:doctor-shares-auto-repair:v5:${doctor.id}`;
+    const needSync =
+      typeof window !== "undefined" && !sessionStorage.getItem(repairKey);
+    const walletUrl = needSync
+      ? "/api/doctor/wallet-stats?sync_shares=1"
+      : "/api/doctor/wallet-stats";
+
+    try {
+      const res = await fetch(walletUrl, {
+        credentials: "include",
+        headers: authPortalHeaders("doctor"),
+      });
+      if (res.ok) {
+        const stats = (await res.json()) as { availableBalance: number };
+        setBalance(stats.availableBalance);
+        if (needSync && typeof window !== "undefined") {
+          sessionStorage.setItem(repairKey, "1");
+        }
+        return;
+      }
+    } catch {
+      /* fallback */
+    }
+
+    setBalance(0);
   }, []);
 
   useEffect(() => {

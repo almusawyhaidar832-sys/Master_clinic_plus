@@ -68,13 +68,22 @@ export default function DoctorWalletPage() {
     }
 
     let live: DoctorWalletStats | null = null;
+    const repairKey = `mc:doctor-shares-auto-repair:v5:${doctor.id}`;
+    const needSync =
+      typeof window !== "undefined" && !sessionStorage.getItem(repairKey);
+    const walletUrl = needSync
+      ? "/api/doctor/wallet-stats?sync_shares=1"
+      : "/api/doctor/wallet-stats";
     try {
-      const res = await fetch("/api/doctor/wallet-stats", {
+      const res = await fetch(walletUrl, {
         credentials: "include",
         headers: authPortalHeaders("doctor"),
       });
       if (res.ok) {
         live = (await res.json()) as DoctorWalletStats;
+        if (needSync && typeof window !== "undefined") {
+          sessionStorage.setItem(repairKey, "1");
+        }
       }
     } catch {
       /* fallback below */

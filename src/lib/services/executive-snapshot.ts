@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { DOCTOR_FINANCE_SELECT } from "@/lib/services/doctor-db-select";
 import { fetchClosedPayrollMonths } from "@/lib/services/salary-payroll";
 import { fetchConfirmedPayrollProfitDeduction } from "@/lib/services/payroll-paid-portions";
 import {
@@ -671,7 +672,7 @@ export async function summarizePeriodOperationFinancials(
       ? supabase
           .from("doctors")
           .select(
-            "id, percentage, payment_type, financial_agreement, materials_share, salary_amount"
+            DOCTOR_FINANCE_SELECT
           )
           .in("id", doctorIds)
       : Promise.resolve({ data: [] as Record<string, unknown>[] }),
@@ -807,7 +808,7 @@ export async function fetchTopPerformersForPeriod(
         ? supabase
             .from("doctors")
             .select(
-              "id, percentage, payment_type, financial_agreement, materials_share, salary_amount"
+              DOCTOR_FINANCE_SELECT
             )
             .in("id", paymentDoctorIds)
         : Promise.resolve({ data: [] as Record<string, unknown>[] }),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
+import { repairDoctorOperationShares } from "@/lib/services/operation-amount-edit";
 
 /** GET — رصيد الطبيب (يشمل صرفيات الطبيب — قد يكون سالباً) */
 export async function GET(req: NextRequest) {
@@ -29,6 +30,13 @@ export async function GET(req: NextRequest) {
         { error: "لم يُربط حسابك بسجل طبيب" },
         { status: 404 }
       );
+    }
+
+    const syncShares = new URL(req.url).searchParams.get("sync_shares") === "1";
+    if (syncShares) {
+      await repairDoctorOperationShares(admin, doctor.clinic_id, {
+        doctorId: doctor.id,
+      });
     }
 
     const stats = await fetchDoctorWalletStats(admin, doctor.id);

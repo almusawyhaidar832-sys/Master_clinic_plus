@@ -12,6 +12,7 @@ import { doctorPaymentPct } from "@/lib/services/patient-financial-plan";
 import {
   calcOperationEarned,
 } from "@/lib/services/doctor-wallet";
+import { DOCTOR_FINANCE_SELECT } from "@/lib/services/doctor-db-select";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import type { Doctor } from "@/types";
 import { opName } from "@/types";
@@ -199,7 +200,7 @@ async function resolveDoctorShareForArchive(
   const { data: doctorRaw } = await admin
     .from("doctors")
     .select(
-      "id, percentage, payment_type, financial_agreement, materials_share"
+      DOCTOR_FINANCE_SELECT
     )
     .eq("id", doctorId)
     .maybeSingle();

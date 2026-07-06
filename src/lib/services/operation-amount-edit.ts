@@ -10,6 +10,7 @@ import {
   isPersistedTreatmentCaseId,
   processCasePayment,
 } from "@/lib/services/patient-treatment-cases";
+import { DOCTOR_FINANCE_SELECT } from "@/lib/services/doctor-db-select";
 import type { Doctor } from "@/types";
 
 function num(v: unknown): number {
@@ -85,7 +86,7 @@ async function recalculateOperationShares(
 
   const { data: doctorRaw } = await admin
     .from("doctors")
-    .select("id, percentage, payment_type, financial_agreement, materials_share, salary_amount")
+    .select(DOCTOR_FINANCE_SELECT)
     .eq("id", op.doctor_id)
     .maybeSingle();
 
@@ -254,7 +255,7 @@ export async function syncFinancialsAfterOperationEdit(
 
   const { data: doctorRaw } = await admin
     .from("doctors")
-    .select("id, percentage, payment_type, financial_agreement, materials_share, salary_amount")
+    .select(DOCTOR_FINANCE_SELECT)
     .eq("id", after.doctor_id)
     .maybeSingle();
   const doctor = (doctorRaw as Doctor | null) ?? null;

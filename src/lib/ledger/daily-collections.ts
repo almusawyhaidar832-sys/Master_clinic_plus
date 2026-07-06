@@ -15,8 +15,11 @@ import {
   sumPatientDebtFromCases,
   type DebtorCaseDetail,
 } from "@/lib/ledger/outstanding-debt";
-import { computeVisitDoctorShare } from "@/lib/services/doctor-wallet";
+import {
+  treatmentPaidForDoctorShare,
+} from "@/lib/services/doctor-wallet";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
+import { DOCTOR_FINANCE_WITH_NAME_SELECT } from "@/lib/services/doctor-db-select";
 import {
   fetchDailyAssistantPayrollLines,
   sumAssistantPayrollByDoctor,
@@ -509,6 +512,39 @@ type DoctorPaymentMeta = {
   doctor: Doctor | null;
 };
 
+/** حصة الطبيب لزيارة — نسبته الحالية فقط (بدون 50/50 مخزّن) */
+function earnedVisitShareLive(
+  ops: TodayOperationRow[],
+  meta: DoctorPaymentMeta
+): number {
+  if (meta.salary) return 0;
+
+  let total = 0;
+  for (const op of ops) {
+    const raw = op as TodayOperationRow & {
+      review_fee_amount?: unknown;
+      is_review_statement?: boolean | null;
+    };
+    const treatmentPaid = treatmentPaidForDoctorShare({
+      paid_amount: num(op.paid_amount),
+      review_fee_amount: num(raw.review_fee_amount),
+      is_review_statement: raw.is_review_statement,
+    });
+    if (treatmentPaid <= FINANCIAL_EPSILON) continue;
+
+    if (meta.doctor) {
+      total += computeLiveDoctorShare(
+        treatmentPaid,
+        meta.doctor,
+        num(op.materials_cost)
+      );
+    } else if (meta.pct > 0) {
+      total += roundMoney(treatmentPaid * meta.pct);
+    }
+  }
+  return roundMoney(total);
+}
+
 function computeVisitDoctorShares(
   operations: TodayOperationRow[],
   visitPaidByKey: Map<string, number>,
@@ -543,19 +579,9 @@ function computeVisitDoctorShares(
   const byDoctor = new Map<string, number>();
   const byVisit = new Map<string, number>();
   for (const { doctorId, vk, ops } of groups.values()) {
-    const meta = metaByDoctor.get(doctorId) ?? {
-      pct: 0.5,
-      salary: false,
-      doctor: null,
-    };
-    const visitPaid = visitPaidByKey.get(vk) ?? 0;
-    const earned = computeVisitDoctorShare(
-      ops,
-      meta.pct,
-      visitPaid,
-      meta.salary,
-      meta.doctor
-    );
+    const meta = metaByDoctor.get(doctorId);
+    if (!meta) continue;
+    const earned = earnedVisitShareLive(ops, meta);
     byVisit.set(vk, earned);
     byDoctor.set(doctorId, (byDoctor.get(doctorId) ?? 0) + earned);
   }
@@ -921,9 +947,7 @@ export async function fetchDailyCollections(
     fetchQueueForPeriod(supabase, clinicId, effectiveFrom, effectiveTo, input.doctorId),
     supabase
       .from("doctors")
-      .select(
-        "id, full_name_ar, percentage, payment_type, financial_agreement, materials_share"
-      )
+      .select(DOCTOR_FINANCE_WITH_NAME_SELECT)
       .eq("clinic_id", clinicId)
       .order("full_name_ar"),
   ]);
@@ -967,31 +991,23 @@ export async function fetchDailyCollections(
   const metaByDoctor = new Map<string, DoctorPaymentMeta>();
   for (const doc of doctorsRes.data ?? []) {
     const doctor = doc as Doctor;
-    metaByDoctor.set(String(doc.id), {
+      metaByDoctor.set(String(doc.id), {
       pct: doctorPaymentPct(doctor),
-      salary: isSalaryDoctor({
-        payment_type: doc.payment_type,
-        financial_agreement: doc.financial_agreement,
-      }),
+      salary: isSalaryDoctor({ payment_type: doc.payment_type }),
       doctor,
     });
   }
   if (input.doctorId && !metaByDoctor.has(input.doctorId)) {
     const { data: doc } = await supabase
       .from("doctors")
-      .select(
-        "id, full_name_ar, percentage, payment_type, financial_agreement, materials_share"
-      )
+      .select(DOCTOR_FINANCE_WITH_NAME_SELECT)
       .eq("id", input.doctorId)
       .maybeSingle();
     if (doc) {
       const doctor = doc as Doctor;
       metaByDoctor.set(input.doctorId, {
         pct: doctorPaymentPct(doctor),
-        salary: isSalaryDoctor({
-          payment_type: doc.payment_type,
-          financial_agreement: doc.financial_agreement,
-        }),
+        salary: isSalaryDoctor({ payment_type: doc.payment_type }),
         doctor,
       });
     }
@@ -1007,20 +1023,15 @@ export async function fetchDailyCollections(
   if (missingDoctorIds.length) {
     const { data: extraDocs } = await supabase
       .from("doctors")
-      .select(
-        "id, full_name_ar, percentage, payment_type, financial_agreement, materials_share"
-      )
+      .select(DOCTOR_FINANCE_WITH_NAME_SELECT)
       .in("id", missingDoctorIds);
     for (const doc of extraDocs ?? []) {
       const doctor = doc as Doctor;
       metaByDoctor.set(String(doc.id), {
-        pct: doctorPaymentPct(doctor),
-        salary: isSalaryDoctor({
-          payment_type: doc.payment_type,
-          financial_agreement: doc.financial_agreement,
-        }),
-        doctor,
-      });
+      pct: doctorPaymentPct(doctor),
+      salary: isSalaryDoctor({ payment_type: doc.payment_type }),
+      doctor,
+    });
     }
   }
   const { byVisit: visitDoctorShareByKey } = computeVisitDoctorShares(
@@ -1499,9 +1510,7 @@ export async function fetchPeriodCollectionFinancialTotals(
   const doctorsRes = doctorIds.length
     ? await supabase
         .from("doctors")
-        .select(
-          "id, full_name_ar, percentage, payment_type, financial_agreement, materials_share, salary_amount"
-        )
+        .select(DOCTOR_FINANCE_WITH_NAME_SELECT)
         .in("id", doctorIds)
     : { data: [] as Doctor[] };
 

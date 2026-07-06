@@ -276,7 +276,7 @@ export function DoctorDailyCollectionsPanel({
 
     const repairKey =
       clinicId && doctorId
-        ? `mc:doctor-shares-auto-repair:v4:${clinicId}:${doctorId}`
+        ? `mc:doctor-shares-auto-repair:v5:${clinicId}:${doctorId}`
         : "";
     const needSync =
       repairKey &&

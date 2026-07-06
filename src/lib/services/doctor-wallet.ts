@@ -20,6 +20,7 @@ import {
   BALANCE_TOPUP_DOCTOR_TYPE,
 } from "@/lib/services/balance-topup";
 import { currentMonthYear, monthDateRange } from "@/lib/utils";
+import { DOCTOR_FINANCE_SELECT } from "@/lib/services/doctor-db-select";
 import type { Doctor, PayrollRecord } from "@/types";
 
 export interface DoctorWalletStats {
@@ -564,7 +565,7 @@ async function fetchDoctorPaymentMap(
   const { data } = await supabase
     .from("doctors")
     .select(
-      "id, percentage, payment_type, financial_agreement, materials_share"
+      DOCTOR_FINANCE_SELECT
     )
     .in("id", doctorIds);
 
@@ -572,10 +573,7 @@ async function fetchDoctorPaymentMap(
     const doctor = row as Doctor;
     map.set(row.id, {
       pct: doctorPaymentPct(doctor),
-      isSalary: isSalaryDoctor({
-        payment_type: doctor.payment_type,
-        financial_agreement: doctor.financial_agreement,
-      }),
+      isSalary: isSalaryDoctor({ payment_type: doctor.payment_type }),
       doctor,
     });
   }
@@ -613,11 +611,8 @@ export async function computeEarningsFromOperationsForDoctors(
   ]);
 
   for (const row of (opsRes.data ?? []) as OperationEarningBatchRow[]) {
-    const meta = paymentMap.get(row.doctor_id) ?? {
-      pct: 0.5,
-      isSalary: false,
-      doctor: null,
-    };
+    const meta = paymentMap.get(row.doctor_id);
+    if (!meta) continue;
     const prev = sums.get(row.doctor_id) ?? 0;
     sums.set(
       row.doctor_id,
@@ -877,7 +872,7 @@ function sumOperationEarnings(
   );
 }
 
-/** حساب الأرباح من الجلسات — يعتمد على doctor_share_amount المجمّد عند الدفع */
+/** حساب الأرباح من الجلسات — نسبة الطبيب الحالية من ملفه (لا 50/50 افتراضي) */
 export async function computeEarningsFromOperations(
   supabase: SupabaseClient,
   doctorId: string
@@ -890,7 +885,7 @@ export async function computeEarningsFromOperations(
     supabase
       .from("doctors")
       .select(
-        "id, percentage, payment_type, financial_agreement, materials_share"
+        DOCTOR_FINANCE_SELECT
       )
       .eq("id", doctorId)
       .maybeSingle(),
@@ -900,7 +895,6 @@ export async function computeEarningsFromOperations(
   const pct = doctorPaymentPct(doctorRow);
   const salaryDoctor = isSalaryDoctor({
     payment_type: doctorRow?.payment_type,
-    financial_agreement: doctorRow?.financial_agreement,
   });
   return sumOperationEarnings(opsRes.data, pct, salaryDoctor, doctorRow);
 }
@@ -923,7 +917,7 @@ export async function computeEarningsFromOperationsForPeriod(
   const { data: doctorRaw } = await supabase
     .from("doctors")
     .select(
-      "id, percentage, payment_type, financial_agreement, materials_share"
+      DOCTOR_FINANCE_SELECT
     )
     .eq("id", doctorId)
     .maybeSingle();
@@ -932,7 +926,6 @@ export async function computeEarningsFromOperationsForPeriod(
   const pct = doctorPaymentPct(doctorRow);
   const salaryDoctor = isSalaryDoctor({
     payment_type: doctorRow?.payment_type,
-    financial_agreement: doctorRow?.financial_agreement,
   });
   const { data: ops } = await opsQuery;
   return sumOperationEarnings(ops, pct, salaryDoctor, doctorRow);

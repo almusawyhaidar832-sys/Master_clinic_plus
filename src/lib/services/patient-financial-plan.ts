@@ -747,25 +747,20 @@ export function previewPaidSessionSplit(opts: {
   let baseDoc = 0;
   let baseClinic = 0;
 
-  if (finalPrice > 0 && (caseDoc > 0 || caseClinic > 0) && paid > 0) {
-    if (
-      shouldUseDoctorPercentageForPaymentSplit(
-        opts.doctor,
-        finalPrice,
-        caseDoc,
-        caseClinic
-      )
-    ) {
+  if (finalPrice > 0 && paid > 0) {
+    if (opts.doctor && !isSalaryDoctor(opts.doctor)) {
       const live = splitPaidByDoctorPercentage(paid, opts.doctor);
       baseDoc = live.doctorShare;
       baseClinic = live.clinicShare;
-    } else if (caseDoc > finalPrice || caseClinic > finalPrice) {
-      const live = splitPaidByDoctorPercentage(paid, opts.doctor);
-      baseDoc = live.doctorShare;
-      baseClinic = live.clinicShare;
-    } else {
-      baseDoc = roundMoney((paid * caseDoc) / finalPrice);
-      baseClinic = roundMoney((paid * caseClinic) / finalPrice);
+    } else if (caseDoc > 0 || caseClinic > 0) {
+      if (caseDoc > finalPrice || caseClinic > finalPrice) {
+        const live = splitPaidByDoctorPercentage(paid, opts.doctor);
+        baseDoc = live.doctorShare;
+        baseClinic = live.clinicShare;
+      } else {
+        baseDoc = roundMoney((paid * caseDoc) / finalPrice);
+        baseClinic = roundMoney((paid * caseClinic) / finalPrice);
+      }
     }
   } else if (opts.doctor && finalPrice <= 0 && paid > 0) {
     const live = splitPaidByDoctorPercentage(paid, opts.doctor);
