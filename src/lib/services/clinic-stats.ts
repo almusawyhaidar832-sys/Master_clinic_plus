@@ -91,11 +91,15 @@ export async function fetchClinicProfitStatsForPeriod(
   const { fetchTotalRefundsAmount } = await import(
     "@/lib/services/session-refunds"
   );
-  const { fetchResolvedSalaryDeductionForPeriod, loadOperationsInPeriod, summarizePeriodOperationFinancials } =
+  const { fetchResolvedSalaryDeductionForPeriod, loadOperationsInPeriod } =
     await import("@/lib/services/executive-snapshot");
+  const { fetchPeriodCollectionFinancialTotals } = await import(
+    "@/lib/ledger/daily-collections"
+  );
 
   const [
     ops,
+    collectionFinancials,
     expensesRes,
     totalSalariesPaid,
     totalRefunds,
@@ -104,6 +108,7 @@ export async function fetchClinicProfitStatsForPeriod(
     balanceTopups,
   ] = await Promise.all([
     loadOperationsInPeriod(supabase, clinicId, from, to),
+    fetchPeriodCollectionFinancialTotals(supabase, clinicId, from, to),
     supabase
       .from("expenses")
       .select("amount, expense_kind")
@@ -124,13 +129,9 @@ export async function fetchClinicProfitStatsForPeriod(
     fetchClinicBalanceTopupsForPeriod(supabase, clinicId, from, to),
   ]);
 
-  const opFinancials = await summarizePeriodOperationFinancials(
-    supabase,
-    ops
-  );
-  const cashInflow = opFinancials.collected;
-  const clinicShareTotal = opFinancials.clinicShareTotal;
-  const doctorShareTotal = opFinancials.doctorShareTotal;
+  const cashInflow = collectionFinancials.collected;
+  const clinicShareTotal = collectionFinancials.clinicShareTotal;
+  const doctorShareTotal = collectionFinancials.doctorShareTotal;
   const generalExpenses = (expensesRes.data ?? [])
     .filter((r) => (r.expense_kind ?? "general") !== "doctor_salary")
     .reduce((s, r) => s + Number(r.amount ?? 0), 0);

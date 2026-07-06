@@ -1141,3 +1141,55 @@ async function fetchQueueForPeriod(
     };
   });
 }
+
+export type PeriodDoctorEarningRow = {
+  doctorId: string;
+  doctorName: string;
+  collected: number;
+  doctorShare: number;
+  clinicShare: number;
+};
+
+/** حصص الأطباء/العيادة — نفس كشف مالي اليوم (زيارة + نسبة الطبيب) */
+export async function fetchPeriodCollectionFinancialTotals(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<{
+  collected: number;
+  doctorShareTotal: number;
+  clinicShareTotal: number;
+  byDoctor: PeriodDoctorEarningRow[];
+}> {
+  const result = await fetchDailyCollections(supabase, clinicId, {
+    dateFrom: from,
+    dateTo: to,
+    statusFilter: "all",
+  });
+
+  const collected = roundMoney(result.totals.totalCollected);
+  const doctorShareTotal = roundMoney(result.totals.doctorShareToday);
+  const clinicShareTotal = roundMoney(
+    Math.max(0, collected - doctorShareTotal)
+  );
+
+  const byDoctor = result.doctors.map((d) => {
+    const docCollected = roundMoney(d.stats.totalCollected);
+    const docShare = roundMoney(d.stats.doctorShareToday);
+    return {
+      doctorId: d.doctorId,
+      doctorName: d.doctorName,
+      collected: docCollected,
+      doctorShare: docShare,
+      clinicShare: roundMoney(Math.max(0, docCollected - docShare)),
+    };
+  });
+
+  return {
+    collected,
+    doctorShareTotal,
+    clinicShareTotal,
+    byDoctor,
+  };
+}
