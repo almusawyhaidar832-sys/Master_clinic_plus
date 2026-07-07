@@ -2,15 +2,23 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, User, Pencil, RefreshCw } from "lucide-react";
+import {
+  X,
+  User,
+  Pencil,
+  RefreshCw,
+  Check,
+  Ban,
+  Trash2,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { resolveAppointmentPatientProfileHref } from "@/lib/services/ensure-appointment-patient-client";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { formatDate, formatTime } from "@/lib/utils";
-import {
-  APPOINTMENT_STATUS_COLORS,
-} from "@/components/appointments/appointment-constants";
+import { APPOINTMENT_STATUS_COLORS } from "@/components/appointments/appointment-constants";
+import { appointmentActionFlags } from "@/components/appointments/appointment-action-flags";
 import { useAppointmentStatusLabels } from "@/i18n/localized-labels";
+import { setAccountantAppointmentStatusViaApi } from "@/lib/services/accountant-appointments-client";
 import { cn } from "@/lib/utils";
 import type { AppointmentWithDoctor } from "@/hooks/useCentralizedAppointments";
 
@@ -19,15 +27,10 @@ interface AppointmentScheduleActionsModalProps {
   clinicId: string;
   onClose: () => void;
   onEdit: () => void;
-}
-
-function canEditAppointment(status: string): boolean {
-  return (
-    status !== "cancelled" &&
-    status !== "completed" &&
-    status !== "in_examination" &&
-    status !== "in_clinic"
-  );
+  onCancel: () => void;
+  onReject: () => void;
+  onDelete: () => void;
+  onChanged: (message: string) => void;
 }
 
 export function AppointmentScheduleActionsModal({
@@ -35,13 +38,18 @@ export function AppointmentScheduleActionsModal({
   clinicId,
   onClose,
   onEdit,
+  onCancel,
+  onReject,
+  onDelete,
+  onChanged,
 }: AppointmentScheduleActionsModalProps) {
   const statusLabels = useAppointmentStatusLabels();
   const router = useRouter();
   const [openingPatient, setOpeningPatient] = useState(false);
+  const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState("");
 
-  const editable = canEditAppointment(appointment.status);
+  const flags = appointmentActionFlags(appointment.status);
 
   async function handleOpenPatient() {
     setError("");
@@ -60,6 +68,26 @@ export function AppointmentScheduleActionsModal({
     } finally {
       setOpeningPatient(false);
     }
+  }
+
+  async function handleAccept() {
+    setError("");
+    setAccepting(true);
+    const result = await setAccountantAppointmentStatusViaApi(
+      appointment.id,
+      "accept"
+    );
+    setAccepting(false);
+    if (!result.ok) {
+      setError(result.error ?? "تعذر التأكيد");
+      return;
+    }
+    onChanged(
+      result.queuedToWaitingRoom
+        ? "تم تأكيد الحجز — المراجع في غرفة الانتظار"
+        : "تم تأكيد الحجز وإبقاؤه"
+    );
+    onClose();
   }
 
   return (
@@ -115,6 +143,63 @@ export function AppointmentScheduleActionsModal({
         )}
 
         <div className="space-y-2">
+          {flags.isPending && (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleAccept()}
+                disabled={accepting}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {accepting ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4" />
+                )}
+                تأكيد وإبقاء الحجز
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onReject();
+                  onClose();
+                }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-100"
+              >
+                <X className="h-4 w-4" />
+                رفض الطلب
+              </button>
+            </>
+          )}
+
+          {flags.canCancel && (
+            <button
+              type="button"
+              onClick={() => {
+                onCancel();
+                onClose();
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+            >
+              <Ban className="h-4 w-4" />
+              إلغاء الحجز
+            </button>
+          )}
+
+          {flags.canDelete && (
+            <button
+              type="button"
+              onClick={() => {
+                onDelete();
+                onClose();
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50"
+            >
+              <Trash2 className="h-4 w-4" />
+              حذف نهائي
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => void handleOpenPatient()}
@@ -129,7 +214,7 @@ export function AppointmentScheduleActionsModal({
             ملف المريض
           </button>
 
-          {editable ? (
+          {flags.canEdit ? (
             <button
               type="button"
               onClick={() => {
@@ -141,10 +226,16 @@ export function AppointmentScheduleActionsModal({
               <Pencil className="h-4 w-4" />
               تعديل الموعد
             </button>
-          ) : (
-            <p className="rounded-xl bg-slate-50 px-3 py-2 text-center text-xs text-slate-muted">
-              لا يمكن تعديل موعد مكتمل أو ملغى أو جارٍ فحصه
-            </p>
+          ) : null}
+
+          {(flags.canCancel || flags.isPending) && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              إبقاء الحجز كما هو
+            </button>
           )}
         </div>
       </div>

@@ -14,7 +14,12 @@ import { cn } from "@/lib/utils";
 import { Select } from "@/components/ui/Select";
 import { CalendarRange, RefreshCw } from "lucide-react";
 import { EditAppointmentModal } from "@/components/assistant/EditAppointmentModal";
+import { CancelAppointmentModal } from "@/components/assistant/CancelAppointmentModal";
+import { RejectAppointmentModal } from "@/components/assistant/RejectAppointmentModal";
 import { AppointmentScheduleActionsModal } from "@/components/appointments/AppointmentScheduleActionsModal";
+import { appointmentActionFlags } from "@/components/appointments/appointment-action-flags";
+import { deleteAccountantAppointmentViaApi } from "@/lib/services/accountant-appointments-client";
+import { Check, Ban, Trash2, X } from "lucide-react";
 import type { AppointmentWithDoctor } from "@/hooks/useCentralizedAppointments";
 import type { Doctor } from "@/types";
 
@@ -46,6 +51,10 @@ export function AppointmentScheduleView() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [selected, setSelected] = useState<AppointmentWithDoctor | null>(null);
   const [editing, setEditing] = useState<AppointmentWithDoctor | null>(null);
+  const [cancelling, setCancelling] = useState<AppointmentWithDoctor | null>(null);
+  const [rejecting, setRejecting] = useState<AppointmentWithDoctor | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!clinicId) return;
@@ -96,6 +105,19 @@ export function AppointmentScheduleView() {
     return `${formatDate(effectiveFrom)} — ${formatDate(effectiveTo)}`;
   }, [effectiveFrom, effectiveTo]);
 
+  async function handleDelete(appt: AppointmentWithDoctor) {
+    if (!confirm(`حذف نهائي لموعد ${appt.patient_name_ar}؟`)) return;
+    setActionId(appt.id);
+    const result = await deleteAccountantAppointmentViaApi(appt.id);
+    setActionId(null);
+    if (!result.ok) {
+      setMessage(result.error ?? "تعذر الحذف");
+      return;
+    }
+    setMessage("تم حذف الموعد نهائياً");
+    refresh();
+  }
+
   if (clinicLoading) {
     return (
       <div className="flex justify-center py-16">
@@ -122,10 +144,16 @@ export function AppointmentScheduleView() {
           جدول المواعيد
         </h1>
         <p className="mt-1 text-sm text-slate-muted">
-          عرض أجندة الحجوزات حسب التاريخ والطبيب — اضغط على أي موعد لفتح ملف المريض أو
-          تعديله
+          عرض أجندة الحجوزات — تأكيد أو إلغاء أو حذف حسب الحالة (مرحلتان: إلغاء ثم
+          حذف)
         </p>
       </div>
+
+      {message && (
+        <p className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+          {message}
+        </p>
+      )}
 
       <div className="rounded-2xl border border-slate-border bg-surface-card p-4 shadow-card space-y-4">
         <div className="flex flex-wrap gap-2">
@@ -242,10 +270,13 @@ export function AppointmentScheduleView() {
                 <th className="px-4 py-3 font-medium">التاريخ</th>
                 <th className="px-4 py-3 font-medium">الوقت</th>
                 <th className="px-4 py-3 font-medium">حالة الحجز</th>
+                <th className="px-4 py-3 font-medium">إجراءات</th>
               </tr>
             </thead>
             <tbody>
-              {appointments.map((a) => (
+              {appointments.map((a) => {
+                const flags = appointmentActionFlags(a.status);
+                return (
                 <tr
                   key={a.id}
                   role="button"
@@ -287,8 +318,50 @@ export function AppointmentScheduleView() {
                       {statusLabels[a.status] ?? a.status}
                     </span>
                   </td>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-wrap gap-1">
+                      {flags.isPending && (
+                        <ScheduleActionBtn
+                          onClick={() => setSelected(a)}
+                          className="bg-emerald-600 text-white hover:bg-emerald-700"
+                        >
+                          <Check className="h-3 w-3" />
+                          تأكيد
+                        </ScheduleActionBtn>
+                      )}
+                      {flags.canCancel && (
+                        <ScheduleActionBtn
+                          onClick={() => setCancelling(a)}
+                          className="border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                        >
+                          <Ban className="h-3 w-3" />
+                          إلغاء
+                        </ScheduleActionBtn>
+                      )}
+                      {flags.canDelete && (
+                        <ScheduleActionBtn
+                          disabled={actionId === a.id}
+                          onClick={() => void handleDelete(a)}
+                          className="border border-red-200 text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          حذف
+                        </ScheduleActionBtn>
+                      )}
+                      {flags.isPending && (
+                        <ScheduleActionBtn
+                          onClick={() => setRejecting(a)}
+                          className="border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                        >
+                          <X className="h-3 w-3" />
+                          رفض
+                        </ScheduleActionBtn>
+                      )}
+                    </div>
+                  </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
@@ -300,6 +373,39 @@ export function AppointmentScheduleView() {
           clinicId={clinicId}
           onClose={() => setSelected(null)}
           onEdit={() => setEditing(selected)}
+          onCancel={() => setCancelling(selected)}
+          onReject={() => setRejecting(selected)}
+          onDelete={() => void handleDelete(selected)}
+          onChanged={(msg) => {
+            setMessage(msg);
+            refresh();
+          }}
+        />
+      )}
+
+      {cancelling && (
+        <CancelAppointmentModal
+          appointment={cancelling}
+          portal="accountant"
+          onClose={() => setCancelling(null)}
+          onSaved={() => {
+            setMessage("تم إلغاء الحجز — يمكنك حذفه لاحقاً من زر «حذف»");
+            setCancelling(null);
+            refresh();
+          }}
+        />
+      )}
+
+      {rejecting && (
+        <RejectAppointmentModal
+          appointment={rejecting}
+          portal="accountant"
+          onClose={() => setRejecting(null)}
+          onSaved={() => {
+            setMessage("تم رفض الطلب — الحجز ملغي");
+            setRejecting(null);
+            refresh();
+          }}
         />
       )}
 
@@ -315,5 +421,31 @@ export function AppointmentScheduleView() {
         />
       )}
     </div>
+  );
+}
+
+function ScheduleActionBtn({
+  children,
+  onClick,
+  disabled,
+  className,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium disabled:opacity-50",
+        className
+      )}
+    >
+      {children}
+    </button>
   );
 }
