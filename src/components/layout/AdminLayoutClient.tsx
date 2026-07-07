@@ -7,6 +7,7 @@ import { fetchUnreadNotificationCountViaApi } from "@/lib/notifications/client";
 import { getAuthProfile } from "@/lib/clinic-context";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { ClinicDataSyncBridge } from "@/components/sync/ClinicDataSyncBridge";
 
 export function AdminLayoutClient({
   children,
@@ -39,6 +40,7 @@ export function AdminLayoutClient({
 
   return (
     <AdminMobileShell notificationCount={notificationCount}>
+      <ClinicDataSyncBridge />
       {children}
     </AdminMobileShell>
   );

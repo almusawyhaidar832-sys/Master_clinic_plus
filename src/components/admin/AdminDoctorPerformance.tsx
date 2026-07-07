@@ -92,7 +92,7 @@ export function AdminDoctorPerformance() {
   }, [fetchData, clinicLoading, clinicId]);
 
   useClinicSync({
-    topics: ["sessions", "financial"],
+    topics: ["sessions", "financial", "profit"],
     clinicId: clinicId ?? undefined,
     onRefresh: () => fetchData({ silent: true }),
     enabled: !!clinicId,

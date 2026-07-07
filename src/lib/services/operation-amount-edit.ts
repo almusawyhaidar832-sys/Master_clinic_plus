@@ -287,7 +287,17 @@ export async function syncFinancialsAfterOperationEdit(
   const beforeTotal = num(before.total_amount);
   const afterTotal = num(after.total_amount);
 
-  if (beforePaid === afterPaid && beforeTotal === afterTotal) {
+  const beforeReview = num(before.review_fee_amount);
+  const afterReview = num(after.review_fee_amount);
+  const beforeIsReview = Boolean(before.is_review_statement);
+  const afterIsReview = Boolean(after.is_review_statement);
+
+  if (
+    beforePaid === afterPaid &&
+    beforeTotal === afterTotal &&
+    beforeReview === afterReview &&
+    beforeIsReview === afterIsReview
+  ) {
     return { ok: true };
   }
 
@@ -432,6 +442,10 @@ export function buildOperationAmountAuditNote(
   const afterTotal = num(after.total_amount);
   const beforeDoc = num(before.doctor_share_amount);
   const afterDoc = num(after.doctor_share_amount);
+  const beforeReview = num(before.review_fee_amount);
+  const afterReview = num(after.review_fee_amount);
+  const beforeIsReview = Boolean(before.is_review_statement);
+  const afterIsReview = Boolean(after.is_review_statement);
 
   if (beforePaid !== afterPaid) {
     parts.push(`المدفوع ${beforePaid} ← ${afterPaid}`);
@@ -439,11 +453,19 @@ export function buildOperationAmountAuditNote(
   if (beforeTotal !== afterTotal) {
     parts.push(`الإجمالي ${beforeTotal} ← ${afterTotal}`);
   }
+  if (beforeIsReview !== afterIsReview) {
+    parts.push(
+      beforeIsReview ? "كشفية مراجع ← جلسة" : "جلسة ← كشفية مراجع"
+    );
+  }
+  if (beforeReview !== afterReview) {
+    parts.push(`الكشفية ${beforeReview} ← ${afterReview}`);
+  }
   if (beforeDoc !== afterDoc) {
     parts.push(`حصة الطبيب ${beforeDoc} ← ${afterDoc}`);
   }
 
-  return parts.length ? `تعديل مبلغ — ${parts.join(" · ")}` : undefined;
+  return parts.length ? `تعديل جلسة — ${parts.join(" · ")}` : undefined;
 }
 
 /** تصحيح paid_amount للجلسات القديمة (علاج فقط) أو المضاعفة خطأً */

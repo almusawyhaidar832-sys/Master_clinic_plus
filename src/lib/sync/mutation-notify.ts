@@ -71,3 +71,20 @@ export function notifyFinancialMutation(input: {
     source: "mutation",
   });
 }
+
+/**
+ * بعد تعديل جلسة (مبلغ، كشفية، تاريخ) — يُحدّث الكشف المالي والطبيب والإدارة فوراً.
+ */
+export function notifyOperationEditMutation(input: {
+  clinicId: string;
+  doctorId?: string;
+  patientId?: string;
+}): void {
+  notifyClinicSync({
+    topic: ["sessions", "financial", "profit", "audit"],
+    clinicId: input.clinicId,
+    doctorId: input.doctorId,
+    patientId: input.patientId,
+    source: "mutation",
+  });
+}

@@ -16,6 +16,8 @@ const EDITABLE_FIELDS = [
   "total_amount",
   "operation_name_ar",
   "operation_type",
+  "is_review_statement",
+  "review_fee_amount",
 ] as const;
 
 /** PATCH — تعديل جلسة مع سجل تدقيق */
@@ -91,10 +93,19 @@ export async function PATCH(
     const afterPaid = Number(after.paid_amount ?? 0);
     const beforeTotal = Number(before.total_amount ?? 0);
     const afterTotal = Number(after.total_amount ?? 0);
+    const beforeReview = Number(before.review_fee_amount ?? 0);
+    const afterReview = Number(after.review_fee_amount ?? 0);
+    const beforeIsReview = Boolean(before.is_review_statement);
+    const afterIsReview = Boolean(after.is_review_statement);
     const paidDelta = Math.round((afterPaid - beforePaid) * 100) / 100;
     const totalDelta = Math.round((afterTotal - beforeTotal) * 100) / 100;
+    const financialFieldsChanged =
+      paidDelta !== 0 ||
+      totalDelta !== 0 ||
+      beforeReview !== afterReview ||
+      beforeIsReview !== afterIsReview;
 
-    if (paidDelta !== 0 || totalDelta !== 0) {
+    if (financialFieldsChanged) {
       const sync = await syncFinancialsAfterOperationEdit(
         admin,
         before as OperationAmountRow,
@@ -125,6 +136,12 @@ export async function PATCH(
             after as OperationAmountRow
           );
 
+    const beforeDoc = Number(before.doctor_share_amount ?? 0);
+    const afterDoc = Number(
+      (after as Record<string, unknown>).doctor_share_amount ?? 0
+    );
+    const docDelta = Math.round((afterDoc - beforeDoc) * 100) / 100;
+
     await writeAuditLog(admin, {
       clinicId: profile.clinic_id,
       entityType: "patient_operation",
@@ -133,7 +150,13 @@ export async function PATCH(
       changedBy: profile.id,
       actorName: profile.full_name ?? null,
       financialAmount:
-        paidDelta !== 0 ? paidDelta : totalDelta !== 0 ? totalDelta : null,
+        paidDelta !== 0
+          ? paidDelta
+          : totalDelta !== 0
+            ? totalDelta
+            : docDelta !== 0
+              ? docDelta
+              : null,
       before: before as Record<string, unknown>,
       after: after as Record<string, unknown>,
       note: auditNote,

@@ -20,7 +20,10 @@ const APPOINTMENT_KEYS = new Set([
 
 function formatVal(key: string, val: unknown): string {
   if (val == null || val === "") return "—";
-  if (FINANCIAL_KEYS.has(key)) {
+  if (key === "is_review_statement") {
+    return val === true || val === "true" ? "نعم" : "لا";
+  }
+  if (FINANCIAL_KEYS.has(key) || key === "review_fee_amount") {
     const n = Number(val);
     if (Number.isFinite(n)) return formatCurrency(n);
   }
@@ -40,6 +43,8 @@ const KEY_LABELS: Record<string, string> = {
   operation_name_ar: "الإجراء",
   doctor_share_amount: "حصة الطبيب",
   clinic_share_amount: "حصة العيادة",
+  review_fee_amount: "كشفية المراجع",
+  is_review_statement: "كشفية مراجع",
 };
 
 /** استخراج سطور diff للعرض في سجل المراقبة */
@@ -54,7 +59,14 @@ export function buildAuditChangeLines(
     entityType === "appointment"
       ? APPOINTMENT_KEYS
       : entityType === "patient_operation"
-        ? new Set([...FINANCIAL_KEYS, "operation_name_ar", "operation_date", "notes"])
+        ? new Set([
+            ...FINANCIAL_KEYS,
+            "operation_name_ar",
+            "operation_date",
+            "notes",
+            "review_fee_amount",
+            "is_review_statement",
+          ])
         : FINANCIAL_KEYS;
 
   const lines: string[] = [];

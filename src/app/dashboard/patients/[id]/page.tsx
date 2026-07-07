@@ -9,6 +9,7 @@ import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { useClinicSync } from "@/hooks/useClinicSync";
 import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
 import { QuickEntryForm } from "@/components/accountant/QuickEntryForm";
 import {
@@ -186,6 +187,17 @@ export default function PatientProfilePage() {
     }
     if (id) load();
   }, [id, loadOperations, loadTreatmentCases]);
+
+  useClinicSync({
+    topics: ["sessions", "financial"],
+    clinicId: profile?.id,
+    patientId: id,
+    onRefresh: () => {
+      void loadOperations();
+      void loadTreatmentCases();
+    },
+    enabled: !!profile?.id && !!id,
+  });
 
   const handleDoctorTransferred = useCallback(
     async (caseId: string, doc: PatientPrimaryDoctor) => {
