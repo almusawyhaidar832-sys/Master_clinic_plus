@@ -19,6 +19,8 @@ const appBuildId =
 const nextConfig: NextConfig = {
   outputFileTracingRoot: appRoot,
   reactStrictMode: true,
+  /** Edge TTS يعتمد على ws/crypto — لا تُضمَّن داخل حزمة السيرفر */
+  serverExternalPackages: ["edge-tts-universal", "ws"],
   env: {
     NEXT_PUBLIC_APP_BUILD_ID: appBuildId,
   },

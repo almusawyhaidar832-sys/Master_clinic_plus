@@ -8,8 +8,11 @@ import { cn } from "@/lib/utils";
 import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { broadcastPatientSentToDoctor } from "@/lib/queue/broadcast";
-import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
-import { useQueueListRefresh } from "@/hooks/useQueueListRefresh";
+import { useQueueRealtimeSync } from "@/hooks/useQueueRealtimeSync";
+import {
+  fetchClinicDoctorsFromSupabase,
+  fetchTodayQueueFromSupabase,
+} from "@/lib/queue/queue-client-fetch";
 import {
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
@@ -321,26 +324,31 @@ export function AssistantQueuePanel() {
   }, [supabase]);
 
   const fetchQueue = useCallback(async () => {
-    if (!assistant?.doctor_id) return;
+    if (!assistant?.doctor_id || !clinicId) return;
     setPageError(null);
     try {
-      const data = await apiJson<{
-        queue: QueueEntry[];
-        doctorId: string | null;
-        doctors?: ClinicDoctor[];
-      }>("/api/queue", lang, t);
+      const did = assistant.doctor_id;
+      setDoctorId(did);
 
-      setDoctorId(data.doctorId);
-      setClinicDoctors(data.doctors ?? []);
-      const rows = (data.queue ?? []).filter(
+      const [allRows, doctors] = await Promise.all([
+        fetchTodayQueueFromSupabase<QueueEntry>(supabase, {
+          clinicId,
+          doctorId: did,
+          includeDone: false,
+        }),
+        fetchClinicDoctorsFromSupabase(supabase, clinicId),
+      ]);
+
+      const rows = allRows.filter(
         (e) =>
           e.status !== "done" &&
           e.status !== "ready_for_billing" &&
           e.status !== "ready_for_payment" &&
           e.status !== "cancelled"
       );
+      setClinicDoctors(doctors);
       setQueue(rows);
-      cachePortalQueue("assistant", data.doctorId ?? assistant?.doctor_id ?? null, rows);
+      cachePortalQueue("assistant", did, rows);
       setClinicalEntryId((prev) =>
         prev && !rows.some((e) => e.id === prev) ? null : prev
       );
@@ -360,13 +368,26 @@ export function AssistantQueuePanel() {
     } finally {
       setLoading(false);
     }
-  }, [assistant?.doctor_id, doctorId, lang, t]);
+  }, [assistant?.doctor_id, clinicId, doctorId, supabase, t]);
 
   useEffect(() => {
-    if (assistant?.doctor_id) void fetchQueue();
-  }, [assistant?.doctor_id, fetchQueue]);
+    if (assistant?.doctor_id && clinicId) void fetchQueue();
+  }, [assistant?.doctor_id, clinicId, fetchQueue]);
 
-  useQueueListRefresh("doctor", doctorId, fetchQueue);
+  useQueueRealtimeSync("doctor", doctorId, setQueue, {
+    doctors: clinicDoctors,
+    doctorId: doctorId ?? undefined,
+    includeRow: (row) =>
+      !row.cancellation_requested_at &&
+      !["done", "ready_for_billing", "ready_for_payment", "cancelled"].includes(
+        String(row.status)
+      ),
+    onChange: (_payload, nextQueue) => {
+      setClinicalEntryId((prev) =>
+        prev && !nextQueue.some((e) => e.id === prev) ? null : prev
+      );
+    },
+  });
 
   useEffect(() => {
     if (!examFromUrl) return;
@@ -403,9 +424,6 @@ export function AssistantQueuePanel() {
         name,
         entryId: entry.id,
       });
-      notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
-      notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errOperationFailed"));
     } finally {
@@ -420,9 +438,6 @@ export function AssistantQueuePanel() {
         method: "POST",
         body: JSON.stringify({ action: "recall", queue_entry_id: entry.id }),
       });
-      notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
-      notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errOperationFailed"));
     } finally {
@@ -445,9 +460,6 @@ export function AssistantQueuePanel() {
           body: JSON.stringify({ action: "advance" }),
         });
       }
-      notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
-      notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errOperationFailed"));
     } finally {
@@ -474,9 +486,6 @@ export function AssistantQueuePanel() {
         method: "PATCH",
         body: JSON.stringify({ action: "cancel" }),
       });
-      notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
-      notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errOperationFailed"));
     } finally {
@@ -495,11 +504,8 @@ export function AssistantQueuePanel() {
           target_doctor_id: transferTargetId,
         }),
       });
-      notifyQueueRefresh({ scope: "doctor", doctorId: transferEntry.doctor_id });
-      notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
       setTransferEntry(null);
       setTransferTargetId("");
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("docErrTransfer"));
     } finally {
@@ -541,9 +547,6 @@ export function AssistantQueuePanel() {
         entryId: result.id,
         notes: data.notes?.trim() || undefined,
       });
-      notifyQueueRefresh({ scope: "doctor", doctorId: targetDoctorId });
-      notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
-      void fetchQueue();
       return true;
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errAddQueue"));

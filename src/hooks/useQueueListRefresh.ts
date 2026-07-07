@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { subscribeQueueRefresh, type QueueRefreshScope } from "@/lib/queue/queue-refresh";
 import { subscribeClinicSync } from "@/lib/sync/clinic-events";
 
-/** Auto-refetch queue list when realtime/broadcast/global sync fires */
+/** @deprecated Use `useQueueRealtimeSync` — list refresh via Supabase Realtime, not API refetch. */
 export function useQueueListRefresh(
   scope: QueueRefreshScope,
   id: string | null | undefined,

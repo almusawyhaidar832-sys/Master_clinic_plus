@@ -102,7 +102,7 @@ export function DoctorMobileShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col bg-surface pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]">
       <ClinicDataSyncBridge />
-      <QueueRealtimeBridge portal="doctor" enablePolling />
+      <QueueRealtimeBridge portal="doctor" />
       <header className="safe-top mc-gradient-hero sticky top-0 z-30 border-b border-white/10 px-4 py-3 text-white shadow-premium backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
           {profile?.logo_url ? (

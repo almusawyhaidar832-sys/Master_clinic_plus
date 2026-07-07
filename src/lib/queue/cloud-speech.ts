@@ -5,16 +5,21 @@ import {
   joinPatientCallSpeech,
   type PatientCallSpeechParts,
 } from "@/lib/queue/arabic-speech-text";
+import {
+  isTtsSpeakCircuitOpen,
+  recordTtsSpeakFailure,
+  recordTtsSpeakSuccess,
+} from "@/lib/queue/tts-speak-circuit";
 
 let speechChain: Promise<void> = Promise.resolve();
 
 const CLOUD_TTS_TIMEOUT_MS = 18_000;
-const CLOUD_TTS_ATTEMPTS = 3;
+/** محاولة واحدة — عند الفشل يُستخدم صوت المتصفح بدون إغراق السيرفر */
+const CLOUD_TTS_ATTEMPTS = 1;
 const DOCTOR_CLOUD_TTS_TIMEOUT_MS = 8_000;
 const DOCTOR_CLOUD_TTS_ATTEMPTS = 1;
-/** شاشة الانتظار — مهلة أطول لأن Edge TTS قد يتأخر على الشبكة */
 const QUEUE_SCREEN_TTS_TIMEOUT_MS = 18_000;
-const QUEUE_SCREEN_TTS_ATTEMPTS = 2;
+const QUEUE_SCREEN_TTS_ATTEMPTS = 1;
 
 const ttsBlobCache = new Map<string, Blob>();
 const TTS_CACHE_MAX = 24;
@@ -45,6 +50,7 @@ function storeTtsBlob(key: string, blob: Blob): void {
 /** يحمّل الصوت مسبقاً — يُستدعى عند وصول النداء قبل التشغيل */
 export function prefetchCloudTts(parts: PatientCallSpeechParts): void {
   if (typeof window === "undefined") return;
+  if (isTtsSpeakCircuitOpen()) return;
   const key = joinPatientCallSpeech(parts);
   if (!key || ttsBlobCache.has(key)) return;
   void fetchCloudAudio({ parts }).then((blob) => {
@@ -145,6 +151,8 @@ async function fetchCloudAudioOnce(
   body: Record<string, unknown>,
   signal: AbortSignal
 ): Promise<Blob | null> {
+  if (isTtsSpeakCircuitOpen()) return null;
+
   const res = await fetch("/api/tts/speak", {
     method: "POST",
     credentials: "include",
@@ -157,17 +165,31 @@ async function fetchCloudAudioOnce(
     cache: "no-store",
   });
 
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const retryable = res.status === 408 || res.status === 429;
+    recordTtsSpeakFailure(retryable);
+    return null;
+  }
 
   const contentType = res.headers.get("content-type") ?? "";
-  if (contentType.includes("json")) return null;
+  if (contentType.includes("json")) {
+    recordTtsSpeakFailure(false);
+    return null;
+  }
 
   const blob = await res.blob();
-  if (blob.size < 128) return null;
+  if (blob.size < 128) {
+    recordTtsSpeakFailure(false);
+    return null;
+  }
+
+  recordTtsSpeakSuccess();
   return blob;
 }
 
 async function fetchCloudAudio(body: Record<string, unknown>): Promise<Blob | null> {
+  if (isTtsSpeakCircuitOpen()) return null;
+
   const attempts = isDoctorPortal()
     ? DOCTOR_CLOUD_TTS_ATTEMPTS
     : isQueueScreen()
@@ -180,6 +202,8 @@ async function fetchCloudAudio(body: Record<string, unknown>): Promise<Blob | nu
       : CLOUD_TTS_TIMEOUT_MS;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (isTtsSpeakCircuitOpen()) return null;
+
     const controller = new AbortController();
     const timer = window.setTimeout(
       () => controller.abort(),
@@ -190,7 +214,7 @@ async function fetchCloudAudio(body: Record<string, unknown>): Promise<Blob | nu
       const blob = await fetchCloudAudioOnce(body, controller.signal);
       if (blob) return blob;
     } catch {
-      // retry
+      recordTtsSpeakFailure(true);
     } finally {
       window.clearTimeout(timer);
     }
@@ -262,6 +286,7 @@ export function speakViaCloudTtsParts(
 export async function warmDoctorCloudTts(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (!window.location.pathname.startsWith("/doctor")) return false;
+  if (isTtsSpeakCircuitOpen()) return false;
 
   try {
     const res = await fetch("/api/tts/speak", {
@@ -274,12 +299,20 @@ export async function warmDoctorCloudTts(): Promise<boolean> {
       body: JSON.stringify({ text: "تجربة" }),
       cache: "no-store",
     });
-    if (!res.ok) return false;
+    if (!res.ok) {
+      recordTtsSpeakFailure(false);
+      return false;
+    }
     const blob = await res.blob();
-    if (blob.size < 128) return false;
+    if (blob.size < 128) {
+      recordTtsSpeakFailure(false);
+      return false;
+    }
+    recordTtsSpeakSuccess();
     await playAudioBlob(blob);
     return true;
   } catch {
+    recordTtsSpeakFailure(true);
     return false;
   }
 }

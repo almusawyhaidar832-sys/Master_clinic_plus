@@ -11,7 +11,7 @@ import {
   prepareArabicSpeechPlainText,
   type PatientCallSpeechParts,
 } from "@/lib/queue/arabic-speech-text";
-import { synthesizeArabicSpeech } from "@/lib/queue/edge-tts-server";
+import { synthesizeArabicSpeech, isTtsSpeakDisabled } from "@/lib/queue/edge-tts-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -37,7 +37,29 @@ function callerMayUseTts(role: string | null | undefined): boolean {
   );
 }
 
+function ttsErrorStatus(message: string): number {
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("websocket") ||
+    lower.includes("timeout") ||
+    lower.includes("مهلة") ||
+    lower.includes("غير متاح") ||
+    lower.includes("لم تُرجع") ||
+    lower.includes("لم يُرجع")
+  ) {
+    return 503;
+  }
+  return 500;
+}
+
 export async function POST(req: NextRequest) {
+  if (isTtsSpeakDisabled()) {
+    return NextResponse.json(
+      { error: "خدمة تحويل النص إلى صوت معطّلة مؤقتاً" },
+      { status: 503 }
+    );
+  }
+
   try {
     const profile = await getApiCallerProfile(req);
     if (!profile && !isQueueScreenCaller(req)) {
@@ -47,10 +69,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
     }
 
-    const body = (await req.json()) as {
-      text?: string;
-      parts?: PatientCallSpeechParts;
-    };
+    let body: { text?: string; parts?: PatientCallSpeechParts };
+    try {
+      body = (await req.json()) as { text?: string; parts?: PatientCallSpeechParts };
+    } catch {
+      return NextResponse.json({ error: "جسم الطلب غير صالح (JSON)" }, { status: 400 });
+    }
 
     let plain = "";
     if (body.parts?.intro != null && body.parts?.patientName != null) {
@@ -73,6 +97,10 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "تعذر توليد الصوت";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[api/tts/speak]", message, err);
+    return NextResponse.json(
+      { error: message },
+      { status: ttsErrorStatus(message) }
+    );
   }
 }

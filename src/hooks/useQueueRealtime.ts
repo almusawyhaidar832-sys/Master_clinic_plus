@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { triggerQueueAlert } from "@/lib/queue/audio-alerts";
 import { shouldFireQueueAlert } from "@/lib/queue/alert-dedupe";
-import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import {
   clinicQueueChannelName,
   doctorQueueChannelName,
@@ -255,8 +254,6 @@ export function useDoctorQueueRealtime(
           filter: `doctor_id=eq.${doctorId}`,
         },
         (payload) => {
-          notifyQueueRefresh({ scope: "doctor", doctorId });
-
           if (!alertsEnabled) return;
 
           const row =
@@ -326,7 +323,6 @@ export function useDoctorQueueRealtime(
             recall?: boolean;
             sentAt?: string;
           };
-          notifyQueueRefresh({ scope: "doctor", doctorId });
           if (alertsEnabled) {
             alertDoctorFromBroadcast(p, seenRef.current);
           }
@@ -372,11 +368,6 @@ export function useAccountantQueueRealtime(
           filter: `clinic_id=eq.${clinicId}`,
         },
         (payload) => {
-          notifyQueueRefresh({ scope: "clinic", clinicId });
-          if (filterDoctorId) {
-            notifyQueueRefresh({ scope: "doctor", doctorId: filterDoctorId });
-          }
-
           if (payload.eventType !== "UPDATE") return;
 
           const row = parseQueueRow(payload.new as Record<string, unknown>);
@@ -411,10 +402,6 @@ export function useAccountantQueueRealtime(
             gender?: PatientGender;
             audioUrl?: string;
           };
-          notifyQueueRefresh({ scope: "clinic", clinicId });
-          if (filterDoctorId) {
-            notifyQueueRefresh({ scope: "doctor", doctorId: filterDoctorId });
-          }
           alertAccountantFromBroadcast(p, seenRef.current, admitLinkPath);
         }
       )
@@ -430,7 +417,6 @@ export function useAccountantQueueRealtime(
             doctorNotes?: string;
             audioUrl?: string;
           };
-          notifyQueueRefresh({ scope: "clinic", clinicId });
           alertAccountantBilling(p, seenRef.current);
         }
       )

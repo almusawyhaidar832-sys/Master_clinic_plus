@@ -33,6 +33,11 @@ import {
   resolvePatientGender,
   type PatientGender,
 } from "@/lib/queue/patient-gender";
+import {
+  isTodayQueueRow,
+  mergeRealtimeQueueRow,
+  type QueueRealtimePayload,
+} from "@/lib/queue/realtime-patch";
 import { isUuid } from "@/lib/booking/urls";
 import {
   clearQueueScreenClinicRef,
@@ -62,6 +67,53 @@ function resolvePatientName(entry: QueueEntry): string {
 
 function resolveDoctorName(entry: QueueEntry): string {
   return resolveDoctorSpeechName(entry.doctor);
+}
+
+const SCREEN_HIDDEN_STATUSES = new Set([
+  "done",
+  "cancelled",
+  "ready_for_billing",
+  "ready_for_payment",
+]);
+
+function shouldShowOnQueueScreen(row: Record<string, unknown>): boolean {
+  if (row.cancellation_requested_at) return false;
+  return !SCREEN_HIDDEN_STATUSES.has(String(row.status ?? ""));
+}
+
+function rememberDoctorNames(rows: QueueEntry[], into: Map<string, string>) {
+  for (const row of rows) {
+    const doctorId = (row as QueueEntry & { doctor_id?: string }).doctor_id;
+    const name = row.doctor?.full_name_ar;
+    if (doctorId && name) into.set(doctorId, name);
+  }
+}
+
+function rowToScreenEntry(
+  row: Record<string, unknown>,
+  existing: QueueEntry | undefined,
+  doctorNames: Map<string, string>
+): QueueEntry {
+  const merged = mergeRealtimeQueueRow(existing, row);
+  const doctorId = String(row.doctor_id ?? "");
+  const doctorName = merged.doctor?.full_name_ar ?? doctorNames.get(doctorId) ?? null;
+  return {
+    id: merged.id,
+    ticket_number: merged.ticket_number,
+    status: merged.status as QueueEntry["status"],
+    patient_name: merged.patient_name ?? null,
+    doctor: doctorName ? { full_name_ar: doctorName } : merged.doctor,
+    patient: merged.patient,
+    called_at: merged.called_at ?? null,
+  };
+}
+
+function splitQueueScreenRows(rows: QueueEntry[]) {
+  const calledRows = rows.filter(
+    (r) => r.status === "called" || r.status === "in_progress"
+  );
+  const waitingRows = rows.filter((r) => r.status === "waiting");
+  return { calledRows, waitingRows };
 }
 
 function ClinicCodeTvSetup({
@@ -228,6 +280,9 @@ function QueueScreenContent() {
   const prevCalledAtRef = useRef<Map<string, string>>(new Map());
   const prevWaitingRef = useRef<Set<string>>(new Set());
   const queueReadyRef = useRef(false);
+  const doctorNamesRef = useRef<Map<string, string>>(new Map());
+  const calledRef = useRef<QueueEntry[]>([]);
+  const waitingRef = useRef<QueueEntry[]>([]);
 
   const handleUnlockAudio = useCallback(async () => {
     const diag = await unlockSpeechAudioDiagnostics().catch(() => null);
@@ -347,42 +402,11 @@ function QueueScreenContent() {
     [clinicRef]
   );
 
-  const fetchQueue = useCallback(async () => {
-    if (!clinicRef) return;
+  const applyQueueScreenRows = useCallback(
+    (rows: QueueEntry[]) => {
+      rememberDoctorNames(rows, doctorNamesRef.current);
 
-    try {
-      const res = await fetch(
-        `/api/queue/screen?clinic=${encodeURIComponent(clinicRef)}`,
-        { cache: "no-store" }
-      );
-      if (!res.ok) return;
-
-      const data = (await res.json()) as {
-        clinicId?: string;
-        clinicRef?: string;
-        clinicName: string;
-        queue: QueueEntry[];
-      };
-
-      if (data.clinicId) setResolvedClinicId(data.clinicId);
-      if (data.clinicRef) {
-        setClinicRef(data.clinicRef);
-        saveQueueScreenClinicRef(data.clinicRef);
-      }
-      if (typeof window !== "undefined" && data.clinicRef) {
-        setScreenUrl(
-          `${window.location.origin}/queue-screen?clinic=${encodeURIComponent(data.clinicRef)}`
-        );
-      }
-
-      setClinicName(data.clinicName || "العيادة");
-      const rows = data.queue ?? [];
-
-      const calledRows = rows.filter(
-        (r) => r.status === "called" || r.status === "in_progress"
-      );
-      const waitingRows = rows.filter((r) => r.status === "waiting");
-
+      const { calledRows, waitingRows } = splitQueueScreenRows(rows);
       const newlyWaiting = waitingRows.filter(
         (r) => !prevWaitingRef.current.has(r.id)
       );
@@ -423,18 +447,107 @@ function QueueScreenContent() {
       prevWaitingRef.current = new Set(waitingRows.map((r) => r.id));
       queueReadyRef.current = true;
 
+      calledRef.current = calledRows;
+      waitingRef.current = waitingRows;
       setCalled(calledRows);
       setWaiting(waitingRows);
+    },
+    [handleQueueScreenCall]
+  );
+
+  const applyScreenRealtimePayload = useCallback(
+    (payload: QueueRealtimePayload) => {
+      const eventType = payload.eventType;
+      const oldRow = payload.old as Record<string, unknown> | undefined;
+      const newRow = payload.new as Record<string, unknown> | undefined;
+      const row = newRow ?? oldRow;
+      if (!row) return;
+
+      const entryId = String(oldRow?.id ?? row.id ?? "");
+
+      if (eventType === "DELETE" || !isTodayQueueRow(row)) {
+        if (!entryId) return;
+        const nextCalled = calledRef.current.filter((entry) => entry.id !== entryId);
+        const nextWaiting = waitingRef.current.filter((entry) => entry.id !== entryId);
+        applyQueueScreenRows([...nextCalled, ...nextWaiting]);
+        return;
+      }
+
+      if (!shouldShowOnQueueScreen(row)) {
+        const nextCalled = calledRef.current.filter((entry) => entry.id !== entryId);
+        const nextWaiting = waitingRef.current.filter((entry) => entry.id !== entryId);
+        applyQueueScreenRows([...nextCalled, ...nextWaiting]);
+        return;
+      }
+
+      const existing =
+        calledRef.current.find((entry) => entry.id === entryId) ??
+        waitingRef.current.find((entry) => entry.id === entryId);
+      const entry = rowToScreenEntry(row, existing, doctorNamesRef.current);
+      const doctorId = String(row.doctor_id ?? "");
+      if (entry.doctor?.full_name_ar && doctorId) {
+        doctorNamesRef.current.set(doctorId, entry.doctor.full_name_ar);
+      }
+
+      const withoutId = (list: QueueEntry[]) =>
+        list.filter((item) => item.id !== entry.id);
+
+      let nextCalled = withoutId(calledRef.current);
+      let nextWaiting = withoutId(waitingRef.current);
+
+      if (entry.status === "called" || entry.status === "in_progress") {
+        nextCalled = [...nextCalled, entry].sort(
+          (a, b) => a.ticket_number - b.ticket_number
+        );
+      } else if (entry.status === "waiting") {
+        nextWaiting = [...nextWaiting, entry].sort(
+          (a, b) => a.ticket_number - b.ticket_number
+        );
+      }
+
+      applyQueueScreenRows([...nextCalled, ...nextWaiting]);
+    },
+    [applyQueueScreenRows]
+  );
+
+  const fetchQueue = useCallback(async () => {
+    if (!clinicRef) return;
+
+    try {
+      const res = await fetch(
+        `/api/queue/screen?clinic=${encodeURIComponent(clinicRef)}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) return;
+
+      const data = (await res.json()) as {
+        clinicId?: string;
+        clinicRef?: string;
+        clinicName: string;
+        queue: QueueEntry[];
+      };
+
+      if (data.clinicId) setResolvedClinicId(data.clinicId);
+      if (data.clinicRef) {
+        setClinicRef(data.clinicRef);
+        saveQueueScreenClinicRef(data.clinicRef);
+      }
+      if (typeof window !== "undefined" && data.clinicRef) {
+        setScreenUrl(
+          `${window.location.origin}/queue-screen?clinic=${encodeURIComponent(data.clinicRef)}`
+        );
+      }
+
+      setClinicName(data.clinicName || "العيادة");
+      applyQueueScreenRows(data.queue ?? []);
     } catch {
-      // retry on next poll
+      // initial load only — realtime handles subsequent updates
     }
-  }, [clinicRef, handleQueueScreenCall]);
+  }, [clinicRef, applyQueueScreenRows]);
 
   useEffect(() => {
     if (!clinicRef) return;
     void fetchQueue();
-    const poll = setInterval(fetchQueue, 1500);
-    return () => clearInterval(poll);
   }, [fetchQueue, clinicRef]);
 
   useEffect(() => {
@@ -486,7 +599,6 @@ function QueueScreenContent() {
           audioUrl: p.audioUrl,
           recall: p.recall === true,
         });
-        void fetchQueue();
       }
     };
 
@@ -506,20 +618,8 @@ function QueueScreenContent() {
           table: "patient_queue",
           filter: `clinic_id=eq.${resolvedClinicId}`,
         },
-        () => {
-          void fetchQueue();
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "appointments",
-          filter: `clinic_id=eq.${resolvedClinicId}`,
-        },
-        () => {
-          void fetchQueue();
+        (payload) => {
+          applyScreenRealtimePayload(payload as QueueRealtimePayload);
         }
       )
       .subscribe();
@@ -528,7 +628,7 @@ function QueueScreenContent() {
       void supabase.removeChannel(screenChannelRef);
       void supabase.removeChannel(dataChannel);
     };
-  }, [resolvedClinicId, fetchQueue, handleQueueScreenCall]);
+  }, [resolvedClinicId, applyScreenRealtimePayload, handleQueueScreenCall]);
 
   function handleClinicResolved(id: string) {
     saveQueueScreenClinicRef(id);

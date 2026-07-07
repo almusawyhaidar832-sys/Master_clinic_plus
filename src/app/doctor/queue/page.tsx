@@ -16,16 +16,20 @@ import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { broadcastAdmitRequest, broadcastQueueScreenCall } from "@/lib/queue/broadcast";
 import {
+  fetchClinicDoctorsFromSupabase,
+  fetchTodayQueueFromSupabase,
+} from "@/lib/queue/queue-client-fetch";
+import {
   resolveDoctorSpeechName,
   resolvePatientSpeechName,
 } from "@/lib/queue/utils";
 import { resolvePatientGender } from "@/lib/queue/patient-gender";
-import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
-import { useQueueListRefresh } from "@/hooks/useQueueListRefresh";
+import { useQueueRealtimeSync } from "@/hooks/useQueueRealtimeSync";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { getQueueStatusLabel, type QueueStatusKey } from "@/i18n/localized-labels";
 import type { Language, TranslationKey } from "@/i18n/translations";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
 import {
   cachePortalQueue,
@@ -155,24 +159,35 @@ function DoctorQueuePageContent() {
   const [transferTargetId, setTransferTargetId] = useState("");
 
   const fetchQueue = useCallback(async () => {
+    if (!clinicId) return;
     setPageError(null);
     try {
-      const data = await apiJson<{
-        queue: QueueEntry[];
-        doctorId: string | null;
-        doctors?: ClinicDoctor[];
-      }>("/api/queue", lang, t);
+      const doc = await getDoctorForCurrentUser(supabase);
+      const did = doc?.id ?? doctorId;
+      if (!did) {
+        setPageError(t("errQueueLoad"));
+        return;
+      }
+      setDoctorId(did);
 
-      setDoctorId(data.doctorId);
-      setClinicDoctors(data.doctors ?? []);
-      const rows = (data.queue ?? []).filter(
+      const [allRows, doctors] = await Promise.all([
+        fetchTodayQueueFromSupabase<QueueEntry>(supabase, {
+          clinicId,
+          doctorId: did,
+          includeDone: false,
+        }),
+        fetchClinicDoctorsFromSupabase(supabase, clinicId),
+      ]);
+
+      const rows = allRows.filter(
         (e) =>
           e.status !== "done" &&
           e.status !== "ready_for_billing" &&
           e.status !== "ready_for_payment"
       );
+      setClinicDoctors(doctors);
       setQueue(rows);
-      cachePortalQueue("doctor", data.doctorId, rows);
+      cachePortalQueue("doctor", did, rows);
 
       setClinicalEntryId((prev) =>
         prev && !rows.some((e) => e.id === prev) ? null : prev
@@ -190,13 +205,26 @@ function DoctorQueuePageContent() {
     } finally {
       setLoading(false);
     }
-  }, [lang, t, doctorId]);
+  }, [clinicId, supabase, doctorId, t]);
 
   useEffect(() => {
-    fetchQueue();
-  }, [fetchQueue]);
+    if (clinicId) void fetchQueue();
+  }, [clinicId, fetchQueue]);
 
-  useQueueListRefresh("doctor", doctorId, fetchQueue);
+  useQueueRealtimeSync("doctor", doctorId, setQueue, {
+    doctors: clinicDoctors,
+    doctorId: doctorId ?? undefined,
+    includeRow: (row) =>
+      !row.cancellation_requested_at &&
+      !["done", "ready_for_billing", "ready_for_payment", "cancelled"].includes(
+        String(row.status)
+      ),
+    onChange: (_payload, nextQueue) => {
+      setClinicalEntryId((prev) =>
+        prev && !nextQueue.some((e) => e.id === prev) ? null : prev
+      );
+    },
+  });
 
   useEffect(() => {
     if (!examFromUrl) return;
@@ -238,9 +266,7 @@ function DoctorQueuePageContent() {
           entryId: entry.id,
           gender: resolvePatientGender(entry) ?? undefined,
         });
-        notifyQueueRefresh({ scope: "clinic", clinicId });
       }
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("docErrAdmit"));
     } finally {
@@ -267,7 +293,6 @@ function DoctorQueuePageContent() {
           doctorName,
           entryId: entry.id,
         });
-        notifyQueueRefresh({ scope: "clinic", clinicId });
       }
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("docErrRecall"));
@@ -285,10 +310,6 @@ function DoctorQueuePageContent() {
         body: JSON.stringify({ action: "enter" }),
       });
       openClinicalExam(entry);
-      if (clinicId) {
-        notifyQueueRefresh({ scope: "clinic", clinicId });
-      }
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("docErrStartExam"));
     } finally {
@@ -315,10 +336,6 @@ function DoctorQueuePageContent() {
         method: "PATCH",
         body: JSON.stringify({ action: "reject" }),
       });
-      if (clinicId) {
-        notifyQueueRefresh({ scope: "clinic", clinicId });
-      }
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("docErrReject"));
     } finally {
@@ -337,12 +354,8 @@ function DoctorQueuePageContent() {
           target_doctor_id: transferTargetId,
         }),
       });
-      if (clinicId) {
-        notifyQueueRefresh({ scope: "clinic", clinicId });
-      }
       setTransferEntry(null);
       setTransferTargetId("");
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("docErrTransfer"));
     } finally {

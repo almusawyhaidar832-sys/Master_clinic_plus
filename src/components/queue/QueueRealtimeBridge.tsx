@@ -8,11 +8,6 @@ import {
 } from "@/lib/clinic-context";
 import { createClient } from "@/lib/supabase/client";
 import {
-  useAccountantQueuePolling,
-  useDoctorQueuePolling,
-  fetchDoctorIdForPolling,
-} from "@/hooks/useQueuePolling";
-import {
   useAccountantQueueRealtime,
   useDoctorQueueRealtime,
 } from "@/hooks/useQueueRealtime";
@@ -34,19 +29,14 @@ import { useRouter } from "next/navigation";
 
 interface QueueRealtimeBridgeProps {
   portal: "dashboard" | "doctor" | "assistant";
-  /** polling — fallback للتحديث فقط؛ النداء من Realtime داخل التطبيق */
-  enablePolling?: boolean;
 }
 
 /**
- * Queue alerts: Realtime + polling fallback.
+ * Queue alerts via Supabase Realtime (no API polling).
  * Doctor portal: mounted globally in DoctorMobileShell (all pages).
  * Assistant portal: admit alerts + sync for linked doctor only.
  */
-export function QueueRealtimeBridge({
-  portal,
-  enablePolling = true,
-}: QueueRealtimeBridgeProps) {
+export function QueueRealtimeBridge({ portal }: QueueRealtimeBridgeProps) {
   const router = useRouter();
   const { profile } = useClinicProfile();
   const clinicId = profile?.id ?? null;
@@ -72,10 +62,7 @@ export function QueueRealtimeBridge({
       if (cancelled) return;
       if (doc?.id) {
         setDoctorId(doc.id);
-        return;
       }
-      const id = await fetchDoctorIdForPolling();
-      if (!cancelled && id) setDoctorId(id);
     }
 
     void loadDoctorId();
@@ -142,18 +129,6 @@ export function QueueRealtimeBridge({
     admitLinkPath:
       portal === "assistant" ? "/assistant/queue" : "/dashboard/queue",
     doctorId: portal === "assistant" ? doctorId ?? undefined : undefined,
-  });
-
-  useDoctorQueuePolling(
-    portal === "doctor" ? activeDoctorId : null,
-    enablePolling && portal === "doctor"
-  );
-
-  useAccountantQueuePolling(activeClinicId, enablePolling, {
-    admitLinkPath:
-      portal === "assistant" ? "/assistant/queue" : "/dashboard/queue",
-    doctorId: portal === "assistant" ? doctorId ?? undefined : undefined,
-    portal: portal === "assistant" ? "assistant" : "accountant",
   });
 
   return <QueueAlertOverlay />;

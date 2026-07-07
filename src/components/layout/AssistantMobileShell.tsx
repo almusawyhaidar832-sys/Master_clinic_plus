@@ -87,7 +87,7 @@ export function AssistantMobileShell({ children }: { children: React.ReactNode }
   return (
     <div className="flex min-h-screen flex-col bg-slate-50" dir={isRTL ? "rtl" : "ltr"}>
       <ClinicDataSyncBridge portal="assistant" />
-      <QueueRealtimeBridge portal="assistant" enablePolling />
+      <QueueRealtimeBridge portal="assistant" />
       <header className="safe-top sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
           <div className="min-w-0">

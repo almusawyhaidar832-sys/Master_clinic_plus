@@ -8,10 +8,13 @@ import { cn } from "@/lib/utils";
 import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { broadcastPatientSentToDoctor, broadcastQueueScreenCall } from "@/lib/queue/broadcast";
-import { notifyQueueRefresh } from "@/lib/queue/queue-refresh";
 import { tryEnqueueQueueAddOffline } from "@/lib/offline/queue-add/enqueue";
 import { cacheOfflineDoctors } from "@/lib/offline/reference-cache";
-import { useQueueListRefresh } from "@/hooks/useQueueListRefresh";
+import { useQueueRealtimeSync } from "@/hooks/useQueueRealtimeSync";
+import {
+  fetchClinicDoctorsFromSupabase,
+  fetchTodayQueueFromSupabase,
+} from "@/lib/queue/queue-client-fetch";
 import { announcePatientCall } from "@/lib/queue/realtime-client";
 import {
   resolveDoctorSpeechName,
@@ -327,6 +330,18 @@ async function apiJson<T>(
   return data;
 }
 
+function computeQueueStats(rows: QueueEntry[]): QueueStats {
+  return {
+    waiting: rows.filter((r) => r.status === "waiting").length,
+    called: rows.filter((r) => r.status === "called").length,
+    in_progress: rows.filter((r) => r.status === "in_progress").length,
+    ready_for_billing: rows.filter((r) => r.status === "ready_for_billing").length,
+    ready_for_payment: rows.filter((r) => r.status === "ready_for_payment").length,
+    done: rows.filter((r) => r.status === "done").length,
+    total: rows.length,
+  };
+}
+
 export default function QueuePage() {
   const router = useRouter();
   const supabase = createClient();
@@ -357,43 +372,41 @@ export default function QueuePage() {
 
   const fetchQueue = useCallback(async () => {
     setPageError(null);
+    const cid = clinicId ?? clinicProfile?.id;
+    if (!cid) return;
     try {
-      const data = await apiJson<{
-        queue: QueueEntry[];
-        doctors: Doctor[];
-        clinicId: string;
-      }>("/api/queue", lang, t);
+      const [rows, doctorRows] = await Promise.all([
+        fetchTodayQueueFromSupabase<QueueEntry>(supabase, {
+          clinicId: cid,
+          includeDone: true,
+        }),
+        fetchClinicDoctorsFromSupabase(supabase, cid),
+      ]);
 
-      setClinicId(data.clinicId);
-      const rows = data.queue ?? [];
+      setClinicId(cid);
       setQueue(rows);
-      const doctorRows = data.doctors ?? [];
       setDoctors(doctorRows);
-      if (data.clinicId && doctorRows.length > 0) {
-        cacheOfflineDoctors(data.clinicId, doctorRows);
+      if (doctorRows.length > 0) {
+        cacheOfflineDoctors(cid, doctorRows);
       }
 
-      setStats({
-        waiting:     rows.filter((r) => r.status === "waiting").length,
-        called:      rows.filter((r) => r.status === "called").length,
-        in_progress: rows.filter((r) => r.status === "in_progress").length,
-        ready_for_billing: rows.filter((r) => r.status === "ready_for_billing").length,
-        ready_for_payment: rows.filter((r) => r.status === "ready_for_payment").length,
-        done:        rows.filter((r) => r.status === "done").length,
-        total:       rows.length,
-      });
+      setStats(computeQueueStats(rows));
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errQueueLoad"));
     } finally {
       setLoading(false);
     }
-  }, [lang, t]);
+  }, [clinicId, clinicProfile?.id, supabase, t]);
 
   useEffect(() => {
-    fetchQueue();
-  }, [fetchQueue]);
+    if (clinicProfile?.id || clinicId) void fetchQueue();
+  }, [fetchQueue, clinicProfile?.id, clinicId]);
 
-  useQueueListRefresh("clinic", clinicId ?? clinicProfile?.id ?? null, fetchQueue);
+  useQueueRealtimeSync("clinic", clinicId ?? clinicProfile?.id ?? null, setQueue, {
+    doctors,
+    includeRow: (row) => String(row.status) !== "cancelled",
+    onChange: (_payload, nextQueue) => setStats(computeQueueStats(nextQueue)),
+  });
 
   const effectiveClinicId = clinicId ?? clinicProfile?.id ?? null;
 
@@ -415,19 +428,12 @@ export default function QueuePage() {
             entryId: entry.id,
             gender: resolvePatientGender(entry) ?? undefined,
           });
-          notifyQueueRefresh({ scope: "clinic", clinicId: effectiveClinicId });
-          notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
         }
       } else if (data.status === "in_progress") {
         const name = resolvePatientSpeechName(entry);
         const doctorName = resolveDoctorSpeechName(entry.doctor);
         announcePatientCall(name, doctorName, "enter");
-        if (clinicId) {
-          notifyQueueRefresh({ scope: "clinic", clinicId });
-          notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
-        }
       }
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errQueueUpdate"));
     } finally {
@@ -470,15 +476,10 @@ export default function QueuePage() {
         method: "PATCH",
         body: JSON.stringify({ action: "ready_for_payment" }),
       });
-      if (clinicId) {
-        notifyQueueRefresh({ scope: "clinic", clinicId });
-        notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
-      }
       if (openLedger && result.ledger_url) {
         router.push(result.ledger_url);
         return;
       }
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errFinishExam"));
     } finally {
@@ -498,8 +499,6 @@ export default function QueuePage() {
         name,
         entryId: entry.id,
       });
-      notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errSendDoctor"));
     } finally {
@@ -526,7 +525,6 @@ export default function QueuePage() {
             gender: resolvePatientGender(entry) ?? undefined,
             recall: true,
           });
-          notifyQueueRefresh({ scope: "clinic", clinicId: effectiveClinicId });
         }
         return;
       }
@@ -541,7 +539,6 @@ export default function QueuePage() {
           entryId: entry.id,
           recall: true,
         });
-        notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
       }
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errReCall"));
@@ -577,11 +574,6 @@ export default function QueuePage() {
           action: pendingCancel ? "finalize_cancel" : "cancel",
         }),
       });
-      if (clinicId) {
-        notifyQueueRefresh({ scope: "clinic", clinicId });
-        notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
-      }
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errCancel"));
     } finally {
@@ -615,9 +607,6 @@ export default function QueuePage() {
         }),
       });
       if (clinicId) {
-        notifyQueueRefresh({ scope: "clinic", clinicId });
-        notifyQueueRefresh({ scope: "doctor", doctorId: cancelTransferTargetId });
-        notifyQueueRefresh({ scope: "doctor", doctorId: cancelTransferEntry.doctor_id });
         void broadcastPatientSentToDoctor(supabase, cancelTransferTargetId, {
           name: patient,
           entryId: cancelTransferEntry.id,
@@ -625,7 +614,6 @@ export default function QueuePage() {
       }
       setCancelTransferEntry(null);
       setCancelTransferTargetId("");
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errTransferConfirm"));
     } finally {
@@ -659,9 +647,6 @@ export default function QueuePage() {
         }),
       });
       if (clinicId) {
-        notifyQueueRefresh({ scope: "clinic", clinicId });
-        notifyQueueRefresh({ scope: "doctor", doctorId: transferTargetId });
-        notifyQueueRefresh({ scope: "doctor", doctorId: transferEntry.doctor_id });
         void broadcastPatientSentToDoctor(supabase, transferTargetId, {
           name: patient,
           entryId: transferEntry.id,
@@ -669,7 +654,6 @@ export default function QueuePage() {
       }
       setTransferEntry(null);
       setTransferTargetId("");
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errTransferConfirm"));
     } finally {
@@ -699,17 +683,11 @@ export default function QueuePage() {
       });
       const targetDoctorId = entry.transfer_to_doctor_id;
       if (targetDoctorId) {
-        notifyQueueRefresh({ scope: "doctor", doctorId: targetDoctorId });
         void broadcastPatientSentToDoctor(supabase, targetDoctorId, {
           name: patient,
           entryId: entry.id,
         });
       }
-      if (clinicId) {
-        notifyQueueRefresh({ scope: "clinic", clinicId });
-        notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
-      }
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errTransferConfirm"));
     } finally {
@@ -724,11 +702,6 @@ export default function QueuePage() {
         method: "PATCH",
         body: JSON.stringify({ action: "dismiss_transfer" }),
       });
-      if (clinicId) {
-        notifyQueueRefresh({ scope: "clinic", clinicId });
-        notifyQueueRefresh({ scope: "doctor", doctorId: entry.doctor_id });
-      }
-      await fetchQueue();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errTransferCancel"));
     } finally {
@@ -792,9 +765,6 @@ export default function QueuePage() {
         entryId: result.id,
         notes: data.notes?.trim() || undefined,
       });
-      notifyQueueRefresh({ scope: "doctor", doctorId: targetDoctorId });
-      notifyQueueRefresh({ scope: "clinic", clinicId: clinicId ?? undefined });
-      void fetchQueue();
       return true;
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("errAddQueue"));
@@ -834,7 +804,7 @@ export default function QueuePage() {
         <Alert variant="success">{pageSuccess}</Alert>
       )}
 
-      <TodayAppointmentsPanel compact onApprovedToQueue={fetchQueue} />
+      <TodayAppointmentsPanel compact />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
