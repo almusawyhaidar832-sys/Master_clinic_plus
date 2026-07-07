@@ -7,7 +7,7 @@ import { translateDbError } from "@/lib/db-errors";
 import { cn } from "@/lib/utils";
 import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import { broadcastPatientSentToDoctor, broadcastQueueScreenCall } from "@/lib/queue/broadcast";
+import { broadcastPatientSentToDoctor } from "@/lib/queue/broadcast";
 import { tryEnqueueQueueAddOffline } from "@/lib/offline/queue-add/enqueue";
 import { cacheOfflineDoctors } from "@/lib/offline/reference-cache";
 import { useQueueRealtimeSync } from "@/hooks/useQueueRealtimeSync";
@@ -418,18 +418,7 @@ export default function QueuePage() {
         body: JSON.stringify({ action: "advance" }),
       });
 
-      if (data.status === "called") {
-        const name = resolvePatientSpeechName(entry);
-        const doctorName = resolveDoctorSpeechName(entry.doctor);
-        if (effectiveClinicId) {
-          void broadcastQueueScreenCall(supabase, effectiveClinicId, {
-            name,
-            doctorName,
-            entryId: entry.id,
-            gender: resolvePatientGender(entry) ?? undefined,
-          });
-        }
-      } else if (data.status === "in_progress") {
+      if (data.status === "in_progress") {
         const name = resolvePatientSpeechName(entry);
         const doctorName = resolveDoctorSpeechName(entry.doctor);
         announcePatientCall(name, doctorName, "enter");
@@ -517,15 +506,6 @@ export default function QueuePage() {
           method: "POST",
           body: JSON.stringify({ entry_id: entry.id }),
         });
-        if (effectiveClinicId) {
-          void broadcastQueueScreenCall(supabase, effectiveClinicId, {
-            name,
-            doctorName,
-            entryId: entry.id,
-            gender: resolvePatientGender(entry) ?? undefined,
-            recall: true,
-          });
-        }
         return;
       }
 

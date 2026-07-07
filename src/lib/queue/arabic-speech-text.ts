@@ -12,6 +12,9 @@ const TATWEEL = /\u0640/g;
 /** سرعة النطق — جملة واحدة متصلة */
 export const ARABIC_SPEECH_RATE = "+8%";
 
+/** شاشة انتظار المرضى — نطق متوسط (لا سريع ولا بطيء) */
+export const QUEUE_SCREEN_SPEECH_RATE = "+0%";
+
 export const SPEECH_INTRO_CALLED_MALE = "يُرْجَى مِنَ المُراجعِ";
 export const SPEECH_INTRO_CALLED_FEMALE = "يُرْجَى مِنَ المُراجعةِ";
 export const SPEECH_INTRO_ENTER_MALE = "يُرْجَى مِنَ المُراجعِ";

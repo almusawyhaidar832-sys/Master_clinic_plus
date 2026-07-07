@@ -51,8 +51,6 @@ function announcementDedupeKey(job: AnnouncementJob): string {
 
 function shouldSkipDuplicateAnnouncement(job: AnnouncementJob): boolean {
   if (job.recall) return false;
-  /** رابط MP3 من السيرفر — لا نتخطاه حتى لو وصل بث عميل بدون صوت قبله */
-  if (job.audioUrl?.trim()) return false;
   const key = announcementDedupeKey(job);
   const now = Date.now();
   if (key === lastAnnouncedKey && now - lastAnnouncedAt < CALL_DEDUP_MS) {

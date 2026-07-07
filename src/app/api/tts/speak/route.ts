@@ -9,6 +9,7 @@ import {
   ARABIC_SPEECH_RATE,
   joinPatientCallSpeech,
   prepareArabicSpeechPlainText,
+  QUEUE_SCREEN_SPEECH_RATE,
   type PatientCallSpeechParts,
 } from "@/lib/queue/arabic-speech-text";
 import { synthesizeArabicSpeech, isTtsSpeakDisabled } from "@/lib/queue/edge-tts-server";
@@ -87,7 +88,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "النص مطلوب" }, { status: 400 });
     }
 
-    const audio = await synthesizeArabicSpeech(plain, { rate: ARABIC_SPEECH_RATE });
+    const speechRate = isQueueScreenCaller(req)
+      ? QUEUE_SCREEN_SPEECH_RATE
+      : ARABIC_SPEECH_RATE;
+    const audio = await synthesizeArabicSpeech(plain, { rate: speechRate });
     return new NextResponse(new Uint8Array(audio), {
       headers: {
         "Content-Type": "audio/mpeg",

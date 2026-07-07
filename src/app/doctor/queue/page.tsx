@@ -14,7 +14,7 @@ import { translateDbError } from "@/lib/db-errors";
 import { cn } from "@/lib/utils";
 import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import { broadcastAdmitRequest, broadcastQueueScreenCall } from "@/lib/queue/broadcast";
+import { broadcastAdmitRequest } from "@/lib/queue/broadcast";
 import {
   fetchClinicDoctorsFromSupabase,
   fetchTodayQueueFromSupabase,
@@ -260,12 +260,6 @@ function DoctorQueuePageContent() {
           name,
           entryId: entry.id,
         });
-        void broadcastQueueScreenCall(supabase, clinicId, {
-          name,
-          doctorName,
-          entryId: entry.id,
-          gender: resolvePatientGender(entry) ?? undefined,
-        });
       }
     } catch (err) {
       setPageError(err instanceof Error ? err.message : t("docErrAdmit"));
@@ -286,11 +280,6 @@ function DoctorQueuePageContent() {
       if (clinicId) {
         void broadcastAdmitRequest(supabase, clinicId, {
           name,
-          entryId: entry.id,
-        });
-        void broadcastQueueScreenCall(supabase, clinicId, {
-          name,
-          doctorName,
           entryId: entry.id,
         });
       }

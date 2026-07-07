@@ -6,7 +6,7 @@ import {
 } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { resolveQueueApiAccess } from "@/lib/queue/api-access";
-import { emitQueueScreenCall } from "@/lib/queue/server";
+import { emitQueueScreenCall, emitQueueScreenSync } from "@/lib/queue/server";
 import { buildQueueAnnounceAudioUrl } from "@/lib/queue/queue-announce-audio-url";
 import {
   resolveDoctorSpeechName,
@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
     );
 
     void emitQueueScreenCall(entryId, { recall: true }).catch(console.error);
+    void emitQueueScreenSync(entryId).catch(console.error);
 
     return NextResponse.json({
       success: true,

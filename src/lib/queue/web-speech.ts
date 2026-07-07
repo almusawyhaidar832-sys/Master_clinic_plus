@@ -37,6 +37,8 @@ let cachedArabicVoice: SpeechSynthesisVoice | null = null;
 let browserSpeechChain: Promise<void> = Promise.resolve();
 
 const BROWSER_SPEECH_RATE = 0.95;
+/** نطق متوسط على شاشة التلفاز عند استخدام صوت المتصفح */
+const QUEUE_SCREEN_BROWSER_SPEECH_RATE = 0.88;
 const AUDIO_UNLOCK_KEY = "mcp-queue-screen-audio-unlocked";
 
 type AudioContextCtor = typeof AudioContext;
@@ -395,7 +397,10 @@ export async function speakPatientCallParts(
     }
 
     const voice = await resolveArabicVoice();
-    await speakPart(joinPatientCallSpeech(parts), voice, BROWSER_SPEECH_RATE, true);
+    const rate = isQueueScreenPath()
+      ? QUEUE_SCREEN_BROWSER_SPEECH_RATE
+      : BROWSER_SPEECH_RATE;
+    await speakPart(joinPatientCallSpeech(parts), voice, rate, true);
   };
 
   if (options?.skipCloudQueue) {

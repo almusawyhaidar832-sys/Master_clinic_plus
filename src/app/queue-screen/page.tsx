@@ -9,6 +9,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
+import type { QueueScreenSyncPayload } from "@/lib/queue/broadcast-types";
 import { clinicQueueChannelName, clinicQueueScreenChannelName } from "@/lib/queue/realtime-client";
 import { prefetchCloudTts } from "@/lib/queue/cloud-speech";
 import { splitPatientCallSpeech } from "@/lib/queue/arabic-speech-text";
@@ -279,6 +280,7 @@ function QueueScreenContent() {
   const prevCalledRef = useRef<Set<string>>(new Set());
   const prevCalledAtRef = useRef<Map<string, string>>(new Map());
   const prevWaitingRef = useRef<Set<string>>(new Set());
+  const announcedCallsRef = useRef<Map<string, number>>(new Map());
   const queueReadyRef = useRef(false);
   const doctorNamesRef = useRef<Map<string, string>>(new Map());
   const calledRef = useRef<QueueEntry[]>([]);
@@ -417,27 +419,6 @@ function QueueScreenContent() {
           if (at) prevCalledAtRef.current.set(entry.id, at);
         }
       } else {
-        for (const entry of calledRows) {
-          const at = entry.called_at ?? "";
-          if (!at) continue;
-
-          const wasCalled = prevCalledRef.current.has(entry.id);
-          const prevAt = prevCalledAtRef.current.get(entry.id);
-          const isNewCall = !wasCalled;
-          const isRecall = wasCalled && prevAt != null && prevAt !== at;
-
-          if (isNewCall || isRecall) {
-            handleQueueScreenCall(
-              resolvePatientName(entry),
-              resolveDoctorName(entry),
-              resolvePatientGender(entry),
-              { entryId: entry.id, recall: isRecall }
-            );
-          }
-
-          prevCalledAtRef.current.set(entry.id, at);
-        }
-
         if (newlyWaiting.length > 0) {
           void playAttentionBeep();
         }
@@ -452,26 +433,15 @@ function QueueScreenContent() {
       setCalled(calledRows);
       setWaiting(waitingRows);
     },
-    [handleQueueScreenCall]
+    [],
   );
 
-  const applyScreenRealtimePayload = useCallback(
-    (payload: QueueRealtimePayload) => {
-      const eventType = payload.eventType;
-      const oldRow = payload.old as Record<string, unknown> | undefined;
-      const newRow = payload.new as Record<string, unknown> | undefined;
-      const row = newRow ?? oldRow;
-      if (!row) return;
+  const applyScreenRowUpdate = useCallback(
+    (row: Record<string, unknown>) => {
+      if (!isTodayQueueRow(row)) return;
 
-      const entryId = String(oldRow?.id ?? row.id ?? "");
-
-      if (eventType === "DELETE" || !isTodayQueueRow(row)) {
-        if (!entryId) return;
-        const nextCalled = calledRef.current.filter((entry) => entry.id !== entryId);
-        const nextWaiting = waitingRef.current.filter((entry) => entry.id !== entryId);
-        applyQueueScreenRows([...nextCalled, ...nextWaiting]);
-        return;
-      }
+      const entryId = String(row.id ?? "");
+      if (!entryId) return;
 
       if (!shouldShowOnQueueScreen(row)) {
         const nextCalled = calledRef.current.filter((entry) => entry.id !== entryId);
@@ -508,6 +478,49 @@ function QueueScreenContent() {
       applyQueueScreenRows([...nextCalled, ...nextWaiting]);
     },
     [applyQueueScreenRows]
+  );
+
+  const applyScreenRealtimePayload = useCallback(
+    (payload: QueueRealtimePayload) => {
+      const eventType = payload.eventType;
+      const oldRow = payload.old as Record<string, unknown> | undefined;
+      const newRow = payload.new as Record<string, unknown> | undefined;
+      const row = newRow ?? oldRow;
+      if (!row) return;
+
+      const entryId = String(oldRow?.id ?? row.id ?? "");
+
+      if (eventType === "DELETE" || !isTodayQueueRow(row)) {
+        if (!entryId) return;
+        const nextCalled = calledRef.current.filter((entry) => entry.id !== entryId);
+        const nextWaiting = waitingRef.current.filter((entry) => entry.id !== entryId);
+        applyQueueScreenRows([...nextCalled, ...nextWaiting]);
+        return;
+      }
+
+      applyScreenRowUpdate(row);
+    },
+    [applyQueueScreenRows, applyScreenRowUpdate]
+  );
+
+  const applyScreenSyncPayload = useCallback(
+    (payload: QueueScreenSyncPayload) => {
+      if (payload.event === "delete" && payload.entryId) {
+        const nextCalled = calledRef.current.filter(
+          (entry) => entry.id !== payload.entryId
+        );
+        const nextWaiting = waitingRef.current.filter(
+          (entry) => entry.id !== payload.entryId
+        );
+        applyQueueScreenRows([...nextCalled, ...nextWaiting]);
+        return;
+      }
+
+      const row = payload.row;
+      if (!row) return;
+      applyScreenRowUpdate(row as Record<string, unknown>);
+    },
+    [applyQueueScreenRows, applyScreenRowUpdate]
   );
 
   const fetchQueue = useCallback(async () => {
@@ -563,6 +576,8 @@ function QueueScreenContent() {
     const supabase = createClient();
     const screenChannel = clinicQueueScreenChannelName(resolvedClinicId);
 
+    const ANNOUNCE_DEDUP_MS = 8_000;
+
     const onScreenCall = ({ payload }: { payload: Record<string, unknown> }) => {
       const p = payload as {
         name?: string;
@@ -573,39 +588,49 @@ function QueueScreenContent() {
         recall?: boolean;
         audioUrl?: string;
       };
-      if (p.name && p.doctorName) {
-        prefetchCloudTts(
-          splitPatientCallSpeech(
-            p.name,
-            p.doctorName,
-            "queue_screen",
-            p.gender ?? null
-          )
-        );
-        if (p.entryId) {
-          prevCalledRef.current.add(p.entryId);
-        }
-        setLiveCall({
-          name: p.name,
-          doctorName: p.doctorName,
-          entryId: p.entryId,
-          ticketNumber: p.ticketNumber,
-          gender: p.gender ?? null,
-          recall: p.recall === true,
-        });
-        setLiveCallTick((t) => t + 1);
-        handleQueueScreenCall(p.name, p.doctorName, p.gender ?? null, {
-          entryId: p.entryId,
-          audioUrl: p.audioUrl,
-          recall: p.recall === true,
-        });
+      if (!p.name?.trim() || !p.doctorName?.trim()) return;
+
+      if (p.entryId) {
+        const dedupeKey = p.recall ? `${p.entryId}:recall` : p.entryId;
+        const lastAt = announcedCallsRef.current.get(dedupeKey) ?? 0;
+        if (Date.now() - lastAt < ANNOUNCE_DEDUP_MS) return;
+        announcedCallsRef.current.set(dedupeKey, Date.now());
+        prevCalledRef.current.add(p.entryId);
       }
+
+      prefetchCloudTts(
+        splitPatientCallSpeech(
+          p.name,
+          p.doctorName,
+          "queue_screen",
+          p.gender ?? null
+        )
+      );
+      setLiveCall({
+        name: p.name,
+        doctorName: p.doctorName,
+        entryId: p.entryId,
+        ticketNumber: p.ticketNumber,
+        gender: p.gender ?? null,
+        recall: p.recall === true,
+      });
+      setLiveCallTick((t) => t + 1);
+      handleQueueScreenCall(p.name, p.doctorName, p.gender ?? null, {
+        entryId: p.entryId,
+        audioUrl: p.audioUrl,
+        recall: p.recall === true,
+      });
+    };
+
+    const onScreenSync = ({ payload }: { payload: Record<string, unknown> }) => {
+      applyScreenSyncPayload(payload as QueueScreenSyncPayload);
     };
 
     const screenChannelRef = supabase
       .channel(screenChannel, { config: { broadcast: { self: false } } })
       .on("broadcast", { event: "queue_screen_call" }, onScreenCall)
       .on("broadcast", { event: "queue_screen_recall" }, onScreenCall)
+      .on("broadcast", { event: "queue_screen_sync" }, onScreenSync)
       .subscribe();
 
     const dataChannel = supabase
@@ -628,7 +653,7 @@ function QueueScreenContent() {
       void supabase.removeChannel(screenChannelRef);
       void supabase.removeChannel(dataChannel);
     };
-  }, [resolvedClinicId, applyScreenRealtimePayload, handleQueueScreenCall]);
+  }, [resolvedClinicId, applyScreenRealtimePayload, applyScreenSyncPayload, handleQueueScreenCall]);
 
   function handleClinicResolved(id: string) {
     saveQueueScreenClinicRef(id);

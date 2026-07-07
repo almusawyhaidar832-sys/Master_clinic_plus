@@ -6,7 +6,9 @@ import {
   broadcastBillingReadyServer,
   broadcastPatientSentToDoctorServer,
   broadcastQueueScreenCallServer,
+  broadcastQueueScreenSyncServer,
 } from "@/lib/queue/broadcast-server";
+import type { QueueScreenSyncRow } from "@/lib/queue/broadcast-types";
 import { resolvePatientGender } from "@/lib/queue/patient-gender";
 import {
   formatAccountantBillingAlertMessage,
@@ -41,6 +43,7 @@ export interface QueueEntryRow {
   patient_id: string | null;
   doctor_id: string;
   clinic_id: string;
+  queue_date: string;
   created_at: string;
   called_at: string | null;
   entered_at: string | null;
@@ -61,7 +64,7 @@ export interface QueueEntryRow {
 
 const QUEUE_ENTRY_SELECT = `
   id, ticket_number, status, patient_name, patient_phone,
-  patient_id, doctor_id, clinic_id, created_at, called_at, entered_at,
+  patient_id, doctor_id, clinic_id, queue_date, created_at, called_at, entered_at,
   sent_to_doctor_at, appointment_id,
   transfer_to_doctor_id, transfer_from_doctor_id, transfer_requested_at,
   cancellation_requested_at, cancellation_requested_by, cancellation_actor_label,
@@ -183,6 +186,63 @@ function queueBroadcastContext(entry: {
       patient_name: entry.patient_name,
     }),
   };
+}
+
+const SCREEN_HIDDEN_STATUSES = new Set([
+  "done",
+  "cancelled",
+  "ready_for_billing",
+  "ready_for_payment",
+]);
+
+function shouldShowEntryOnQueueScreen(entry: {
+  status: string;
+  cancellation_requested_at?: string | null;
+  queue_date?: string;
+}): boolean {
+  if (entry.cancellation_requested_at) return false;
+  if (entry.queue_date && entry.queue_date !== todayIsoDate()) return false;
+  return !SCREEN_HIDDEN_STATUSES.has(entry.status);
+}
+
+function toQueueScreenSyncRow(entry: Awaited<ReturnType<typeof loadQueueEntryContext>>): QueueScreenSyncRow {
+  const patientRow = Array.isArray(entry.patient) ? entry.patient[0] : entry.patient;
+  const doctorRow = Array.isArray(entry.doctor) ? entry.doctor[0] : entry.doctor;
+  return {
+    id: entry.id,
+    ticket_number: entry.ticket_number,
+    status: entry.status,
+    patient_name: entry.patient_name,
+    doctor_id: entry.doctor_id,
+    queue_date: entry.queue_date,
+    called_at: entry.called_at,
+    cancellation_requested_at: entry.cancellation_requested_at,
+    doctor: doctorRow ? { full_name_ar: doctorRow.full_name_ar } : null,
+    patient: patientRow
+      ? {
+          full_name_ar: patientRow.full_name_ar,
+          speech_name_ar: patientRow.speech_name_ar ?? null,
+          gender: patientRow.gender ?? null,
+        }
+      : null,
+  };
+}
+
+/** مزامنة قائمة شاشة الانتظار — إضافة/تحديث/حذف صف على التلفاز */
+export async function emitQueueScreenSync(queueEntryId: string) {
+  const entry = await loadQueueEntryContext(queueEntryId);
+  if (!shouldShowEntryOnQueueScreen(entry)) {
+    await broadcastQueueScreenSyncServer(entry.clinic_id, {
+      event: "delete",
+      entryId: entry.id,
+    });
+    return;
+  }
+
+  await broadcastQueueScreenSyncServer(entry.clinic_id, {
+    event: "upsert",
+    row: toQueueScreenSyncRow(entry),
+  });
 }
 
 /** نداء شاشة الانتظار — من السيرفر فور تغيير الحالة */
@@ -754,6 +814,10 @@ export async function insertQueueEntry(input: {
     });
   }
 
+  void emitQueueScreenSync(entryId).catch((err) => {
+    console.error("[queue] screen sync on insert failed:", err);
+  });
+
   return data.id as string;
 }
 
@@ -802,6 +866,10 @@ export async function updateQueueStatus(
   if (!data) {
     throw new Error("لم يتم تحديث الدور — تحقق من الصلاحيات أو حالة المراجع");
   }
+
+  void emitQueueScreenSync(queueEntryId).catch((err) => {
+    console.error("[queue] screen sync on status update failed:", err);
+  });
 }
 
 const DOCTOR_QUEUE_ACTION_STATUSES: QueueStatus[] = ["waiting", "called"];

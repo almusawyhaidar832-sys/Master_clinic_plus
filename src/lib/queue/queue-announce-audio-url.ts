@@ -7,6 +7,7 @@ import {
   buildQueueScreenAnnouncement,
   formatNameForSpeech,
   joinPatientCallSpeech,
+  QUEUE_SCREEN_SPEECH_RATE,
   splitAccountantAdmitSpeech,
   splitAccountantBillingSpeech,
 } from "@/lib/queue/arabic-speech-text";
@@ -186,7 +187,10 @@ export async function synthesizeQueueAnnounceForEntry(
     plain = buildQueueScreenAnnouncement(formattedName, doctorName, gender);
   }
 
-  const audio = await synthesizeArabicSpeech(plain);
+  const audio = await synthesizeArabicSpeech(
+    plain,
+    variant === "queue_screen" ? { rate: QUEUE_SCREEN_SPEECH_RATE } : undefined
+  );
   cacheQueueAnnounceAudio(entryId, variant, audio);
   return audio;
 }

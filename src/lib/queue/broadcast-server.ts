@@ -7,6 +7,9 @@ import {
   doctorQueueChannelName,
 } from "@/lib/queue/realtime-channels";
 import type { PatientGender } from "@/lib/queue/patient-gender";
+import type { QueueScreenSyncPayload } from "@/lib/queue/broadcast-types";
+
+export type { QueueScreenSyncPayload, QueueScreenSyncRow } from "@/lib/queue/broadcast-types";
 
 export type QueueScreenCallPayload = {
   name: string;
@@ -105,6 +108,18 @@ export function broadcastQueueScreenCallServer(
   return sendServerBroadcast(
     clinicQueueScreenChannelName(clinicId),
     "queue_screen_call",
+    payload as Record<string, unknown>
+  );
+}
+
+/** تحديث قائمة شاشة الانتظار — يعمل على التلفاز بدون جلسة (broadcast وليس postgres_changes) */
+export function broadcastQueueScreenSyncServer(
+  clinicId: string,
+  payload: QueueScreenSyncPayload
+): Promise<void> {
+  return sendServerBroadcast(
+    clinicQueueScreenChannelName(clinicId),
+    "queue_screen_sync",
     payload as Record<string, unknown>
   );
 }
