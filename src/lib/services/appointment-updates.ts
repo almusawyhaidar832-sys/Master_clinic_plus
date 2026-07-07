@@ -29,8 +29,6 @@ export interface SendAppointmentUpdateResult {
   skipped?: boolean;
   error?: string;
   messageBody?: string;
-  deliveryWarning?: string;
-  providerMessageStatus?: string;
 }
 
 /**
@@ -65,29 +63,7 @@ export async function sendAppointmentUpdate(
     messageType: `appointment_${input.action}`,
   });
 
-  let finalOutcome = outcome;
-  if (
-    !outcome.ok &&
-    outcome.configured &&
-    (outcome.providerError === "whatsapp_not_linked" ||
-      outcome.providerError?.includes("disconnected") ||
-      outcome.providerError?.includes("not connected"))
-  ) {
-    await new Promise((r) => setTimeout(r, 1500));
-    finalOutcome = await deliverWhatsAppMessage(admin, {
-      clinicId: input.clinicId,
-      rawPhone: phone,
-      messageBody,
-      messageType: `appointment_${input.action}_retry`,
-    });
-  }
-
-  const delivered =
-    finalOutcome.ok &&
-    finalOutcome.status === "sent" &&
-    !finalOutcome.deliveryWarning;
-
-  if (input.appointmentId && delivered) {
+  if (input.appointmentId && outcome.ok) {
     await admin
       .from("appointments")
       .update({ whatsapp_sent: true } as Record<string, boolean>)
@@ -95,7 +71,7 @@ export async function sendAppointmentUpdate(
       .eq("clinic_id", input.clinicId);
   }
 
-  if (!finalOutcome.configured) {
+  if (!outcome.configured) {
     return {
       sent: false,
       skipped: true,
@@ -104,31 +80,13 @@ export async function sendAppointmentUpdate(
     };
   }
 
-  if (!finalOutcome.ok) {
+  if (!outcome.ok) {
     return {
       sent: false,
-      error: finalOutcome.providerError ?? "whatsapp_send_failed",
+      error: outcome.providerError ?? "whatsapp_send_failed",
       messageBody,
     };
   }
 
-  if (!delivered) {
-    const warn =
-      finalOutcome.deliveryWarning ??
-      finalOutcome.providerError ??
-      "evolution_pending_delivery";
-    return {
-      sent: false,
-      error: warn,
-      messageBody,
-      deliveryWarning: finalOutcome.deliveryWarning ?? warn,
-      providerMessageStatus: finalOutcome.providerMessageStatus,
-    };
-  }
-
-  return {
-    sent: true,
-    messageBody,
-    providerMessageStatus: finalOutcome.providerMessageStatus,
-  };
+  return { sent: true, messageBody };
 }

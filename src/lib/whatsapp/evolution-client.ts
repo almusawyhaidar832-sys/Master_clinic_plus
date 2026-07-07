@@ -502,26 +502,7 @@ export async function autoRepairEvolutionWhatsApp(
 
   const cleanup = await cleanupExtraEvolutionInstances(name);
 
-  const sessionBefore = await resolveEvolutionSession(name, { skipCache: true });
-  if (sessionBefore.linked) {
-    await restartEvolutionConnection(name);
-    const sessionAfter = await resolveEvolutionSession(name, { skipCache: true });
-    if (sessionAfter.linked) {
-      return {
-        ok: true,
-        deletedInstances: cleanup.deleted,
-        deleteFailures: cleanup.failed,
-        qr: {
-          linked: true,
-          connectionState: "open",
-          qrImageSrc: null,
-          linkedPhone: sessionAfter.linkedPhone,
-          profileName: sessionAfter.profileName,
-        },
-      };
-    }
-  }
-
+  // دائماً logout + QR جديد — جلسة "open" قد تكون zombie (تقبل الإرسال لكن لا تُسلّم).
   await evolutionFetch(`/instance/logout/${encodeURIComponent(name)}`, {
     method: "DELETE",
   });
@@ -942,19 +923,8 @@ export async function checkEvolutionWhatsAppNumber(
 export async function sendEvolutionText(
   rawPhone: string,
   text: string,
-  options?: {
-    clinicId?: string;
-    instanceName?: string;
-    restartConnection?: boolean;
-  }
-): Promise<{
-  ok: boolean;
-  status: number;
-  error?: string;
-  data?: unknown;
-  providerMessageStatus?: string;
-  deliveryWarning?: string;
-}> {
+  options?: { clinicId?: string; instanceName?: string }
+): Promise<{ ok: boolean; status: number; error?: string; data?: unknown }> {
   const { configured } = getWhatsAppConfig();
   const instanceName =
     options?.instanceName?.trim() ||
@@ -965,71 +935,13 @@ export async function sendEvolutionText(
     return { ok: false, status: 0, error: "whatsapp_not_configured" };
   }
 
-  const numberCheck = await checkEvolutionWhatsAppNumber(rawPhone, {
-    clinicId: options?.clinicId,
-    instanceName,
-  });
-  if (!numberCheck.skipped && !numberCheck.exists) {
-    return {
-      ok: false,
-      status: 400,
-      error: "number_not_on_whatsapp",
-      data: numberCheck,
-    };
-  }
-
-  const sendTarget = resolveEvolutionSendNumber(rawPhone, numberCheck);
-  if (sendTarget.lidJid) {
-    return {
-      ok: false,
-      status: 400,
-      error: "whatsapp_lid_jid",
-      data: { jid: sendTarget.lidJid, numberCheck },
-    };
-  }
-
-  const sendNumber = numberCheck.jid?.endsWith("@s.whatsapp.net")
-    ? numberCheck.jid.split("@")[0] ?? sendTarget.number
-    : sendTarget.number;
-  const remoteJid =
-    numberCheck.jid?.endsWith("@s.whatsapp.net")
-      ? numberCheck.jid
-      : `${sendTarget.number}@s.whatsapp.net`;
-
-  const restartBeforeSend =
-    options?.restartConnection ??
-    shouldRestartEvolutionBeforeSend();
-
-  if (restartBeforeSend) {
-    const restarted = await restartEvolutionConnection(instanceName);
-    if (!restarted.ok) {
-      console.warn(LOG, "restart_before_send_failed", restarted.error);
-    }
-    const session = await resolveEvolutionSession(instanceName, {
-      skipCache: true,
-    });
-    if (!session.linked) {
-      return {
-        ok: false,
-        status: 503,
-        error: "whatsapp_not_linked",
-        data: { restartError: restarted.error },
-      };
-    }
-  }
-
-  await sendEvolutionComposingPresence(instanceName, sendNumber);
+  const number = formatEvolutionApiNumber(rawPhone);
 
   const res = await evolutionFetch(
     `/message/sendText/${encodeURIComponent(instanceName)}`,
     {
       method: "POST",
-      body: JSON.stringify({
-        number: sendNumber,
-        text,
-        delay: 1200,
-        linkPreview: false,
-      }),
+      body: JSON.stringify({ number, text }),
     }
   );
 
@@ -1046,48 +958,7 @@ export async function sendEvolutionText(
     return { ok: false, status: res.status, error: hiddenErr, data: res.data };
   }
 
-  let providerMessageStatus =
-    parseEvolutionMessageStatus(res.data) ?? undefined;
-  const messageKey = extractEvolutionMessageKey(res.data);
-
-  if (
-    messageKey?.id &&
-    (!providerMessageStatus ||
-      providerMessageStatus.toUpperCase() === "PENDING")
-  ) {
-    const polled = await pollEvolutionMessageDeliveryStatus(
-      instanceName,
-      messageKey.id,
-      messageKey.remoteJid ?? remoteJid
-    );
-    if (polled) providerMessageStatus = polled;
-  }
-
-  if (providerMessageStatus?.toUpperCase() === "ERROR") {
-    return {
-      ok: true,
-      status: res.status,
-      data: res.data,
-      providerMessageStatus,
-      deliveryWarning: "evolution_delivery_error",
-    };
-  }
-
-  const deliveryWarning =
-    !providerMessageStatus ||
-    providerMessageStatus.toUpperCase() === "PENDING"
-      ? "evolution_pending_delivery"
-      : providerMessageStatus.toUpperCase() === "SERVER_ACK"
-        ? "evolution_server_ack_only"
-        : undefined;
-
-  return {
-    ok: true,
-    status: res.status,
-    data: res.data,
-    providerMessageStatus,
-    deliveryWarning,
-  };
+  return { ok: true, status: res.status, data: res.data };
 }
 
 /** إرسال ملف (PDF) عبر Evolution */

@@ -7,7 +7,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Copy, Check } from "lucide-react";
 
 const DOCKER_IMAGE = "evoapicloud/evolution-api:v2.3.7";
-const PHONE_VERSION = "2.3000.1039700148";
+const PHONE_VERSION = "2.3000.1042742319";
 
 function buildHandoffText(serverUrl: string | null): string {
   const url =

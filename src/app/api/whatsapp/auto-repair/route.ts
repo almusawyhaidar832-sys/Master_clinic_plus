@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     message: result.qr.linked
       ? "تم الإصلاح — واتساب متصل الآن"
       : qrSrc
-        ? "تم الإصلاح — امسح QR من جوال العيادة (خطوة واحدة)"
+        ? "تم الإصلاح — امسح QR من جوال العيادة خلال 20 ثانية (خطوة واحدة)"
         : result.error ?? "تعذر إكمال الإصلاح — حاول مرة أخرى",
   });
 }

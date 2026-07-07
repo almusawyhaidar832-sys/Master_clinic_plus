@@ -136,8 +136,19 @@ export async function POST(request: NextRequest) {
         ]
       : [];
 
+  const userMessage = !outcome.configured
+    ? "لم يُضبط WHATSAPP_API_URL أو WHATSAPP_API_KEY على سيرفر التطبيق — سُجّلت الرسالة كمعلّقة"
+    : !outcome.ok
+      ? "فشل إرسال الرسالة التجريبية"
+      : outcome.status === "pending"
+        ? deliveryNote ??
+          "بانتظار تأكيد التسليم — تحقق من وصول الرسالة على الجوال"
+        : deliveryNote
+          ? "قبل Evolution الطلب — تحقق من وصول الرسالة على الجوال"
+          : "تم إرسال الرسالة التجريبية — تحقق من وصولها خلال دقيقة";
+
   return NextResponse.json({
-    ok: true,
+    ok: outcome.ok || outcome.configured,
     status: outcome.status,
     normalizedPhone: outcome.normalizedPhone,
     configured: outcome.configured,
@@ -152,11 +163,6 @@ export async function POST(request: NextRequest) {
       ? phoneToLocalDisplay(session.linkedPhone)
       : null,
     evolutionLinked: session.linked,
-    message:
-      outcome.status === "pending"
-        ? "لم يُضبط WHATSAPP_API_URL — سُجّلت الرسالة كمعلّقة"
-        : deliveryNote
-          ? "قبل Evolution الطلب — تحقق من وصول الرسالة على الجوال"
-          : "تم إرسال الرسالة التجريبية — تحقق من وصولها خلال دقيقة",
+    message: userMessage,
   });
 }

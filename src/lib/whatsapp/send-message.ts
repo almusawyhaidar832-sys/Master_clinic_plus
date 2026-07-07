@@ -5,7 +5,6 @@ import {
 } from "@/lib/phone";
 import { getWhatsAppConfig } from "@/lib/whatsapp/config";
 import {
-  invalidateEvolutionSessionCache,
   resolveEvolutionSession,
   sendEvolutionDocument,
   sendEvolutionText,
@@ -94,17 +93,11 @@ export async function deliverWhatsAppMessage(
 
   let providerError: string | undefined;
   let providerStatus: number | undefined;
-  let providerMessageStatus: string | undefined;
-  let deliveryWarning: string | undefined;
 
   try {
     if (cfg.provider === "evolution") {
       const instanceName = await resolveWhatsAppInstanceForClinic(params.clinicId);
-      let session = await resolveEvolutionSession(instanceName, { skipCache: true });
-      if (!session.linked) {
-        invalidateEvolutionSessionCache(instanceName);
-        session = await resolveEvolutionSession(instanceName, { skipCache: true });
-      }
+      const session = await resolveEvolutionSession(instanceName);
       if (!session.linked) {
         const err = "whatsapp_not_linked";
         console.error(LOG_PREFIX, params.messageType, err, { instanceName });
@@ -150,8 +143,6 @@ export async function deliverWhatsAppMessage(
           configured: true,
         };
       }
-      providerMessageStatus = evo.providerMessageStatus;
-      deliveryWarning = evo.deliveryWarning;
     } else {
       const res = await fetch(`${cfg.baseUrl}/message/send`, {
         method: "POST",
@@ -192,23 +183,16 @@ export async function deliverWhatsAppMessage(
       }
     }
 
-    const finalStatus: WhatsAppDeliveryStatus = deliveryWarning
-      ? "pending"
-      : "sent";
-
     await logWhatsAppRow(supabase, {
       ...params,
       recipient_phone: normalizedPhone,
-      status: finalStatus,
-      error_message: deliveryWarning,
+      status: "sent",
     });
     return {
       ok: true,
       normalizedPhone,
-      status: finalStatus,
+      status: "sent",
       configured: true,
-      providerMessageStatus,
-      deliveryWarning,
     };
   } catch (e) {
     providerError = e instanceof Error ? e.message : String(e);
@@ -282,11 +266,7 @@ export async function deliverWhatsAppDocument(
   try {
     if (cfg.provider === "evolution") {
       const instanceName = await resolveWhatsAppInstanceForClinic(params.clinicId);
-      let session = await resolveEvolutionSession(instanceName, { skipCache: true });
-      if (!session.linked) {
-        invalidateEvolutionSessionCache(instanceName);
-        session = await resolveEvolutionSession(instanceName, { skipCache: true });
-      }
+      const session = await resolveEvolutionSession(instanceName);
       if (!session.linked) {
         const err = "whatsapp_not_linked";
         await logWhatsAppRow(supabase, {
