@@ -25,7 +25,24 @@ jobs:
         env:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: supabase link --project-ref "$SUPABASE_PROJECT_ID" -p "$SUPABASE_DB_PASSWORD"
+        run: |
+          PROJECT_REF="${SUPABASE_PROJECT_ID//[[:space:]]/}"
+
+          if [[ "$PROJECT_REF" =~ supabase\.co ]]; then
+            PROJECT_REF="$(echo "$PROJECT_REF" | sed -E 's|^https?://||; s|\.supabase\.co.*||')"
+          fi
+
+          if [[ -z "$PROJECT_REF" ]]; then
+            echo "::error::SUPABASE_PROJECT_ID is empty. Add the 20-letter Reference ID from Supabase Dashboard → Project Settings → General."
+            exit 1
+          fi
+
+          if [[ ! "$PROJECT_REF" =~ ^[a-z]{20}$ ]]; then
+            echo "::error::Invalid project ref format. Expected 20 lowercase letters (Reference ID), got length ${#PROJECT_REF}."
+            exit 1
+          fi
+
+          supabase link --project-ref "$PROJECT_REF" -p "$SUPABASE_DB_PASSWORD"
 
       - name: Dump database
         run: supabase db dump -f supabase-backup.sql --linked
