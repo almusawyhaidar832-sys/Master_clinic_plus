@@ -3,6 +3,7 @@ import { getApiCallerProfile, isApiStaffRole } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   approvePendingAppointment,
+  cancelStaffAppointment,
   rejectPendingAppointment,
 } from "@/lib/services/staff-appointments-server";
 
@@ -19,7 +20,7 @@ export async function POST(
     }
 
     const body = await req.json();
-    const action = body.action as "accept" | "reject";
+    const action = body.action as "accept" | "reject" | "cancel";
     const admin = getAdminClient();
     const clinicId = caller.clinic_id as string;
 
@@ -42,8 +43,21 @@ export async function POST(
       return NextResponse.json({ success: true, appointment });
     }
 
+    if (action === "cancel") {
+      const appointment = await cancelStaffAppointment(
+        admin,
+        clinicId,
+        id,
+        {
+          changedBy: caller.id as string,
+          actorName: caller.full_name ?? null,
+        }
+      );
+      return NextResponse.json({ success: true, appointment });
+    }
+
     return NextResponse.json(
-      { error: "action يجب أن يكون accept أو reject" },
+      { error: "action يجب أن يكون accept أو reject أو cancel" },
       { status: 400 }
     );
   } catch (e) {

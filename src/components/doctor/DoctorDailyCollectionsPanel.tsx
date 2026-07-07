@@ -24,6 +24,9 @@ import {
   type DailyCollectionRow,
 } from "@/lib/ledger/daily-collections";
 import type { DailyAssistantPayrollLine } from "@/lib/ledger/daily-assistant-payroll";
+import type { DoctorWithdrawalLine } from "@/lib/withdrawals/display";
+import { withdrawalStatusLabel } from "@/lib/withdrawals/display";
+import type { DoctorBalanceTopUpLine } from "@/lib/ledger/daily-doctor-balance-topups";
 import { OutstandingDebtPanel } from "@/components/accountant/OutstandingDebtPanel";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -31,6 +34,8 @@ import { cn, formatCurrency, formatDate, todayISO, addDaysISO } from "@/lib/util
 import {
   Calendar,
   RefreshCw,
+  ArrowDownToLine,
+  ArrowUpToLine,
   UserRound,
   Users,
 } from "lucide-react";
@@ -220,6 +225,53 @@ function AssistantPayrollRow({ line }: { line: DailyAssistantPayrollLine }) {
             − {formatCurrency(line.doctorDeduction)}
           </p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WithdrawalRow({ line }: { line: DoctorWithdrawalLine }) {
+  return (
+    <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-red-50/20 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <ArrowDownToLine className="h-4 w-4 shrink-0 text-red-600" />
+          <p className="font-semibold text-slate-text">{line.source}</p>
+          <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-800">
+            {withdrawalStatusLabel(line.status)}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-slate-muted">
+          {formatDate(line.effectiveDate)}
+        </p>
+      </div>
+      <div className="text-right">
+        <p className="text-[11px] text-slate-muted">سحب رصيد</p>
+        <p className="font-bold tabular-nums text-red-600">
+          − {formatCurrency(line.amount)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function BalanceTopUpRow({ line }: { line: DoctorBalanceTopUpLine }) {
+  return (
+    <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-emerald-50/20 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <ArrowUpToLine className="h-4 w-4 shrink-0 text-emerald-600" />
+          <p className="font-semibold text-slate-text">{line.label}</p>
+        </div>
+        <p className="mt-1 text-xs text-slate-muted">
+          {formatDate(line.effectiveDate)}
+        </p>
+      </div>
+      <div className="text-right">
+        <p className="text-[11px] text-slate-muted">شحن رصيد</p>
+        <p className="font-bold tabular-nums text-emerald-700">
+          + {formatCurrency(line.amount)}
+        </p>
       </div>
     </div>
   );
@@ -478,6 +530,27 @@ export function DoctorDailyCollectionsPanel({
                 className="border-emerald-300 bg-emerald-50/70"
               />
             )}
+            {mySummary.stats.totalWithdrawnInPeriod > 0 && (
+              <SummaryChip
+                label={t("docDailyWithdrawn")}
+                value={`− ${formatCurrency(mySummary.stats.totalWithdrawnInPeriod)}`}
+                className="border-red-200 bg-red-50/50 text-red-700"
+              />
+            )}
+            {mySummary.stats.totalToppedUpInPeriod > 0 && (
+              <SummaryChip
+                label={t("docDailyToppedUp")}
+                value={`+ ${formatCurrency(mySummary.stats.totalToppedUpInPeriod)}`}
+                className="border-emerald-200 bg-emerald-50/50 text-emerald-700"
+              />
+            )}
+            {mySummary.stats.availableBalance != null && (
+              <SummaryChip
+                label={t("docDailyBalanceRemaining")}
+                value={formatCurrency(mySummary.stats.availableBalance)}
+                className="border-slate-200 bg-slate-50/80"
+              />
+            )}
             <SummaryChip
               label={t("docDailyRemaining")}
               value={formatCurrency(mySummary.stats.totalRemaining)}
@@ -498,13 +571,13 @@ export function DoctorDailyCollectionsPanel({
         </div>
       )}
 
-      {!loading && result && !mySummary?.rows.length && !mySummary?.assistantPayroll.length && (
+      {!loading && result && !mySummary?.rows.length && !mySummary?.assistantPayroll.length && !mySummary?.withdrawals.length && !mySummary?.balanceTopups.length && (
         <Alert variant="info">
           {t("docDailyNoData")} {periodLabel}
         </Alert>
       )}
 
-      {!loading && mySummary && (mySummary.rows.length > 0 || mySummary.assistantPayroll.length > 0) && (
+      {!loading && mySummary && (mySummary.rows.length > 0 || mySummary.assistantPayroll.length > 0 || mySummary.withdrawals.length > 0 || mySummary.balanceTopups.length > 0) && (
         <Card className="overflow-hidden p-0">
           <div className="border-b border-slate-border bg-surface-card px-4 py-3">
             <p className="flex items-center gap-2 text-sm font-bold text-slate-text">
@@ -523,6 +596,26 @@ export function DoctorDailyCollectionsPanel({
                 </p>
                 {mySummary.assistantPayroll.map((line) => (
                   <AssistantPayrollRow key={line.id} line={line} />
+                ))}
+              </div>
+            )}
+            {mySummary.withdrawals.length > 0 && (
+              <div className="border-t border-red-200/60">
+                <p className="bg-red-50/60 px-4 py-2 text-xs font-semibold text-red-900">
+                  {t("docDailyWithdrawals")}
+                </p>
+                {mySummary.withdrawals.map((line) => (
+                  <WithdrawalRow key={line.id} line={line} />
+                ))}
+              </div>
+            )}
+            {mySummary.balanceTopups.length > 0 && (
+              <div className="border-t border-emerald-200/60">
+                <p className="bg-emerald-50/60 px-4 py-2 text-xs font-semibold text-emerald-900">
+                  {t("docDailyBalanceTopUps")}
+                </p>
+                {mySummary.balanceTopups.map((line) => (
+                  <BalanceTopUpRow key={line.id} line={line} />
                 ))}
               </div>
             )}

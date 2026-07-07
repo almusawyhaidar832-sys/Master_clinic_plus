@@ -12,6 +12,7 @@ import {
 import {
   enqueueApprovedAppointment,
   notifyDoctorForApprovedAppointment,
+  syncQueueFromAppointmentStatus,
 } from "@/lib/services/appointment-queue-sync";
 import type { Appointment } from "@/types";
 
@@ -333,6 +334,70 @@ const DELETABLE_STATUSES = new Set([
   "confirmed",
   "waiting",
 ]);
+
+const CANCELLABLE_STATUSES = new Set([
+  "scheduled",
+  "confirmed",
+  "waiting",
+]);
+
+/** إلغاء حجز اليوم — لم يحضر المراجع أو إلغاء من غرفة الانتظار */
+export async function cancelStaffAppointment(
+  admin: SupabaseClient,
+  clinicId: string,
+  appointmentId: string,
+  audit?: AppointmentAuditActor
+): Promise<Appointment> {
+  const { data: current } = await admin
+    .from("appointments")
+    .select("*")
+    .eq("id", appointmentId)
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+
+  if (!current) throw new Error("الموعد غير موجود");
+
+  if (!CANCELLABLE_STATUSES.has(current.status as string)) {
+    throw new Error("لا يمكن إلغاء موعد مكتمل أو داخل الكشف");
+  }
+
+  const { data, error } = await admin
+    .from("appointments")
+    .update({ status: "cancelled" })
+    .eq("id", appointmentId)
+    .eq("clinic_id", clinicId)
+    .in("status", [...CANCELLABLE_STATUSES])
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) {
+    throw new Error("تعذّر الإلغاء — تغيّرت حالة الموعد قبل الحفظ");
+  }
+
+  await syncQueueFromAppointmentStatus(
+    admin,
+    appointmentId,
+    clinicId,
+    "cancelled"
+  );
+
+  if (audit) {
+    await writeAuditLog(admin, {
+      clinicId,
+      entityType: "appointment",
+      entityId: appointmentId,
+      action: "update",
+      changedBy: audit.changedBy,
+      actorName: audit.actorName,
+      before: appointmentSnapshot(current as Record<string, unknown>),
+      after: appointmentSnapshot(data as Record<string, unknown>),
+      note: `إلغاء حجز — ${(current.patient_name_ar as string) ?? "مراجع"}`,
+    });
+  }
+
+  return data as Appointment;
+}
 
 /** إنشاء موعد يدوي — محاسب / مالك (مع اختيار الطبيب) */
 export async function createStaffAppointment(

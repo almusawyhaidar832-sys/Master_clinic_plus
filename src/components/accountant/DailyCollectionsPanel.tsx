@@ -25,6 +25,9 @@ import {
   type DailyCollectionRow,
 } from "@/lib/ledger/daily-collections";
 import type { DailyAssistantPayrollLine } from "@/lib/ledger/daily-assistant-payroll";
+import type { DoctorWithdrawalLine } from "@/lib/withdrawals/display";
+import { withdrawalStatusLabel } from "@/lib/withdrawals/display";
+import type { DoctorBalanceTopUpLine } from "@/lib/ledger/daily-doctor-balance-topups";
 import { OutstandingDebtPanel } from "@/components/accountant/OutstandingDebtPanel";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
@@ -33,6 +36,8 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
+  ArrowDownToLine,
+  ArrowUpToLine,
   Receipt,
   RefreshCw,
   Stethoscope,
@@ -278,17 +283,68 @@ function AssistantPayrollRow({ line }: { line: DailyAssistantPayrollLine }) {
   );
 }
 
+function WithdrawalRow({ line }: { line: DoctorWithdrawalLine }) {
+  return (
+    <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-red-50/20 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <ArrowDownToLine className="h-4 w-4 shrink-0 text-red-600" />
+          <p className="font-semibold text-slate-text">{line.source}</p>
+          <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-800">
+            {withdrawalStatusLabel(line.status)}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-slate-muted">
+          {formatDate(line.effectiveDate)}
+        </p>
+      </div>
+      <div className="text-right">
+        <p className="text-[11px] text-slate-muted">سحب رصيد</p>
+        <p className="font-bold tabular-nums text-red-600">
+          − {formatCurrency(line.amount)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function BalanceTopUpRow({ line }: { line: DoctorBalanceTopUpLine }) {
+  return (
+    <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-emerald-50/20 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <ArrowUpToLine className="h-4 w-4 shrink-0 text-emerald-600" />
+          <p className="font-semibold text-slate-text">{line.label}</p>
+        </div>
+        <p className="mt-1 text-xs text-slate-muted">
+          {formatDate(line.effectiveDate)}
+        </p>
+      </div>
+      <div className="text-right">
+        <p className="text-[11px] text-slate-muted">شحن رصيد</p>
+        <p className="font-bold tabular-nums text-emerald-700">
+          + {formatCurrency(line.amount)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function DoctorSection({
   doctorName,
   stats,
   rows,
   assistantPayroll,
+  withdrawals,
+  balanceTopups,
   defaultOpen,
 }: {
   doctorName: string;
   stats: DailyCollectionsResult["totals"];
   rows: DailyCollectionRow[];
   assistantPayroll: DailyAssistantPayrollLine[];
+  withdrawals: DoctorWithdrawalLine[];
+  balanceTopups: DoctorBalanceTopUpLine[];
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -326,6 +382,20 @@ function DoctorSection({
               {stats.totalPatients === 0 && assistantPayroll.length > 0 && (
                 <>أجور مساعدين فقط</>
               )}
+              {stats.totalPatients === 0 &&
+                assistantPayroll.length === 0 &&
+                withdrawals.length === 0 &&
+                balanceTopups.length === 0 && (
+                  <>لا حركة مالية في هذه الفترة</>
+                )}
+              {stats.totalPatients === 0 &&
+                assistantPayroll.length === 0 &&
+                withdrawals.length > 0 &&
+                balanceTopups.length === 0 && <>سحوبات رصيد فقط</>}
+              {stats.totalPatients === 0 &&
+                assistantPayroll.length === 0 &&
+                withdrawals.length === 0 &&
+                balanceTopups.length > 0 && <>شحن رصيد فقط</>}
               {stats.assistantDoctorDeduction > 0 && (
                 <>
                   {stats.totalPatients > 0 && " · "}
@@ -333,6 +403,33 @@ function DoctorSection({
                   {stats.netDoctorShareToday >= 0 && (
                     <> · صافي {formatCurrency(stats.netDoctorShareToday)}</>
                   )}
+                </>
+              )}
+              {stats.totalWithdrawnInPeriod > 0 && (
+                <>
+                  {(stats.totalPatients > 0 ||
+                    stats.assistantDoctorDeduction > 0) &&
+                    " · "}
+                  <span className="font-medium text-red-600">
+                    سحب −{formatCurrency(stats.totalWithdrawnInPeriod)}
+                  </span>
+                </>
+              )}
+              {stats.totalToppedUpInPeriod > 0 && (
+                <>
+                  {(stats.totalPatients > 0 ||
+                    stats.assistantDoctorDeduction > 0 ||
+                    stats.totalWithdrawnInPeriod > 0) &&
+                    " · "}
+                  <span className="font-medium text-emerald-700">
+                    شحن +{formatCurrency(stats.totalToppedUpInPeriod)}
+                  </span>
+                </>
+              )}
+              {stats.availableBalance != null && (
+                <>
+                  {" · "}
+                  رصيد متبقي {formatCurrency(stats.availableBalance)}
                 </>
               )}
             </p>
@@ -361,7 +458,10 @@ function DoctorSection({
 
       {open && (
         <div className="border-t border-slate-border bg-surface-card">
-          {rows.length === 0 && assistantPayroll.length === 0 ? (
+          {rows.length === 0 &&
+          assistantPayroll.length === 0 &&
+          withdrawals.length === 0 &&
+          balanceTopups.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-slate-muted">
               لا مراجعين في هذا التصنيف
             </p>
@@ -377,6 +477,26 @@ function DoctorSection({
                   </p>
                   {assistantPayroll.map((line) => (
                     <AssistantPayrollRow key={line.id} line={line} />
+                  ))}
+                </div>
+              )}
+              {withdrawals.length > 0 && (
+                <div className="border-t border-red-200/60">
+                  <p className="bg-red-50/60 px-4 py-2 text-xs font-semibold text-red-900">
+                    سحوبات رصيد الطبيب
+                  </p>
+                  {withdrawals.map((line) => (
+                    <WithdrawalRow key={line.id} line={line} />
+                  ))}
+                </div>
+              )}
+              {balanceTopups.length > 0 && (
+                <div className="border-t border-emerald-200/60">
+                  <p className="bg-emerald-50/60 px-4 py-2 text-xs font-semibold text-emerald-900">
+                    شحن رصيد الطبيب
+                  </p>
+                  {balanceTopups.map((line) => (
+                    <BalanceTopUpRow key={line.id} line={line} />
                   ))}
                 </div>
               )}
@@ -719,6 +839,20 @@ export function DailyCollectionsPanel() {
                 className="border-emerald-300 bg-emerald-50/70"
               />
             )}
+            {result.totals.totalWithdrawnInPeriod > 0 && (
+              <SummaryChip
+                label="سحوبات الأطباء"
+                value={`− ${formatCurrency(result.totals.totalWithdrawnInPeriod)}`}
+                className="border-red-200 bg-red-50/50 text-red-700"
+              />
+            )}
+            {result.totals.totalToppedUpInPeriod > 0 && (
+              <SummaryChip
+                label="شحن رصيد الأطباء"
+                value={`+ ${formatCurrency(result.totals.totalToppedUpInPeriod)}`}
+                className="border-emerald-200 bg-emerald-50/50 text-emerald-700"
+              />
+            )}
             <SummaryChip
               label="متبقي"
               value={formatCurrency(result.totals.totalRemaining)}
@@ -760,6 +894,8 @@ export function DailyCollectionsPanel() {
             stats={group.stats}
             rows={group.rows}
             assistantPayroll={group.assistantPayroll}
+            withdrawals={group.withdrawals}
+            balanceTopups={group.balanceTopups}
             defaultOpen={!!selectedDoctorId || index < 5}
           />
         ))}

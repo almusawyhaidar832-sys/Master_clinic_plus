@@ -67,6 +67,7 @@ export function TodayAppointmentsPanel({
   const [appointments, setAppointments] = useState<DashboardAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
   const [editing, setEditing] = useState<DashboardAppointment | null>(null);
   const [rejecting, setRejecting] = useState<DashboardAppointment | null>(null);
@@ -148,6 +149,39 @@ export function TodayAppointmentsPanel({
       load();
     } finally {
       setActionId(null);
+    }
+  }
+
+  async function handleCancel(appointment: DashboardAppointment) {
+    const name = appointment.patient_name_ar || t("entityPatient");
+    if (
+      !confirm(
+        bi(`إلغاء حجز ${name} لهذا اليوم؟`, `Cancel ${name}'s booking for today?`)
+      )
+    ) {
+      return;
+    }
+
+    setCancellingId(appointment.id);
+    setMessage(null);
+    try {
+      const result = await setAccountantAppointmentStatusViaApi(
+        appointment.id,
+        "cancel"
+      );
+      if (!result.ok) {
+        setMessage(result.error ?? t("msgCancelBookingFailed"));
+        return;
+      }
+      setToast(t("msgAppointmentCancelled"));
+      if (clinicId) {
+        notifyQueueRefresh({ scope: "clinic", clinicId });
+        notifyQueueRefresh({ scope: "doctor", doctorId: appointment.doctor_id });
+      }
+      onApprovedToQueue?.();
+      load();
+    } finally {
+      setCancellingId(null);
     }
   }
 
@@ -321,6 +355,7 @@ export function TodayAppointmentsPanel({
             const statusLabel = statusLabels[a.status] ?? a.status;
             const isPending = a.status === "pending";
             const canCheckIn = ["scheduled", "confirmed", "waiting"].includes(a.status);
+            const canCancel = canCheckIn;
             const canCheckout =
               a.status === "ready_for_billing" || a.status === "ready_for_payment";
             const inConsultation = a.status === "in_clinic" || a.status === "in_examination";
@@ -405,6 +440,21 @@ export function TodayAppointmentsPanel({
                         <DoorOpen className="h-3 w-3" />
                       )}
                       {t("apptCheckIn")}
+                    </button>
+                  )}
+                  {canCancel && (
+                    <button
+                      type="button"
+                      disabled={cancellingId === a.id}
+                      onClick={() => handleCancel(a)}
+                      className="flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60"
+                    >
+                      {cancellingId === a.id ? (
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <X className="h-3 w-3" />
+                      )}
+                      {t("apptCancelBooking")}
                     </button>
                   )}
                   {inConsultation && (

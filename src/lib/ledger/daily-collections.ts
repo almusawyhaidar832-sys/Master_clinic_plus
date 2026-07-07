@@ -27,6 +27,17 @@ import {
   sumAssistantPayrollByDoctor,
   type DailyAssistantPayrollLine,
 } from "@/lib/ledger/daily-assistant-payroll";
+import {
+  fetchDailyDoctorWithdrawalLines,
+  sumWithdrawalsByDoctor,
+} from "@/lib/ledger/daily-doctor-withdrawals";
+import {
+  fetchDailyDoctorBalanceTopUpLines,
+  sumBalanceTopUpsByDoctor,
+  type DoctorBalanceTopUpLine,
+} from "@/lib/ledger/daily-doctor-balance-topups";
+import { fetchDoctorWalletStatsBatch } from "@/lib/services/doctor-wallet";
+import type { DoctorWithdrawalLine } from "@/lib/withdrawals/display";
 import { getPatientDisplayPhone } from "@/lib/phone";
 import { opName, type Doctor } from "@/types";
 import { formatCurrency, todayISO } from "@/lib/utils";
@@ -77,6 +88,8 @@ export type DoctorDailySummary = {
   doctorName: string;
   rows: DailyCollectionRow[];
   assistantPayroll: DailyAssistantPayrollLine[];
+  withdrawals: DoctorWithdrawalLine[];
+  balanceTopups: DoctorBalanceTopUpLine[];
   stats: {
     totalPatients: number;
     paidFull: number;
@@ -95,6 +108,12 @@ export type DoctorDailySummary = {
     assistantClinicShare: number;
     /** حصة الطبيب بعد خصم المساعدين */
     netDoctorShareToday: number;
+    /** مسحوب / موافق عليه خلال الفترة */
+    totalWithdrawnInPeriod: number;
+    /** شحن رصيد خلال الفترة */
+    totalToppedUpInPeriod: number;
+    /** الرصيد المحاسبي الحالي للطبيب بعد كل الصرفيات */
+    availableBalance: number | null;
   };
 };
 
@@ -650,6 +669,9 @@ function emptyStats(): DoctorDailySummary["stats"] {
     assistantDoctorDeduction: 0,
     assistantClinicShare: 0,
     netDoctorShareToday: 0,
+    totalWithdrawnInPeriod: 0,
+    totalToppedUpInPeriod: 0,
+    availableBalance: null,
   };
 }
 
@@ -723,6 +745,22 @@ function applyAssistantPayrollToStats(
     0,
     roundMoney(stats.doctorShareToday - stats.assistantDoctorDeduction)
   );
+}
+
+function applyBalanceTopupsToStats(
+  stats: DoctorDailySummary["stats"],
+  toppedUpInPeriod: number
+): void {
+  stats.totalToppedUpInPeriod = toppedUpInPeriod;
+}
+
+function applyWithdrawalsToStats(
+  stats: DoctorDailySummary["stats"],
+  withdrawnInPeriod: number,
+  availableBalance: number | null
+): void {
+  stats.totalWithdrawnInPeriod = withdrawnInPeriod;
+  stats.availableBalance = availableBalance;
 }
 
 /** صف واحد لكل مراجع + طبيب في اليوم — بدل تكرار الاسم لكل سجل */
@@ -902,6 +940,8 @@ function mergeStats(
   target.assistantDoctorDeduction += source.assistantDoctorDeduction;
   target.assistantClinicShare += source.assistantClinicShare;
   target.netDoctorShareToday += source.netDoctorShareToday;
+  target.totalWithdrawnInPeriod += source.totalWithdrawnInPeriod;
+  target.totalToppedUpInPeriod += source.totalToppedUpInPeriod;
 }
 
 export function matchesCollectionFilter(
@@ -1119,6 +1159,59 @@ export async function fetchDailyCollections(
     const list = assistantLinesByDoctor.get(line.doctorId) ?? [];
     list.push(line);
     assistantLinesByDoctor.set(line.doctorId, list);
+  }
+
+  const withdrawalLines = await fetchDailyDoctorWithdrawalLines(
+    supabase,
+    clinicId,
+    {
+      dateFrom: effectiveFrom,
+      dateTo: effectiveTo,
+      doctorId: input.doctorId,
+    }
+  );
+  const withdrawalsByDoctor = sumWithdrawalsByDoctor(withdrawalLines);
+  const withdrawalLinesByDoctor = new Map<string, DoctorWithdrawalLine[]>();
+  for (const line of withdrawalLines) {
+    const list = withdrawalLinesByDoctor.get(line.doctorId) ?? [];
+    list.push(line);
+    withdrawalLinesByDoctor.set(line.doctorId, list);
+  }
+
+  const balanceTopUpLines = await fetchDailyDoctorBalanceTopUpLines(
+    supabase,
+    clinicId,
+    {
+      dateFrom: effectiveFrom,
+      dateTo: effectiveTo,
+      doctorId: input.doctorId,
+    }
+  );
+  const topupsByDoctor = sumBalanceTopUpsByDoctor(balanceTopUpLines);
+  const topupLinesByDoctor = new Map<string, DoctorBalanceTopUpLine[]>();
+  for (const line of balanceTopUpLines) {
+    const list = topupLinesByDoctor.get(line.doctorId) ?? [];
+    list.push(line);
+    topupLinesByDoctor.set(line.doctorId, list);
+  }
+
+  function applyDoctorFinancialExtras(
+    stats: DoctorDailySummary["stats"],
+    doctorId: string
+  ): void {
+    applyWithdrawalsToStats(
+      stats,
+      withdrawalsByDoctor.get(doctorId) ?? 0,
+      null
+    );
+    applyBalanceTopupsToStats(stats, topupsByDoctor.get(doctorId) ?? 0);
+  }
+
+  function doctorFinancialExtras(doctorId: string) {
+    return {
+      withdrawals: withdrawalLinesByDoctor.get(doctorId) ?? [],
+      balanceTopups: topupLinesByDoctor.get(doctorId) ?? [],
+    };
   }
 
   const sessionRows: DailyCollectionRow[] = [];
@@ -1381,11 +1474,13 @@ export async function fetchDailyCollections(
       if (assistantTotals) {
         applyAssistantPayrollToStats(stats, assistantTotals);
       }
+      applyDoctorFinancialExtras(stats, doctorId);
       return {
         doctorId,
         doctorName: doctorNameById.get(doctorId) ?? "طبيب",
         rows: sorted,
         assistantPayroll: assistantLinesByDoctor.get(doctorId) ?? [],
+        ...doctorFinancialExtras(doctorId),
         stats,
       };
     })
@@ -1396,13 +1491,60 @@ export async function fetchDailyCollections(
     const assistantTotals = assistantByDoctor.get(doctorId)!;
     const stats = emptyStats();
     applyAssistantPayrollToStats(stats, assistantTotals);
+    applyDoctorFinancialExtras(stats, doctorId);
     doctors.push({
       doctorId,
       doctorName: doctorNameById.get(doctorId) ?? "طبيب",
       rows: [],
       assistantPayroll: assistantLinesByDoctor.get(doctorId) ?? [],
+      ...doctorFinancialExtras(doctorId),
       stats,
     });
+  }
+
+  for (const doctorId of withdrawalsByDoctor.keys()) {
+    if (doctors.some((d) => d.doctorId === doctorId)) continue;
+    const stats = emptyStats();
+    applyDoctorFinancialExtras(stats, doctorId);
+    doctors.push({
+      doctorId,
+      doctorName:
+        doctorNameById.get(doctorId) ??
+        withdrawalLinesByDoctor.get(doctorId)?.[0]?.doctorName ??
+        topupLinesByDoctor.get(doctorId)?.[0]?.doctorName ??
+        "طبيب",
+      rows: [],
+      assistantPayroll: [],
+      ...doctorFinancialExtras(doctorId),
+      stats,
+    });
+  }
+
+  for (const doctorId of topupsByDoctor.keys()) {
+    if (doctors.some((d) => d.doctorId === doctorId)) continue;
+    const stats = emptyStats();
+    applyDoctorFinancialExtras(stats, doctorId);
+    doctors.push({
+      doctorId,
+      doctorName:
+        doctorNameById.get(doctorId) ??
+        topupLinesByDoctor.get(doctorId)?.[0]?.doctorName ??
+        "طبيب",
+      rows: [],
+      assistantPayroll: [],
+      ...doctorFinancialExtras(doctorId),
+      stats,
+    });
+  }
+
+  const walletDoctorIds = doctors.map((d) => d.doctorId);
+  const walletStatsMap = await fetchDoctorWalletStatsBatch(
+    supabase,
+    walletDoctorIds
+  );
+  for (const group of doctors) {
+    const wallet = walletStatsMap.get(group.doctorId);
+    group.stats.availableBalance = wallet?.availableBalance ?? null;
   }
 
   doctors.sort((a, b) => a.doctorName.localeCompare(b.doctorName, "ar"));

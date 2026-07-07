@@ -82,7 +82,7 @@ export async function updateAccountantAppointmentViaApi(
 
 export async function setAccountantAppointmentStatusViaApi(
   id: string,
-  action: "accept" | "reject",
+  action: "accept" | "reject" | "cancel",
   reason_for_change?: string
 ): Promise<{
   ok: boolean;
