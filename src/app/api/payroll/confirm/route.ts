@@ -237,6 +237,23 @@ export async function POST(req: NextRequest) {
     const activeRecord = (freshRecord ?? record) as PayrollRecord;
     const dailyWageResolved = dailyWage ?? false;
 
+    const { data: assistantRow } = await admin
+      .from("assistants")
+      .select("doctor_share_percentage")
+      .eq("id", activeRecord.assistant_id as string)
+      .eq("clinic_id", clinicId)
+      .maybeSingle();
+
+    const doctorSharePct = Number(
+      assistantRow?.doctor_share_percentage ??
+        activeRecord.doctor_share_percentage ??
+        0
+    );
+    const pendingMode = {
+      dailyWage: dailyWageResolved,
+      doctorSharePercentage: doctorSharePct,
+    };
+
     const assistantMonthYear = activeRecord.month_year as string;
     if (await isMonthClosed(admin, clinicId, assistantMonthYear)) {
       return NextResponse.json(
@@ -245,16 +262,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (assistantIsFullyPaid(activeRecord, { dailyWage: dailyWageResolved })) {
+    if (assistantIsFullyPaid(activeRecord, pendingMode)) {
       return NextResponse.json({ success: true, already_paid: true });
     }
 
-    const pendingDoctor = assistantPendingDoctorShare(activeRecord, {
-      dailyWage: dailyWageResolved,
-    });
-    const pendingClinic = assistantPendingClinicShare(activeRecord, {
-      dailyWage: dailyWageResolved,
-    });
+    const pendingDoctor = assistantPendingDoctorShare(activeRecord, pendingMode);
+    const pendingClinic = assistantPendingClinicShare(activeRecord, pendingMode);
 
     if (pendingDoctor <= 0 && pendingClinic <= 0) {
       return NextResponse.json({ success: true, already_paid: true });
@@ -308,9 +321,7 @@ export async function POST(req: NextRequest) {
       paid_clinic_share_amount: newPaidClinic,
       paid_total_salary: newPaidTotal,
     } as PayrollRecord;
-    const fullyPaid = assistantIsFullyPaid(resolvedRecord, {
-      dailyWage: dailyWageResolved,
-    });
+    const fullyPaid = assistantIsFullyPaid(resolvedRecord, pendingMode);
 
     const { error: statusErr } = await admin
       .from("payroll_records")

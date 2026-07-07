@@ -459,6 +459,8 @@ export async function fetchDoctorPendingAssistantPayrollDeductions(
     .from("payroll_records")
     .select(
       `
+      doctor_id,
+      doctor_share_percentage,
       doctor_share_amount,
       paid_doctor_share_amount,
       clinic_share_amount,
@@ -466,7 +468,7 @@ export async function fetchDoctorPendingAssistantPayrollDeductions(
       total_salary,
       paid_total_salary,
       status,
-      assistant:assistants!assistant_id(compensation_mode)
+      assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
     `
     )
     .eq("doctor_id", doctorId);
@@ -485,6 +487,12 @@ export async function fetchDoctorPendingAssistantPayrollDeductions(
           ?.compensation_mode
       )
     );
+    const doctorSharePct = Number(
+      (assistant as { doctor_share_percentage?: number } | null)
+        ?.doctor_share_percentage ??
+        (row as { doctor_share_percentage?: number }).doctor_share_percentage ??
+        0
+    );
     total += assistantPendingDoctorShare(
       row as Pick<
         PayrollRecord,
@@ -496,7 +504,10 @@ export async function fetchDoctorPendingAssistantPayrollDeductions(
         | "paid_total_salary"
         | "status"
       >,
-      { dailyWage }
+      {
+        dailyWage,
+        doctorSharePercentage: doctorSharePct,
+      }
     );
   }
 
@@ -527,6 +538,7 @@ async function fetchPendingAssistantPayrollByDoctor(
     .select(
       `
       doctor_id,
+      doctor_share_percentage,
       doctor_share_amount,
       paid_doctor_share_amount,
       clinic_share_amount,
@@ -534,7 +546,7 @@ async function fetchPendingAssistantPayrollByDoctor(
       total_salary,
       paid_total_salary,
       status,
-      assistant:assistants!assistant_id(compensation_mode)
+      assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
     `
     )
     .in("doctor_id", doctorIds);
@@ -554,6 +566,12 @@ async function fetchPendingAssistantPayrollByDoctor(
           ?.compensation_mode
       )
     );
+    const doctorSharePct = Number(
+      (assistant as { doctor_share_percentage?: number } | null)
+        ?.doctor_share_percentage ??
+        (row as { doctor_share_percentage?: number }).doctor_share_percentage ??
+        0
+    );
     const pending = assistantPendingDoctorShare(
       row as Pick<
         PayrollRecord,
@@ -567,6 +585,7 @@ async function fetchPendingAssistantPayrollByDoctor(
       >,
       {
         dailyWage,
+        doctorSharePercentage: doctorSharePct,
       }
     );
     if (pending <= FINANCIAL_EPSILON) continue;

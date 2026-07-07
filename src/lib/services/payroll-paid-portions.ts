@@ -1,11 +1,58 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import type { PayrollRecord, SalarySlip } from "@/types";
 
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export type PayrollPendingMode = { dailyWage?: boolean };
+export type PayrollPendingMode = {
+  dailyWage?: boolean;
+  /** عند التوفّر: يُحسب المتبقي من النسبة الحالية وليس من doctor_share_amount المخزّن */
+  doctorSharePercentage?: number;
+};
+
+type AssistantShareRecord = Pick<
+  PayrollRecord,
+  | "total_salary"
+  | "doctor_share_amount"
+  | "paid_doctor_share_amount"
+  | "clinic_share_amount"
+  | "paid_clinic_share_amount"
+>;
+
+/** حصتا الطبيب/العيادة المستحقّتان من total_salary حسب النسبة */
+export function assistantAccruedShares(
+  record: Pick<PayrollRecord, "total_salary"> | null | undefined,
+  doctorSharePercentage: number
+): { doctor: number; clinic: number } {
+  if (!record) return { doctor: 0, clinic: 0 };
+  const breakdown = breakdownAssistantSalary({
+    total_salary: Number(record.total_salary ?? 0),
+    doctor_share_percentage: doctorSharePercentage,
+  });
+  return {
+    doctor: breakdown.doctorShare,
+    clinic: breakdown.clinicShare,
+  };
+}
+
+/** المتبقي غير المؤكَّد — يُفضَّل تمرير doctorSharePercentage من جدول assistants */
+export function assistantPendingShares(
+  record: AssistantShareRecord | null | undefined,
+  doctorSharePercentage: number
+): { doctor: number; clinic: number } {
+  if (!record) return { doctor: 0, clinic: 0 };
+  const accrued = assistantAccruedShares(record, doctorSharePercentage);
+  return {
+    doctor: roundMoney(
+      Math.max(0, accrued.doctor - assistantPaidDoctorShare(record))
+    ),
+    clinic: roundMoney(
+      Math.max(0, accrued.clinic - assistantPaidClinicShare(record))
+    ),
+  };
+}
 
 export function slipPaidNet(
   slip: Pick<SalarySlip, "paid_net_payout"> | null | undefined
@@ -59,13 +106,13 @@ export function assistantPaidTotalSalary(
 }
 
 export function assistantPendingDoctorShare(
-  record: Pick<
-    PayrollRecord,
-    "doctor_share_amount" | "paid_doctor_share_amount"
-  > | null,
+  record: AssistantShareRecord | null,
   mode?: PayrollPendingMode
 ): number {
   if (!record) return 0;
+  if (mode?.doctorSharePercentage != null) {
+    return assistantPendingShares(record, mode.doctorSharePercentage).doctor;
+  }
   if (mode?.dailyWage) {
     return roundMoney(Number(record.doctor_share_amount ?? 0));
   }
@@ -78,13 +125,13 @@ export function assistantPendingDoctorShare(
 }
 
 export function assistantPendingClinicShare(
-  record: Pick<
-    PayrollRecord,
-    "clinic_share_amount" | "paid_clinic_share_amount"
-  > | null,
+  record: AssistantShareRecord | null,
   mode?: PayrollPendingMode
 ): number {
   if (!record) return 0;
+  if (mode?.doctorSharePercentage != null) {
+    return assistantPendingShares(record, mode.doctorSharePercentage).clinic;
+  }
   if (mode?.dailyWage) {
     return roundMoney(Number(record.clinic_share_amount ?? 0));
   }

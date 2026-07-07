@@ -369,11 +369,17 @@ export default function SalaryPage() {
     : slipPaidNet(staffSlipThisMonth ?? null);
   const assistantPendingDoctor = assistantPendingDoctorShare(
     selectedAssistantRecord ?? null,
-    { dailyWage: isDailyAssistantSelected }
+    {
+      dailyWage: isDailyAssistantSelected,
+      doctorSharePercentage: selectedPerson?.doctor_share_percentage,
+    }
   );
   const assistantPendingClinic = assistantPendingClinicShare(
     selectedAssistantRecord ?? null,
-    { dailyWage: isDailyAssistantSelected }
+    {
+      dailyWage: isDailyAssistantSelected,
+      doctorSharePercentage: selectedPerson?.doctor_share_percentage,
+    }
   );
   const canConfirmPayroll =
     slipPendingAmount > 0 ||

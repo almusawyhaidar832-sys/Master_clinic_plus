@@ -3,6 +3,7 @@ import {
   deleteFinancialTransactionsByReference,
   recordFinancialTransaction,
 } from "@/lib/services/clinic-profit";
+import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import { todayISO } from "@/lib/utils";
 import type { PayrollRecord, SalarySlip } from "@/types";
 
@@ -180,14 +181,28 @@ export async function recordAssistantPayrollPaidTransaction(
 ): Promise<{ ok: boolean; error?: string; doctorAmount?: number; clinicAmount?: number }> {
   const paidDoctor = roundMoney(Number(record.paid_doctor_share_amount ?? 0));
   const paidClinic = roundMoney(Number(record.paid_clinic_share_amount ?? 0));
-  const deltaDoctor = roundMoney(
+  let deltaDoctor = roundMoney(
     deltas?.doctor ??
       Math.max(0, Number(record.doctor_share_amount ?? 0) - paidDoctor)
   );
-  const deltaClinic = roundMoney(
+  let deltaClinic = roundMoney(
     deltas?.clinic ??
       Math.max(0, Number(record.clinic_share_amount ?? 0) - paidClinic)
   );
+
+  const sharePct = Number(record.doctor_share_percentage ?? 0);
+  const accrued = breakdownAssistantSalary({
+    total_salary: Number(record.total_salary ?? 0),
+    doctor_share_percentage: sharePct,
+  });
+  const maxDoctor = roundMoney(Math.max(0, accrued.doctorShare - paidDoctor));
+  const maxClinic = roundMoney(Math.max(0, accrued.clinicShare - paidClinic));
+  if (deltaDoctor > maxDoctor + 0.01) {
+    deltaDoctor = maxDoctor;
+  }
+  if (deltaClinic > maxClinic + 0.01) {
+    deltaClinic = maxClinic;
+  }
 
   if (deltaDoctor <= 0 && deltaClinic <= 0) {
     return { ok: true, doctorAmount: 0, clinicAmount: 0 };
