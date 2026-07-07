@@ -7,7 +7,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Copy, Check } from "lucide-react";
 
 const DOCKER_IMAGE = "evoapicloud/evolution-api:v2.3.7";
-const PHONE_VERSION = "2.3000.1042742319";
+const PHONE_VERSION = "2.3000.1042751833";
 
 function buildHandoffText(serverUrl: string | null): string {
   const url =
@@ -33,8 +33,8 @@ function buildHandoffText(serverUrl: string | null): string {
     `WPP_LID_MODE=false`,
     `CONFIG_SESSION_PHONE_VERSION=${PHONE_VERSION}`,
     `SERVER_URL=${url}`,
-    "DATABASE_ENABLED=true",
-    "DATABASE_PROVIDER=postgresql",
+    "DATABASE_ENABLED=false",
+    "(إذا DATABASE_ENABLED=true لازم يمسحون جداول Evolution من PostgreSQL — الجلسة التالفة تبقى محفوظة)",
     "",
     "3) Redeploy كامل + حذف volume الجلسة القديمة إن وُجد",
     "4) instance واحد فقط: mc_clinic_9186408c",

@@ -502,10 +502,8 @@ export async function autoRepairEvolutionWhatsApp(
 
   const cleanup = await cleanupExtraEvolutionInstances(name);
 
-  // دائماً logout + QR جديد — جلسة "open" قد تكون zombie (تقبل الإرسال لكن لا تُسلّم).
-  await evolutionFetch(`/instance/logout/${encodeURIComponent(name)}`, {
-    method: "DELETE",
-  });
+  // حذف كامل + إنشاء جديد — logout وحده لا يكفي بعد zombie session (البيانات في PostgreSQL).
+  await deleteEvolutionInstanceNamed(name);
   await new Promise((r) => setTimeout(r, 2000));
 
   invalidateEvolutionSessionCache(name);
@@ -1072,6 +1070,29 @@ export async function sendEvolutionText(
       phone: sendNumber,
       providerMessageStatus: delivery.providerMessageStatus,
     });
+
+    // محاولة أخيرة: إعادة تشغيل Baileys ثم إعادة الإرسال مرة واحدة
+    const restarted = await restartEvolutionConnection(instanceName);
+    if (restarted.ok) {
+      await sendEvolutionComposingPresence(instanceName, sendNumber);
+      const retry = await postEvolutionText(instanceName, sendNumber, text);
+      if (retry.ok) {
+        const retryDelivery = await confirmEvolutionDelivery(
+          instanceName,
+          retry.data,
+          sendNumber
+        );
+        if (retryDelivery.delivered) {
+          return {
+            ok: true,
+            status: retry.status,
+            data: retry.data,
+            providerMessageStatus: retryDelivery.providerMessageStatus,
+          };
+        }
+      }
+    }
+
     return {
       ok: false,
       status: sent.status,

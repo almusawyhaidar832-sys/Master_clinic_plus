@@ -25,7 +25,7 @@ export function describeWhatsAppDeliveryError(
       return "هذا الرقم غير مسجّل على واتساب — تحقق من الرقم.";
     case "evolution_pending_delivery":
     case "evolution_delivery_error":
-      return "Evolution قبل الطلب لكن Baileys لم يُسلّم للجوال — المشكلة في سيرفر Evolution (مو التطبيق). جرّب VPS أو واتسapp Cloud API الرسمي.";
+      return "جلسة Baileys معطّلة على سيرفر Evolution — امسح QR بعد إصلاح Railway. إذا استمرت: اطلب من Railway ضبط DATABASE_ENABLED=false أو مسح جداول Evolution من PostgreSQL، وتحديث CONFIG_SESSION_PHONE_VERSION=2.3000.1042751833";
     case "evolution_server_ack_only":
       return "واتسapp قبل الرسالة على السيرفر لكن لم تُسلَّم للجوال بعد — قد تصل خلال دقيقة أو السيرفر يحتاج إصلاح.";
     case "whatsapp_lid_jid":
