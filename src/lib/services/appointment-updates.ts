@@ -60,7 +60,7 @@ export async function sendAppointmentUpdate(
     clinicId: input.clinicId,
     rawPhone: phone,
     messageBody,
-    messageType: `appointment_${input.action}`,
+    messageType: "appointment_confirmation",
   });
 
   if (input.appointmentId && outcome.ok) {

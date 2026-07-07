@@ -26,6 +26,11 @@ export interface WhatsAppSendOutcome {
 
 const LOG_PREFIX = "[whatsapp]";
 
+function coerceWhatsAppMessageType(messageType: string): string {
+  if (messageType.startsWith("appointment_")) return "appointment_confirmation";
+  return messageType;
+}
+
 /** Evolution يرفض أحياناً أسماء ملفات عربية — نستخدم ASCII آمن */
 function safeWhatsAppFileName(name: string, fallback: string): string {
   const base = String(name ?? "")
@@ -367,7 +372,7 @@ async function logWhatsAppRow(
   // error_message on pending rows = delivery warning code for support/debug
   const row: Record<string, unknown> = {
     clinic_id: params.clinicId,
-    message_type: params.messageType,
+    message_type: coerceWhatsAppMessageType(params.messageType),
     recipient_phone: params.recipient_phone,
     message_body_ar: params.messageBody,
     status: params.status,
