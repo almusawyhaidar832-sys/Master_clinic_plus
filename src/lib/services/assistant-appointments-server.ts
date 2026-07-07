@@ -13,6 +13,7 @@ import {
   rejectPendingAppointment,
   updateStaffAppointment,
 } from "@/lib/services/staff-appointments-server";
+import { syncQueueFromAppointmentStatus } from "@/lib/services/appointment-queue-sync";
 import type { Appointment } from "@/types";
 
 function timesOverlap(
@@ -311,9 +312,70 @@ export async function rejectAssistantAppointment(
   );
 }
 
-const DELETABLE_STATUSES = new Set(["pending", "scheduled", "confirmed", "waiting"]);
+const DELETABLE_STATUSES = new Set(["cancelled"]);
 
-/** حذف موعد — للمساعد فقط */
+const CANCELLABLE_STATUSES = new Set(["scheduled", "confirmed", "waiting"]);
+
+/** إلغاء حجز مؤكد — المرحلة الأولى (يبقى في الجدول بحالة ملغي) */
+export async function cancelAssistantAppointment(
+  admin: SupabaseClient,
+  ctx: AssistantContext,
+  appointmentId: string
+): Promise<Appointment> {
+  const { data: current } = await admin
+    .from("appointments")
+    .select("*")
+    .eq("id", appointmentId)
+    .eq("clinic_id", ctx.clinicId)
+    .eq("doctor_id", ctx.doctorId)
+    .maybeSingle();
+
+  if (!current) throw new Error("الموعد غير موجود");
+
+  if (!CANCELLABLE_STATUSES.has(current.status as string)) {
+    throw new Error("لا يمكن إلغاء موعد مكتمل أو داخل الكشف");
+  }
+
+  const { data, error } = await admin
+    .from("appointments")
+    .update({ status: "cancelled" })
+    .eq("id", appointmentId)
+    .eq("clinic_id", ctx.clinicId)
+    .eq("doctor_id", ctx.doctorId)
+    .in("status", [...CANCELLABLE_STATUSES])
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) {
+    throw new Error("تعذّر الإلغاء — تغيّرت حالة الموعد قبل الحفظ");
+  }
+
+  await syncQueueFromAppointmentStatus(
+    admin,
+    appointmentId,
+    ctx.clinicId,
+    "cancelled"
+  );
+
+  const doctorName = await fetchDoctorName(admin, ctx.doctorId);
+  await sendAppointmentUpdate(admin, {
+    clinicId: ctx.clinicId,
+    appointmentId: data.id as string,
+    patientPhone: data.patient_phone as string,
+    patientName: data.patient_name_ar as string,
+    doctorName,
+    appointmentDate: data.appointment_date as string,
+    startTime: data.start_time as string,
+    endTime: data.end_time as string,
+    action: "rejected",
+    reasonForChange: "تم إلغاء الحجز من العيادة",
+  });
+
+  return data as Appointment;
+}
+
+/** حذف موعد — المرحلة الثانية (بعد الإلغاء فقط) */
 export async function deleteAssistantAppointment(
   admin: SupabaseClient,
   ctx: AssistantContext,
@@ -330,7 +392,7 @@ export async function deleteAssistantAppointment(
   if (!current) throw new Error("الموعد غير موجود");
 
   if (!DELETABLE_STATUSES.has(current.status as string)) {
-    throw new Error("لا يمكن حذف موعد مكتمل أو داخل الكشف");
+    throw new Error("يمكن حذف المواعيد الملغاة فقط — ألغِ الحجز أولاً");
   }
 
   const { error } = await admin

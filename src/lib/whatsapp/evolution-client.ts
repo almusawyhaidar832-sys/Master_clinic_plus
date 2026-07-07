@@ -20,21 +20,6 @@ export interface EvolutionQrResult {
 
 const LOG = "[whatsapp/evolution]";
 
-/** Baileys يفلتر رسائل متتالية سريعة — ننتظر بين كل إرسالين لنفس الجلسة */
-const lastSendAtByInstance = new Map<string, number>();
-const MIN_SEND_GAP_MS = 2500;
-
-async function waitForEvolutionSendSlot(instanceName: string): Promise<void> {
-  const name = instanceName.trim();
-  if (!name) return;
-  const last = lastSendAtByInstance.get(name) ?? 0;
-  const waitMs = last + MIN_SEND_GAP_MS - Date.now();
-  if (waitMs > 0) {
-    await new Promise((r) => setTimeout(r, waitMs));
-  }
-  lastSendAtByInstance.set(name, Date.now());
-}
-
 export function parseEvolutionLicenseError(
   data: unknown,
   text: string
@@ -950,34 +935,7 @@ export async function sendEvolutionText(
     return { ok: false, status: 0, error: "whatsapp_not_configured" };
   }
 
-  const numberCheck = await checkEvolutionWhatsAppNumber(rawPhone, {
-    clinicId: options?.clinicId,
-    instanceName,
-  });
-  if (!numberCheck.skipped && !numberCheck.exists) {
-    return {
-      ok: false,
-      status: 400,
-      error: "number_not_on_whatsapp",
-      data: numberCheck,
-    };
-  }
-
-  const sendTarget = resolveEvolutionSendNumber(rawPhone, numberCheck);
-  if (sendTarget.lidJid) {
-    return {
-      ok: false,
-      status: 400,
-      error: "whatsapp_lid_jid",
-      data: { jid: sendTarget.lidJid, numberCheck },
-    };
-  }
-
-  const sendNumber = numberCheck.jid?.endsWith("@s.whatsapp.net")
-    ? numberCheck.jid.split("@")[0] ?? sendTarget.number
-    : sendTarget.number;
-
-  await waitForEvolutionSendSlot(instanceName);
+  const sendNumber = formatEvolutionApiNumber(rawPhone);
 
   const res = await evolutionFetch(
     `/message/sendText/${encodeURIComponent(instanceName)}`,

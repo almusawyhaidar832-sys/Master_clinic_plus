@@ -3,6 +3,7 @@ import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   acceptAssistantAppointment,
+  cancelAssistantAppointment,
   rejectAssistantAppointment,
   resolveAssistantContext,
 } from "@/lib/services/assistant-appointments-server";
@@ -26,7 +27,7 @@ export async function POST(
     }
 
     const body = await req.json();
-    const action = body.action as "accept" | "reject";
+    const action = body.action as "accept" | "reject" | "cancel";
 
     if (action === "accept") {
       const appointment = await acceptAssistantAppointment(admin, ctx, id);
@@ -47,8 +48,13 @@ export async function POST(
       return NextResponse.json({ success: true, appointment });
     }
 
+    if (action === "cancel") {
+      const appointment = await cancelAssistantAppointment(admin, ctx, id);
+      return NextResponse.json({ success: true, appointment });
+    }
+
     return NextResponse.json(
-      { error: "action يجب أن يكون accept أو reject" },
+      { error: "action يجب أن يكون accept أو reject أو cancel" },
       { status: 400 }
     );
   } catch (e) {

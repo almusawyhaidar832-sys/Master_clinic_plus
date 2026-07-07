@@ -328,12 +328,7 @@ export async function updateStaffAppointment(
   return data as Appointment;
 }
 
-const DELETABLE_STATUSES = new Set([
-  "pending",
-  "scheduled",
-  "confirmed",
-  "waiting",
-]);
+const DELETABLE_STATUSES = new Set(["cancelled"]);
 
 const CANCELLABLE_STATUSES = new Set([
   "scheduled",
@@ -395,6 +390,20 @@ export async function cancelStaffAppointment(
       note: `إلغاء حجز — ${(current.patient_name_ar as string) ?? "مراجع"}`,
     });
   }
+
+  const doctorName = await fetchDoctorName(admin, data.doctor_id as string);
+  await sendAppointmentUpdate(admin, {
+    clinicId,
+    appointmentId: data.id as string,
+    patientPhone: data.patient_phone as string,
+    patientName: data.patient_name_ar as string,
+    doctorName,
+    appointmentDate: data.appointment_date as string,
+    startTime: data.start_time as string,
+    endTime: data.end_time as string,
+    action: "rejected",
+    reasonForChange: "تم إلغاء الحجز من العيادة",
+  });
 
   return data as Appointment;
 }
@@ -598,7 +607,7 @@ export async function deleteStaffAppointment(
   if (!current) throw new Error("الموعد غير موجود");
 
   if (!DELETABLE_STATUSES.has(current.status as string)) {
-    throw new Error("لا يمكن حذف موعد مكتمل أو داخل الكشف");
+    throw new Error("يمكن حذف المواعيد الملغاة فقط — ألغِ الحجز أولاً");
   }
 
   const { error } = await admin

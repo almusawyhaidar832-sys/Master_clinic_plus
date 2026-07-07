@@ -119,9 +119,7 @@ export function AddAppointmentModal({
     if ("whatsapp" in result && result.whatsapp) {
       const wa = result.whatsapp;
       if (wa.sent && !wa.deliveryWarning) {
-        onSaved(
-          "تم حفظ الموعد وإرسال إشعار واتساب — تحقق من وصول الرسالة للمراجع خلال دقيقة."
-        );
+        onSaved("تم حفظ الموعد وإرسال إشعار واتساب للمراجع.");
         onClose();
         return;
       }

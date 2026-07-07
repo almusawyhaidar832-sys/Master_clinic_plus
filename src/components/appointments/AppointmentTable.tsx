@@ -13,6 +13,7 @@ import { useAppointmentStatusLabels } from "@/i18n/localized-labels";
 import { AddAppointmentModal } from "@/components/assistant/AddAppointmentModal";
 import { EditAppointmentModal } from "@/components/assistant/EditAppointmentModal";
 import { RejectAppointmentModal } from "@/components/assistant/RejectAppointmentModal";
+import { CancelAppointmentModal } from "@/components/assistant/CancelAppointmentModal";
 import {
   deleteAssistantAppointmentViaApi,
   setAssistantAppointmentStatusViaApi,
@@ -31,6 +32,7 @@ import {
   Pencil,
   Check,
   X,
+  Ban,
   Trash2,
 } from "lucide-react";
 
@@ -63,6 +65,7 @@ export function AppointmentTable({
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<AppointmentWithDoctor | null>(null);
   const [rejecting, setRejecting] = useState<AppointmentWithDoctor | null>(null);
+  const [cancelling, setCancelling] = useState<AppointmentWithDoctor | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -79,10 +82,10 @@ export function AppointmentTable({
 
   const defaultSubtitle =
     role === "accountant"
-      ? "حجز فوري لأي طبيب — منع تضارب المواعيد — تحديث لحظي"
+      ? "حجز فوري — إلغاء ثم حذف (مرحلتان منفصلتان)"
       : role === "doctor"
         ? "مواعيدك فقط — تحديث فوري"
-        : "إدارة كاملة — إضافة وتعديل وحذف";
+        : "إضافة وتعديل — إلغاء ثم حذف (مرحلتان)";
 
   async function handleAccept(appt: AppointmentWithDoctor) {
     setActionId(appt.id);
@@ -105,7 +108,7 @@ export function AppointmentTable({
   }
 
   async function handleDelete(appt: AppointmentWithDoctor) {
-    if (!confirm(`حذف موعد ${appt.patient_name_ar}؟`)) return;
+    if (!confirm(`حذف نهائي لموعد ${appt.patient_name_ar}؟ (بعد الإلغاء فقط)`)) return;
     setActionId(appt.id);
     const result =
       portal === "accountant"
@@ -214,6 +217,7 @@ export function AppointmentTable({
                   actionId={actionId}
                   onAccept={() => handleAccept(a)}
                   onReject={() => setRejecting(a)}
+                  onCancel={() => setCancelling(a)}
                   onEdit={() => setEditing(a)}
                   onDelete={() => handleDelete(a)}
                 />
@@ -256,7 +260,18 @@ export function AppointmentTable({
           portal={portal}
           onClose={() => setRejecting(null)}
           onSaved={() => {
-            setMessage("تم رفض الطلب");
+            setMessage("تم رفض الطلب — المرحلة الأولى (ملغي)");
+            refresh();
+          }}
+        />
+      )}
+      {cancelling && (
+        <CancelAppointmentModal
+          appointment={cancelling}
+          portal={portal}
+          onClose={() => setCancelling(null)}
+          onSaved={() => {
+            setMessage("تم إلغاء الحجز — يمكنك حذفه الآن من زر «حذف»");
             refresh();
           }}
         />
@@ -273,6 +288,7 @@ function AppointmentRow({
   actionId,
   onAccept,
   onReject,
+  onCancel,
   onEdit,
   onDelete,
 }: {
@@ -283,13 +299,16 @@ function AppointmentRow({
   actionId: string | null;
   onAccept: () => void;
   onReject: () => void;
+  onCancel: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const statusLabels = useAppointmentStatusLabels();
   const doctorName = a.doctor?.full_name_ar;
   const isPending = a.status === "pending";
-  const canDelete = ["pending", "scheduled", "confirmed", "waiting"].includes(a.status);
+  const isCancelled = a.status === "cancelled";
+  const canDelete = isCancelled;
+  const canCancel = ["scheduled", "confirmed", "waiting"].includes(a.status);
   const canEdit =
     a.status !== "cancelled" &&
     a.status !== "completed" &&
@@ -371,6 +390,16 @@ function AppointmentRow({
               >
                 <Pencil className="h-3.5 w-3.5" />
                 تعديل
+              </ActionBtn>
+            )}
+            {canCancel && (
+              <ActionBtn
+                onClick={onCancel}
+                disabled={actionId === a.id}
+                className="border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                إلغاء
               </ActionBtn>
             )}
             {canDelete && (

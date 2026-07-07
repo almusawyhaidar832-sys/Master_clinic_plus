@@ -101,29 +101,8 @@ export async function deliverWhatsAppMessage(
 
   try {
     if (cfg.provider === "evolution") {
-      const instanceName = await resolveWhatsAppInstanceForClinic(params.clinicId);
-      const session = await resolveEvolutionSession(instanceName);
-      if (!session.linked) {
-        const err = "whatsapp_not_linked";
-        console.error(LOG_PREFIX, params.messageType, err, { instanceName });
-        await logWhatsAppRow(supabase, {
-          ...params,
-          recipient_phone: normalizedPhone,
-          status: "failed",
-          error_message: err,
-        });
-        return {
-          ok: false,
-          normalizedPhone,
-          status: "failed",
-          providerError: err,
-          configured: true,
-        };
-      }
-
       const evo = await sendEvolutionText(normalizedPhone, params.messageBody, {
         clinicId: params.clinicId,
-        instanceName,
       });
       providerStatus = evo.status;
       if (!evo.ok) {

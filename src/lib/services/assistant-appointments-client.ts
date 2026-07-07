@@ -81,7 +81,7 @@ export async function updateAssistantAppointmentViaApi(
 
 export async function setAssistantAppointmentStatusViaApi(
   id: string,
-  action: "accept" | "reject",
+  action: "accept" | "reject" | "cancel",
   reason_for_change?: string
 ): Promise<{
   ok: boolean;
