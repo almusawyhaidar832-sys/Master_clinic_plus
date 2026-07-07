@@ -13,11 +13,21 @@ function buildHandoffText(serverUrl: string | null): string {
   const url =
     serverUrl?.trim() ||
     "https://evolution-api-production-3797.up.railway.app";
+  const today = new Date().toISOString().slice(0, 10);
   return [
-    "=== إصلاح واتسapp عيادة الحلو (Railway) ===",
+    "=== طلب دعم Railway — Evolution API / Baileys لا يُسلّم الرسائل ===",
+    "",
+    `التاريخ: ${today}`,
+    "المشروع: Master Clinic Plus",
+    "",
+    "الأعراض:",
+    "- HTTP 201 على sendText لكن status = PENDING",
+    "- findStatusMessage يُرجع [] بعد 10 ثوانٍ",
+    "- الجلسة تظهر open لكن الرسالة لا تصل لأي جوال",
     "",
     "1) Docker Image:",
     DOCKER_IMAGE,
+    "(لا تستخدم 2.4.0 — LICENSE_REQUIRED)",
     "",
     "2) Variables (Evolution API service):",
     `WPP_LID_MODE=false`,
@@ -26,11 +36,12 @@ function buildHandoffText(serverUrl: string | null): string {
     "DATABASE_ENABLED=true",
     "DATABASE_PROVIDER=postgresql",
     "",
-    "3) Redeploy ثم instance واحد فقط — QR من /dashboard/whatsapp",
+    "3) Redeploy كامل + حذف volume الجلسة القديمة إن وُجد",
+    "4) instance واحد فقط: mc_clinic_9186408c",
+    "5) بعد Redeploy: QR جديد من /dashboard/whatsapp",
     "",
-    "⚠️ لا تستخدم 2.4.0 — يطلب ترخيص LICENSE_REQUIRED",
-    "",
-    "المشكلة: Baileys يقبل الرسالة PENDING لكن لا يُسلّم للجوال.",
+    "التشخيص: zombie Baileys session على Railway.",
+    `رابط السيرفر: ${url}`,
   ].join("\n");
 }
 

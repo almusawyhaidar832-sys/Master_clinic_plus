@@ -32,6 +32,13 @@ export default function WhatsAppSettingsPage() {
     null
   );
   const [repairMessage, setRepairMessage] = useState<string | null>(null);
+  const [healthReport, setHealthReport] = useState<{
+    diagnosisAr: string;
+    fixSteps: string[];
+    railwayMessage?: string;
+    zombieRisk?: boolean;
+  } | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
   const [evolutionPublicUrl, setEvolutionPublicUrl] = useState<string | null>(
     null
   );
@@ -322,6 +329,27 @@ export default function WhatsAppSettingsPage() {
     loadMessageLog,
   ]);
 
+  const runHealthCheck = useCallback(async () => {
+    setHealthLoading(true);
+    setHealthReport(null);
+    try {
+      const res = await whatsappFetch("/api/whatsapp/health");
+      const data = await res.json();
+      setHealthReport({
+        diagnosisAr: data.diagnosisAr ?? "تعذر الفحص",
+        fixSteps: Array.isArray(data.fixSteps) ? data.fixSteps : [],
+        railwayMessage: data.railwayMessage,
+        zombieRisk: data.zombieRisk,
+      });
+    } catch {
+      setHealthReport({
+        diagnosisAr: "تعذر الاتصال بفحص واتساب",
+        fixSteps: [],
+      });
+    }
+    setHealthLoading(false);
+  }, [whatsappFetch]);
+
   useEffect(() => {
     void loadMessageLog();
     void checkConnection().then((connected) => {
@@ -532,6 +560,46 @@ export default function WhatsAppSettingsPage() {
       </Card>
 
       <WhatsAppTestButton portal="accountant" />
+
+      <Card className="border-slate-border bg-surface/60">
+        <CardHeader>
+          <CardTitle className="text-base">فحص شامل للسيرفر</CardTitle>
+          <p className="text-sm text-slate-muted">
+            يفحص Evolution على Railway بدون إرسال رسالة — يوضح إن كانت الجلسة
+            «متصلة ظاهرياً» لكن معطّلة (zombie).
+          </p>
+        </CardHeader>
+        <div className="space-y-3 px-4 pb-4">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={healthLoading}
+            onClick={() => void runHealthCheck()}
+          >
+            {healthLoading ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                جاري الفحص...
+              </>
+            ) : (
+              "فحص شامل"
+            )}
+          </Button>
+          {healthReport && (
+            <Alert variant={healthReport.zombieRisk ? "error" : "info"}>
+              <p className="font-semibold">{healthReport.diagnosisAr}</p>
+              {healthReport.fixSteps.length > 0 && (
+                <ol className="mt-2 list-decimal space-y-1 pr-5 text-sm">
+                  {healthReport.fixSteps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              )}
+            </Alert>
+          )}
+        </div>
+      </Card>
 
       <WhatsAppRailwayHandoff serverUrl={evolutionPublicUrl} />
 

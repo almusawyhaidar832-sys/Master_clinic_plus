@@ -111,6 +111,7 @@ export async function deliverWhatsAppMessage(
           status: evo.status,
           error: providerError,
           phone: normalizedPhone,
+          providerMessageStatus: evo.providerMessageStatus,
         });
         await logWhatsAppRow(supabase, {
           ...params,
@@ -124,9 +125,24 @@ export async function deliverWhatsAppMessage(
           status: "failed",
           providerError,
           providerStatus,
+          providerMessageStatus: evo.providerMessageStatus,
+          deliveryWarning: evo.deliveryWarning,
           configured: true,
         };
       }
+
+      await logWhatsAppRow(supabase, {
+        ...params,
+        recipient_phone: normalizedPhone,
+        status: "sent",
+      });
+      return {
+        ok: true,
+        normalizedPhone,
+        status: "sent",
+        configured: true,
+        providerMessageStatus: evo.providerMessageStatus,
+      };
     } else {
       const res = await fetch(`${cfg.baseUrl}/message/send`, {
         method: "POST",
@@ -165,19 +181,19 @@ export async function deliverWhatsAppMessage(
           configured: true,
         };
       }
-    }
 
-    await logWhatsAppRow(supabase, {
-      ...params,
-      recipient_phone: normalizedPhone,
-      status: "sent",
-    });
-    return {
-      ok: true,
-      normalizedPhone,
-      status: "sent",
-      configured: true,
-    };
+      await logWhatsAppRow(supabase, {
+        ...params,
+        recipient_phone: normalizedPhone,
+        status: "sent",
+      });
+      return {
+        ok: true,
+        normalizedPhone,
+        status: "sent",
+        configured: true,
+      };
+    }
   } catch (e) {
     providerError = e instanceof Error ? e.message : String(e);
     console.error(LOG_PREFIX, params.messageType, "network_error", {

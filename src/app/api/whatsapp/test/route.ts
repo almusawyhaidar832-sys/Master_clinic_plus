@@ -105,20 +105,31 @@ export async function POST(request: NextRequest) {
       providerError: outcome.providerError,
       status: outcome.providerStatus,
       phone: outcome.normalizedPhone,
+      providerMessageStatus: outcome.providerMessageStatus,
     });
-    const deliveryNote = describeWhatsAppDeliveryError(outcome.providerError);
+    const deliveryNote = describeWhatsAppDeliveryError(
+      outcome.deliveryWarning ?? outcome.providerError
+    );
     return NextResponse.json(
       {
         ok: false,
-        error: "فشل إرسال الرسالة التجريبية",
+        error:
+          outcome.deliveryWarning === "evolution_pending_delivery"
+            ? "جلسة واتساب معطّلة على السيرفر — الرسالة لم تُسلَّم"
+            : "فشل إرسال الرسالة التجريبية",
         providerError: outcome.providerError,
+        deliveryWarning: outcome.deliveryWarning ?? null,
         deliveryNote,
         normalizedPhone: outcome.normalizedPhone,
+        providerMessageStatus: outcome.providerMessageStatus ?? null,
         fixSteps: [
-          "اضغط «إصلاح واتساب الآن»",
-          "تواصل مع مطوّر النظام لتحديث سيرفر Evolution على Railway",
+          "افتح إعدادات واتساب واضغط «إصلاح واتساب الآن» ثم امسح QR من جوال العيادة",
+          "انسخ تعليمات Railway وأرسلها لمن يدير السيرفر (القسم أسفل الصفحة)",
+          "تأكد من Docker: evoapicloud/evolution-api:v2.3.7 وليس 2.4",
         ],
         hint: deliveryNote,
+        evolutionLinked: session.linked,
+        instanceName,
       },
       { status: 502 }
     );

@@ -28,6 +28,7 @@ export interface SendAppointmentUpdateResult {
   sent: boolean;
   skipped?: boolean;
   error?: string;
+  deliveryWarning?: string;
   messageBody?: string;
 }
 
@@ -63,7 +64,7 @@ export async function sendAppointmentUpdate(
     messageType: "appointment_confirmation",
   });
 
-  if (input.appointmentId && outcome.ok) {
+  if (input.appointmentId && outcome.ok && outcome.status === "sent") {
     await admin
       .from("appointments")
       .update({ whatsapp_sent: true } as Record<string, boolean>)
@@ -84,6 +85,7 @@ export async function sendAppointmentUpdate(
     return {
       sent: false,
       error: outcome.providerError ?? "whatsapp_send_failed",
+      deliveryWarning: outcome.deliveryWarning ?? outcome.providerError,
       messageBody,
     };
   }

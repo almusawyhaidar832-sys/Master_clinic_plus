@@ -919,29 +919,25 @@ export async function checkEvolutionWhatsAppNumber(
   };
 }
 
-/** إرسال نص عبر Evolution — الرقم بدون + */
-export async function sendEvolutionText(
-  rawPhone: string,
-  text: string,
-  options?: { clinicId?: string; instanceName?: string }
+export type EvolutionSendResult = {
+  ok: boolean;
+  status: number;
+  error?: string;
+  data?: unknown;
+  providerMessageStatus?: string;
+  deliveryWarning?: string;
+};
+
+async function postEvolutionText(
+  instanceName: string,
+  number: string,
+  text: string
 ): Promise<{ ok: boolean; status: number; error?: string; data?: unknown }> {
-  const { configured } = getWhatsAppConfig();
-  const instanceName =
-    options?.instanceName?.trim() ||
-    (options?.clinicId
-      ? await resolveWhatsAppInstanceForClinic(options.clinicId)
-      : await resolveWhatsAppInstanceName());
-  if (!configured) {
-    return { ok: false, status: 0, error: "whatsapp_not_configured" };
-  }
-
-  const sendNumber = formatEvolutionApiNumber(rawPhone);
-
   const res = await evolutionFetch(
     `/message/sendText/${encodeURIComponent(instanceName)}`,
     {
       method: "POST",
-      body: JSON.stringify({ number: sendNumber, text }),
+      body: JSON.stringify({ number, text }),
     }
   );
 
@@ -959,6 +955,139 @@ export async function sendEvolutionText(
   }
 
   return { ok: true, status: res.status, data: res.data };
+}
+
+async function confirmEvolutionDelivery(
+  instanceName: string,
+  data: unknown,
+  sendNumber: string
+): Promise<{
+  delivered: boolean;
+  providerMessageStatus?: string;
+  deliveryWarning?: string;
+}> {
+  const immediateStatus = parseEvolutionMessageStatus(data)?.toUpperCase() ?? "";
+  const msgKey = extractEvolutionMessageKey(data);
+  const remoteJid =
+    msgKey?.remoteJid ?? `${formatEvolutionApiNumber(sendNumber)}@s.whatsapp.net`;
+
+  if (
+    immediateStatus === "DELIVERY_ACK" ||
+    immediateStatus === "READ" ||
+    immediateStatus === "SERVER_ACK"
+  ) {
+    return { delivered: true, providerMessageStatus: immediateStatus };
+  }
+
+  if (immediateStatus !== "PENDING" || !msgKey?.id) {
+    return { delivered: true, providerMessageStatus: immediateStatus || "SENT" };
+  }
+
+  const polled = await pollEvolutionMessageDeliveryStatus(
+    instanceName,
+    msgKey.id,
+    remoteJid,
+    10_000
+  );
+
+  if (
+    polled === "DELIVERY_ACK" ||
+    polled === "READ" ||
+    polled === "SERVER_ACK"
+  ) {
+    return { delivered: true, providerMessageStatus: polled };
+  }
+
+  if (polled === "ERROR") {
+    return {
+      delivered: false,
+      providerMessageStatus: "ERROR",
+      deliveryWarning: "evolution_delivery_error",
+    };
+  }
+
+  return {
+    delivered: false,
+    providerMessageStatus: "PENDING",
+    deliveryWarning: "evolution_pending_delivery",
+  };
+}
+
+/** إرسال نص عبر Evolution — الرقم بدون + */
+export async function sendEvolutionText(
+  rawPhone: string,
+  text: string,
+  options?: { clinicId?: string; instanceName?: string }
+): Promise<EvolutionSendResult> {
+  const { configured } = getWhatsAppConfig();
+  const instanceName =
+    options?.instanceName?.trim() ||
+    (options?.clinicId
+      ? await resolveWhatsAppInstanceForClinic(options.clinicId)
+      : await resolveWhatsAppInstanceName());
+  if (!configured) {
+    return { ok: false, status: 0, error: "whatsapp_not_configured" };
+  }
+
+  const session = await resolveEvolutionSession(instanceName);
+  if (!session.linked) {
+    return { ok: false, status: 0, error: "whatsapp_not_linked" };
+  }
+
+  const numberCheck = await checkEvolutionWhatsAppNumber(rawPhone, {
+    clinicId: options?.clinicId,
+    instanceName,
+  });
+  if (!numberCheck.exists) {
+    return { ok: false, status: 0, error: "number_not_on_whatsapp" };
+  }
+
+  const { number: sendNumber } = resolveEvolutionSendNumber(rawPhone, numberCheck);
+
+  if (shouldRestartEvolutionBeforeSend()) {
+    await restartEvolutionConnection(instanceName);
+  }
+
+  await sendEvolutionComposingPresence(instanceName, sendNumber);
+
+  const sent = await postEvolutionText(instanceName, sendNumber, text);
+  if (!sent.ok) {
+    return {
+      ok: false,
+      status: sent.status,
+      error: sent.error,
+      data: sent.data,
+    };
+  }
+
+  const delivery = await confirmEvolutionDelivery(
+    instanceName,
+    sent.data,
+    sendNumber
+  );
+
+  if (!delivery.delivered) {
+    console.error(LOG, "zombie_session_suspected", {
+      instanceName,
+      phone: sendNumber,
+      providerMessageStatus: delivery.providerMessageStatus,
+    });
+    return {
+      ok: false,
+      status: sent.status,
+      error: delivery.deliveryWarning ?? "evolution_pending_delivery",
+      data: sent.data,
+      providerMessageStatus: delivery.providerMessageStatus,
+      deliveryWarning: delivery.deliveryWarning,
+    };
+  }
+
+  return {
+    ok: true,
+    status: sent.status,
+    data: sent.data,
+    providerMessageStatus: delivery.providerMessageStatus,
+  };
 }
 
 /** إرسال ملف (PDF) عبر Evolution */
