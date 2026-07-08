@@ -53,6 +53,7 @@ interface Snapshot {
   /** ما يُخصم فعلياً من صافي الربح (رواتب مُولَّدة أو مدفوعة) */
   salaries_deducted_from_profit?: number;
   review_fees: number;
+  balance_topups?: number;
   withdrawals_paid: number;
   net_profit: number;
   operation_count: number;
@@ -165,6 +166,14 @@ function NetProfitCard({
       ? [{
           label: t("execReviewFeesProfit"),
           amount: snap.review_fees,
+          color: "text-success-text",
+          sign: "+",
+        }]
+      : []),
+    ...(Number(snap.balance_topups ?? 0) > 0
+      ? [{
+          label: t("execClinicBalanceTopUp"),
+          amount: Number(snap.balance_topups ?? 0),
           color: "text-success-text",
           sign: "+",
         }]
@@ -474,7 +483,10 @@ export function ExecutiveDashboard() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-bold tracking-tight text-slate-text">{t("executiveDashboard")}</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <BalanceTopUpButton onSuccess={() => fetchData({ silent: true })} />
+          <BalanceTopUpButton
+            portal="accountant"
+            onSuccess={() => void fetchData({ silent: true })}
+          />
           <div className="flex gap-1 rounded-xl border border-slate-border bg-surface-card p-1 shadow-card">
           {PERIODS.map((p) => (
             <button
@@ -514,6 +526,11 @@ export function ExecutiveDashboard() {
             <KpiCard
               label={t("netProfit")}
               value={formatMoney(snap.net_profit)}
+              sub={
+                Number(snap.balance_topups ?? 0) > 0
+                  ? `${t("execClinicBalanceTopUp")}: +${fmt(Number(snap.balance_topups ?? 0))}`
+                  : undefined
+              }
               icon={TrendingUp}
               color={snap.net_profit >= 0 ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-600"}
               growth={snap.revenue_growth}

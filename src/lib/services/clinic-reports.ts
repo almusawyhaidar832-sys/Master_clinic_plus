@@ -883,6 +883,7 @@ export async function fetchMasterClinicReport(
           clinicShareTotal: 0,
           doctorShareTotal: 0,
           reviewFeesTotal: 0,
+          balanceTopupsTotal: 0,
           totalExpenses: 0,
           totalSalariesPaid: 0,
           breakdown: [],

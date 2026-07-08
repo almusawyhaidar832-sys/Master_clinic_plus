@@ -130,6 +130,7 @@ export async function GET(req: NextRequest) {
         clinicShareTotal: collectionFinancials.clinicShareTotal,
         totalExpenses: profitStats.totalExpenses,
         reviewFees,
+        balanceTopups: profitStats.balanceTopupsTotal,
         salariesDeducted: profitStats.totalSalariesPaid,
         doctorShareTotal: collectionFinancials.doctorShareTotal,
         revenue,

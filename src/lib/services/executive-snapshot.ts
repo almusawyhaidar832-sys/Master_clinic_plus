@@ -517,6 +517,7 @@ export interface ReportAlignedProfitMetrics {
   clinicShareTotal: number;
   totalExpenses: number;
   reviewFees: number;
+  balanceTopups: number;
   salariesDeducted: number;
   doctorShareTotal: number;
   revenue: number;
@@ -541,6 +542,7 @@ export function applyReportAlignedProfitMetrics<T extends ExecutiveSnapshotCore>
     clinic_shares: clinicShareFromTreatment,
     expenses: aligned.totalExpenses,
     review_fees: aligned.reviewFees,
+    balance_topups: roundMoney(aligned.balanceTopups),
     net_profit: aligned.netProfit,
     doctor_shares: aligned.doctorShareTotal,
     operation_count: aligned.operationCount,
@@ -1085,6 +1087,7 @@ export interface ExecutiveSnapshotCore {
   expenses: number;
   salaries_paid?: number;
   review_fees?: number;
+  balance_topups?: number;
   net_profit: number;
   [key: string]: unknown;
 }
@@ -1108,6 +1111,7 @@ export function mergeExecutiveDashboardMetrics<T extends ExecutiveSnapshotCore>(
 ): T {
   const clinicShares = Number(snap.clinic_shares ?? 0);
   const expenses = Number(snap.expenses ?? 0);
+  const balanceTopups = Number(snap.balance_topups ?? 0);
   const reviewFees =
     metrics.reviewFees > 0
       ? metrics.reviewFees
@@ -1117,11 +1121,13 @@ export function mergeExecutiveDashboardMetrics<T extends ExecutiveSnapshotCore>(
     ...snap,
     salaries_paid: metrics.salariesPaid,
     review_fees: reviewFees,
+    balance_topups: balanceTopups,
     net_profit:
       clinicShares +
       reviewFees -
       expenses -
-      metrics.salariesDeductedFromProfit,
+      metrics.salariesDeductedFromProfit +
+      balanceTopups,
   };
 }
 

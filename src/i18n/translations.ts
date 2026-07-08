@@ -367,6 +367,7 @@ const translations = {
     // ── Executive dashboard extras ──
     execClinicShareOps:           "حصة العيادة من العمليات",
     execReviewFeesProfit:         "كشفيات مراجع (ربح العيادة)",
+    execClinicBalanceTopUp:       "شحن رصيد العيادة",
     execGeneralExpenses:          "صرفيات العيادة",
     execSalariesDeduct:           "رواتب/مساعدين (خصم الربح)",
     execTotalRevenueRef:          "إجمالي الإيرادات (مرجع)",
@@ -1152,6 +1153,7 @@ const translations = {
     // ── Executive dashboard extras ──
     execClinicShareOps:           "Clinic share from sessions",
     execReviewFeesProfit:         "Review visits (clinic profit)",
+    execClinicBalanceTopUp:       "Clinic balance top-up",
     execGeneralExpenses:          "Clinic expenditures",
     execSalariesDeduct:           "Salaries/assistants (profit deduction)",
     execTotalRevenueRef:          "Total revenue (reference)",

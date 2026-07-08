@@ -17,6 +17,7 @@ export interface ClinicProfitStats {
   clinicShareTotal: number;
   doctorShareTotal: number;
   reviewFeesTotal: number;
+  balanceTopupsTotal: number;
   totalExpenses: number;
   totalSalariesPaid: number;
   breakdown: {
@@ -69,6 +70,7 @@ const emptyProfitStats = (): ClinicProfitStats => ({
   clinicShareTotal: 0,
   doctorShareTotal: 0,
   reviewFeesTotal: 0,
+  balanceTopupsTotal: 0,
   totalExpenses: 0,
   totalSalariesPaid: 0,
   breakdown: [],
@@ -179,6 +181,7 @@ export async function fetchClinicProfitStatsForPeriod(
     clinicShareTotal,
     doctorShareTotal,
     reviewFeesTotal,
+    balanceTopupsTotal: balanceTopupsRounded,
     totalExpenses,
     totalSalariesPaid: totalSalariesPaidRounded,
     breakdown: [
