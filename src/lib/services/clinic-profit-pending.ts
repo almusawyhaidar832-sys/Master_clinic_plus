@@ -4,7 +4,7 @@ import {
 } from "@/lib/services/clinic-stats";
 
 type PendingClinicTopUp = {
-  delta: number;
+  amount: number;
   transactionDate: string;
 };
 
@@ -38,7 +38,7 @@ function hydratePending(): void {
     if (!raw) return;
     const parsed = JSON.parse(raw) as Record<string, PendingClinicTopUp>;
     for (const [clinicId, pending] of Object.entries(parsed)) {
-      if (pending?.delta > 0) {
+      if (pending?.amount > 0) {
         pendingByClinic.set(clinicId, pending);
       }
     }
@@ -70,7 +70,16 @@ export function subscribePendingClinicTopUpChanges(
   };
 }
 
-/** يُسجَّل بعد شحن رصيد العيادة — يُشارَك بين المحاسب والإدارة (كل التبويبات) */
+/** يُمسح عندما يعكس السيرفر الشحن */
+export function clearPendingClinicTopUp(clinicId: string): void {
+  if (!clinicId) return;
+  hydratePending();
+  if (!pendingByClinic.has(clinicId)) return;
+  pendingByClinic.delete(clinicId);
+  persistPending();
+}
+
+/** يُسجَّل بعد شحن ناجح فقط — آخر مبلغ (لا يُجمع المحاولات السابقة) */
 export function registerPendingClinicTopUp(
   clinicId: string,
   amount: number,
@@ -79,24 +88,22 @@ export function registerPendingClinicTopUp(
   if (!clinicId || amount <= 0) return;
   hydratePending();
 
-  const prev = pendingByClinic.get(clinicId);
   pendingByClinic.set(clinicId, {
-    delta: roundMoney((prev?.delta ?? 0) + amount),
+    amount: roundMoney(amount),
     transactionDate: transactionDate.slice(0, 10),
   });
   persistPending();
 }
 
-/** دمج شحن معلّق فقط إن لم يعكسه السيرفر بعد — بدون جمع مزدوج */
-export function reconcilePendingClinicProfitStats(
+/** للواجهة الفورية بعد شحن — قبل اكتمال تحديث السيرفر */
+export function applyOptimisticClinicTopUp(
   clinicId: string,
   stats: ClinicProfitStats,
   period: { from: string; to: string }
 ): ClinicProfitStats {
   hydratePending();
-
   const pending = pendingByClinic.get(clinicId);
-  if (!pending || pending.delta <= 0) return stats;
+  if (!pending || pending.amount <= 0) return stats;
 
   if (
     pending.transactionDate < period.from ||
@@ -105,21 +112,26 @@ export function reconcilePendingClinicProfitStats(
     return stats;
   }
 
-  // السيرفر يعكس الشحن بالفعل — لا نضيفه مرة ثانية
-  if (stats.balanceTopupsTotal + 0.01 >= pending.delta) {
-    pendingByClinic.delete(clinicId);
-    persistPending();
+  if (stats.balanceTopupsTotal + 0.01 >= pending.amount) {
+    clearPendingClinicTopUp(clinicId);
     return stats;
   }
 
-  const topupGap = roundMoney(pending.delta - stats.balanceTopupsTotal);
-  if (topupGap > 0.01) {
-    pendingByClinic.delete(clinicId);
-    persistPending();
-    return applyClinicTopUpToProfitStats(stats, topupGap);
+  const gap = roundMoney(pending.amount - stats.balanceTopupsTotal);
+  if (gap > 0.01) {
+    return applyClinicTopUpToProfitStats(stats, gap);
   }
 
   return stats;
+}
+
+/** @deprecated استخدم applyOptimisticClinicTopUp */
+export function reconcilePendingClinicProfitStats(
+  clinicId: string,
+  stats: ClinicProfitStats,
+  period: { from: string; to: string }
+): ClinicProfitStats {
+  return applyOptimisticClinicTopUp(clinicId, stats, period);
 }
 
 /** تحديث فوري للواجهة بعد شحن ناجح */

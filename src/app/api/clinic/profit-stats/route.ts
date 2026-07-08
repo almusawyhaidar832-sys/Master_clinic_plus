@@ -3,7 +3,7 @@ import {
   getApiCallerProfile,
   isApiStaffRole,
 } from "@/lib/auth/api-session";
-import { resolveStaffApiClinicId } from "@/lib/auth/resolve-staff-clinic";
+import { verifyStaffClinicAccess, resolveStaffApiClinicId } from "@/lib/auth/resolve-staff-clinic";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   applyClinicTopUpToProfitStats,
@@ -28,7 +28,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
     }
 
-    const clinicId = await resolveStaffApiClinicId(req, caller);
+    const fromQuery = req.nextUrl.searchParams.get("clinic_id")?.trim() || null;
+    let clinicId: string | null = null;
+
+    if (fromQuery && (await verifyStaffClinicAccess(req, caller, fromQuery))) {
+      clinicId = fromQuery;
+    } else {
+      clinicId = await resolveStaffApiClinicId(req, caller);
+    }
+
     if (!clinicId) {
       return NextResponse.json(
         { error: "حسابك غير مربوط بعيادة أو العيادة المطلوبة غير مصرح بها" },

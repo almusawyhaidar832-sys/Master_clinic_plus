@@ -13,7 +13,7 @@ import { formatCurrency } from "@/lib/utils";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { TrendingDown, TrendingUp, Wallet, AlertCircle } from "lucide-react";
 import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
-import { subscribePendingClinicTopUpChanges } from "@/lib/services/clinic-profit-pending";
+import { subscribePendingClinicTopUpChanges, applyOptimisticClinicTopUp } from "@/lib/services/clinic-profit-pending";
 
 interface ProfitDashboardProps {
   mobile?: boolean;
@@ -54,10 +54,11 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
     }
     try {
       const period = defaultClinicProfitPeriod();
-      const [data, totalDebt] = await Promise.all([
+      const [raw, totalDebt] = await Promise.all([
         fetchAlignedClinicProfitStats(clinicId, "accountant", period),
         fetchTotalOutstandingDebt(period.from, period.to, clinicId),
       ]);
+      const data = applyOptimisticClinicTopUp(clinicId, raw, period);
       setStats(
         totalDebt !== null ? { ...data, outstandingDebts: totalDebt } : data
       );

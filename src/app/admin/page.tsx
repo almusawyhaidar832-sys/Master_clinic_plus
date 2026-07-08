@@ -13,7 +13,6 @@ import {
   defaultClinicProfitPeriod,
   fetchAlignedClinicProfitStats,
 } from "@/lib/services/clinic-profit-loader";
-import { applyClinicTopUpToProfitStats } from "@/lib/services/clinic-stats";
 import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 import type { BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
 import { formatCurrency } from "@/lib/utils";
@@ -34,7 +33,7 @@ import { BalanceTopUpButton } from "@/components/finance/BalanceTopUpModal";
 import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { useClinicSync } from "@/hooks/useClinicSync";
-import { subscribePendingClinicTopUpChanges } from "@/lib/services/clinic-profit-pending";
+import { subscribePendingClinicTopUpChanges, applyOptimisticClinicTopUp } from "@/lib/services/clinic-profit-pending";
 
 export default function AdminHomePage() {
   const { clinicId: activeClinicId } = useActiveClinicId();
@@ -49,8 +48,8 @@ export default function AdminHomePage() {
 
   const loadStats = useCallback(async (clinic: string) => {
     const period = defaultClinicProfitPeriod();
-    // يفضّل جلسة المحاسب — نفس رقم لوحة المحاسب
-    return fetchAlignedClinicProfitStats(clinic, "accountant", period);
+    const stats = await fetchAlignedClinicProfitStats(clinic, "accountant", period);
+    return applyOptimisticClinicTopUp(clinic, stats, period);
   }, []);
 
   useEffect(() => {
@@ -108,15 +107,6 @@ export default function AdminHomePage() {
   const handleBalanceTopUpSuccess = useCallback(
     (detail: BalanceTopUpSuccessDetail) => {
       if (detail.target !== "clinic" || detail.amount <= 0) return;
-      const period = defaultClinicProfitPeriod();
-      if (detail.transactionDate < period.from || detail.transactionDate > period.to) {
-        return;
-      }
-
-      setStats((prev) => {
-        if (!prev) return prev;
-        return applyClinicTopUpToProfitStats(prev, detail.amount);
-      });
       setRefreshKey((k) => k + 1);
     },
     []
