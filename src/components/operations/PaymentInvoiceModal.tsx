@@ -114,10 +114,6 @@ export function PaymentInvoiceModal({
       setError("المبلغ الكلي غير صالح");
       return;
     }
-    if (paid > total) {
-      setError("المبلغ المدفوع أكبر من الإجمالي");
-      return;
-    }
 
     setSaving(true);
     try {

@@ -62,7 +62,7 @@ export async function createAppointmentInvoice(
 
   const materialsCost = Math.max(0, input.materialsCost ?? 0);
   const totalAmount = Math.max(0, input.totalAmount);
-  const paidAmount = Math.min(Math.max(0, input.paidAmount), totalAmount);
+  const paidAmount = Math.max(0, input.paidAmount);
 
   const split = calculateDoctorShareForDoctor(
     totalAmount,

@@ -46,12 +46,6 @@ export async function POST(req: NextRequest) {
     if (!Number.isFinite(paidAmount) || paidAmount < 0) {
       return NextResponse.json({ error: "المبلغ المدفوع غير صالح" }, { status: 400 });
     }
-    if (paidAmount > totalAmount) {
-      return NextResponse.json(
-        { error: "المبلغ المدفوع لا يمكن أن يتجاوز الإجمالي" },
-        { status: 400 }
-      );
-    }
 
     const admin = getAdminClient();
 

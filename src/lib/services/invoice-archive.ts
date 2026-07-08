@@ -50,6 +50,35 @@ function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function resolveSessionInvoiceAmounts(input: {
+  caseTotalAmount?: number;
+  paidThisSession?: number;
+  operationPaidAmount?: number | string | null;
+  operationTotalAmount?: number | string | null;
+  remainingBalance?: number;
+}): { total: number; paid: number; remaining: number } {
+  const paid = roundMoney(
+    Math.max(
+      Number(input.paidThisSession ?? 0),
+      Number(input.operationPaidAmount ?? 0)
+    )
+  );
+  const total = roundMoney(
+    Number(input.caseTotalAmount ?? 0) > 0
+      ? Number(input.caseTotalAmount)
+      : Number(input.operationTotalAmount ?? 0) > 0
+        ? Number(input.operationTotalAmount)
+        : paid
+  );
+  const remainingRaw = input.remainingBalance;
+  const remaining = roundMoney(
+    remainingRaw != null && Number.isFinite(Number(remainingRaw))
+      ? Number(remainingRaw)
+      : total - paid
+  );
+  return { total, paid, remaining };
+}
+
 function isMissingColumnError(
   msg: string | undefined,
   column: string
@@ -346,12 +375,13 @@ export async function ensureDraftInvoiceForOperation(
     return { ok: true, invoiceId: existing.id };
   }
 
-  const total = roundMoney(
-    Number(input.snapshot?.caseTotalAmount ?? op.total_amount ?? 0)
-  );
-  const paid = roundMoney(
-    Number(input.snapshot?.paidThisSession ?? op.paid_amount ?? 0)
-  );
+  const { total, paid } = resolveSessionInvoiceAmounts({
+    caseTotalAmount: input.snapshot?.caseTotalAmount,
+    paidThisSession: input.snapshot?.paidThisSession,
+    operationPaidAmount: op.paid_amount,
+    operationTotalAmount: op.total_amount,
+    remainingBalance: input.snapshot?.remainingBalance,
+  });
   const invoiceNumber =
     input.snapshot?.invoiceNumber ?? buildInvoiceNumber(input.operationId);
   const invoiceDate =
@@ -366,7 +396,7 @@ export async function ensureDraftInvoiceForOperation(
       patient_id: op.patient_id,
       doctor_id: op.doctor_id,
       operation_id: input.operationId,
-      total_amount: total > 0 ? total : paid,
+      total_amount: total,
       paid_amount: paid,
       invoice_date: invoiceDate,
       invoice_number: invoiceNumber,
@@ -425,17 +455,12 @@ export async function finalizeInvoiceToHistory(
     await markOperationArchived(admin, operationId);
 
     if (input.invoiceId) {
-      const paid = roundMoney(
-        Math.max(
-          Number(input.snapshot.paidThisSession ?? 0),
-          Number(existingHistory.paid_amount ?? 0)
-        )
-      );
-      const total = roundMoney(
-        input.snapshot.caseTotalAmount > 0
-          ? input.snapshot.caseTotalAmount
-          : paid
-      );
+      const { total, paid } = resolveSessionInvoiceAmounts({
+        caseTotalAmount: input.snapshot.caseTotalAmount,
+        paidThisSession: input.snapshot.paidThisSession,
+        operationPaidAmount: existingHistory.paid_amount,
+        remainingBalance: input.snapshot.remainingBalance,
+      });
       await finalizeInvoiceRecord(admin, input.invoiceId, {
         finalizedBy: input.finalizedBy,
         invoiceNumber: input.snapshot.invoiceNumber,
@@ -476,24 +501,13 @@ export async function finalizeInvoiceToHistory(
   }
 
   const doctorId = op.doctor_id ?? input.snapshot.doctorId ?? null;
-  const paid = roundMoney(
-    Math.max(
-      Number(input.snapshot.paidThisSession ?? 0),
-      Number(op.paid_amount ?? 0)
-    )
-  );
-  const total = roundMoney(
-    input.snapshot.caseTotalAmount > 0
-      ? input.snapshot.caseTotalAmount
-      : Number(op.total_amount ?? 0) > 0
-        ? Number(op.total_amount)
-        : paid
-  );
-  const remaining = roundMoney(
-    input.snapshot.remainingBalance > 0
-      ? input.snapshot.remainingBalance
-      : Math.max(total - paid, 0)
-  );
+  const { total, paid, remaining } = resolveSessionInvoiceAmounts({
+    caseTotalAmount: input.snapshot.caseTotalAmount,
+    paidThisSession: input.snapshot.paidThisSession,
+    operationPaidAmount: op.paid_amount,
+    operationTotalAmount: op.total_amount,
+    remainingBalance: input.snapshot.remainingBalance,
+  });
   const { doctorShare, clinicShare } = await resolveDoctorShareForArchive(
     admin,
     doctorId,

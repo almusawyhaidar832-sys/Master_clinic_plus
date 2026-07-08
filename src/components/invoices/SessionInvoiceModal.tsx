@@ -2,10 +2,10 @@
 
 
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
-import { X, MessageCircle, Loader2, CheckCircle2 } from "lucide-react";
+import { X, MessageCircle, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 
@@ -115,6 +115,8 @@ export function SessionInvoiceModal({
   const [finalizeLoading, setFinalizeLoading] = useState(false);
 
   const [finalized, setFinalized] = useState(archivedHistory);
+
+  const autoFinalizeStarted = useRef(false);
 
   const [invoiceId, setInvoiceId] = useState<string | null>(
 
@@ -464,6 +466,8 @@ export function SessionInvoiceModal({
 
         if (!draftRes.ok) {
 
+          autoFinalizeStarted.current = false;
+
           setActionMessage({
 
             type: "error",
@@ -526,6 +530,8 @@ export function SessionInvoiceModal({
 
       if (!res.ok) {
 
+        autoFinalizeStarted.current = false;
+
         setActionMessage({
 
           type: "error",
@@ -578,6 +584,8 @@ export function SessionInvoiceModal({
 
     } catch {
 
+      autoFinalizeStarted.current = false;
+
       setActionMessage({ type: "error", text: "تعذر الاتصال بالسيرفر" });
 
     } finally {
@@ -587,6 +595,18 @@ export function SessionInvoiceModal({
     }
 
   }
+
+
+
+  useEffect(() => {
+
+    if (archivedHistory || finalized || autoFinalizeStarted.current) return;
+
+    autoFinalizeStarted.current = true;
+
+    void handleFinalize();
+
+  }, [archivedHistory, finalized]);
 
 
 
@@ -672,14 +692,38 @@ export function SessionInvoiceModal({
 
 
 
-          {!finalized && !archivedHistory && (
+          {!finalized && !archivedHistory && finalizeLoading && (
+
+            <Alert variant="info">
+
+              جاري الاعتماد التلقائي ونقل الفاتورة إلى السجل التاريخي…
+
+            </Alert>
+
+          )}
+
+
+
+          {finalized && !archivedHistory && (
+
+            <Alert variant="success">
+
+              ✓ تم الاعتماد تلقائياً — يمكنك طباعة الفاتورة أو إرسالها للمراجع.
+
+            </Alert>
+
+          )}
+
+
+
+          {!finalized && !archivedHistory && !finalizeLoading && (
 
             <Alert variant="info">
 
               اضغط <strong>إرسال واتساب</strong> ليرسل للمراجع: رسالة الفاتورة
               والتفاصيل (مخطط + ملاحظات + أشعة)
               {hasPrescription ? " ثم PDF الوصفة" : ""}. إن تعذر PDF الفاتورة
-              تُرسل كنص. لا يُرسل شيء تلقائياً.
+              تُرسل كنص.
 
             </Alert>
 
@@ -829,65 +873,13 @@ export function SessionInvoiceModal({
 
 
 
-        <div className="border-t border-slate-border p-4 no-print space-y-2">
+        <div className="border-t border-slate-border p-4 no-print">
 
-          {!finalized && !archivedHistory ? (
+          <Button type="button" className="w-full" onClick={onClose}>
 
-            <>
+            إغلاق
 
-              <Button
-
-                type="button"
-
-                className="w-full"
-
-                disabled={finalizeLoading}
-
-                onClick={() => void handleFinalize()}
-
-              >
-
-                {finalizeLoading ? (
-
-                  <Loader2 className="h-4 w-4 animate-spin" />
-
-                ) : (
-
-                  <CheckCircle2 className="h-4 w-4" />
-
-                )}
-
-                اعتماد نهائي — نقل إلى السجل التاريخي
-
-              </Button>
-
-              <Button
-
-                type="button"
-
-                variant="outline"
-
-                className="w-full"
-
-                onClick={onClose}
-
-              >
-
-                إغلاق مؤقت (تبقى في العمليات النشطة)
-
-              </Button>
-
-            </>
-
-          ) : (
-
-            <Button type="button" className="w-full" onClick={onClose}>
-
-              إغلاق
-
-            </Button>
-
-          )}
+          </Button>
 
         </div>
       </div>
