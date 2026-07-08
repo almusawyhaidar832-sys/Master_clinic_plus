@@ -80,6 +80,79 @@ function roundProfitMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+const BALANCE_TOPUP_LABEL = "شحن رصيد العيادة";
+const NET_PROFIT_LABEL = "صافي ربح العيادة";
+
+export interface PendingClinicTopUpProfit {
+  minTopups: number;
+  minNetProfit: number;
+}
+
+/** تحديث فوري لصافي الربح بعد شحن رصيد العيادة ضمن الفترة المعروضة */
+export function applyClinicTopUpToProfitStats(
+  stats: ClinicProfitStats,
+  amount: number
+): ClinicProfitStats {
+  const balanceTopupsTotal = roundProfitMoney(stats.balanceTopupsTotal + amount);
+  const netProfit = roundProfitMoney(stats.netProfit + amount);
+  const breakdown = [...stats.breakdown];
+
+  const topupIdx = breakdown.findIndex((r) => r.label === BALANCE_TOPUP_LABEL);
+  if (topupIdx >= 0) {
+    breakdown[topupIdx] = { ...breakdown[topupIdx], amount: balanceTopupsTotal };
+  } else {
+    const expenseIdx = breakdown.findIndex((r) => r.label === "صرفيات العيادة");
+    const insertAt = expenseIdx >= 0 ? expenseIdx : breakdown.length - 1;
+    breakdown.splice(insertAt, 0, {
+      label: BALANCE_TOPUP_LABEL,
+      amount: balanceTopupsTotal,
+    });
+  }
+
+  const netIdx = breakdown.findIndex((r) => r.label === NET_PROFIT_LABEL);
+  if (netIdx >= 0) {
+    breakdown[netIdx] = { ...breakdown[netIdx], amount: netProfit };
+  }
+
+  return { ...stats, balanceTopupsTotal, netProfit, breakdown };
+}
+
+/** دمج شحن معلّق حتى يعكس السيرفر المبلغ ضمن الفترة */
+export function reconcilePendingClinicTopUpInProfitStats(
+  stats: ClinicProfitStats,
+  pending: PendingClinicTopUpProfit
+): { stats: ClinicProfitStats; resolved: boolean } {
+  const serverTopups = roundProfitMoney(stats.balanceTopupsTotal);
+  const serverNet = roundProfitMoney(stats.netProfit);
+  const topupsOk = serverTopups + 0.01 >= pending.minTopups;
+  const netOk = serverNet + 0.01 >= pending.minNetProfit;
+
+  if (topupsOk && netOk) {
+    return { stats, resolved: true };
+  }
+
+  let next = stats;
+  if (!topupsOk) {
+    next = applyClinicTopUpToProfitStats(
+      next,
+      pending.minTopups - serverTopups
+    );
+  }
+  if (!netOk) {
+    const netProfit = roundProfitMoney(
+      Math.max(next.netProfit, pending.minNetProfit)
+    );
+    next = {
+      ...next,
+      netProfit,
+      breakdown: next.breakdown.map((row) =>
+        row.label === NET_PROFIT_LABEL ? { ...row, amount: netProfit } : row
+      ),
+    };
+  }
+  return { stats: next, resolved: false };
+}
+
 /** إحصائيات مالية لشهر أو فترة محددة — للتقارير التاريخية */
 export async function fetchClinicProfitStatsForPeriod(
   supabase: SupabaseClient,

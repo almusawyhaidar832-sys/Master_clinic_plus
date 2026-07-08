@@ -1,4 +1,4 @@
-import { getApiSessionUser } from "@/lib/auth/api-session";
+import { getApiSessionUser, isApiStaffRole } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { isStaffRole } from "@/lib/withdrawals/update-status-client";
 
@@ -116,7 +116,7 @@ export async function assertCanManageClinicFinance(req?: Request) {
     throw new StaffAccessError(400, "حسابك غير مربوط بعيادة");
   }
 
-  if (!["accountant", "super_admin"].includes(String(profile.role ?? ""))) {
+  if (!isApiStaffRole(profile.role)) {
     throw new StaffAccessError(403, "صلاحيات غير كافية");
   }
 

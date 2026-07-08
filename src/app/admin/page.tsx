@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -10,7 +10,13 @@ import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile, getActiveClinicId } from "@/lib/clinic-context";
 import { fetchDoctorLedgers } from "@/lib/services/clinic-reports";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
-import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
+import {
+  applyClinicTopUpToProfitStats,
+  reconcilePendingClinicTopUpInProfitStats,
+  type ClinicProfitStats,
+  type PendingClinicTopUpProfit,
+} from "@/lib/services/clinic-stats";
+import type { BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
 import { currentMonthYear, formatCurrency, monthDateRange } from "@/lib/utils";
 import {
   FileText,
@@ -36,6 +42,25 @@ export default function AdminHomePage() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [clinicId, setClinicId] = useState<string | null>(null);
+  const pendingClinicTopupRef = useRef<PendingClinicTopUpProfit | null>(null);
+
+  const loadStats = useCallback(async () => {
+    const { from, to } = monthDateRange(currentMonthYear());
+    let profit = await fetchClinicProfitStatsForPeriodViaApi(from, to, "admin");
+
+    if (pendingClinicTopupRef.current) {
+      const reconciled = reconcilePendingClinicTopUpInProfitStats(
+        profit,
+        pendingClinicTopupRef.current
+      );
+      profit = reconciled.stats;
+      if (reconciled.resolved) {
+        pendingClinicTopupRef.current = null;
+      }
+    }
+
+    return profit;
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -46,10 +71,7 @@ export default function AdminHomePage() {
       const activeClinicId = active?.clinicId ?? null;
       setClinicId(activeClinicId);
       const [profit, doctors, pending] = await Promise.all([
-        (async () => {
-          const { from, to } = monthDateRange(currentMonthYear());
-          return fetchClinicProfitStatsForPeriodViaApi(from, to, "admin");
-        })(),
+        loadStats().catch(() => null),
         fetchDoctorLedgers(supabase),
         activeClinicId
           ? supabase
@@ -64,7 +86,7 @@ export default function AdminHomePage() {
       setPendingCount(pending.count ?? 0);
     }
     load();
-  }, [refreshKey]);
+  }, [refreshKey, loadStats]);
 
   useClinicSync({
     topics: ["profit", "financial"],
@@ -73,7 +95,24 @@ export default function AdminHomePage() {
     enabled: !!clinicId,
   });
 
-  const reloadStats = () => setRefreshKey((k) => k + 1);
+  const handleBalanceTopUpSuccess = useCallback(
+    (detail: BalanceTopUpSuccessDetail) => {
+      if (detail.target !== "clinic" || detail.amount <= 0) return;
+      const { from, to } = monthDateRange(currentMonthYear());
+      if (detail.transactionDate < from || detail.transactionDate > to) return;
+
+      setStats((prev) => {
+        if (!prev) return prev;
+        const next = applyClinicTopUpToProfitStats(prev, detail.amount);
+        pendingClinicTopupRef.current = {
+          minTopups: next.balanceTopupsTotal,
+          minNetProfit: next.netProfit,
+        };
+        return next;
+      });
+    },
+    []
+  );
 
   const monthRange = monthDateRange(currentMonthYear());
 
@@ -84,7 +123,11 @@ export default function AdminHomePage() {
         subtitle="متابعة مالية كاملة من الجوال"
         actions={
           <div className="flex items-center gap-2">
-            <BalanceTopUpButton portal="admin" onSuccess={reloadStats} size="sm" />
+            <BalanceTopUpButton
+              portal="admin"
+              onSuccess={handleBalanceTopUpSuccess}
+              size="sm"
+            />
             <span className="mc-badge-premium">
               <Crown className="h-3 w-3" />
               المالك
@@ -105,6 +148,12 @@ export default function AdminHomePage() {
               </p>
               <p className="mt-2 text-xs text-white/70">
                 تدفق نقدي: {formatCurrency(stats.cashInflow)}
+                {stats.balanceTopupsTotal > 0 && (
+                  <>
+                    {" "}
+                    · شحن رصيد: +{formatCurrency(stats.balanceTopupsTotal)}
+                  </>
+                )}
               </p>
             </div>
             <ProfitExplanationButton

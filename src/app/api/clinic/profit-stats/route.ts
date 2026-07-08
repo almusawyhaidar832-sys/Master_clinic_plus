@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiCallerProfile } from "@/lib/auth/api-session";
+import { getApiCallerProfile, isApiStaffRole } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { fetchClinicProfitStatsForPeriod } from "@/lib/services/clinic-stats";
 
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     if (!caller) {
       return NextResponse.json({ error: "يجب تسجيل الدخول أولاً" }, { status: 401 });
     }
-    if (!["accountant", "super_admin"].includes(caller.role)) {
+    if (!isApiStaffRole(caller.role)) {
       return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
     }
 
