@@ -206,6 +206,7 @@ export interface ConfirmedPayrollPayoutLine {
   amount: number;
   transactionDate: string;
   descriptionAr: string;
+  referenceId?: string;
 }
 
 /** خصم من الربح: سالب = صرف، موجب = تصحيح/استرداد */
@@ -254,7 +255,7 @@ export async function fetchConfirmedPayrollPayoutLines(
 ): Promise<ConfirmedPayrollPayoutLine[]> {
   const { data, error } = await supabase
     .from("transactions")
-    .select("id, amount, type, transaction_date, description_ar")
+    .select("id, amount, type, transaction_date, description_ar, reference_id")
     .eq("clinic_id", clinicId)
     .gte("transaction_date", from)
     .lte("transaction_date", to)
@@ -263,25 +264,28 @@ export async function fetchConfirmedPayrollPayoutLines(
 
   if (error || !data?.length) return [];
 
-  return data
-    .map((row) => {
-      const amt = Number(row.amount ?? 0);
-      if (amt === 0) return null;
-      const type = String(row.type ?? "");
-      const netDeduction = payrollProfitDeductionFromTransactionAmount(amt);
-      if (netDeduction === 0) return null;
-      const isCredit = amt > 0;
-      return {
-        id: row.id as string,
-        type,
-        typeLabel: isCredit
-          ? `${CONFIRMED_PAYROLL_TYPE_LABELS[type] ?? type} — تصحيح`
-          : (CONFIRMED_PAYROLL_TYPE_LABELS[type] ?? type),
-        amount: netDeduction,
-        transactionDate: String(row.transaction_date ?? ""),
-        descriptionAr: String(row.description_ar ?? "").trim(),
-      };
-    })
-    .filter((row): row is ConfirmedPayrollPayoutLine => row != null);
+  const lines: ConfirmedPayrollPayoutLine[] = [];
+
+  for (const row of data ?? []) {
+    const amt = Number(row.amount ?? 0);
+    if (amt === 0) continue;
+    const type = String(row.type ?? "");
+    const netDeduction = payrollProfitDeductionFromTransactionAmount(amt);
+    if (netDeduction === 0) continue;
+    const isCredit = amt > 0;
+    lines.push({
+      id: row.id as string,
+      type,
+      typeLabel: isCredit
+        ? `${CONFIRMED_PAYROLL_TYPE_LABELS[type] ?? type} — تصحيح`
+        : (CONFIRMED_PAYROLL_TYPE_LABELS[type] ?? type),
+      amount: netDeduction,
+      transactionDate: String(row.transaction_date ?? ""),
+      descriptionAr: String(row.description_ar ?? "").trim(),
+      referenceId: row.reference_id ? String(row.reference_id) : undefined,
+    });
+  }
+
+  return lines;
 }
 

@@ -21,10 +21,12 @@ import {
   Activity,
   Crown,
   Calendar,
+  History,
 } from "lucide-react";
 import { ActivityFeed } from "@/components/admin/ActivityFeed";
 import { AdminDoctorPerformance } from "@/components/admin/AdminDoctorPerformance";
 import { BalanceTopUpButton } from "@/components/finance/BalanceTopUpModal";
+import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
 
 export default function AdminHomePage() {
   const [stats, setStats] = useState<ClinicProfitStats | null>(null);
@@ -63,6 +65,8 @@ export default function AdminHomePage() {
 
   const reloadStats = () => setRefreshKey((k) => k + 1);
 
+  const monthRange = monthDateRange(currentMonthYear());
+
   return (
     <div className="space-y-5 animate-fade-in">
       <PageHeader
@@ -83,13 +87,27 @@ export default function AdminHomePage() {
         <div className="relative overflow-hidden rounded-mc-2xl bg-mc-navy p-5 text-white shadow-premium">
           <div className="pointer-events-none absolute -end-10 -top-14 h-48 w-48 rounded-full bg-white/5 blur-2xl" />
           <div className="pointer-events-none absolute -start-8 bottom-[-3rem] h-40 w-40 rounded-full bg-premium-400/10 blur-2xl" />
-          <p className="relative text-xs text-white/70">صافي ربح العيادة (هذا الشهر)</p>
-          <p className="relative mt-1 text-3xl font-extrabold tracking-tight tabular-nums">
-            {formatCurrency(stats.netProfit)}
-          </p>
-          <p className="relative mt-2 text-xs text-white/70">
-            تدفق نقدي: {formatCurrency(stats.cashInflow)}
-          </p>
+          <div className="relative flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs text-white/70">صافي ربح العيادة (هذا الشهر)</p>
+              <p className="mt-1 text-3xl font-extrabold tracking-tight tabular-nums">
+                {formatCurrency(stats.netProfit)}
+              </p>
+              <p className="mt-2 text-xs text-white/70">
+                تدفق نقدي: {formatCurrency(stats.cashInflow)}
+              </p>
+            </div>
+            <ProfitExplanationButton
+              from={monthRange.from}
+              to={monthRange.to}
+              portal="admin"
+              netProfit={stats.netProfit}
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-white/30 bg-white/10 text-white hover:bg-white/20"
+              label="توضيح"
+            />
+          </div>
         </div>
       )}
 
@@ -110,6 +128,15 @@ export default function AdminHomePage() {
             </div>
             <p className="text-xs font-semibold text-slate-text">الأرباح</p>
             <p className="text-[10px] text-slate-muted">تفصيل كامل</p>
+          </Card>
+        </Link>
+        <Link href="/admin/financial-history">
+          <Card hoverable className="p-3 active:scale-[0.98]">
+            <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100">
+              <History className="h-5 w-5 text-violet-700" />
+            </div>
+            <p className="text-xs font-semibold text-slate-text">سجل الصرفيات</p>
+            <p className="text-[10px] text-slate-muted">أرشيف كامل للإدارة</p>
           </Card>
         </Link>
         <Link href="/admin/withdrawals">

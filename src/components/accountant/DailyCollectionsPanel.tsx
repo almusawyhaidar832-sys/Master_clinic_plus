@@ -23,11 +23,18 @@ import {
   type CollectionStatusFilter,
   type DailyCollectionsResult,
   type DailyCollectionRow,
+  type DoctorDailySummary,
 } from "@/lib/ledger/daily-collections";
 import type { DailyAssistantPayrollLine } from "@/lib/ledger/daily-assistant-payroll";
 import type { DoctorWithdrawalLine } from "@/lib/withdrawals/display";
 import { withdrawalStatusLabel } from "@/lib/withdrawals/display";
 import type { DoctorBalanceTopUpLine } from "@/lib/ledger/daily-doctor-balance-topups";
+import type { DailyDoctorExpenseLine } from "@/lib/ledger/daily-statement-expenses";
+import {
+  ClinicExpenseRow,
+  DoctorExpenseRow,
+  StatementExpenseSection,
+} from "@/components/ledger/StatementExpenseRows";
 import { OutstandingDebtPanel } from "@/components/accountant/OutstandingDebtPanel";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
@@ -337,14 +344,16 @@ function DoctorSection({
   assistantPayroll,
   withdrawals,
   balanceTopups,
+  doctorExpenses,
   defaultOpen,
 }: {
   doctorName: string;
-  stats: DailyCollectionsResult["totals"];
+  stats: DoctorDailySummary["stats"];
   rows: DailyCollectionRow[];
   assistantPayroll: DailyAssistantPayrollLine[];
   withdrawals: DoctorWithdrawalLine[];
   balanceTopups: DoctorBalanceTopUpLine[];
+  doctorExpenses: DailyDoctorExpenseLine[];
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -385,9 +394,15 @@ function DoctorSection({
               {stats.totalPatients === 0 &&
                 assistantPayroll.length === 0 &&
                 withdrawals.length === 0 &&
-                balanceTopups.length === 0 && (
+                balanceTopups.length === 0 &&
+                doctorExpenses.length === 0 && (
                   <>لا حركة مالية في هذه الفترة</>
                 )}
+              {stats.totalPatients === 0 &&
+                assistantPayroll.length === 0 &&
+                withdrawals.length === 0 &&
+                balanceTopups.length === 0 &&
+                doctorExpenses.length > 0 && <>فواتير صرفية فقط</>}
               {stats.totalPatients === 0 &&
                 assistantPayroll.length === 0 &&
                 withdrawals.length > 0 &&
@@ -461,7 +476,8 @@ function DoctorSection({
           {rows.length === 0 &&
           assistantPayroll.length === 0 &&
           withdrawals.length === 0 &&
-          balanceTopups.length === 0 ? (
+          balanceTopups.length === 0 &&
+          doctorExpenses.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-slate-muted">
               لا مراجعين في هذا التصنيف
             </p>
@@ -470,6 +486,13 @@ function DoctorSection({
               {rows.map((row) => (
                 <PatientRow key={row.id} row={row} />
               ))}
+              {doctorExpenses.length > 0 && (
+                <StatementExpenseSection title="فواتير صرفية الطبيب">
+                  {doctorExpenses.map((line) => (
+                    <DoctorExpenseRow key={line.id} line={line} />
+                  ))}
+                </StatementExpenseSection>
+              )}
               {assistantPayroll.length > 0 && (
                 <div className="border-t border-amber-200/60">
                   <p className="bg-amber-50/60 px-4 py-2 text-xs font-semibold text-amber-900">
@@ -853,6 +876,20 @@ export function DailyCollectionsPanel() {
                 className="border-emerald-200 bg-emerald-50/50 text-emerald-700"
               />
             )}
+            {result.totals.totalDoctorExpenseDeduction > 0 && (
+              <SummaryChip
+                label="خصم فواتير أطباء"
+                value={`− ${formatCurrency(result.totals.totalDoctorExpenseDeduction)}`}
+                className="border-orange-200 bg-orange-50/50 text-orange-800"
+              />
+            )}
+            {result.totals.totalClinicGeneralExpenses > 0 && (
+              <SummaryChip
+                label="صرفيات العيادة"
+                value={`− ${formatCurrency(result.totals.totalClinicGeneralExpenses)}`}
+                className="border-violet-200 bg-violet-50/50 text-violet-800"
+              />
+            )}
             <SummaryChip
               label="متبقي"
               value={formatCurrency(result.totals.totalRemaining)}
@@ -873,7 +910,7 @@ export function DailyCollectionsPanel() {
         </div>
       )}
 
-      {!loading && result && result.doctors.length === 0 && (
+      {!loading && result && result.doctors.length === 0 && result.clinicExpenses.length === 0 && (
         <Alert variant="info">
           لا توجد بيانات مالية لـ {periodLabel}
           {doctorId ? " لهذا الطبيب" : ""}.
@@ -896,9 +933,29 @@ export function DailyCollectionsPanel() {
             assistantPayroll={group.assistantPayroll}
             withdrawals={group.withdrawals}
             balanceTopups={group.balanceTopups}
+            doctorExpenses={group.doctorExpenses}
             defaultOpen={!!selectedDoctorId || index < 5}
           />
         ))}
+
+      {!loading && result && result.clinicExpenses.length > 0 && (
+        <Card className="overflow-hidden p-0">
+          <div className="border-b border-slate-border bg-surface-card px-5 py-4">
+            <p className="flex items-center gap-2 font-bold text-slate-text">
+              <Receipt className="h-5 w-5 text-violet-600" />
+              صرفيات العيادة العامة
+            </p>
+            <p className="mt-0.5 text-xs text-slate-muted">
+              مختبر، مواد، ومصاريف تشغيل — تُخصم من ربح العيادة
+            </p>
+          </div>
+          <div>
+            {result.clinicExpenses.map((line) => (
+              <ClinicExpenseRow key={line.id} line={line} />
+            ))}
+          </div>
+        </Card>
+      )}
 
       {!loading && clinicId && (
         <OutstandingDebtPanel clinicId={clinicId} doctorId={selectedDoctorId} />

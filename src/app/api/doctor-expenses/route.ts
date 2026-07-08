@@ -10,6 +10,7 @@ import {
   rollbackDoctorExpenseInsert,
 } from "@/lib/services/doctor-expense-deduction";
 import { archiveDoctorExpenseToHistory } from "@/lib/services/invoice-archive";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
 
 const BUCKET = "doctor-expense-invoices";
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -223,6 +224,27 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    await writeAuditLog(admin, {
+      clinicId,
+      entityType: "expense",
+      entityId: expense.id,
+      action: "create",
+      changedBy: caller.id,
+      actorName: caller.full_name ?? null,
+      financialAmount: -clinicShare,
+      after: {
+        kind: "doctor_expense",
+        doctor_id: doctorId,
+        doctor_name: doctor.full_name_ar,
+        amount,
+        clinic_share: clinicShare,
+        doctor_share: doctorShare,
+        expense_date: expenseDate,
+        description_ar: descriptionAr,
+      },
+      note: `فاتورة صرفية طبيب — ${doctor.full_name_ar as string}`,
+    });
 
     return NextResponse.json({
       success: true,

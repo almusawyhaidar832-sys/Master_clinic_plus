@@ -24,6 +24,7 @@ import {
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { OutstandingDebtPanel } from "@/components/accountant/OutstandingDebtPanel";
 import { BalanceTopUpButton } from "@/components/finance/BalanceTopUpModal";
+import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
@@ -148,7 +149,15 @@ function KpiCard({
 // ─────────────────────────────────────────────
 // Net Profit Breakdown card
 // ─────────────────────────────────────────────
-function NetProfitCard({ snap }: { snap: Snapshot }) {
+function NetProfitCard({
+  snap,
+  from,
+  to,
+}: {
+  snap: Snapshot;
+  from: string;
+  to: string;
+}) {
   const { t } = useLanguage();
   const rows = [
     { label: t("execClinicShareOps"), amount: snap.clinic_shares, color: "text-success-text", sign: "+" },
@@ -174,10 +183,20 @@ function NetProfitCard({ snap }: { snap: Snapshot }) {
       "mc-card-premium mc-hover-lift p-5",
       snap.net_profit < 0 && "border-debt-border"
     )}>
-      <h3 className="mb-4 flex items-center gap-2 font-bold text-slate-text">
-        <DollarSign className="h-5 w-5 text-premium-500" />
-        {t("profitBreakdown")}
-      </h3>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 font-bold text-slate-text">
+          <DollarSign className="h-5 w-5 text-premium-500" />
+          {t("profitBreakdown")}
+        </h3>
+        <ProfitExplanationButton
+          from={from}
+          to={to}
+          portal="accountant"
+          netProfit={snap.net_profit}
+          size="sm"
+          variant="outline"
+        />
+      </div>
       <div className="space-y-2">
         {rows.map((row) => (
           <div key={row.label} className="flex items-center justify-between text-sm">
@@ -575,7 +594,7 @@ export function ExecutiveDashboard() {
 
           {/* Row 2: breakdown + alerts */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <NetProfitCard snap={snap} />
+            <NetProfitCard snap={snap} from={getRange().from} to={getRange().to} />
             <SmartAlerts snap={snap} />
           </div>
 

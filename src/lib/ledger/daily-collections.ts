@@ -36,6 +36,14 @@ import {
   sumBalanceTopUpsByDoctor,
   type DoctorBalanceTopUpLine,
 } from "@/lib/ledger/daily-doctor-balance-topups";
+import {
+  fetchDailyClinicExpenseLines,
+  fetchDailyDoctorExpenseLines,
+  sumClinicGeneralExpenses,
+  sumDoctorExpenseDeductions,
+  type DailyClinicExpenseLine,
+  type DailyDoctorExpenseLine,
+} from "@/lib/ledger/daily-statement-expenses";
 import { fetchDoctorWalletStatsBatch } from "@/lib/services/doctor-wallet";
 import type { DoctorWithdrawalLine } from "@/lib/withdrawals/display";
 import { getPatientDisplayPhone } from "@/lib/phone";
@@ -90,6 +98,7 @@ export type DoctorDailySummary = {
   assistantPayroll: DailyAssistantPayrollLine[];
   withdrawals: DoctorWithdrawalLine[];
   balanceTopups: DoctorBalanceTopUpLine[];
+  doctorExpenses: DailyDoctorExpenseLine[];
   stats: {
     totalPatients: number;
     paidFull: number;
@@ -108,6 +117,10 @@ export type DoctorDailySummary = {
     assistantClinicShare: number;
     /** حصة الطبيب بعد خصم المساعدين */
     netDoctorShareToday: number;
+    /** خصم فواتير الصرفية من محفظة الطبيب */
+    totalDoctorExpenseDeduction: number;
+    /** حصة العيادة من فواتير صرفية هذا الطبيب */
+    totalDoctorExpenseClinicShare: number;
     /** مسحوب / موافق عليه خلال الفترة */
     totalWithdrawnInPeriod: number;
     /** شحن رصيد خلال الفترة */
@@ -122,7 +135,10 @@ export type DailyCollectionsResult = {
   dateFrom: string;
   dateTo: string;
   doctors: DoctorDailySummary[];
-  totals: DoctorDailySummary["stats"];
+  clinicExpenses: DailyClinicExpenseLine[];
+  totals: DoctorDailySummary["stats"] & {
+    totalClinicGeneralExpenses: number;
+  };
 };
 
 type QueueRow = {
@@ -671,6 +687,8 @@ function emptyStats(): DoctorDailySummary["stats"] {
     netDoctorShareToday: 0,
     totalWithdrawnInPeriod: 0,
     totalToppedUpInPeriod: 0,
+    totalDoctorExpenseDeduction: 0,
+    totalDoctorExpenseClinicShare: 0,
     availableBalance: null,
   };
 }
@@ -745,6 +763,15 @@ function applyAssistantPayrollToStats(
     0,
     roundMoney(stats.doctorShareToday - stats.assistantDoctorDeduction)
   );
+}
+
+function applyDoctorExpensesToStats(
+  stats: DoctorDailySummary["stats"],
+  lines: DailyDoctorExpenseLine[]
+): void {
+  const sums = sumDoctorExpenseDeductions(lines);
+  stats.totalDoctorExpenseDeduction = sums.doctor;
+  stats.totalDoctorExpenseClinicShare = sums.clinic;
 }
 
 function applyBalanceTopupsToStats(
@@ -942,6 +969,8 @@ function mergeStats(
   target.netDoctorShareToday += source.netDoctorShareToday;
   target.totalWithdrawnInPeriod += source.totalWithdrawnInPeriod;
   target.totalToppedUpInPeriod += source.totalToppedUpInPeriod;
+  target.totalDoctorExpenseDeduction += source.totalDoctorExpenseDeduction;
+  target.totalDoctorExpenseClinicShare += source.totalDoctorExpenseClinicShare;
 }
 
 export function matchesCollectionFilter(
@@ -1195,6 +1224,27 @@ export async function fetchDailyCollections(
     topupLinesByDoctor.set(line.doctorId, list);
   }
 
+  const [doctorExpenseLines, clinicExpenseLines] = await Promise.all([
+    fetchDailyDoctorExpenseLines(supabase, clinicId, {
+      dateFrom: effectiveFrom,
+      dateTo: effectiveTo,
+      doctorId: input.doctorId,
+    }),
+    input.doctorId
+      ? Promise.resolve([] as DailyClinicExpenseLine[])
+      : fetchDailyClinicExpenseLines(supabase, clinicId, {
+          dateFrom: effectiveFrom,
+          dateTo: effectiveTo,
+        }),
+  ]);
+
+  const doctorExpenseLinesByDoctor = new Map<string, DailyDoctorExpenseLine[]>();
+  for (const line of doctorExpenseLines) {
+    const list = doctorExpenseLinesByDoctor.get(line.doctorId) ?? [];
+    list.push(line);
+    doctorExpenseLinesByDoctor.set(line.doctorId, list);
+  }
+
   function applyDoctorFinancialExtras(
     stats: DoctorDailySummary["stats"],
     doctorId: string
@@ -1205,12 +1255,17 @@ export async function fetchDailyCollections(
       null
     );
     applyBalanceTopupsToStats(stats, topupsByDoctor.get(doctorId) ?? 0);
+    applyDoctorExpensesToStats(
+      stats,
+      doctorExpenseLinesByDoctor.get(doctorId) ?? []
+    );
   }
 
   function doctorFinancialExtras(doctorId: string) {
     return {
       withdrawals: withdrawalLinesByDoctor.get(doctorId) ?? [],
       balanceTopups: topupLinesByDoctor.get(doctorId) ?? [],
+      doctorExpenses: doctorExpenseLinesByDoctor.get(doctorId) ?? [],
     };
   }
 
@@ -1537,6 +1592,23 @@ export async function fetchDailyCollections(
     });
   }
 
+  for (const doctorId of doctorExpenseLinesByDoctor.keys()) {
+    if (doctors.some((d) => d.doctorId === doctorId)) continue;
+    const stats = emptyStats();
+    applyDoctorFinancialExtras(stats, doctorId);
+    doctors.push({
+      doctorId,
+      doctorName:
+        doctorNameById.get(doctorId) ??
+        doctorExpenseLinesByDoctor.get(doctorId)?.[0]?.doctorName ??
+        "طبيب",
+      rows: [],
+      assistantPayroll: [],
+      ...doctorFinancialExtras(doctorId),
+      stats,
+    });
+  }
+
   const walletDoctorIds = doctors.map((d) => d.doctorId);
   const walletStatsMap = await fetchDoctorWalletStatsBatch(
     supabase,
@@ -1549,7 +1621,10 @@ export async function fetchDailyCollections(
 
   doctors.sort((a, b) => a.doctorName.localeCompare(b.doctorName, "ar"));
 
-  const totals = emptyStats();
+  const totals = {
+    ...emptyStats(),
+    totalClinicGeneralExpenses: sumClinicGeneralExpenses(clinicExpenseLines),
+  };
   for (const group of doctors) {
     mergeStats(totals, group.stats);
   }
@@ -1559,6 +1634,7 @@ export async function fetchDailyCollections(
     dateFrom: effectiveFrom,
     dateTo: effectiveTo,
     doctors,
+    clinicExpenses: clinicExpenseLines,
     totals,
   };
 }

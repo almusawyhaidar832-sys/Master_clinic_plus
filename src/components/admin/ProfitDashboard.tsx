@@ -7,6 +7,7 @@ import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 import { currentMonthYear, formatCurrency, monthDateRange } from "@/lib/utils";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { TrendingDown, TrendingUp, Wallet, AlertCircle } from "lucide-react";
+import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
 
 interface ProfitDashboardProps {
   mobile?: boolean;
@@ -72,6 +73,8 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
     );
   }
 
+  const { from, to } = monthDateRange(currentMonthYear());
+
   const cards = [
     {
       label: "إجمالي التدفق النقدي",
@@ -127,9 +130,28 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
         ))}
       </div>
 
-      <Card>
+      <Card premium>
         <CardHeader>
+          <div className="flex items-start justify-between gap-2">
+            <div>
           <CardTitle>تفصيل الحساب</CardTitle>
+              <p className="mt-1 text-xs text-slate-muted">
+                اضغط «توضيح الربح» أو افتح{" "}
+                <a href="/admin/financial-history" className="text-primary underline">
+                  سجل الصرفيات
+                </a>{" "}
+                لكل العمليات السابقة
+              </p>
+            </div>
+            <ProfitExplanationButton
+              from={from}
+              to={to}
+              portal="admin"
+              netProfit={stats.netProfit}
+              size="sm"
+              variant="premium"
+            />
+          </div>
         </CardHeader>
         <div className="space-y-2">
           {stats.breakdown.map((row) => (

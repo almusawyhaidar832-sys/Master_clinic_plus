@@ -27,6 +27,10 @@ import type { DailyAssistantPayrollLine } from "@/lib/ledger/daily-assistant-pay
 import type { DoctorWithdrawalLine } from "@/lib/withdrawals/display";
 import { withdrawalStatusLabel } from "@/lib/withdrawals/display";
 import type { DoctorBalanceTopUpLine } from "@/lib/ledger/daily-doctor-balance-topups";
+import {
+  DoctorExpenseRow,
+  StatementExpenseSection,
+} from "@/components/ledger/StatementExpenseRows";
 import { OutstandingDebtPanel } from "@/components/accountant/OutstandingDebtPanel";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -544,6 +548,13 @@ export function DoctorDailyCollectionsPanel({
                 className="border-emerald-200 bg-emerald-50/50 text-emerald-700"
               />
             )}
+            {mySummary.stats.totalDoctorExpenseDeduction > 0 && (
+              <SummaryChip
+                label="خصم فواتير صرفية"
+                value={`− ${formatCurrency(mySummary.stats.totalDoctorExpenseDeduction)}`}
+                className="border-orange-200 bg-orange-50/50 text-orange-800"
+              />
+            )}
             {mySummary.stats.availableBalance != null && (
               <SummaryChip
                 label={t("docDailyBalanceRemaining")}
@@ -571,13 +582,13 @@ export function DoctorDailyCollectionsPanel({
         </div>
       )}
 
-      {!loading && result && !mySummary?.rows.length && !mySummary?.assistantPayroll.length && !mySummary?.withdrawals.length && !mySummary?.balanceTopups.length && (
+      {!loading && result && !mySummary?.rows.length && !mySummary?.assistantPayroll.length && !mySummary?.withdrawals.length && !mySummary?.balanceTopups.length && !mySummary?.doctorExpenses.length && (
         <Alert variant="info">
           {t("docDailyNoData")} {periodLabel}
         </Alert>
       )}
 
-      {!loading && mySummary && (mySummary.rows.length > 0 || mySummary.assistantPayroll.length > 0 || mySummary.withdrawals.length > 0 || mySummary.balanceTopups.length > 0) && (
+      {!loading && mySummary && (mySummary.rows.length > 0 || mySummary.assistantPayroll.length > 0 || mySummary.withdrawals.length > 0 || mySummary.balanceTopups.length > 0 || mySummary.doctorExpenses.length > 0) && (
         <Card className="overflow-hidden p-0">
           <div className="border-b border-slate-border bg-surface-card px-4 py-3">
             <p className="flex items-center gap-2 text-sm font-bold text-slate-text">
@@ -589,6 +600,16 @@ export function DoctorDailyCollectionsPanel({
             {mySummary.rows.map((row) => (
               <DoctorPatientRow key={row.id} row={row} />
             ))}
+            {mySummary.doctorExpenses.length > 0 && (
+              <StatementExpenseSection
+                title="فواتير صرفيتك (خصم حسب نسبتك)"
+                tone="violet"
+              >
+                {mySummary.doctorExpenses.map((line) => (
+                  <DoctorExpenseRow key={line.id} line={line} forDoctor />
+                ))}
+              </StatementExpenseSection>
+            )}
             {mySummary.assistantPayroll.length > 0 && (
               <div className="border-t border-amber-200/60">
                 <p className="bg-amber-50/60 px-4 py-2 text-xs font-semibold text-amber-900">

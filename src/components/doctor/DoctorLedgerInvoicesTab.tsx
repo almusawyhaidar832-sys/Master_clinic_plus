@@ -11,15 +11,12 @@ import { truncateLabNotes } from "@/lib/invoices/lab-session-details";
 import { RefreshCw } from "lucide-react";
 import { DoctorExpenseInvoiceViewer } from "@/components/doctor-expenses/DoctorExpenseInvoiceViewer";
 
-function invoiceStatement(
-  row: DoctorLedgerInvoiceRow,
-  clinicExpenseLabel: string
-): string {
+function invoiceStatement(row: DoctorLedgerInvoiceRow): string {
   const label = row.procedure_label?.trim();
   if (label && label !== "—") return label;
   const treatment = row.treatment_name?.trim();
-  if (treatment) return treatment;
-  return row.record_kind === "doctor_expense" ? clinicExpenseLabel : "—";
+  if (treatment && treatment !== "صرفية") return treatment;
+  return row.record_kind === "doctor_expense" ? row.patient_name_ar : "—";
 }
 
 interface DoctorLedgerInvoicesTabProps {
@@ -36,8 +33,6 @@ export function DoctorLedgerInvoicesTab({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const clinicExpenseLabel = t("docKindClinicExpense");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,8 +96,10 @@ export function DoctorLedgerInvoicesTab({
       header: t("docColType"),
       render: (row) =>
         row.record_kind === "doctor_expense" ? (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-            {t("docKindClinicExpenseShort")}
+          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-900">
+            {/مختبر|lab/i.test(row.procedure_label)
+              ? "مختبر"
+              : t("docKindDoctorExpenseShort")}
           </span>
         ) : (
           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
@@ -117,9 +114,16 @@ export function DoctorLedgerInvoicesTab({
         <div className="text-slate-700">
           <span>
             {row.record_kind === "doctor_expense"
-              ? invoiceStatement(row, clinicExpenseLabel)
-              : `${row.patient_name_ar} — ${invoiceStatement(row, clinicExpenseLabel)}`}
+              ? invoiceStatement(row)
+              : `${row.patient_name_ar} — ${invoiceStatement(row)}`}
           </span>
+          {row.record_kind === "doctor_expense" &&
+          row.expense_percentage_split != null ? (
+            <span className="mt-0.5 block text-[10px] text-slate-500">
+              نسبتك {Math.round(row.expense_percentage_split)}% — إجمالي{" "}
+              {formatMoney(row.total_amount)}
+            </span>
+          ) : null}
           {row.record_kind !== "doctor_expense" && row.lab_notes ? (
             <span className="mt-0.5 block text-[10px] text-slate-500">
               {truncateLabNotes(row.lab_notes, 48)}
@@ -171,17 +175,25 @@ export function DoctorLedgerInvoicesTab({
       key: "share",
       header: t("docColYourShare"),
       render: (row) => (
-        <span
-          className={cn(
-            "font-bold tabular-nums",
-            row.record_kind === "doctor_expense"
-              ? "text-red-600"
-              : "text-emerald-600"
-          )}
-        >
-          {row.record_kind === "doctor_expense" ? "−" : ""}
-          {formatMoney(row.doctor_share)}
-        </span>
+        <div className="text-right">
+          <span
+            className={cn(
+              "font-bold tabular-nums",
+              row.record_kind === "doctor_expense"
+                ? "text-red-600"
+                : "text-emerald-600"
+            )}
+          >
+            {row.record_kind === "doctor_expense" ? "−" : ""}
+            {formatMoney(row.doctor_share)}
+          </span>
+          {row.record_kind === "doctor_expense" &&
+            row.expense_percentage_split != null && (
+              <p className="text-[10px] text-slate-muted">
+                {Math.round(row.expense_percentage_split)}%
+              </p>
+            )}
+        </div>
       ),
     },
   ];

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { recordFinancialTransaction } from "@/lib/services/clinic-profit";
 
 /**
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
         amount,
         expense_date,
         category_id,
+        created_by: caller.id,
       })
       .select("id")
       .single();
@@ -76,6 +78,23 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    await writeAuditLog(admin, {
+      clinicId,
+      entityType: "expense",
+      entityId: expense.id,
+      action: "create",
+      changedBy: caller.id,
+      actorName: caller.full_name ?? null,
+      financialAmount: -amount,
+      after: {
+        description_ar,
+        amount,
+        expense_date,
+        category_id,
+      },
+      note: "تسجيل صرفية عيادة",
+    });
 
     return NextResponse.json({
       success: true,

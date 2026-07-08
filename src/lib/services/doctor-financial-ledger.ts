@@ -50,6 +50,8 @@ export interface DoctorLedgerInvoiceRow {
   doctor_expense_id?: string | null;
   invoice_file_name?: string | null;
   has_invoice_attachment?: boolean;
+  /** نسبة خصم الطبيب من فاتورة الصرفية */
+  expense_percentage_split?: number | null;
 }
 
 export interface DoctorLedgerPatientRow {
@@ -408,6 +410,13 @@ function mapHistoryToInvoiceRow(row: InvoiceHistoryRow): DoctorLedgerInvoiceRow 
   const lab = isExpense
     ? { materialsCost: 0, labNotes: null }
     : labDetailsFromSnapshot(row.snapshot_json);
+  const snapshot = row.snapshot_json as {
+    percentage_split?: number;
+    description_ar?: string;
+  } | null;
+  const expenseLabel =
+    String(row.procedure_label ?? snapshot?.description_ar ?? "").trim() ||
+    "فاتورة صرفية";
 
   return {
     id: row.id,
@@ -415,9 +424,9 @@ function mapHistoryToInvoiceRow(row: InvoiceHistoryRow): DoctorLedgerInvoiceRow 
     invoice_date: row.invoice_date,
     record_kind: isExpense ? "doctor_expense" : "session_invoice",
     patient_name_ar: isExpense
-      ? "صرفية عيادة"
+      ? expenseLabel
       : String(row.patient_name_ar ?? "").trim() || "مراجع",
-    procedure_label: String(row.procedure_label ?? "") || (isExpense ? "صرفية" : "—"),
+    procedure_label: isExpense ? expenseLabel : String(row.procedure_label ?? "") || "—",
     treatment_name: String(row.treatment_name ?? ""),
     paid_amount: row.paid_amount,
     doctor_share: row.doctor_share,
@@ -435,6 +444,9 @@ function mapHistoryToInvoiceRow(row: InvoiceHistoryRow): DoctorLedgerInvoiceRow 
           snapshot: row.snapshot_json as Record<string, unknown>,
         })
       : false,
+    expense_percentage_split: isExpense
+      ? Number(snapshot?.percentage_split ?? NaN) || null
+      : null,
   };
 }
 
@@ -929,7 +941,7 @@ export async function fetchDoctorFinancialReport(
     (inv) => ({
       id: inv.id,
       kind: "expense_deduction" as const,
-      label: inv.procedure_label || "صرفية عيادة",
+      label: inv.procedure_label || inv.patient_name_ar || "فاتورة صرفية",
       amount: inv.doctor_share,
       operation_date: inv.invoice_date,
     })
