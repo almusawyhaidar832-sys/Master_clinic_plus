@@ -14,11 +14,11 @@ import {
   resolveExecutiveSalaryDeduction,
   applyReportAlignedProfitMetrics,
   applyClinicTopUpToSnapshot,
-  reconcilePendingClinicTopUp,
   type ExecutiveSnapshotCore,
   type ReportAlignedProfitMetrics,
 } from "@/lib/services/executive-snapshot";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
+import { reconcilePendingClinicProfitStats } from "@/lib/services/clinic-profit-pending";
 import type { BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import {
@@ -321,10 +321,6 @@ export function ExecutiveDashboard() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const fetchGenerationRef = useRef(0);
-  const pendingClinicTopupRef = useRef<{
-    minTopups: number;
-    minNetProfit: number;
-  } | null>(null);
 
   // date range
   const getRange = useCallback(() => {
@@ -367,9 +363,9 @@ export function ExecutiveDashboard() {
           cache: "no-store",
         }
       ),
-      fetchClinicProfitStatsForPeriodViaApi(from, to, "accountant").catch(
-        () => null
-      ),
+      fetchClinicProfitStatsForPeriodViaApi(from, to, "accountant")
+        .then((stats) => reconcilePendingClinicProfitStats(clinicId, stats, { from, to }))
+        .catch(() => null),
     ]);
 
     const supplementJson = supplementRes.ok
@@ -488,17 +484,6 @@ export function ExecutiveDashboard() {
           : baseSnap.patient_count,
     };
 
-    if (pendingClinicTopupRef.current) {
-      const reconciled = reconcilePendingClinicTopUp(
-        resolvedSnap,
-        pendingClinicTopupRef.current
-      );
-      resolvedSnap = reconciled.snap as Snapshot;
-      if (reconciled.resolved) {
-        pendingClinicTopupRef.current = null;
-      }
-    }
-
     if (fetchGeneration !== fetchGenerationRef.current) return;
 
     setSnap(resolvedSnap);
@@ -524,12 +509,7 @@ export function ExecutiveDashboard() {
 
       setSnap((prev) => {
         if (!prev) return prev;
-        const next = applyClinicTopUpToSnapshot(prev, detail.amount);
-        pendingClinicTopupRef.current = {
-          minTopups: Number(next.balance_topups ?? 0),
-          minNetProfit: Number(next.net_profit ?? 0),
-        };
-        return next;
+        return applyClinicTopUpToSnapshot(prev, detail.amount) as Snapshot;
       });
     },
     [getRange]

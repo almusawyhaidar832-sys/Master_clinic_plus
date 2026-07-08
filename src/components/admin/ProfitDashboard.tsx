@@ -4,9 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicSync } from "@/hooks/useClinicSync";
-import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
+import {
+  defaultClinicProfitPeriod,
+  fetchAlignedClinicProfitStats,
+} from "@/lib/services/clinic-profit-loader";
 import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
-import { currentMonthYear, formatCurrency, monthDateRange } from "@/lib/utils";
+import { currentMonthYear, formatCurrency } from "@/lib/utils";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { TrendingDown, TrendingUp, Wallet, AlertCircle } from "lucide-react";
 import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
@@ -43,11 +46,15 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!clinicId) {
+      setLoading(false);
+      return;
+    }
     try {
-      const { from, to } = monthDateRange(currentMonthYear());
+      const period = defaultClinicProfitPeriod();
       const [data, totalDebt] = await Promise.all([
-        fetchClinicProfitStatsForPeriodViaApi(from, to, "admin"),
-        fetchTotalOutstandingDebt(from, to),
+        fetchAlignedClinicProfitStats(clinicId, "admin", period),
+        fetchTotalOutstandingDebt(period.from, period.to),
       ]);
       setStats(
         totalDebt !== null ? { ...data, outstandingDebts: totalDebt } : data
@@ -57,7 +64,7 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
       setError("تعذر تحميل بيانات الأرباح");
     }
     setLoading(false);
-  }, []);
+  }, [clinicId]);
 
   useEffect(() => {
     void load();
@@ -84,7 +91,7 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
     );
   }
 
-  const { from, to } = monthDateRange(currentMonthYear());
+  const { from, to } = defaultClinicProfitPeriod();
 
   const cards = [
     {

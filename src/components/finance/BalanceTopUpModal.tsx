@@ -10,6 +10,7 @@ import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { notifyBalanceTopUpRefresh } from "@/lib/services/clinic-profit";
+import { registerPendingClinicTopUp } from "@/lib/services/clinic-profit-pending";
 import {
   registerPendingDoctorTopUpDelta,
   registerPendingDoctorWallet,
@@ -156,6 +157,9 @@ export function BalanceTopUpModal({
 
       const toppedAmount = Number(json.amount ?? parsed);
       const doctorWallet = json.doctor_wallet ?? undefined;
+      if (target === "clinic" && clinicId && toppedAmount > 0) {
+        registerPendingClinicTopUp(clinicId, toppedAmount, transactionDate);
+      }
       if (target === "doctor" && toppedDoctorId) {
         if (doctorWallet) {
           registerPendingDoctorWallet(toppedDoctorId, doctorWallet);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,15 +9,14 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile, getActiveClinicId } from "@/lib/clinic-context";
 import { fetchDoctorLedgers } from "@/lib/services/clinic-reports";
-import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
 import {
-  applyClinicTopUpToProfitStats,
-  reconcilePendingClinicTopUpInProfitStats,
-  type ClinicProfitStats,
-  type PendingClinicTopUpProfit,
-} from "@/lib/services/clinic-stats";
+  defaultClinicProfitPeriod,
+  fetchAlignedClinicProfitStats,
+} from "@/lib/services/clinic-profit-loader";
+import { applyClinicTopUpToProfitStats } from "@/lib/services/clinic-stats";
+import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 import type { BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
-import { currentMonthYear, formatCurrency, monthDateRange } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import {
   FileText,
   Stethoscope,
@@ -42,24 +41,10 @@ export default function AdminHomePage() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [clinicId, setClinicId] = useState<string | null>(null);
-  const pendingClinicTopupRef = useRef<PendingClinicTopUpProfit | null>(null);
 
-  const loadStats = useCallback(async () => {
-    const { from, to } = monthDateRange(currentMonthYear());
-    let profit = await fetchClinicProfitStatsForPeriodViaApi(from, to, "admin");
-
-    if (pendingClinicTopupRef.current) {
-      const reconciled = reconcilePendingClinicTopUpInProfitStats(
-        profit,
-        pendingClinicTopupRef.current
-      );
-      profit = reconciled.stats;
-      if (reconciled.resolved) {
-        pendingClinicTopupRef.current = null;
-      }
-    }
-
-    return profit;
+  const loadStats = useCallback(async (activeClinicId: string) => {
+    const period = defaultClinicProfitPeriod();
+    return fetchAlignedClinicProfitStats(activeClinicId, "admin", period);
   }, []);
 
   useEffect(() => {
@@ -71,7 +56,9 @@ export default function AdminHomePage() {
       const activeClinicId = active?.clinicId ?? null;
       setClinicId(activeClinicId);
       const [profit, doctors, pending] = await Promise.all([
-        loadStats().catch(() => null),
+        activeClinicId
+          ? loadStats(activeClinicId).catch(() => null)
+          : Promise.resolve(null),
         fetchDoctorLedgers(supabase),
         activeClinicId
           ? supabase
@@ -95,26 +82,32 @@ export default function AdminHomePage() {
     enabled: !!clinicId,
   });
 
+  useEffect(() => {
+    function onFocus() {
+      setRefreshKey((k) => k + 1);
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
   const handleBalanceTopUpSuccess = useCallback(
     (detail: BalanceTopUpSuccessDetail) => {
       if (detail.target !== "clinic" || detail.amount <= 0) return;
-      const { from, to } = monthDateRange(currentMonthYear());
-      if (detail.transactionDate < from || detail.transactionDate > to) return;
+      const period = defaultClinicProfitPeriod();
+      if (detail.transactionDate < period.from || detail.transactionDate > period.to) {
+        return;
+      }
 
       setStats((prev) => {
         if (!prev) return prev;
-        const next = applyClinicTopUpToProfitStats(prev, detail.amount);
-        pendingClinicTopupRef.current = {
-          minTopups: next.balanceTopupsTotal,
-          minNetProfit: next.netProfit,
-        };
-        return next;
+        return applyClinicTopUpToProfitStats(prev, detail.amount);
       });
+      setRefreshKey((k) => k + 1);
     },
     []
   );
 
-  const monthRange = monthDateRange(currentMonthYear());
+  const monthRange = defaultClinicProfitPeriod();
 
   return (
     <div className="space-y-5 animate-fade-in">
