@@ -14,6 +14,8 @@ interface ToothProcedureModalProps {
   toothNumber: number;
   current?: PatientToothState;
   saving?: boolean;
+  /** عرض فقط — للمحاسب وملف الجلسات */
+  readOnly?: boolean;
   onClose: () => void;
   onSave: (update: PatientToothState) => void;
   onReset: () => void;
@@ -23,6 +25,7 @@ export function ToothProcedureModal({
   toothNumber,
   current,
   saving = false,
+  readOnly = false,
   onClose,
   onSave,
   onReset,
@@ -61,7 +64,9 @@ export function ToothProcedureModal({
               السن {toothNumber}
             </h3>
             <p className="text-xs text-slate-muted">
-              اختر الحالة — يظهر لون واضح على السن ويُحفظ للطبيب والمساعد
+              {readOnly
+                ? "تفاصيل السن المسجّلة في هذه الجلسة"
+                : "اختر الحالة — يظهر لون واضح على السن ويُحفظ للطبيب والمساعد"}
             </p>
           </div>
           <button
@@ -74,85 +79,122 @@ export function ToothProcedureModal({
           </button>
         </div>
 
-        <p className="mb-2 text-xs font-medium text-slate-text">الحالة</p>
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {(Object.keys(TOOTH_STATUS_LABELS_AR) as ToothStatus[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStatus(s)}
-              className={cn(
-                "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
-                status === s
-                  ? "bg-primary text-white"
-                  : "border border-slate-border bg-surface text-slate-text"
-              )}
-            >
-              {TOOTH_STATUS_LABELS_AR[s]}
-            </button>
-          ))}
-        </div>
+        {readOnly ? (
+          <dl className="mb-4 space-y-2 text-sm">
+            <div>
+              <dt className="text-xs font-medium text-slate-muted">الحالة</dt>
+              <dd className="font-medium text-slate-text">
+                {TOOTH_STATUS_LABELS_AR[status]}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-slate-muted">الإجراء</dt>
+              <dd className="font-medium text-slate-text">{procedure}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-slate-muted">
+                ملاحظة على السن
+              </dt>
+              <dd className="mt-0.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-slate-800">
+                {note.trim() || "— لا توجد ملاحظة —"}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <>
+            <p className="mb-2 text-xs font-medium text-slate-text">الحالة</p>
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {(Object.keys(TOOTH_STATUS_LABELS_AR) as ToothStatus[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStatus(s)}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
+                    status === s
+                      ? "bg-primary text-white"
+                      : "border border-slate-border bg-surface text-slate-text"
+                  )}
+                >
+                  {TOOTH_STATUS_LABELS_AR[s]}
+                </button>
+              ))}
+            </div>
 
-        <p className="mb-2 text-xs font-medium text-slate-text">الإجراء</p>
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {CHART_PROCEDURE_OPTIONS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setProcedure(p)}
-              className={cn(
-                "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
-                procedure === p
-                  ? "bg-primary/15 text-primary ring-1 ring-primary/40"
-                  : "border border-slate-border bg-white text-slate-text"
-              )}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
+            <p className="mb-2 text-xs font-medium text-slate-text">الإجراء</p>
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {CHART_PROCEDURE_OPTIONS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setProcedure(p)}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
+                    procedure === p
+                      ? "bg-primary/15 text-primary ring-1 ring-primary/40"
+                      : "border border-slate-border bg-white text-slate-text"
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
 
-        <input
-          type="text"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="ملاحظة على هذا السن..."
-          className="mb-4 w-full rounded-lg border border-slate-border px-3 py-2 text-sm"
-        />
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="ملاحظة على هذا السن..."
+              className="mb-4 w-full rounded-lg border border-slate-border px-3 py-2 text-sm"
+            />
+          </>
+        )}
 
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() =>
-              onSave({
-                tooth_number: toothNumber,
-                status,
-                procedure_ar: procedure,
-                note: note.trim() || null,
-              })
-            }
-            className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"
-          >
-            {saving ? "جاري الحفظ..." : "حفظ"}
-          </button>
-          {current && (
+          {readOnly ? (
             <button
               type="button"
-              disabled={saving}
-              onClick={onReset}
-              className="rounded-lg border border-red-200 px-4 py-2.5 text-sm text-red-600 disabled:opacity-60"
+              onClick={onClose}
+              className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white"
             >
-              إعادة سليم
+              إغلاق
             </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() =>
+                  onSave({
+                    tooth_number: toothNumber,
+                    status,
+                    procedure_ar: procedure,
+                    note: note.trim() || null,
+                  })
+                }
+                className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              >
+                {saving ? "جاري الحفظ..." : "حفظ"}
+              </button>
+              {current && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={onReset}
+                  className="rounded-lg border border-red-200 px-4 py-2.5 text-sm text-red-600 disabled:opacity-60"
+                >
+                  إعادة سليم
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg px-4 py-2.5 text-sm text-slate-muted"
+              >
+                إلغاء
+              </button>
+            </>
           )}
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-4 py-2.5 text-sm text-slate-muted"
-          >
-            إلغاء
-          </button>
         </div>
       </div>
     </div>

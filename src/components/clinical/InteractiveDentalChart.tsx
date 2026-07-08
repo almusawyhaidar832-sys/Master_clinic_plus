@@ -70,12 +70,19 @@ export function InteractiveDentalChart(props: InteractiveDentalChartProps) {
 
   const handleOdontogramChange = useCallback(
     (selected: ToothDetail[]) => {
-      if (readOnly || !selected.length) return;
+      if (!selected.length) return;
       const fdi = fdiFromToothDetail(selected[0]);
-      if (fdi != null) setActiveTooth(fdi);
+      if (fdi == null) return;
+      if (readOnly) {
+        if (chartMap[fdi]) setActiveTooth(fdi);
+        return;
+      }
+      setActiveTooth(fdi);
     },
-    [readOnly]
+    [readOnly, chartMap]
   );
+
+  const canInspectTeeth = !readOnly || markedCount > 0;
 
   function handleSave(update: PatientToothState) {
     if (isSession) {
@@ -155,7 +162,7 @@ export function InteractiveDentalChart(props: InteractiveDentalChartProps) {
           layout="circle"
           showHalf="full"
           singleSelect
-          readOnly={readOnly}
+          readOnly={!canInspectTeeth}
           showTooltip={false}
           showLabels={false}
           teethConditions={teethConditions}
@@ -199,27 +206,77 @@ export function InteractiveDentalChart(props: InteractiveDentalChartProps) {
         </div>
       )}
 
-      {markedCount > 0 && !embedded && (
-        <ul className="max-h-28 space-y-0.5 overflow-y-auto text-xs text-slate-muted">
-          {ALL_FDI_TEETH.filter((n) => chartMap[n]).map((n) => {
-            const row = chartMap[n];
-            return (
-              <li key={n} className="tabular-nums">
-                <span className="font-medium text-slate-text">{n}</span>:{" "}
-                {TOOTH_STATUS_LABELS_AR[row.status]}
-                {row.procedure_ar ? ` — ${row.procedure_ar}` : ""}
-                {row.note ? ` (${row.note})` : ""}
-              </li>
-            );
-          })}
-        </ul>
+      {markedCount > 0 && (
+        <div
+          className={cn(
+            "rounded-xl border border-amber-200/80 bg-amber-50/60",
+            embedded ? "p-2.5" : "p-3"
+          )}
+        >
+          <p
+            className={cn(
+              "font-semibold text-amber-950",
+              embedded ? "mb-1.5 text-xs" : "mb-2 text-sm"
+            )}
+          >
+            سجل الأسنان والملاحظات ({markedCount})
+          </p>
+          {readOnly && (
+            <p className="mb-2 text-[11px] text-amber-900/80">
+              اضغط على السن في المخطط لعرض تفاصيله
+            </p>
+          )}
+          <ul
+            className={cn(
+              "space-y-1.5 overflow-y-auto",
+              embedded ? "max-h-36 text-[11px]" : "max-h-40 text-xs"
+            )}
+          >
+            {ALL_FDI_TEETH.filter((n) => chartMap[n]).map((n) => {
+              const row = chartMap[n];
+              return (
+                <li
+                  key={n}
+                  className={cn(
+                    "rounded-lg border border-amber-100/80 bg-white/90 px-2.5 py-1.5 tabular-nums",
+                    readOnly && "cursor-pointer hover:border-primary/30 hover:bg-primary/5"
+                  )}
+                  onClick={() => {
+                    if (readOnly) setActiveTooth(n);
+                  }}
+                  onKeyDown={(e) => {
+                    if (readOnly && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                      setActiveTooth(n);
+                    }
+                  }}
+                  role={readOnly ? "button" : undefined}
+                  tabIndex={readOnly ? 0 : undefined}
+                >
+                  <p className="font-medium text-slate-text">
+                    السن {n} — {TOOTH_STATUS_LABELS_AR[row.status]}
+                    {row.procedure_ar ? ` · ${row.procedure_ar}` : ""}
+                  </p>
+                  {row.note?.trim() ? (
+                    <p className="mt-0.5 font-medium text-amber-950">
+                      ملاحظة: {row.note.trim()}
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 text-slate-muted">بدون ملاحظة</p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
 
-      {activeTooth != null && !readOnly && (
+      {activeTooth != null && (!readOnly || chartMap[activeTooth]) && (
         <ToothProcedureModal
           toothNumber={activeTooth}
           current={chartMap[activeTooth]}
           saving={savingTooth === activeTooth}
+          readOnly={readOnly}
           onClose={() => setActiveTooth(null)}
           onSave={handleSave}
           onReset={handleReset}

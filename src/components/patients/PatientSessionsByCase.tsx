@@ -14,6 +14,8 @@ import {
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
 import { isPersistedTreatmentCaseId } from "@/lib/services/patient-treatment-cases";
 import { VisualMedicalRecord } from "@/components/clinical/VisualMedicalRecord";
+import { SessionPrescriptionPanel } from "@/components/prescriptions/SessionPrescriptionPanel";
+import { useClinicModules } from "@/contexts/ClinicModulesContext";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
 import { hasClinicalData } from "@/lib/clinical/types";
 import { opName, type PatientOperation } from "@/types";
@@ -137,6 +139,8 @@ function SessionRow({
   allowEdit,
   showContinueActions,
   clinicalView,
+  showPrescriptions = false,
+  prescriptionPortal = "doctor",
 }: {
   item: CaseSessionItem;
   totalInCase: number;
@@ -149,6 +153,8 @@ function SessionRow({
   allowEdit?: boolean;
   showContinueActions?: boolean;
   clinicalView?: boolean;
+  showPrescriptions?: boolean;
+  prescriptionPortal?: "doctor" | "accountant";
 }) {
   const op = item.operation;
   const [refundOpen, setRefundOpen] = useState(false);
@@ -235,12 +241,25 @@ function SessionRow({
       <div className="mt-2 border-t border-slate-border/50 pt-2">
         <VisualMedicalRecord
           operationId={op.id}
-          portal="doctor"
+          portal={prescriptionPortal}
           initialData={clinical}
           onSaved={onClinicalSaved}
           collapsible
           defaultOpen={hasClinical}
+          readOnly={!clinicalView}
+          accountantSingleChart={!clinicalView}
         />
+        {showPrescriptions && op.doctor_id && (
+          <SessionPrescriptionPanel
+            className="mt-2"
+            operationId={op.id}
+            patientId={patientId}
+            doctorId={op.doctor_id}
+            queueEntryId={op.queue_entry_id}
+            portal={prescriptionPortal}
+            readOnly
+          />
+        )}
         <div className="mt-2 flex flex-wrap gap-2">
           {canRefund && (
             <button
@@ -324,6 +343,8 @@ function CaseAccordion({
   allowEdit,
   showContinueActions,
   clinicalView,
+  showPrescriptions = false,
+  prescriptionPortal = "doctor",
 }: {
   group: PatientCaseGroup;
   expanded: boolean;
@@ -336,6 +357,8 @@ function CaseAccordion({
   allowEdit?: boolean;
   showContinueActions?: boolean;
   clinicalView?: boolean;
+  showPrescriptions?: boolean;
+  prescriptionPortal?: "doctor" | "accountant";
 }) {
   const linkedCaseId =
     group.caseId && isPersistedTreatmentCaseId(group.caseId)
@@ -433,6 +456,8 @@ function CaseAccordion({
                 allowEdit={allowEdit}
                 showContinueActions={showContinueActions}
                 clinicalView={clinicalView}
+                showPrescriptions={showPrescriptions}
+                prescriptionPortal={prescriptionPortal}
               />
             ))
           )}
@@ -454,7 +479,10 @@ export function PatientSessionsByCase({
   showContinueActions = true,
   viewMode = "accountant",
 }: PatientSessionsByCaseProps) {
+  const { hasModule } = useClinicModules();
+  const showPrescriptions = hasModule("smart_prescriptions");
   const clinicalView = viewMode === "clinical";
+  const prescriptionPortal = clinicalView ? "doctor" : "accountant";
 
   const caseGroups = useMemo(
     () =>
@@ -501,6 +529,8 @@ export function PatientSessionsByCase({
           allowEdit={allowEdit}
           showContinueActions={showContinueActions}
           clinicalView={clinicalView}
+          showPrescriptions={showPrescriptions}
+          prescriptionPortal={prescriptionPortal}
         />
       ))}
     </div>

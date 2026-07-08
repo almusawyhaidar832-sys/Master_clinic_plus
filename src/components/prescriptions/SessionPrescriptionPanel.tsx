@@ -522,19 +522,30 @@ export function SessionPrescriptionPanel({
             <label className={cn("mb-1.5", examMode ? "mc-exam-label" : "mc-label")}>
               ملاحظات للمراجع
             </label>
-            <textarea
-              className={cn(
-                "w-full rounded-lg border px-3 py-2 text-sm disabled:opacity-70",
-                examMode
-                  ? "mc-exam-input min-h-[72px]"
-                  : "border-slate-border bg-surface-card focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              )}
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              disabled={isReadOnlyView}
-              placeholder="تعليمات عامة..."
-            />
+            {isReadOnlyView ? (
+              notes.trim() ? (
+                <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2.5 text-sm text-slate-800 whitespace-pre-wrap">
+                  {notes.trim()}
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-muted">
+                  لا توجد ملاحظات للمراجع في هذه الوصفة
+                </p>
+              )
+            ) : (
+              <textarea
+                className={cn(
+                  "w-full rounded-lg border px-3 py-2 text-sm disabled:opacity-70",
+                  examMode
+                    ? "mc-exam-input min-h-[72px]"
+                    : "border-slate-border bg-surface-card focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                )}
+                rows={2}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="تعليمات عامة..."
+              />
+            )}
           </div>
 
           {!isReadOnlyView && !examMode && (
