@@ -14,28 +14,45 @@ export function defaultClinicProfitPeriod(): { from: string; to: string } {
   return monthDateRange(currentMonthYear());
 }
 
-async function fetchProfitStatsWithPortalFallback(
-  from: string,
-  to: string,
-  clinicId: string
-): Promise<ClinicProfitStats> {
-  const portals: AuthPortalId[] = ["accountant", "admin"];
-
-  let lastError: Error | null = null;
-  for (const portal of portals) {
-    try {
-      return await fetchClinicProfitStatsForPeriodViaApi(
-        from,
-        to,
-        portal,
-        clinicId
-      );
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-    }
+/** يختار النتيجة الأكمل — يفضّل من فيها شحن رصيد ثم أعلى صافي ربح */
+function pickBestProfitStats(candidates: ClinicProfitStats[]): ClinicProfitStats {
+  if (candidates.length === 0) {
+    throw new Error("تعذر تحميل بيانات الأرباح");
   }
 
-  throw lastError ?? new Error("تعذر تحميل بيانات الأرباح");
+  return candidates.reduce((best, cur) => {
+    if (cur.balanceTopupsTotal > best.balanceTopupsTotal + 0.01) return cur;
+    if (best.balanceTopupsTotal > cur.balanceTopupsTotal + 0.01) return best;
+    if (cur.netProfit > best.netProfit + 0.01) return cur;
+    return best;
+  });
+}
+
+/** يجلب من جلسة المحاسب والإدارة — يطابق رقم المحاسب على لوحة المالك */
+async function fetchProfitStatsFromAllPortals(
+  from: string,
+  to: string,
+  clinicId: string,
+  preferredPortal: AuthPortalId = "accountant"
+): Promise<ClinicProfitStats> {
+  const otherPortal: AuthPortalId =
+    preferredPortal === "accountant" ? "admin" : "accountant";
+  const portals: AuthPortalId[] = [preferredPortal, otherPortal];
+
+  const results = await Promise.all(
+    portals.map((portal) =>
+      fetchClinicProfitStatsForPeriodViaApi(from, to, portal, clinicId).catch(
+        () => null
+      )
+    )
+  );
+
+  const ok = results.filter((r): r is ClinicProfitStats => r !== null);
+  if (ok.length === 0) {
+    throw new Error("تعذر تحميل بيانات الأرباح");
+  }
+
+  return pickBestProfitStats(ok);
 }
 
 /** يدمج شحن الرصيد من جدول الحركات إن لم يعكسه الـ API */
@@ -75,21 +92,31 @@ async function mergeClientBalanceTopupsIfNeeded(
 /**
  * مصدر موحّد للإدارة والمحاسب:
  * صافي الربح = حصة العيادة − مصروفات − رواتب + شحن الرصيد
- * (نفس fetchClinicProfitStatsForPeriod على السيرفر)
  */
 export async function fetchAlignedClinicProfitStats(
   clinicId: string,
-  _portal: AuthPortalId = "accountant",
+  portal: AuthPortalId = "accountant",
   period: { from: string; to: string } = defaultClinicProfitPeriod()
 ): Promise<ClinicProfitStats> {
-  const { createClient } = await import("@/lib/supabase/client");
-
-  let stats = await fetchProfitStatsWithPortalFallback(
-    period.from,
-    period.to,
-    clinicId
+  const { createClient, createClientForPortal } = await import(
+    "@/lib/supabase/client"
   );
 
+  let stats = await fetchProfitStatsFromAllPortals(
+    period.from,
+    period.to,
+    clinicId,
+    portal
+  );
+
+  for (const p of ["accountant", "admin"] as const) {
+    stats = await mergeClientBalanceTopupsIfNeeded(
+      createClientForPortal(p),
+      clinicId,
+      stats,
+      period
+    );
+  }
   stats = await mergeClientBalanceTopupsIfNeeded(
     createClient(),
     clinicId,

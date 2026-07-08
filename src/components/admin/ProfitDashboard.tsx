@@ -55,7 +55,7 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
     try {
       const period = defaultClinicProfitPeriod();
       const [data, totalDebt] = await Promise.all([
-        fetchAlignedClinicProfitStats(clinicId, "admin", period),
+        fetchAlignedClinicProfitStats(clinicId, "accountant", period),
         fetchTotalOutstandingDebt(period.from, period.to, clinicId),
       ]);
       setStats(

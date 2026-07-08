@@ -20,7 +20,10 @@ export async function fetchClinicProfitStatsForPeriodViaApi(
 
   const res = await fetch(`/api/clinic/profit-stats?${params.toString()}`, {
     credentials: "include",
-    headers: authPortalHeaders(portal),
+    headers: {
+      ...authPortalHeaders(portal),
+      ...(clinicId ? { "X-Clinic-Id": clinicId } : {}),
+    },
     cache: "no-store",
   });
   const json = (await res.json().catch(() => ({}))) as ClinicProfitStats & {

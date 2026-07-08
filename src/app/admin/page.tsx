@@ -49,7 +49,8 @@ export default function AdminHomePage() {
 
   const loadStats = useCallback(async (clinic: string) => {
     const period = defaultClinicProfitPeriod();
-    return fetchAlignedClinicProfitStats(clinic, "admin", period);
+    // يفضّل جلسة المحاسب — نفس رقم لوحة المحاسب
+    return fetchAlignedClinicProfitStats(clinic, "accountant", period);
   }, []);
 
   useEffect(() => {
