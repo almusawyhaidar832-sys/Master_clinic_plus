@@ -293,6 +293,64 @@ export async function fetchRegisteredAssistantPayrollClinicDeduction(
   return sumAssistantPayrollClinicShare(lines, "registered");
 }
 
+export function sumAssistantPayrollDoctorDeduction(
+  lines: DailyAssistantPayrollLine[],
+  mode: "all" | "registered" | "confirmed" = "all"
+): number {
+  return roundMoney(
+    lines
+      .filter((line) => {
+        if (mode === "registered") return line.statusLabel === "أجر مسجّل";
+        if (mode === "confirmed") return line.statusLabel === "صرف مؤكّد";
+        return true;
+      })
+      .reduce((sum, line) => sum + line.doctorDeduction, 0)
+  );
+}
+
+/** حصة الطبيب من أجور مساعدين — مجمّعة حسب الطبيب (نفس منطق الكشف المالي) */
+export async function fetchRegisteredAssistantPayrollDoctorDeductionMap(
+  supabase: SupabaseClient,
+  clinicId: string,
+  input: { dateFrom: string; dateTo: string },
+  doctorIds?: string[]
+): Promise<Map<string, number>> {
+  const lines = await fetchDailyAssistantPayrollLines(supabase, clinicId, input);
+  const registered = lines.filter((line) => line.statusLabel === "أجر مسجّل");
+  const byDoctor = sumAssistantPayrollByDoctor(registered);
+  const map = new Map<string, number>();
+
+  for (const [doctorId, totals] of byDoctor) {
+    if (doctorIds?.length && !doctorIds.includes(doctorId)) continue;
+    if (totals.doctorDeduction <= FINANCIAL_EPSILON) continue;
+    map.set(doctorId, totals.doctorDeduction);
+  }
+
+  return map;
+}
+
+/** حصة طبيب واحد من أجور مساعده المسجّلة في شهر */
+export async function fetchRegisteredAssistantPayrollDoctorDeductionForAssistant(
+  supabase: SupabaseClient,
+  clinicId: string,
+  assistantId: string,
+  from: string,
+  to: string
+): Promise<number> {
+  const lines = await fetchDailyAssistantPayrollLines(supabase, clinicId, {
+    dateFrom: from,
+    dateTo: to,
+  });
+  return roundMoney(
+    lines
+      .filter(
+        (line) =>
+          line.assistantId === assistantId && line.statusLabel === "أجر مسجّل"
+      )
+      .reduce((sum, line) => sum + line.doctorDeduction, 0)
+  );
+}
+
 export function sumAssistantPayrollByDoctor(
   lines: DailyAssistantPayrollLine[]
 ): Map<
