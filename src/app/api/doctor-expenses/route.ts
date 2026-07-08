@@ -11,6 +11,7 @@ import {
 } from "@/lib/services/doctor-expense-deduction";
 import { archiveDoctorExpenseToHistory } from "@/lib/services/invoice-archive";
 import { writeAuditLog } from "@/lib/audit/write-audit-log";
+import { insertResilient } from "@/lib/db/resilient-insert";
 
 const BUCKET = "doctor-expense-invoices";
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -158,9 +159,10 @@ export async function POST(req: NextRequest) {
     const doctorShare = doctorShareFromExpense(amount, percentageSplit);
     const clinicShare = Math.round((amount - doctorShare) * 100) / 100;
 
-    const { data: expense, error: insertErr } = await admin
-      .from("doctor_expenses")
-      .insert({
+    const { data: expense, error: insertErr } = await insertResilient<{ id: string }>(
+      admin,
+      "doctor_expenses",
+      {
         clinic_id: clinicId,
         doctor_id: doctorId,
         amount,
@@ -171,9 +173,16 @@ export async function POST(req: NextRequest) {
         invoice_file_name: invoiceFileName,
         invoice_mime_type: invoiceMimeType,
         created_by: caller.id,
-      })
-      .select("id")
-      .single();
+      },
+      {
+        optionalColumns: [
+          "invoice_storage_path",
+          "invoice_file_name",
+          "invoice_mime_type",
+          "created_by",
+        ],
+      }
+    );
 
     if (insertErr || !expense?.id) {
       if (uploadedPath) {

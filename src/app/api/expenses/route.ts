@@ -3,6 +3,7 @@ import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { recordFinancialTransaction } from "@/lib/services/clinic-profit";
+import { insertResilient } from "@/lib/db/resilient-insert";
 
 /**
  * POST /api/expenses
@@ -39,18 +40,19 @@ export async function POST(req: NextRequest) {
 
     const admin = getAdminClient();
 
-    const { data: expense, error: insertErr } = await admin
-      .from("expenses")
-      .insert({
+    const { data: expense, error: insertErr } = await insertResilient<{ id: string }>(
+      admin,
+      "expenses",
+      {
         clinic_id: clinicId,
         description_ar,
         amount,
         expense_date,
         category_id,
         created_by: caller.id,
-      })
-      .select("id")
-      .single();
+      },
+      { optionalColumns: ["category_id", "created_by"] }
+    );
 
     if (insertErr || !expense?.id) {
       return NextResponse.json(
