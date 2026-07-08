@@ -12,14 +12,14 @@ import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { notifyBalanceTopUpRefresh } from "@/lib/services/clinic-profit";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn, formatCurrency, todayISO } from "@/lib/utils";
-import type { BalanceTopUpTarget } from "@/lib/services/balance-topup";
+import type { BalanceTopUpTarget, BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
 
 type DoctorOption = { id: string; name: string };
 
 interface BalanceTopUpModalProps {
   open: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (detail: BalanceTopUpSuccessDetail) => void;
   portal?: AuthPortalId;
 }
 
@@ -130,6 +130,7 @@ export function BalanceTopUpModal({
         success?: boolean;
         amount?: number;
         target?: BalanceTopUpTarget;
+        doctor_id?: string | null;
       };
 
       if (!res.ok) {
@@ -145,20 +146,29 @@ export function BalanceTopUpModal({
         target,
       });
 
-      if (json.amount) {
+      const toppedAmount = Number(json.amount ?? parsed);
+      const successDetail: BalanceTopUpSuccessDetail = {
+        target,
+        amount: toppedAmount,
+        transactionDate,
+        doctorId: toppedDoctorId,
+      };
+
+      onSuccess?.(successDetail);
+
+      if (toppedAmount > 0) {
         if (target === "clinic") {
           window.alert(
-            `تم شحن ${formatCurrency(json.amount)} لربح العيادة.\nيظهر في «توضيح الربح» والكشف المالي لنفس تاريخ الشحن.`
+            `تم شحن ${formatCurrency(toppedAmount)} لربح العيادة.\nيظهر في «صافي الربح الحقيقي» والكشف المالي لنفس تاريخ الشحن.`
           );
         } else {
           const doctorName =
             doctors.find((d) => d.id === toppedDoctorId)?.name ?? t("doctor");
           window.alert(
-            `تم شحن ${formatCurrency(json.amount)} لرصيد ${doctorName}.\nيرتفع الرصيد فوراً في محفظة الطبيب والكشف المالي لنفس تاريخ الشحن.`
+            `تم شحن ${formatCurrency(toppedAmount)} لرصيد ${doctorName}.\nيرتفع الرصيد فوراً في محفظة الطبيب والكشف المالي لنفس تاريخ الشحن.`
           );
         }
       }
-      onSuccess?.();
       onClose();
     } catch {
       setError(t("errServerConnection"));
@@ -355,7 +365,7 @@ export function BalanceTopUpModal({
 
 interface BalanceTopUpButtonProps {
   portal?: AuthPortalId;
-  onSuccess?: () => void;
+  onSuccess?: (detail: BalanceTopUpSuccessDetail) => void;
   className?: string;
   variant?: "primary" | "outline" | "premium";
   size?: "sm" | "md" | "lg";

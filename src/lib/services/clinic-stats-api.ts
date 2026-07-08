@@ -9,10 +9,11 @@ export async function fetchClinicProfitStatsForPeriodViaApi(
   portal: AuthPortalId = "admin"
 ): Promise<ClinicProfitStats> {
   const res = await fetch(
-    `/api/clinic/profit-stats?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    `/api/clinic/profit-stats?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&_t=${Date.now()}`,
     {
       credentials: "include",
       headers: authPortalHeaders(portal),
+      cache: "no-store",
     }
   );
   const json = (await res.json().catch(() => ({}))) as ClinicProfitStats & {

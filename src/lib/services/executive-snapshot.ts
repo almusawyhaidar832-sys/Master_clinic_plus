@@ -527,6 +527,19 @@ export interface ReportAlignedProfitMetrics {
   newPatients: number;
 }
 
+/** تحديث فوري لصافي الربح بعد شحن رصيد العيادة ضمن الفترة المعروضة */
+export function applyClinicTopUpToSnapshot<T extends ExecutiveSnapshotCore>(
+  snap: T,
+  amount: number
+): T {
+  const topups = roundMoney(Number(snap.balance_topups ?? 0) + amount);
+  return {
+    ...snap,
+    balance_topups: topups,
+    net_profit: roundMoney(Number(snap.net_profit ?? 0) + amount),
+  };
+}
+
 /** محاذاة اللوحة التنفيذية مع الكشف المالي — علاج وكشفيات منفصلان في العرض */
 export function applyReportAlignedProfitMetrics<T extends ExecutiveSnapshotCore>(
   snap: T,

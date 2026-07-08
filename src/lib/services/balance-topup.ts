@@ -5,6 +5,13 @@ export const BALANCE_TOPUP_DOCTOR_TYPE = "balance_topup_doctor";
 
 export type BalanceTopUpTarget = "clinic" | "doctor";
 
+export interface BalanceTopUpSuccessDetail {
+  target: BalanceTopUpTarget;
+  amount: number;
+  transactionDate: string;
+  doctorId?: string | null;
+}
+
 export interface ClinicBalanceTopUpLine {
   id: string;
   amount: number;

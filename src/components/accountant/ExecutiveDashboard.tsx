@@ -13,9 +13,12 @@ import {
   mergeExecutiveDashboardMetrics,
   resolveExecutiveSalaryDeduction,
   applyReportAlignedProfitMetrics,
+  applyClinicTopUpToSnapshot,
   type ExecutiveSnapshotCore,
   type ReportAlignedProfitMetrics,
 } from "@/lib/services/executive-snapshot";
+import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
+import type { BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import {
   TopDoctorsCard,
@@ -342,16 +345,21 @@ export function ExecutiveDashboard() {
     if (!options?.silent) setLoading(true);
     setFetchError(null);
     const { from, to } = getRange();
+    const cacheBust = Date.now();
 
     try {
     const [snapRes, supplementRes] = await Promise.all([
       supabase.rpc("get_clinic_financial_snapshot", {
         p_clinic_id: clinicId, p_from: from, p_to: to,
       }),
-      fetch(`/api/executive/supplement?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
-        credentials: "include",
-        headers: authPortalHeaders("accountant"),
-      }),
+      fetch(
+        `/api/executive/supplement?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&_t=${cacheBust}`,
+        {
+          credentials: "include",
+          headers: authPortalHeaders("accountant"),
+          cache: "no-store",
+        }
+      ),
     ]);
 
     const supplementJson = supplementRes.ok
@@ -381,6 +389,39 @@ export function ExecutiveDashboard() {
       ? reportAligned.salariesDeducted
       : resolveExecutiveSalaryDeduction(payrollAccruals, salariesPaidLegacy);
 
+    let profitFallback: ReportAlignedProfitMetrics | null = reportAligned ?? null;
+    if (!profitFallback) {
+      try {
+        const profitStats = await fetchClinicProfitStatsForPeriodViaApi(
+          from,
+          to,
+          "accountant"
+        );
+        profitFallback = {
+          netProfit: profitStats.netProfit,
+          clinicShareTotal: profitStats.clinicShareTotal,
+          totalExpenses: profitStats.totalExpenses,
+          reviewFees: profitStats.reviewFeesTotal,
+          balanceTopups: profitStats.balanceTopupsTotal,
+          salariesDeducted: profitStats.totalSalariesPaid,
+          doctorShareTotal: profitStats.doctorShareTotal,
+          revenue: Number((snapRes.data as Record<string, unknown>)?.revenue ?? 0),
+          collected: profitStats.cashInflow,
+          operationCount: Number(
+            (snapRes.data as Record<string, unknown>)?.operation_count ?? 0
+          ),
+          patientCount: Number(
+            (snapRes.data as Record<string, unknown>)?.patient_count ?? 0
+          ),
+          newPatients: Number(
+            (snapRes.data as Record<string, unknown>)?.new_patients ?? 0
+          ),
+        };
+      } catch {
+        profitFallback = null;
+      }
+    }
+
     if (snapRes.error) {
       setFetchError(
         snapRes.error.message || t("execLoadSummaryError")
@@ -399,10 +440,10 @@ export function ExecutiveDashboard() {
               ),
             }
           ) as unknown as Snapshot;
-          return reportAligned
+          return profitFallback
             ? (applyReportAlignedProfitMetrics(
                 merged as unknown as ExecutiveSnapshotCore,
-                reportAligned
+                profitFallback
               ) as unknown as Snapshot)
             : merged;
         })()
@@ -454,6 +495,19 @@ export function ExecutiveDashboard() {
     }
   }, [clinicId, getRange, period, supabase, t]);
 
+  const handleBalanceTopUpSuccess = useCallback(
+    (detail: BalanceTopUpSuccessDetail) => {
+      if (detail.target !== "clinic" || detail.amount <= 0) return;
+      const { from, to } = getRange();
+      if (detail.transactionDate < from || detail.transactionDate > to) return;
+      setSnap((prev) =>
+        prev ? applyClinicTopUpToSnapshot(prev, detail.amount) : prev
+      );
+      void fetchData({ silent: true });
+    },
+    [fetchData, getRange]
+  );
+
   useEffect(() => {
     if (clinicLoading || clinicId === undefined) return;
     if (!clinicId) {
@@ -485,7 +539,7 @@ export function ExecutiveDashboard() {
         <div className="flex flex-wrap items-center gap-2">
           <BalanceTopUpButton
             portal="accountant"
-            onSuccess={() => void fetchData({ silent: true })}
+            onSuccess={handleBalanceTopUpSuccess}
           />
           <div className="flex gap-1 rounded-xl border border-slate-border bg-surface-card p-1 shadow-card">
           {PERIODS.map((p) => (

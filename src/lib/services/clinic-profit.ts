@@ -53,7 +53,17 @@ export function notifyBalanceTopUpRefresh(options: {
 
   notifyClinicProfitRefresh(options.clinicId);
 
-  if (options.target === "doctor" && options.doctorId) {
+  if (options.target === "clinic") {
+    notifyClinicSync({
+      topic: ["profit", "financial"],
+      clinicId: options.clinicId,
+      source: "mutation",
+      force: true,
+    });
+    return;
+  }
+
+  if (options.doctorId) {
     notifyClinicSync({
       topic: "financial",
       clinicId: options.clinicId,

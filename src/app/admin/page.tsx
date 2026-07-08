@@ -27,6 +27,8 @@ import { ActivityFeed } from "@/components/admin/ActivityFeed";
 import { AdminDoctorPerformance } from "@/components/admin/AdminDoctorPerformance";
 import { BalanceTopUpButton } from "@/components/finance/BalanceTopUpModal";
 import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
+import { useClinicSync } from "@/hooks/useClinicSync";
+import type { BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
 
 export default function AdminHomePage() {
   const [stats, setStats] = useState<ClinicProfitStats | null>(null);
@@ -34,6 +36,7 @@ export default function AdminHomePage() {
   const [doctorCount, setDoctorCount] = useState(0);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [clinicId, setClinicId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -41,18 +44,19 @@ export default function AdminHomePage() {
       const profile = await getAuthProfile(supabase);
       setIsSuperAdmin(profile?.role === "super_admin");
       const active = await getActiveClinicId(supabase);
-      const clinicId = active?.clinicId;
+      const activeClinicId = active?.clinicId ?? null;
+      setClinicId(activeClinicId);
       const [profit, doctors, pending] = await Promise.all([
         (async () => {
           const { from, to } = monthDateRange(currentMonthYear());
           return fetchClinicProfitStatsForPeriodViaApi(from, to, "admin");
         })(),
         fetchDoctorLedgers(supabase),
-        clinicId
+        activeClinicId
           ? supabase
               .from("doctor_withdrawals")
               .select("*", { count: "exact", head: true })
-              .eq("clinic_id", clinicId)
+              .eq("clinic_id", activeClinicId)
               .eq("status", "pending")
           : Promise.resolve({ count: 0 }),
       ]);
@@ -63,7 +67,33 @@ export default function AdminHomePage() {
     load();
   }, [refreshKey]);
 
-  const reloadStats = () => setRefreshKey((k) => k + 1);
+  useClinicSync({
+    topics: ["profit", "financial"],
+    clinicId,
+    onRefresh: () => setRefreshKey((k) => k + 1),
+    enabled: !!clinicId,
+  });
+
+  const reloadStats = (detail?: BalanceTopUpSuccessDetail) => {
+    const { from, to } = monthDateRange(currentMonthYear());
+    if (
+      detail?.target === "clinic" &&
+      detail.amount > 0 &&
+      detail.transactionDate >= from &&
+      detail.transactionDate <= to
+    ) {
+      setStats((prev) =>
+        prev
+          ? {
+              ...prev,
+              netProfit: prev.netProfit + detail.amount,
+              balanceTopupsTotal: prev.balanceTopupsTotal + detail.amount,
+            }
+          : prev
+      );
+    }
+    setRefreshKey((k) => k + 1);
+  };
 
   const monthRange = monthDateRange(currentMonthYear());
 
