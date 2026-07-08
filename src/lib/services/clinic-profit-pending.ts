@@ -36,10 +36,19 @@ function hydratePending(): void {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
-    const parsed = JSON.parse(raw) as Record<string, PendingClinicTopUp>;
+    const parsed = JSON.parse(raw) as Record<
+      string,
+      PendingClinicTopUp & { delta?: number }
+    >;
     for (const [clinicId, pending] of Object.entries(parsed)) {
-      if (pending?.amount > 0) {
-        pendingByClinic.set(clinicId, pending);
+      const amount = roundMoney(
+        Number(pending?.amount ?? pending?.delta ?? 0)
+      );
+      if (amount > 0 && pending?.transactionDate) {
+        pendingByClinic.set(clinicId, {
+          amount,
+          transactionDate: pending.transactionDate.slice(0, 10),
+        });
       }
     }
   } catch {

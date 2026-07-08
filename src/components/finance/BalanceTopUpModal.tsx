@@ -149,17 +149,17 @@ export function BalanceTopUpModal({
 
       const toppedDoctorId =
         target === "doctor" ? (json.doctor_id ?? doctorId) : undefined;
-      notifyBalanceTopUpRefresh({
-        clinicId: clinicId ?? undefined,
-        doctorId: toppedDoctorId,
-        target,
-      });
-
       const toppedAmount = Number(json.amount ?? parsed);
       const doctorWallet = json.doctor_wallet ?? undefined;
       if (target === "clinic" && clinicId && toppedAmount > 0) {
         registerPendingClinicTopUp(clinicId, toppedAmount, transactionDate);
       }
+
+      notifyBalanceTopUpRefresh({
+        clinicId: clinicId ?? undefined,
+        doctorId: toppedDoctorId,
+        target,
+      });
       if (target === "doctor" && toppedDoctorId) {
         if (doctorWallet) {
           registerPendingDoctorWallet(toppedDoctorId, doctorWallet);

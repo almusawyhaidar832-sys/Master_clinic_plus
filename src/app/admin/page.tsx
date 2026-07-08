@@ -33,7 +33,7 @@ import { BalanceTopUpButton } from "@/components/finance/BalanceTopUpModal";
 import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { useClinicSync } from "@/hooks/useClinicSync";
-import { subscribePendingClinicTopUpChanges, applyOptimisticClinicTopUp } from "@/lib/services/clinic-profit-pending";
+import { subscribePendingClinicTopUpChanges } from "@/lib/services/clinic-profit-pending";
 
 export default function AdminHomePage() {
   const { clinicId: activeClinicId } = useActiveClinicId();
@@ -48,8 +48,7 @@ export default function AdminHomePage() {
 
   const loadStats = useCallback(async (clinic: string) => {
     const period = defaultClinicProfitPeriod();
-    const stats = await fetchAlignedClinicProfitStats(clinic, "accountant", period);
-    return applyOptimisticClinicTopUp(clinic, stats, period);
+    return fetchAlignedClinicProfitStats(clinic, "accountant", period);
   }, []);
 
   useEffect(() => {

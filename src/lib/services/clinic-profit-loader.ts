@@ -5,7 +5,7 @@ import {
   applyClinicTopUpToProfitStats,
   type ClinicProfitStats,
 } from "@/lib/services/clinic-stats";
-import { clearPendingClinicTopUp } from "@/lib/services/clinic-profit-pending";
+import { applyOptimisticClinicTopUp } from "@/lib/services/clinic-profit-pending";
 import { BALANCE_TOPUP_CLINIC_TYPE } from "@/lib/services/balance-topup";
 import { currentMonthYear, monthDateRange } from "@/lib/utils";
 
@@ -85,7 +85,7 @@ async function mergeClientBalanceTopupsIfNeeded(
 }
 
 /**
- * مصدر موحّد للإدارة والمحاسب — السيرفر فقط (بدون ذاكرة معلّقة).
+ * مصدر موحّد للإدارة والمحاسب — السيرفر + شحن معلّق (آخر شحن ناجح فقط).
  * صافي الربح = حصة العيادة − مصروفات − رواتب + شحن الرصيد
  */
 export async function fetchAlignedClinicProfitStats(
@@ -106,9 +106,5 @@ export async function fetchAlignedClinicProfitStats(
     );
   }
 
-  if (stats.balanceTopupsTotal > 0) {
-    clearPendingClinicTopUp(clinicId);
-  }
-
-  return stats;
+  return applyOptimisticClinicTopUp(clinicId, stats, period);
 }

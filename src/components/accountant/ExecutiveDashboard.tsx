@@ -14,13 +14,13 @@ import {
   resolveExecutiveSalaryDeduction,
   applyReportAlignedProfitMetrics,
   mergeReportAlignedWithSnapshot,
-  applyClinicTopUpToSnapshot,
   type ExecutiveSnapshotCore,
   type ReportAlignedProfitMetrics,
 } from "@/lib/services/executive-snapshot";
 import {
   fetchAlignedClinicProfitStats,
 } from "@/lib/services/clinic-profit-loader";
+import { subscribePendingClinicTopUpChanges } from "@/lib/services/clinic-profit-pending";
 import type { BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import {
@@ -506,15 +506,9 @@ export function ExecutiveDashboard() {
   const handleBalanceTopUpSuccess = useCallback(
     (detail: BalanceTopUpSuccessDetail) => {
       if (detail.target !== "clinic" || detail.amount <= 0) return;
-      const { from, to } = getRange();
-      if (detail.transactionDate < from || detail.transactionDate > to) return;
-
-      setSnap((prev) => {
-        if (!prev) return prev;
-        return applyClinicTopUpToSnapshot(prev, detail.amount) as Snapshot;
-      });
+      void fetchData({ silent: true });
     },
-    [getRange]
+    [fetchData]
   );
 
   useEffect(() => {
@@ -532,6 +526,12 @@ export function ExecutiveDashboard() {
     onRefresh: () => fetchData({ silent: true }),
     enabled: !!clinicId,
   });
+
+  useEffect(() => {
+    return subscribePendingClinicTopUpChanges(() => {
+      void fetchData({ silent: true });
+    });
+  }, [fetchData]);
 
   const PERIODS = [
     { key: "today" as Period, label: t("today") },
