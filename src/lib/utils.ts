@@ -164,6 +164,50 @@ export function monthDateRange(monthYear: string): { from: string; to: string } 
   };
 }
 
+export type ProfitPeriodPreset = "today" | "week" | "month";
+
+/** نطاق الفترة لتوضيح الربح — يطابق لوحة المحاسب (الأسبوع = آخر 7 أيام) */
+export function profitPeriodDateRange(
+  preset: ProfitPeriodPreset
+): { from: string; to: string } {
+  const todayStr = todayISO();
+  switch (preset) {
+    case "today":
+      return { from: todayStr, to: todayStr };
+    case "week": {
+      const w = new Date();
+      w.setDate(w.getDate() - 6);
+      return { from: localDateISO(w), to: todayStr };
+    }
+    case "month":
+    default:
+      return monthDateRange(currentMonthYear());
+  }
+}
+
+export function profitPeriodLabelAr(preset: ProfitPeriodPreset): string {
+  switch (preset) {
+    case "today":
+      return "اليوم";
+    case "week":
+      return "الأسبوع";
+    case "month":
+      return "الشهر";
+  }
+}
+
+/** يحدد التبويب الافتراضي من نطاق التاريخ الممرَّر */
+export function inferProfitPeriodFromRange(
+  from: string,
+  to: string
+): ProfitPeriodPreset {
+  const today = profitPeriodDateRange("today");
+  const week = profitPeriodDateRange("week");
+  if (from === today.from && to === today.to) return "today";
+  if (from === week.from && to === week.to) return "week";
+  return "month";
+}
+
 /** Last N months including current (YYYY-MM) */
 export function listRecentMonthYears(count = 18): string[] {
   const out: string[] = [];

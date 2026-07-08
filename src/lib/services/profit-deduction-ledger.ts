@@ -23,6 +23,13 @@ export interface ProfitLedgerLine {
   title: string;
   subtitle?: string;
   actorName?: string;
+  /** إجمالي أجر المساعد في هذه الدفعة (وليس تراكم الشهر) */
+  totalAmount?: number;
+  /** ما يُخصم من رصيد الطبيب في هذه الدفعة */
+  doctorShare?: number;
+  /** ما يُخصم من ربح العيادة في هذه الدفعة */
+  clinicShare?: number;
+  doctorSharePct?: number;
 }
 
 export interface ProfitLedgerGroup {
@@ -58,10 +65,165 @@ function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function payrollCategoryFromType(type: string): ProfitLedgerCategory {
-  if (type === "assistant_payroll_clinic") return "assistant_payroll";
+function payrollCategoryFromType(type: string): ProfitLedgerCategory | null {
+  if (type === "assistant_payroll_clinic") return null;
   if (type === "doctor_salary_paid") return "doctor_salary";
   return "staff_salary";
+}
+
+function extractAssistantNameFromDesc(desc: string | null | undefined): string {
+  const text = String(desc ?? "").trim();
+  const m = text.match(/مساعد\s+(.+?)\s+—/);
+  if (m?.[1]) return m[1].trim();
+  return "مساعد";
+}
+
+type AssistantPayrollTxRow = {
+  id: string;
+  doctor_id: string | null;
+  amount: number;
+  type: string;
+  reference_id: string | null;
+  description_ar: string | null;
+  transaction_date: string;
+};
+
+/** دمج حركات الطبيب + العيادة لكل دفعة صرف — يوم بيوم بدون تراكم */
+async function appendAssistantPayrollBatchedLines(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string,
+  getGroup: (cat: ProfitLedgerCategory) => ProfitLedgerGroup,
+  payrollParentIds: string[]
+): Promise<void> {
+  const { data } = await supabase
+    .from("transactions")
+    .select(
+      "id, doctor_id, amount, type, reference_id, description_ar, transaction_date"
+    )
+    .eq("clinic_id", clinicId)
+    .gte("transaction_date", from)
+    .lte("transaction_date", to)
+    .in("type", ["assistant_payroll_doctor", "assistant_payroll_clinic"])
+    .order("transaction_date", { ascending: false });
+
+  const batches = new Map<
+    string,
+    { doctor?: AssistantPayrollTxRow; clinic?: AssistantPayrollTxRow }
+  >();
+
+  for (const raw of data ?? []) {
+    const tx = raw as AssistantPayrollTxRow;
+    const key = tx.reference_id ?? tx.id;
+    const batch = batches.get(key) ?? {};
+    if (tx.type === "assistant_payroll_doctor") batch.doctor = tx;
+    else if (tx.type === "assistant_payroll_clinic") batch.clinic = tx;
+    batches.set(key, batch);
+  }
+
+  const parentIds = new Set<string>();
+  for (const batch of batches.values()) {
+    const ref = batch.doctor?.reference_id ?? batch.clinic?.reference_id;
+    if (ref) parentIds.add(parsePayrollParentId(ref));
+  }
+
+  const recordMap = new Map<
+    string,
+    {
+      assistant_name_ar: string;
+      doctor_name_ar: string;
+      doctor_share_percentage: number;
+    }
+  >();
+
+  if (parentIds.size > 0) {
+    const { data: records } = await supabase
+      .from("payroll_records")
+      .select(
+        "id, assistant_name_ar, doctor_share_percentage, doctor:doctors(full_name_ar)"
+      )
+      .eq("clinic_id", clinicId)
+      .in("id", [...parentIds]);
+
+    for (const r of records ?? []) {
+      const doctor = relationOne(
+        r.doctor as
+          | { full_name_ar?: string }
+          | { full_name_ar?: string }[]
+          | null
+      );
+      recordMap.set(String(r.id), {
+        assistant_name_ar: String(r.assistant_name_ar ?? "مساعد"),
+        doctor_name_ar: doctor?.full_name_ar?.trim() || "طبيب",
+        doctor_share_percentage: Number(r.doctor_share_percentage ?? 0),
+      });
+    }
+  }
+
+  type BatchEntry = {
+    key: string;
+    batch: { doctor?: AssistantPayrollTxRow; clinic?: AssistantPayrollTxRow };
+    date: string;
+    doctorShare: number;
+    clinicShare: number;
+    totalAmount: number;
+  };
+
+  const entries: BatchEntry[] = [];
+
+  for (const [key, batch] of batches) {
+    const doctorShare = roundMoney(Math.abs(Number(batch.doctor?.amount ?? 0)));
+    const clinicShare = roundMoney(Math.abs(Number(batch.clinic?.amount ?? 0)));
+    const totalAmount = roundMoney(doctorShare + clinicShare);
+    if (totalAmount <= 0) continue;
+
+    const date = String(
+      batch.clinic?.transaction_date ?? batch.doctor?.transaction_date ?? ""
+    );
+    entries.push({ key, batch, date, doctorShare, clinicShare, totalAmount });
+  }
+
+  entries.sort((a, b) => b.date.localeCompare(a.date));
+
+  for (const entry of entries) {
+    const ref =
+      entry.batch.doctor?.reference_id ?? entry.batch.clinic?.reference_id ?? "";
+    const parentId = ref ? parsePayrollParentId(ref) : "";
+    if (parentId) payrollParentIds.push(parentId);
+
+    const record = parentId ? recordMap.get(parentId) : undefined;
+    const assistantName =
+      record?.assistant_name_ar ??
+      extractAssistantNameFromDesc(
+        entry.batch.doctor?.description_ar ?? entry.batch.clinic?.description_ar
+      );
+    const doctorName = record?.doctor_name_ar ?? "";
+    const pct =
+      record?.doctor_share_percentage ??
+      (entry.totalAmount > 0
+        ? roundMoney((entry.doctorShare / entry.totalAmount) * 100)
+        : 0);
+
+    const txId = entry.batch.clinic?.id ?? entry.batch.doctor?.id ?? entry.key;
+
+    pushLine(getGroup("assistant_payroll"), {
+      id: `assistant-batch-${txId}`,
+      category: "assistant_payroll",
+      date: entry.date,
+      amount: entry.clinicShare > 0 ? -entry.clinicShare : 0,
+      title: `أجر مساعد — ${assistantName}`,
+      subtitle: appendSubtitle(
+        doctorName ? `الطبيب: ${doctorName}` : undefined,
+        `نسبة الطبيب ${pct}%`
+      ),
+      totalAmount: entry.totalAmount,
+      doctorShare: entry.doctorShare,
+      clinicShare: entry.clinicShare,
+      doctorSharePct: pct,
+      actorLookupKey: parentId || txId,
+    });
+  }
 }
 
 function emptyGroup(category: ProfitLedgerCategory): ProfitLedgerGroup {
@@ -291,7 +453,7 @@ async function appendLegacyPayrollLines(
     supabase
       .from("payroll_records")
       .select(
-        "id, assistant_name_ar, paid_clinic_share_amount, clinic_share_amount, paid_at, month_year, status"
+        "id, assistant_name_ar, paid_doctor_share_amount, paid_clinic_share_amount, clinic_share_amount, doctor_share_amount, paid_at, status"
       )
       .eq("clinic_id", clinicId)
       .or("status.eq.paid,paid_clinic_share_amount.gt.0"),
@@ -309,30 +471,43 @@ async function appendLegacyPayrollLines(
     if (covered.has(id)) continue;
     if (!paidAtInRange(row.paid_at as string | null, from, to)) continue;
 
-    const amount = roundMoney(
+    const doctorAmount = roundMoney(Number(row.paid_doctor_share_amount ?? 0));
+    const clinicAmount = roundMoney(
       Number(row.paid_clinic_share_amount ?? 0) > 0
         ? Number(row.paid_clinic_share_amount)
         : row.status === "paid"
           ? Number(row.clinic_share_amount ?? 0)
           : 0
     );
-    if (amount <= 0) continue;
+    const totalAmount = roundMoney(
+      doctorAmount > 0 || clinicAmount > 0
+        ? doctorAmount + clinicAmount
+        : row.status === "paid"
+          ? Number(row.clinic_share_amount ?? 0) + Number(row.doctor_share_amount ?? 0)
+          : 0
+    );
+    if (totalAmount <= 0 && clinicAmount <= 0) continue;
 
     payrollParentIds.push(id);
     covered.add(id);
 
     const assistantName = String(row.assistant_name_ar ?? "").trim() || "مساعد";
-    const monthYear = String(row.month_year ?? "");
+    const pct =
+      totalAmount > 0
+        ? roundMoney((doctorAmount / totalAmount) * 100)
+        : 0;
 
     pushLine(getGroup("assistant_payroll"), {
       id: `legacy-payroll-${id}`,
       category: "assistant_payroll",
       date: String(row.paid_at).slice(0, 10),
-      amount: -amount,
+      amount: clinicAmount > 0 ? -clinicAmount : 0,
       title: `أجر مساعد — ${assistantName}`,
-      subtitle: monthYear
-        ? `صرف سابق · ${monthYear} · سجل أرشيف`
-        : "صرف سابق · سجل أرشيف",
+      subtitle: "صرف سابق · سجل أرشيف",
+      totalAmount: totalAmount > 0 ? totalAmount : clinicAmount,
+      doctorShare: doctorAmount,
+      clinicShare: clinicAmount,
+      doctorSharePct: pct,
       actorLookupKey: id,
     });
   }
@@ -490,6 +665,7 @@ export async function fetchProfitDeductionLedger(
 
   for (const line of payrollLines) {
     const category = payrollCategoryFromType(line.type);
+    if (!category) continue;
     const isCredit = line.amount < 0;
     const displayAmount = isCredit ? Math.abs(line.amount) : -line.amount;
     const parentId = line.referenceId
@@ -510,6 +686,15 @@ export async function fetchProfitDeductionLedger(
       actorLookupKey: parentId || line.id,
     });
   }
+
+  await appendAssistantPayrollBatchedLines(
+    supabase,
+    clinicId,
+    from,
+    to,
+    getGroup,
+    payrollParentIds
+  );
 
   await appendLegacyPayrollLines(
     supabase,

@@ -13,18 +13,27 @@ import {
   Building2,
   TrendingDown,
   TrendingUp,
-  UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { fetchProfitDeductionLedgerViaApi } from "@/lib/services/profit-ledger-api";
+import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
 import type {
   ProfitDeductionLedger,
   ProfitLedgerCategory,
   ProfitLedgerGroup,
 } from "@/lib/services/profit-deduction-ledger";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import {
+  cn,
+  formatCurrency,
+  formatDate,
+  inferProfitPeriodFromRange,
+  profitPeriodDateRange,
+  profitPeriodLabelAr,
+  type ProfitPeriodPreset,
+} from "@/lib/utils";
+import { ProfitLedgerLineRow } from "@/components/finance/ProfitLedgerLineRow";
 
 const CATEGORY_ICONS: Record<
   ProfitLedgerCategory,
@@ -46,6 +55,8 @@ const CATEGORY_COLORS: Record<ProfitLedgerCategory, string> = {
   doctor_salary: "bg-pink-100 text-pink-700",
   balance_topup: "bg-emerald-100 text-emerald-700",
 };
+
+const PROFIT_PERIOD_TABS: ProfitPeriodPreset[] = ["today", "week", "month"];
 
 function formatPeriodLabel(from: string, to: string): string {
   if (from === to) return formatDate(from);
@@ -86,35 +97,7 @@ function LedgerGroupSection({ group }: { group: ProfitLedgerGroup }) {
 
       <ul className="divide-y divide-slate-border/40">
         {group.lines.map((line) => (
-          <li
-            key={line.id}
-            className="flex items-start justify-between gap-3 px-3 py-2.5 text-sm"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-slate-text">{line.title}</p>
-              {line.subtitle && (
-                <p className="mt-0.5 text-xs text-slate-muted">{line.subtitle}</p>
-              )}
-              {line.actorName && !line.subtitle?.includes(line.actorName) && (
-                <p className="mt-0.5 flex items-center gap-1 text-xs text-primary">
-                  <UserCheck className="h-3 w-3 shrink-0" />
-                  المحاسب: {line.actorName}
-                </p>
-              )}
-              <p className="mt-0.5 text-[11px] text-slate-muted/80">
-                {formatDate(line.date)}
-              </p>
-            </div>
-            <span
-              className={cn(
-                "shrink-0 font-semibold tabular-nums",
-                line.amount >= 0 ? "text-success-text" : "text-debt-text"
-              )}
-            >
-              {line.amount >= 0 ? "+" : "−"}
-              {formatCurrency(Math.abs(line.amount))}
-            </span>
-          </li>
+          <ProfitLedgerLineRow key={line.id} line={line} />
         ))}
       </ul>
     </section>
@@ -133,36 +116,51 @@ interface ProfitExplanationModalProps {
 export function ProfitExplanationModal({
   open,
   onClose,
-  from,
-  to,
+  from: initialFrom,
+  to: initialTo,
   portal = "accountant",
-  netProfit,
+  netProfit: initialNetProfit,
 }: ProfitExplanationModalProps) {
+  const [period, setPeriod] = useState<ProfitPeriodPreset>("month");
   const [ledger, setLedger] = useState<ProfitDeductionLedger | null>(null);
+  const [netProfit, setNetProfit] = useState<number | undefined>(initialNetProfit);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const range = profitPeriodDateRange(period);
+  const { from, to } = range;
+
   const load = useCallback(async () => {
-    if (!from || !to) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchProfitDeductionLedgerViaApi(from, to, portal);
+      const [data, stats] = await Promise.all([
+        fetchProfitDeductionLedgerViaApi(from, to, portal),
+        fetchClinicProfitStatsForPeriodViaApi(from, to, portal).catch(() => null),
+      ]);
       setLedger(data);
+      setNetProfit(stats?.netProfit ?? undefined);
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر تحميل التفاصيل");
       setLedger(null);
+      setNetProfit(undefined);
     } finally {
       setLoading(false);
     }
   }, [from, to, portal]);
 
   useEffect(() => {
-    if (open) load();
-    else {
+    if (open) {
+      setPeriod(inferProfitPeriodFromRange(initialFrom, initialTo));
+    } else {
       setLedger(null);
       setError(null);
+      setNetProfit(initialNetProfit);
     }
+  }, [open, initialFrom, initialTo, initialNetProfit]);
+
+  useEffect(() => {
+    if (open) load();
   }, [open, load]);
 
   if (!open) return null;
@@ -200,6 +198,26 @@ export function ProfitExplanationModal({
           >
             <X className="h-5 w-5" />
           </button>
+        </div>
+
+        <div className="shrink-0 border-b border-slate-border bg-surface-card px-4 pb-3">
+          <div className="flex gap-1 rounded-xl bg-surface p-1">
+            {PROFIT_PERIOD_TABS.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setPeriod(tab)}
+                className={cn(
+                  "flex-1 rounded-lg px-2 py-2 text-xs font-semibold transition-colors",
+                  period === tab
+                    ? "bg-surface-card text-primary shadow-sm"
+                    : "text-slate-muted hover:text-slate-text"
+                )}
+              >
+                {profitPeriodLabelAr(tab)}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -257,7 +275,9 @@ export function ProfitExplanationModal({
                         : "border-debt-border bg-debt/20"
                     )}
                   >
-                    <p className="text-xs font-medium text-slate-muted">صافي الربح (الفترة)</p>
+                    <p className="text-xs font-medium text-slate-muted">
+                      صافي الربح ({profitPeriodLabelAr(period)})
+                    </p>
                     <p
                       className={cn(
                         "text-lg font-black tabular-nums",

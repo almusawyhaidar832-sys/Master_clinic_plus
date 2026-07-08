@@ -17,6 +17,7 @@ import {
   todayISO,
 } from "@/lib/utils";
 import { History, RefreshCw, Info } from "lucide-react";
+import { ProfitLedgerLineRow } from "@/components/finance/ProfitLedgerLineRow";
 
 const PRESETS = [
   { id: "month", label: "هذا الشهر" },
@@ -222,29 +223,11 @@ export function ClinicFinancialHistoryPanel({ mobile }: { mobile?: boolean }) {
                   </div>
                   <ul className="divide-y divide-slate-border/50">
                     {group.lines.map((line) => (
-                      <li
+                      <ProfitLedgerLineRow
                         key={line.id}
-                        className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="min-w-0">
-                          <p className="font-medium text-slate-text">{line.title}</p>
-                          {line.subtitle && (
-                            <p className="text-xs text-slate-muted">{line.subtitle}</p>
-                          )}
-                          <p className="text-[11px] text-slate-muted/80">
-                            {formatDate(line.date)}
-                          </p>
-                        </div>
-                        <p
-                          className={cn(
-                            "shrink-0 font-bold tabular-nums",
-                            line.amount >= 0 ? "text-success-text" : "text-debt-text"
-                          )}
-                        >
-                          {line.amount >= 0 ? "+" : "−"}
-                          {formatCurrency(Math.abs(line.amount))}
-                        </p>
-                      </li>
+                        line={line}
+                        className="px-4 py-3"
+                      />
                     ))}
                   </ul>
                 </Card>
