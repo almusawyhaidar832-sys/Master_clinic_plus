@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser, getAuthProfile } from "@/lib/clinic-context";
@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { Bell, TrendingUp, Wallet, ArrowDownToLine, ChevronLeft } from "lucide-react";
 import { DoctorPrivateBalance } from "@/components/doctor/DoctorPrivateBalance";
 import { useClinicSync } from "@/hooks/useClinicSync";
+import { reconcilePendingDoctorWallet } from "@/lib/services/doctor-wallet-pending";
 
 export function DoctorHomeDashboard() {
   const { t, formatMoney } = useLanguage();
@@ -35,8 +36,10 @@ export function DoctorHomeDashboard() {
   const [notifications, setNotifications] = useState(0);
   const [doctorId, setDoctorId] = useState<string | null>(null);
   const [clinicId, setClinicId] = useState<string | null>(null);
+  const loadGenerationRef = useRef(0);
 
   const load = useCallback(async () => {
+    const loadGeneration = ++loadGenerationRef.current;
     const supabase = createClient();
     const doctor = await getDoctorForCurrentUser(supabase);
     if (!doctor) return;
@@ -59,10 +62,14 @@ export function DoctorHomeDashboard() {
 
     let stats: DoctorWalletStats | null = null;
     try {
-      const res = await fetch("/api/doctor/wallet-stats", {
-        credentials: "include",
-        headers: authPortalHeaders("doctor"),
-      });
+      const res = await fetch(
+        `/api/doctor/wallet-stats?_t=${Date.now()}`,
+        {
+          credentials: "include",
+          headers: authPortalHeaders("doctor"),
+          cache: "no-store",
+        }
+      );
       if (res.ok) {
         stats = (await res.json()) as DoctorWalletStats;
       }
@@ -72,6 +79,10 @@ export function DoctorHomeDashboard() {
     if (!stats) {
       stats = await fetchDoctorWalletStats(supabase, doctor.id);
     }
+
+    stats = reconcilePendingDoctorWallet(doctor.id, stats);
+
+    if (loadGeneration !== loadGenerationRef.current) return;
 
     setWallet(stats);
     setTodayOps(opsRes.count ?? 0);

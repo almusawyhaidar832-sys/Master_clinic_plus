@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import Link from "next/link";
 import { cacheDoctorBalance, getCachedDoctorBalance } from "@/lib/offline-cache";
@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { DoctorPrivateBalance } from "@/components/doctor/DoctorPrivateBalance";
 import { ArrowDownToLine, ScrollText, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { reconcilePendingDoctorWallet } from "@/lib/services/doctor-wallet-pending";
 
 export default function DoctorWalletPage() {
   const { t, formatMoney } = useLanguage();
@@ -31,8 +32,10 @@ export default function DoctorWalletPage() {
   const [salaryDoctor, setSalaryDoctor] = useState(false);
   const [zeroHint, setZeroHint] = useState(false);
   const [lifetimeOpen, setLifetimeOpen] = useState(false);
+  const loadGenerationRef = useRef(0);
 
   const load = useCallback(async () => {
+    const loadGeneration = ++loadGenerationRef.current;
     const supabase = createClient();
     const doctor = await getDoctorForCurrentUser(supabase);
 
@@ -76,12 +79,13 @@ export default function DoctorWalletPage() {
     const repairKey = doctorSharesRepairKey(doctor.id);
     const needSync = needsSharesRepair(repairKey);
     const walletUrl = needSync
-      ? "/api/doctor/wallet-stats?sync_shares=1"
-      : "/api/doctor/wallet-stats";
+      ? `/api/doctor/wallet-stats?sync_shares=1&_t=${Date.now()}`
+      : `/api/doctor/wallet-stats?_t=${Date.now()}`;
     try {
       const res = await fetch(walletUrl, {
         credentials: "include",
         headers: authPortalHeaders("doctor"),
+        cache: "no-store",
       });
       if (res.ok) {
         live = (await res.json()) as DoctorWalletStats;
@@ -99,6 +103,10 @@ export default function DoctorWalletPage() {
     if (!live) {
       live = await fetchDoctorWalletStats(supabase, doctor.id);
     }
+
+    live = reconcilePendingDoctorWallet(doctor.id, live);
+
+    if (loadGeneration !== loadGenerationRef.current) return;
 
     setStats(live);
     setZeroHint(!isSalary && live.totalEarnings <= 0);

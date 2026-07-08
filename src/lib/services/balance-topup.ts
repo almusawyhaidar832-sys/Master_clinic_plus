@@ -10,6 +10,12 @@ export interface BalanceTopUpSuccessDetail {
   amount: number;
   transactionDate: string;
   doctorId?: string | null;
+  doctorWallet?: DoctorWalletSnapshot;
+}
+
+export interface DoctorWalletSnapshot {
+  availableBalance: number;
+  withdrawableLimit: number;
 }
 
 export interface ClinicBalanceTopUpLine {

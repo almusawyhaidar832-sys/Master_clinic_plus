@@ -61,14 +61,13 @@ export function notifyBalanceTopUpRefresh(options: {
     return;
   }
 
-  notifyClinicProfitRefresh(options.clinicId);
-
-  if (options.doctorId) {
+  if (options.target === "doctor" && options.doctorId) {
     notifyClinicSync({
-      topic: "financial",
+      topic: ["financial", "profit"],
       clinicId: options.clinicId,
       doctorId: options.doctorId,
       source: "mutation",
+      force: true,
     });
   }
 }

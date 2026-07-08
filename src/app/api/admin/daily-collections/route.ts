@@ -8,6 +8,12 @@ import {
 } from "@/lib/ledger/daily-collections";
 import { repairDoctorOperationShares } from "@/lib/services/operation-amount-edit";
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate",
+};
+
 const VALID_FILTERS: CollectionStatusFilter[] = [
   "all",
   "paid",
@@ -63,7 +69,7 @@ export async function GET(req: NextRequest) {
       statusFilter,
     });
 
-    return NextResponse.json({ success: true, result });
+    return NextResponse.json({ success: true, result }, { headers: NO_STORE_HEADERS });
   } catch (err) {
     console.error("[api/admin/daily-collections]", err);
     return NextResponse.json(

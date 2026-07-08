@@ -550,6 +550,23 @@ export function computeWalletStats(
   };
 }
 
+/** زيادة فورية لرصيد الطبيب بعد شحن يدوي */
+export function applyDoctorTopUpToWalletStats(
+  stats: DoctorWalletStats,
+  amount: number
+): DoctorWalletStats {
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const nextBalance = round(stats.availableBalance + amount);
+  return {
+    ...stats,
+    availableBalance: nextBalance,
+    withdrawableLimit: round(
+      Math.max(0, stats.withdrawableLimit + amount)
+    ),
+    isDebtor: nextBalance < 0,
+  };
+}
+
 const OPERATION_EARNINGS_SELECT =
   "doctor_share_amount, clinic_share_amount, paid_amount, materials_cost, review_fee_amount, is_review_statement, treatment_case_id, operation_date, patient_treatment_cases(doctor_share_total, clinic_share_total, final_price)";
 

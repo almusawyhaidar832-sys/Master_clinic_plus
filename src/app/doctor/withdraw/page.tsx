@@ -1,11 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
-import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
+import {
+  fetchDoctorWalletStats,
+  type DoctorWalletStats,
+} from "@/lib/services/doctor-wallet";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
+import { reconcilePendingDoctorWallet } from "@/lib/services/doctor-wallet-pending";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -23,18 +28,39 @@ export default function DoctorWithdrawPage() {
   const [withdrawLimit, setWithdrawLimit] = useState(0);
   const [pending, setPending] = useState(0);
   const [isDebtor, setIsDebtor] = useState(false);
+  const loadGenerationRef = useRef(0);
 
   const load = useCallback(async () => {
+    const loadGeneration = ++loadGenerationRef.current;
     const supabase = createClient();
     const doc = await getDoctorForCurrentUser(supabase);
     setDoctor(doc);
-    if (doc) {
-      const stats = await fetchDoctorWalletStats(supabase, doc.id);
-      setAvailable(stats.availableBalance);
-      setWithdrawLimit(stats.withdrawableLimit);
-      setPending(stats.pendingAmount);
-      setIsDebtor(stats.isDebtor);
+    if (!doc) return;
+
+    let stats: DoctorWalletStats | null = null;
+    try {
+      const res = await fetch(`/api/doctor/wallet-stats?_t=${Date.now()}`, {
+        credentials: "include",
+        headers: authPortalHeaders("doctor"),
+        cache: "no-store",
+      });
+      if (res.ok) {
+        stats = (await res.json()) as DoctorWalletStats;
+      }
+    } catch {
+      /* fallback */
     }
+    if (!stats) {
+      stats = await fetchDoctorWalletStats(supabase, doc.id);
+    }
+    stats = reconcilePendingDoctorWallet(doc.id, stats);
+
+    if (loadGeneration !== loadGenerationRef.current) return;
+
+    setAvailable(stats.availableBalance);
+    setWithdrawLimit(stats.withdrawableLimit);
+    setPending(stats.pendingAmount);
+    setIsDebtor(stats.isDebtor);
   }, []);
 
   useEffect(() => {

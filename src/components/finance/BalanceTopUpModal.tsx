@@ -10,6 +10,10 @@ import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { notifyBalanceTopUpRefresh } from "@/lib/services/clinic-profit";
+import {
+  registerPendingDoctorTopUpDelta,
+  registerPendingDoctorWallet,
+} from "@/lib/services/doctor-wallet-pending";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn, formatCurrency, todayISO } from "@/lib/utils";
 import type { BalanceTopUpTarget, BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
@@ -131,6 +135,10 @@ export function BalanceTopUpModal({
         amount?: number;
         target?: BalanceTopUpTarget;
         doctor_id?: string | null;
+        doctor_wallet?: {
+          availableBalance: number;
+          withdrawableLimit: number;
+        } | null;
       };
 
       if (!res.ok) {
@@ -147,11 +155,21 @@ export function BalanceTopUpModal({
       });
 
       const toppedAmount = Number(json.amount ?? parsed);
+      const doctorWallet = json.doctor_wallet ?? undefined;
+      if (target === "doctor" && toppedDoctorId) {
+        if (doctorWallet) {
+          registerPendingDoctorWallet(toppedDoctorId, doctorWallet);
+        } else {
+          registerPendingDoctorTopUpDelta(toppedDoctorId, toppedAmount);
+        }
+      }
+
       const successDetail: BalanceTopUpSuccessDetail = {
         target,
         amount: toppedAmount,
         transactionDate,
         doctorId: toppedDoctorId,
+        doctorWallet,
       };
 
       onSuccess?.(successDetail);

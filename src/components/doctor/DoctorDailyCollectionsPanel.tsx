@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +16,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { useClinicSync } from "@/hooks/useClinicSync";
+import { reconcileDailyCollectionsResult } from "@/lib/services/doctor-wallet-pending";
 import {
   collectionStatusClass,
   collectionStatusLabel,
@@ -325,6 +326,7 @@ export function DoctorDailyCollectionsPanel({
   const [error, setError] = useState("");
   const [appliedFrom, setAppliedFrom] = useState(todayISO());
   const [appliedTo, setAppliedTo] = useState(todayISO());
+  const loadGenerationRef = useRef(0);
 
   const effectiveTo = dateTo >= dateFrom ? dateTo : dateFrom;
 
@@ -358,6 +360,7 @@ export function DoctorDailyCollectionsPanel({
       return;
     }
 
+    const loadGeneration = ++loadGenerationRef.current;
     setLoading(true);
     setError("");
 
@@ -371,6 +374,7 @@ export function DoctorDailyCollectionsPanel({
       date_from: dateFrom,
       date_to: effectiveTo,
       status_filter: statusFilter,
+      _t: String(Date.now()),
     });
     if (needSync) params.set("sync_shares", "1");
 
@@ -378,11 +382,14 @@ export function DoctorDailyCollectionsPanel({
       const res = await fetch(`/api/doctor/daily-collections?${params}`, {
         credentials: "include",
         headers: authPortalHeaders("doctor"),
+        cache: "no-store",
       });
       const json = (await res.json()) as {
         result?: DailyCollectionsResult;
         error?: string;
       };
+
+      if (loadGeneration !== loadGenerationRef.current) return;
 
       if (!res.ok) {
         setError(json.error ?? t("docDailyLoadFailed"));
@@ -394,14 +401,17 @@ export function DoctorDailyCollectionsPanel({
         markSharesRepairDone({ clinicId, doctorId });
       }
 
-      setResult(json.result ?? null);
+      setResult(reconcileDailyCollectionsResult(json.result ?? null));
       setAppliedFrom(dateFrom);
       setAppliedTo(effectiveTo);
     } catch {
+      if (loadGeneration !== loadGenerationRef.current) return;
       setError(t("errServerConnection"));
       setResult(null);
     } finally {
-      setLoading(false);
+      if (loadGeneration === loadGenerationRef.current) {
+        setLoading(false);
+      }
     }
   }, [doctorId, clinicId, dateFrom, effectiveTo, statusFilter, t]);
 

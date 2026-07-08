@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -32,6 +32,11 @@ import type { ClinicBalanceTopUpLine } from "@/lib/services/balance-topup";
 import type { DoctorBalanceTopUpLine } from "@/lib/ledger/daily-doctor-balance-topups";
 import type { DailyDoctorExpenseLine } from "@/lib/ledger/daily-statement-expenses";
 import { BalanceTopUpButton } from "@/components/finance/BalanceTopUpModal";
+import type { BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
+import {
+  applyDoctorWalletToCollectionsResult,
+  reconcileDailyCollectionsResult,
+} from "@/lib/services/doctor-wallet-pending";
 import {
   ClinicExpenseRow,
   DoctorExpenseRow,
@@ -614,6 +619,7 @@ export function DailyCollectionsPanel() {
   const [repairing, setRepairing] = useState(false);
   const [appliedFrom, setAppliedFrom] = useState(todayISO());
   const [appliedTo, setAppliedTo] = useState(todayISO());
+  const loadGenerationRef = useRef(0);
 
   const effectiveTo = dateTo >= dateFrom ? dateTo : dateFrom;
 
@@ -640,6 +646,7 @@ export function DailyCollectionsPanel() {
       setLoading(false);
       return;
     }
+    const loadGeneration = ++loadGenerationRef.current;
     setLoading(true);
     try {
       const repairKey = clinicSharesRepairKey(clinicId);
@@ -649,6 +656,7 @@ export function DailyCollectionsPanel() {
         date_from: dateFrom,
         date_to: effectiveTo,
         status_filter: statusFilter,
+        _t: String(Date.now()),
       });
       if (selectedDoctorId) params.set("doctor_id", selectedDoctorId);
       if (needSync) params.set("sync_shares", "1");
@@ -656,11 +664,14 @@ export function DailyCollectionsPanel() {
       const res = await fetch(`/api/admin/daily-collections?${params}`, {
         credentials: "include",
         headers: authPortalHeaders(staffPortalForCollections()),
+        cache: "no-store",
       });
       const json = (await res.json()) as {
         result?: DailyCollectionsResult;
         error?: string;
       };
+
+      if (loadGeneration !== loadGenerationRef.current) return;
 
       if (!res.ok) {
         setResult(null);
@@ -671,15 +682,43 @@ export function DailyCollectionsPanel() {
         markSharesRepairDone({ clinicId });
       }
 
-      setResult(json.result ?? null);
+      setResult(reconcileDailyCollectionsResult(json.result ?? null));
       setAppliedFrom(dateFrom);
       setAppliedTo(effectiveTo);
     } catch {
+      if (loadGeneration !== loadGenerationRef.current) return;
       setResult(null);
     } finally {
-      setLoading(false);
+      if (loadGeneration === loadGenerationRef.current) {
+        setLoading(false);
+      }
     }
   }, [clinicId, dateFrom, effectiveTo, selectedDoctorId, statusFilter]);
+
+  const handleTopUpSuccess = useCallback(
+    (detail: BalanceTopUpSuccessDetail) => {
+      if (
+        detail.target === "doctor" &&
+        detail.doctorId &&
+        detail.doctorWallet
+      ) {
+        setResult((prev) =>
+          prev
+            ? applyDoctorWalletToCollectionsResult(
+                prev,
+                detail.doctorId!,
+                detail.doctorWallet!
+              )
+            : prev
+        );
+        return;
+      }
+      if (detail.target === "clinic") {
+        void loadCollections();
+      }
+    },
+    [loadCollections]
+  );
 
   useEffect(() => {
     if (clinicLoading) return;
@@ -801,7 +840,7 @@ export function DailyCollectionsPanel() {
           <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-1">
             <BalanceTopUpButton
               portal="accountant"
-              onSuccess={() => void loadCollections()}
+              onSuccess={handleTopUpSuccess}
               size="sm"
               variant="outline"
             />

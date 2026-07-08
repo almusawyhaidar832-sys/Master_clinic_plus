@@ -11,7 +11,14 @@ import {
   type BalanceTopUpTarget,
 } from "@/lib/services/balance-topup";
 import { recordFinancialTransaction } from "@/lib/services/clinic-profit";
+import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
 import { todayISO } from "@/lib/utils";
+
+export const dynamic = "force-dynamic";
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate",
+};
 
 /** POST — شحن رصيد العيادة أو طبيب */
 export async function POST(req: NextRequest) {
@@ -126,13 +133,27 @@ export async function POST(req: NextRequest) {
       note: descriptionAr,
     });
 
-    return NextResponse.json({
-      success: true,
-      id: txId,
-      target,
-      amount,
-      doctor_id: doctorId,
-    });
+    const doctorWallet =
+      target === "doctor" && doctorId
+        ? await fetchDoctorWalletStats(admin, doctorId)
+        : null;
+
+    return NextResponse.json(
+      {
+        success: true,
+        id: txId,
+        target,
+        amount,
+        doctor_id: doctorId,
+        doctor_wallet: doctorWallet
+          ? {
+              availableBalance: doctorWallet.availableBalance,
+              withdrawableLimit: doctorWallet.withdrawableLimit,
+            }
+          : null,
+      },
+      { headers: NO_STORE_HEADERS }
+    );
   } catch (err) {
     if (err instanceof StaffAccessError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
