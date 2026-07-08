@@ -62,6 +62,13 @@ export async function getApiActiveClinicId(req?: Request): Promise<string | null
   const actingClinicId = await resolveDeveloperActingClinicId(req);
   if (actingClinicId) return actingClinicId;
 
+  if (req && "headers" in req) {
+    const headerClinicId = (req as Request).headers
+      .get("x-mcp-developer-clinic-id")
+      ?.trim();
+    if (headerClinicId) return headerClinicId;
+  }
+
   const caller = await getApiCallerProfile(req);
   return caller?.clinic_id ?? null;
 }

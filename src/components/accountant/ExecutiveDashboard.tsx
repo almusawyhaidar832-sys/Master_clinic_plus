@@ -13,6 +13,7 @@ import {
   mergeExecutiveDashboardMetrics,
   resolveExecutiveSalaryDeduction,
   applyReportAlignedProfitMetrics,
+  mergeReportAlignedWithSnapshot,
   applyClinicTopUpToSnapshot,
   type ExecutiveSnapshotCore,
   type ReportAlignedProfitMetrics,
@@ -443,7 +444,7 @@ export function ExecutiveDashboard() {
             }
           ) as unknown as Snapshot;
           return profitFallback
-            ? (applyReportAlignedProfitMetrics(
+            ? (mergeReportAlignedWithSnapshot(
                 merged as unknown as ExecutiveSnapshotCore,
                 profitFallback
               ) as unknown as Snapshot)

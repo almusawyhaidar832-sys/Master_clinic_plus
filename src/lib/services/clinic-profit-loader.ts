@@ -6,6 +6,7 @@ import {
   applyClinicTopUpToProfitStats,
   clinicProfitStatsFromFinancialSnapshot,
   fetchClinicFinancialSnapshotRpc,
+  type ClinicFinancialSnapshotRpc,
   type ClinicProfitStats,
 } from "@/lib/services/clinic-stats";
 import { reconcilePendingClinicProfitStats } from "@/lib/services/clinic-profit-pending";
@@ -75,19 +76,56 @@ async function mergeClientBalanceTopupsIfNeeded(
   return stats;
 }
 
+function pickBetterSnapshot(
+  current: ClinicFinancialSnapshotRpc | null,
+  candidate: ClinicFinancialSnapshotRpc | null
+): ClinicFinancialSnapshotRpc | null {
+  if (!candidate) return current;
+  if (!current) return candidate;
+  if (candidate.netProfit > current.netProfit + 0.01) return candidate;
+  if (candidate.balanceTopups > current.balanceTopups + 0.01) return candidate;
+  return current;
+}
+
+/** يجرب RPC عبر جلسات المحاسب والإدارة — نفس مصدر اللوحة التنفيذية */
+async function fetchSnapshotWithPortalFallback(
+  clinicId: string,
+  period: { from: string; to: string }
+): Promise<ClinicFinancialSnapshotRpc | null> {
+  const { createClient, createClientForPortal } = await import("@/lib/supabase/client");
+  const portals: AuthPortalId[] = ["accountant", "admin"];
+
+  let best: ClinicFinancialSnapshotRpc | null = null;
+
+  for (const portal of portals) {
+    const snap = await fetchClinicFinancialSnapshotRpc(
+      createClientForPortal(portal),
+      clinicId,
+      period.from,
+      period.to
+    );
+    best = pickBetterSnapshot(best, snap);
+  }
+
+  if (!best) {
+    best = await fetchClinicFinancialSnapshotRpc(
+      createClient(),
+      clinicId,
+      period.from,
+      period.to
+    );
+  }
+
+  return best;
+}
+
 /** يطابق لوحة المحاسب — RPC + API + شحن معلّق */
 async function mergeFinancialSnapshotRpc(
-  supabase: SupabaseClient,
   clinicId: string,
   stats: ClinicProfitStats | null,
   period: { from: string; to: string }
 ): Promise<ClinicProfitStats> {
-  const snap = await fetchClinicFinancialSnapshotRpc(
-    supabase,
-    clinicId,
-    period.from,
-    period.to
-  );
+  const snap = await fetchSnapshotWithPortalFallback(clinicId, period);
 
   if (!snap) {
     return stats ?? clinicProfitStatsFromFinancialSnapshot({
@@ -116,8 +154,7 @@ export async function fetchAlignedClinicProfitStats(
   _portal: AuthPortalId = "accountant",
   period: { from: string; to: string } = defaultClinicProfitPeriod()
 ): Promise<ClinicProfitStats> {
-  const { createClient } = await import("@/lib/supabase/client");
-  const supabase = createClient();
+  const { createClient, createClientForPortal } = await import("@/lib/supabase/client");
 
   let stats: ClinicProfitStats | null = null;
   try {
@@ -131,14 +168,22 @@ export async function fetchAlignedClinicProfitStats(
   }
 
   if (stats) {
+    for (const portal of ["accountant", "admin"] as const) {
+      stats = await mergeClientBalanceTopupsIfNeeded(
+        createClientForPortal(portal),
+        clinicId,
+        stats,
+        period
+      );
+    }
     stats = await mergeClientBalanceTopupsIfNeeded(
-      supabase,
+      createClient(),
       clinicId,
       stats,
       period
     );
   }
 
-  stats = await mergeFinancialSnapshotRpc(supabase, clinicId, stats, period);
+  stats = await mergeFinancialSnapshotRpc(clinicId, stats, period);
   return reconcilePendingClinicProfitStats(clinicId, stats, period);
 }

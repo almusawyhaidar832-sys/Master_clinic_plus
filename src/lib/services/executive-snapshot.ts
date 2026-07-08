@@ -569,6 +569,21 @@ export function applyClinicTopUpToSnapshot<T extends ExecutiveSnapshotCore>(
   };
 }
 
+/** لا نخفّض صافي الربح عن لقطة RPC إذا كانت أعلى (شحن رصيد) */
+export function mergeReportAlignedWithSnapshot<T extends ExecutiveSnapshotCore>(
+  snap: T,
+  aligned: ReportAlignedProfitMetrics
+): T {
+  const snapNet = roundMoney(Number(snap.net_profit ?? 0));
+  const snapTopups = roundMoney(Number(snap.balance_topups ?? 0));
+  const merged: ReportAlignedProfitMetrics = {
+    ...aligned,
+    balanceTopups: Math.max(aligned.balanceTopups, snapTopups),
+    netProfit: Math.max(aligned.netProfit, snapNet),
+  };
+  return applyReportAlignedProfitMetrics(snap, merged);
+}
+
 /** محاذاة اللوحة التنفيذية مع الكشف المالي — علاج وكشفيات منفصلان في العرض */
 export function applyReportAlignedProfitMetrics<T extends ExecutiveSnapshotCore>(
   snap: T,

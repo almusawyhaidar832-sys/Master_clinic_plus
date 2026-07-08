@@ -3,16 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { createClient } from "@/lib/supabase/client";
-import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { useClinicSync } from "@/hooks/useClinicSync";
-import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
+import { fetchAlignedClinicProfitStats } from "@/lib/services/clinic-profit-loader";
 import { fetchTodaySummary, type ClinicProfitStats } from "@/lib/services/clinic-stats";
 import { formatCurrency, todayISO } from "@/lib/utils";
 import { TrendingUp, Wallet, Receipt, AlertCircle } from "lucide-react";
 
 export function ClinicFinancialOverview() {
-  const { profile } = useClinicProfile();
-  const clinicId = profile?.id ?? null;
+  const { clinicId } = useActiveClinicId();
   const [today, setToday] = useState({
     operationsCount: 0,
     totalRemainingDebt: 0,
@@ -22,17 +21,23 @@ export function ClinicFinancialOverview() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    if (!clinicId) {
+      setLoading(false);
+      return;
+    }
+
     const supabase = createClient();
+    const period = { from: "2000-01-01", to: todayISO() };
     const [t, p] = await Promise.all([
       fetchTodaySummary(supabase),
-      fetchClinicProfitStatsForPeriodViaApi("2000-01-01", todayISO(), "accountant").catch(
+      fetchAlignedClinicProfitStats(clinicId, "accountant", period).catch(
         () => null
       ),
     ]);
     setToday(t);
     setProfit(p);
     setLoading(false);
-  }, []);
+  }, [clinicId]);
 
   useEffect(() => {
     void load();
