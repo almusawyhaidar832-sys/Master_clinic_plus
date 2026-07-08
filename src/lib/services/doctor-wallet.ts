@@ -19,7 +19,7 @@ import {
   groupDoctorBalanceTopupsByDoctor,
   BALANCE_TOPUP_DOCTOR_TYPE,
 } from "@/lib/services/balance-topup";
-import { currentMonthYear, monthDateRange, todayISO } from "@/lib/utils";
+import { currentMonthYear, monthDateRange } from "@/lib/utils";
 import { DOCTOR_FINANCE_SELECT } from "@/lib/services/doctor-db-select";
 import type { Doctor, PayrollRecord } from "@/types";
 
@@ -452,7 +452,6 @@ function netPayrollDeductionFromRows(
 
 type PayrollRecordPendingRow = Pick<
   PayrollRecord,
-  | "assistant_id"
   | "doctor_share_amount"
   | "paid_doctor_share_amount"
   | "clinic_share_amount"
@@ -468,26 +467,7 @@ type PayrollRecordPendingRow = Pick<
     | null;
 };
 
-function shouldSkipMonthlyPayrollPending(
-  row: PayrollRecordPendingRow,
-  dailyLineAssistantIds: Set<string>
-): boolean {
-  const assistantRaw = row.assistant;
-  const assistant = Array.isArray(assistantRaw) ? assistantRaw[0] : assistantRaw;
-  if (
-    isDailyWageAssistant(
-      normalizeAssistantCompensationMode(
-        (assistant as { compensation_mode?: string } | null)?.compensation_mode
-      )
-    )
-  ) {
-    return true;
-  }
-  const assistantId = row.assistant_id ? String(row.assistant_id) : "";
-  return assistantId.length > 0 && dailyLineAssistantIds.has(assistantId);
-}
-
-function monthlyPayrollRecordPendingDoctorShare(row: PayrollRecordPendingRow): number {
+function pendingDoctorShareFromPayrollRow(row: PayrollRecordPendingRow): number {
   const assistantRaw = row.assistant;
   const assistant = Array.isArray(assistantRaw) ? assistantRaw[0] : assistantRaw;
   const dailyWage = isDailyWageAssistant(
@@ -495,126 +475,47 @@ function monthlyPayrollRecordPendingDoctorShare(row: PayrollRecordPendingRow): n
       (assistant as { compensation_mode?: string } | null)?.compensation_mode
     )
   );
-  if (dailyWage) return 0;
-
   const doctorSharePct = Number(
     (assistant as { doctor_share_percentage?: number } | null)
       ?.doctor_share_percentage ?? row.doctor_share_percentage ?? 0
   );
   return assistantPendingDoctorShare(row, {
-    dailyWage: false,
+    dailyWage,
     doctorSharePercentage: doctorSharePct,
   });
 }
 
-type DailyAssistantPayrollPendingResult = {
-  byDoctor: Map<string, number>;
-  /** مساعدون لهم أجر يومي مسجّل — لا يُجمع لهم خصم شهري من payroll_records */
-  dailyLineAssistantIds: Set<string>;
-};
-
-/**
- * أجر يومي مسجّل — نفس الكشف المالي: حصة الطبيب فقط (doctorDeduction) لكل سطر «أجر مسجّل».
- */
-async function fetchDailyAssistantPayrollPendingByDoctor(
-  supabase: SupabaseClient,
-  doctorIds?: string[]
-): Promise<DailyAssistantPayrollPendingResult> {
-  const byDoctor = new Map<string, number>();
-  const dailyLineAssistantIds = new Set<string>();
-  if (!doctorIds?.length) return { byDoctor, dailyLineAssistantIds };
-
-  const { data: doctors } = await supabase
-    .from("doctors")
-    .select("id, clinic_id")
-    .in("id", doctorIds);
-
-  const byClinic = new Map<string, string[]>();
-  for (const row of doctors ?? []) {
-    const clinicId = String(row.clinic_id ?? "");
-    const doctorId = String(row.id ?? "");
-    if (!clinicId || !doctorId) continue;
-    const scoped = byClinic.get(clinicId) ?? [];
-    scoped.push(doctorId);
-    byClinic.set(clinicId, scoped);
-  }
-
-  const { fetchDailyAssistantPayrollLines } = await import(
-    "@/lib/ledger/daily-assistant-payroll"
-  );
-  const to = todayISO();
-
-  for (const [clinicId, scopedDoctorIds] of byClinic) {
-    for (const doctorId of scopedDoctorIds) {
-      const lines = await fetchDailyAssistantPayrollLines(
-        supabase,
-        clinicId,
-        { dateFrom: "2000-01-01", dateTo: to },
-        doctorId
-      );
-      let pending = 0;
-      for (const line of lines) {
-        if (line.statusLabel !== "أجر مسجّل") continue;
-        if (line.doctorDeduction <= FINANCIAL_EPSILON) continue;
-        pending = Math.round((pending + line.doctorDeduction) * 100) / 100;
-        if (line.assistantId) dailyLineAssistantIds.add(line.assistantId);
-      }
-      if (pending > FINANCIAL_EPSILON) byDoctor.set(doctorId, pending);
-    }
-  }
-
-  return { byDoctor, dailyLineAssistantIds };
-}
-
-/** حصة الطبيب من أجور مساعديه المسجّلة ولم تُصرف بعد */
+/** حصة الطبيب من أجور مساعديه المسجّلة ولم تُصرف بعد — من payroll_records */
 export async function fetchDoctorPendingAssistantPayrollDeductions(
   supabase: SupabaseClient,
   doctorId: string
 ): Promise<number> {
-  const [recordsRes, dailyPending] = await Promise.all([
-    supabase
-      .from("payroll_records")
-      .select(
-        `
-        doctor_id,
-        assistant_id,
-        doctor_share_percentage,
-        doctor_share_amount,
-        paid_doctor_share_amount,
-        clinic_share_amount,
-        paid_clinic_share_amount,
-        total_salary,
-        paid_total_salary,
-        status,
-        assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
+  const { data, error } = await supabase
+    .from("payroll_records")
+    .select(
       `
-      )
-      .eq("doctor_id", doctorId),
-    fetchDailyAssistantPayrollPendingByDoctor(supabase, [doctorId]),
-  ]);
+      doctor_id,
+      doctor_share_percentage,
+      doctor_share_amount,
+      paid_doctor_share_amount,
+      clinic_share_amount,
+      paid_clinic_share_amount,
+      total_salary,
+      paid_total_salary,
+      status,
+      assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
+    `
+    )
+    .eq("doctor_id", doctorId);
 
-  let monthlyPending = 0;
-  if (!recordsRes.error && recordsRes.data?.length) {
-    for (const row of recordsRes.data) {
-      if (
-        shouldSkipMonthlyPayrollPending(
-          row as PayrollRecordPendingRow,
-          dailyPending.dailyLineAssistantIds
-        )
-      ) {
-        continue;
-      }
-      monthlyPending += monthlyPayrollRecordPendingDoctorShare(
-        row as PayrollRecordPendingRow
-      );
-    }
+  if (error || !data?.length) return 0;
+
+  let total = 0;
+  for (const row of data) {
+    total += pendingDoctorShareFromPayrollRow(row as PayrollRecordPendingRow);
   }
 
-  return (
-    Math.round(
-      (monthlyPending + (dailyPending.byDoctor.get(doctorId) ?? 0)) * 100
-    ) / 100
-  );
+  return Math.round(total * 100) / 100;
 }
 
 /** خصومات مساعدين — مؤكّدة + مسجّلة (أجر يومي قبل الصرف) */
@@ -636,52 +537,32 @@ async function fetchPendingAssistantPayrollByDoctor(
   const map = new Map<string, number>();
   if (!doctorIds.length) return map;
 
-  const [recordsRes, dailyPending] = await Promise.all([
-    supabase
-      .from("payroll_records")
-      .select(
-        `
-        doctor_id,
-        assistant_id,
-        doctor_share_percentage,
-        doctor_share_amount,
-        paid_doctor_share_amount,
-        clinic_share_amount,
-        paid_clinic_share_amount,
-        total_salary,
-        paid_total_salary,
-        status,
-        assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
+  const { data, error } = await supabase
+    .from("payroll_records")
+    .select(
       `
-      )
-      .in("doctor_id", doctorIds),
-    fetchDailyAssistantPayrollPendingByDoctor(supabase, doctorIds),
-  ]);
+      doctor_id,
+      doctor_share_percentage,
+      doctor_share_amount,
+      paid_doctor_share_amount,
+      clinic_share_amount,
+      paid_clinic_share_amount,
+      total_salary,
+      paid_total_salary,
+      status,
+      assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
+    `
+    )
+    .in("doctor_id", doctorIds);
 
-  if (!recordsRes.error && recordsRes.data?.length) {
-    for (const row of recordsRes.data) {
-      const doctorId = String(row.doctor_id ?? "");
-      if (!doctorId) continue;
-      if (
-        shouldSkipMonthlyPayrollPending(
-          row as PayrollRecordPendingRow,
-          dailyPending.dailyLineAssistantIds
-        )
-      ) {
-        continue;
-      }
-      const pending = monthlyPayrollRecordPendingDoctorShare(
-        row as PayrollRecordPendingRow
-      );
-      if (pending <= FINANCIAL_EPSILON) continue;
-      map.set(
-        doctorId,
-        Math.round(((map.get(doctorId) ?? 0) + pending) * 100) / 100
-      );
-    }
-  }
+  if (error || !data?.length) return map;
 
-  for (const [doctorId, pending] of dailyPending.byDoctor) {
+  for (const row of data) {
+    const doctorId = String(row.doctor_id ?? "");
+    if (!doctorId) continue;
+    const pending = pendingDoctorShareFromPayrollRow(
+      row as PayrollRecordPendingRow
+    );
     if (pending <= FINANCIAL_EPSILON) continue;
     map.set(
       doctorId,

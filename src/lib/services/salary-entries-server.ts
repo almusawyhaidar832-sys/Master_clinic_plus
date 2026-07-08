@@ -46,30 +46,6 @@ async function fetchAssistantPendingDoctorShare(
   if (base.error) return 0;
 
   const dailyWage = isDailyWageAssistant(base.compensationMode);
-  const { from, to } = monthDateRange(monthYear);
-
-  const { entries } = await listSalaryEntriesForPersonMonth(
-    admin,
-    clinicId,
-    monthYear,
-    { assistantId }
-  );
-  const hasDailyWageEntries = entries.some(
-    (entry) => entry.entry_type === "daily_wage"
-  );
-
-  if (dailyWage || hasDailyWageEntries) {
-    const { fetchRegisteredAssistantPayrollDoctorDeductionForAssistant } =
-      await import("@/lib/ledger/daily-assistant-payroll");
-    return fetchRegisteredAssistantPayrollDoctorDeductionForAssistant(
-      admin,
-      clinicId,
-      assistantId,
-      from,
-      to
-    );
-  }
-
   const { data: record } = await admin
     .from("payroll_records")
     .select(
@@ -82,12 +58,28 @@ async function fetchAssistantPendingDoctorShare(
 
   if (record) {
     return assistantPendingDoctorShare(record as PayrollRecord, {
-      dailyWage: false,
+      dailyWage,
       doctorSharePercentage: base.doctorSharePercentage,
     });
   }
 
-  return 0;
+  if (!dailyWage) return 0;
+
+  const { entries } = await listSalaryEntriesForPersonMonth(
+    admin,
+    clinicId,
+    monthYear,
+    { assistantId }
+  );
+  const { netPayout } = computeAssistantNetPay(
+    base.compensationMode,
+    base.baseSalary,
+    entries
+  );
+  return breakdownAssistantSalary({
+    total_salary: netPayout,
+    doctor_share_percentage: base.doctorSharePercentage,
+  }).doctorShare;
 }
 
 function notifyDoctorAssistantPayrollChangeIfNeeded(
