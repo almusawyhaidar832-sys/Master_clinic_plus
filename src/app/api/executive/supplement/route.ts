@@ -12,6 +12,12 @@ import { fetchClinicProfitStatsForPeriod } from "@/lib/services/clinic-stats";
 import { normalizeTopPerformersPayload } from "@/lib/services/doctor-performance";
 import type { TopPerformersPayload } from "@/lib/services/doctor-performance";
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate",
+};
+
 function alignTopPerformersWithCollections(
   payload: TopPerformersPayload,
   byDoctor: Array<{
@@ -122,25 +128,28 @@ export async function GET(req: NextRequest) {
       collectionFinancials.byDoctor
     );
 
-    return NextResponse.json({
-      ...supplement,
-      topPerformers: topPayload,
-      reportAligned: {
-        netProfit: profitStats.netProfit,
-        clinicShareTotal: collectionFinancials.clinicShareTotal,
-        totalExpenses: profitStats.totalExpenses,
-        reviewFees,
-        balanceTopups: profitStats.balanceTopupsTotal,
-        salariesDeducted: profitStats.totalSalariesPaid,
-        doctorShareTotal: collectionFinancials.doctorShareTotal,
-        revenue,
-        collected: collectionFinancials.collected,
-        operationCount: ops.length,
-        patientCount,
-        newPatients,
-        doctorEarningsByDoctor: collectionFinancials.byDoctor,
+    return NextResponse.json(
+      {
+        ...supplement,
+        topPerformers: topPayload,
+        reportAligned: {
+          netProfit: profitStats.netProfit,
+          clinicShareTotal: collectionFinancials.clinicShareTotal,
+          totalExpenses: profitStats.totalExpenses,
+          reviewFees,
+          balanceTopups: profitStats.balanceTopupsTotal,
+          salariesDeducted: profitStats.totalSalariesPaid,
+          doctorShareTotal: collectionFinancials.doctorShareTotal,
+          revenue,
+          collected: collectionFinancials.collected,
+          operationCount: ops.length,
+          patientCount,
+          newPatients,
+          doctorEarningsByDoctor: collectionFinancials.byDoctor,
+        },
       },
-    });
+      { headers: NO_STORE_HEADERS }
+    );
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
     return NextResponse.json({ error: msg }, { status: 500 });

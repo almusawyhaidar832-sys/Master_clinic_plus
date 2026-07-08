@@ -3,6 +3,12 @@ import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { fetchClinicProfitStatsForPeriod } from "@/lib/services/clinic-stats";
 
+export const dynamic = "force-dynamic";
+
+const NO_STORE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate",
+};
+
 /** GET /api/clinic/profit-stats?from=&to= — أرباح الفترة (مصدر موحّد للإدارة والمحاسب) */
 export async function GET(req: NextRequest) {
   try {
@@ -33,7 +39,7 @@ export async function GET(req: NextRequest) {
       to
     );
 
-    return NextResponse.json(stats);
+    return NextResponse.json(stats, { headers: NO_STORE_HEADERS });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
     return NextResponse.json({ error: msg }, { status: 500 });

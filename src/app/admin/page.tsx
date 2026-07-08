@@ -28,7 +28,6 @@ import { AdminDoctorPerformance } from "@/components/admin/AdminDoctorPerformanc
 import { BalanceTopUpButton } from "@/components/finance/BalanceTopUpModal";
 import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
 import { useClinicSync } from "@/hooks/useClinicSync";
-import type { BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
 
 export default function AdminHomePage() {
   const [stats, setStats] = useState<ClinicProfitStats | null>(null);
@@ -74,26 +73,7 @@ export default function AdminHomePage() {
     enabled: !!clinicId,
   });
 
-  const reloadStats = (detail?: BalanceTopUpSuccessDetail) => {
-    const { from, to } = monthDateRange(currentMonthYear());
-    if (
-      detail?.target === "clinic" &&
-      detail.amount > 0 &&
-      detail.transactionDate >= from &&
-      detail.transactionDate <= to
-    ) {
-      setStats((prev) =>
-        prev
-          ? {
-              ...prev,
-              netProfit: prev.netProfit + detail.amount,
-              balanceTopupsTotal: prev.balanceTopupsTotal + detail.amount,
-            }
-          : prev
-      );
-    }
-    setRefreshKey((k) => k + 1);
-  };
+  const reloadStats = () => setRefreshKey((k) => k + 1);
 
   const monthRange = monthDateRange(currentMonthYear());
 

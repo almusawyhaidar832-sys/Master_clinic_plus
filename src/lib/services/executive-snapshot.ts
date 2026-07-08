@@ -527,6 +527,35 @@ export interface ReportAlignedProfitMetrics {
   newPatients: number;
 }
 
+/** دمج شحن معلّق حتى يعكس السيرفر المبلغ ضمن الفترة */
+export function reconcilePendingClinicTopUp<T extends ExecutiveSnapshotCore>(
+  snap: T,
+  pending: { minTopups: number; minNetProfit: number }
+): { snap: T; resolved: boolean } {
+  const serverTopups = roundMoney(Number(snap.balance_topups ?? 0));
+  const serverNet = roundMoney(Number(snap.net_profit ?? 0));
+  const topupsOk = serverTopups + 0.01 >= pending.minTopups;
+  const netOk = serverNet + 0.01 >= pending.minNetProfit;
+
+  if (topupsOk && netOk) {
+    return { snap, resolved: true };
+  }
+
+  let next = snap;
+  if (!topupsOk) {
+    next = applyClinicTopUpToSnapshot(next, pending.minTopups - serverTopups);
+  }
+  if (!netOk) {
+    next = {
+      ...next,
+      net_profit: roundMoney(
+        Math.max(Number(next.net_profit ?? 0), pending.minNetProfit)
+      ),
+    };
+  }
+  return { snap: next, resolved: false };
+}
+
 /** تحديث فوري لصافي الربح بعد شحن رصيد العيادة ضمن الفترة المعروضة */
 export function applyClinicTopUpToSnapshot<T extends ExecutiveSnapshotCore>(
   snap: T,

@@ -51,8 +51,6 @@ export function notifyBalanceTopUpRefresh(options: {
 }): void {
   if (typeof window === "undefined") return;
 
-  notifyClinicProfitRefresh(options.clinicId);
-
   if (options.target === "clinic") {
     notifyClinicSync({
       topic: ["profit", "financial"],
@@ -62,6 +60,8 @@ export function notifyBalanceTopUpRefresh(options: {
     });
     return;
   }
+
+  notifyClinicProfitRefresh(options.clinicId);
 
   if (options.doctorId) {
     notifyClinicSync({

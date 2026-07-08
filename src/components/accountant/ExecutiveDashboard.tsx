@@ -6,7 +6,7 @@
  * لا يملكها أي منافس بنفس الوضوح
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import {
@@ -14,6 +14,7 @@ import {
   resolveExecutiveSalaryDeduction,
   applyReportAlignedProfitMetrics,
   applyClinicTopUpToSnapshot,
+  reconcilePendingClinicTopUp,
   type ExecutiveSnapshotCore,
   type ReportAlignedProfitMetrics,
 } from "@/lib/services/executive-snapshot";
@@ -319,6 +320,11 @@ export function ExecutiveDashboard() {
   const [top, setTop]   = useState<TopPerformers | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const fetchGenerationRef = useRef(0);
+  const pendingClinicTopupRef = useRef<{
+    minTopups: number;
+    minNetProfit: number;
+  } | null>(null);
 
   // date range
   const getRange = useCallback(() => {
@@ -342,13 +348,14 @@ export function ExecutiveDashboard() {
 
   const fetchData = useCallback(async (options?: { silent?: boolean }) => {
     if (!clinicId) return;
+    const fetchGeneration = ++fetchGenerationRef.current;
     if (!options?.silent) setLoading(true);
     setFetchError(null);
     const { from, to } = getRange();
     const cacheBust = Date.now();
 
     try {
-    const [snapRes, supplementRes] = await Promise.all([
+    const [snapRes, supplementRes, profitStats] = await Promise.all([
       supabase.rpc("get_clinic_financial_snapshot", {
         p_clinic_id: clinicId, p_from: from, p_to: to,
       }),
@@ -359,6 +366,9 @@ export function ExecutiveDashboard() {
           headers: authPortalHeaders("accountant"),
           cache: "no-store",
         }
+      ),
+      fetchClinicProfitStatsForPeriodViaApi(from, to, "accountant").catch(
+        () => null
       ),
     ]);
 
@@ -389,37 +399,32 @@ export function ExecutiveDashboard() {
       ? reportAligned.salariesDeducted
       : resolveExecutiveSalaryDeduction(payrollAccruals, salariesPaidLegacy);
 
-    let profitFallback: ReportAlignedProfitMetrics | null = reportAligned ?? null;
-    if (!profitFallback) {
-      try {
-        const profitStats = await fetchClinicProfitStatsForPeriodViaApi(
-          from,
-          to,
-          "accountant"
-        );
-        profitFallback = {
-          netProfit: profitStats.netProfit,
-          clinicShareTotal: profitStats.clinicShareTotal,
-          totalExpenses: profitStats.totalExpenses,
-          reviewFees: profitStats.reviewFeesTotal,
-          balanceTopups: profitStats.balanceTopupsTotal,
-          salariesDeducted: profitStats.totalSalariesPaid,
-          doctorShareTotal: profitStats.doctorShareTotal,
-          revenue: Number((snapRes.data as Record<string, unknown>)?.revenue ?? 0),
-          collected: profitStats.cashInflow,
-          operationCount: Number(
-            (snapRes.data as Record<string, unknown>)?.operation_count ?? 0
-          ),
-          patientCount: Number(
-            (snapRes.data as Record<string, unknown>)?.patient_count ?? 0
-          ),
-          newPatients: Number(
-            (snapRes.data as Record<string, unknown>)?.new_patients ?? 0
-          ),
-        };
-      } catch {
-        profitFallback = null;
-      }
+    const snapRecord = (snapRes.data ?? {}) as Record<string, unknown>;
+    let profitFallback: ReportAlignedProfitMetrics | null = null;
+
+    if (profitStats) {
+      profitFallback = {
+        netProfit: profitStats.netProfit,
+        clinicShareTotal: profitStats.clinicShareTotal,
+        totalExpenses: profitStats.totalExpenses,
+        reviewFees: profitStats.reviewFeesTotal,
+        balanceTopups: profitStats.balanceTopupsTotal,
+        salariesDeducted: profitStats.totalSalariesPaid,
+        doctorShareTotal: profitStats.doctorShareTotal,
+        revenue: Number(reportAligned?.revenue ?? snapRecord.revenue ?? 0),
+        collected: profitStats.cashInflow,
+        operationCount: Number(
+          reportAligned?.operationCount ?? snapRecord.operation_count ?? 0
+        ),
+        patientCount: Number(
+          reportAligned?.patientCount ?? snapRecord.patient_count ?? 0
+        ),
+        newPatients: Number(
+          reportAligned?.newPatients ?? snapRecord.new_patients ?? 0
+        ),
+      };
+    } else if (reportAligned) {
+      profitFallback = reportAligned;
     }
 
     if (snapRes.error) {
@@ -472,17 +477,31 @@ export function ExecutiveDashboard() {
           period_to: to,
         };
 
-    setSnap({
+    let resolvedSnap: Snapshot = {
       ...baseSnap,
       salaries_deducted_from_profit: salariesDeducted,
-      // الذمم إجمالي حالي — لا يتصفّر ببداية فترة/شهر جديد (منفصل عن مراجعي الفترة)
       debt: totalDebt.debt,
       debtors_count: totalDebt.debtorCount,
       patient_count:
         visitorDebt.visitorCount > 0
           ? visitorDebt.visitorCount
           : baseSnap.patient_count,
-    });
+    };
+
+    if (pendingClinicTopupRef.current) {
+      const reconciled = reconcilePendingClinicTopUp(
+        resolvedSnap,
+        pendingClinicTopupRef.current
+      );
+      resolvedSnap = reconciled.snap as Snapshot;
+      if (reconciled.resolved) {
+        pendingClinicTopupRef.current = null;
+      }
+    }
+
+    if (fetchGeneration !== fetchGenerationRef.current) return;
+
+    setSnap(resolvedSnap);
 
     if (topPerformers) setTop(topPerformers);
     else setTop(null);
@@ -491,7 +510,9 @@ export function ExecutiveDashboard() {
         err instanceof Error ? err.message : t("execLoadProfitError")
       );
     } finally {
-    setLoading(false);
+    if (fetchGeneration === fetchGenerationRef.current) {
+      setLoading(false);
+    }
     }
   }, [clinicId, getRange, period, supabase, t]);
 
@@ -500,12 +521,18 @@ export function ExecutiveDashboard() {
       if (detail.target !== "clinic" || detail.amount <= 0) return;
       const { from, to } = getRange();
       if (detail.transactionDate < from || detail.transactionDate > to) return;
-      setSnap((prev) =>
-        prev ? applyClinicTopUpToSnapshot(prev, detail.amount) : prev
-      );
-      void fetchData({ silent: true });
+
+      setSnap((prev) => {
+        if (!prev) return prev;
+        const next = applyClinicTopUpToSnapshot(prev, detail.amount);
+        pendingClinicTopupRef.current = {
+          minTopups: Number(next.balance_topups ?? 0),
+          minNetProfit: Number(next.net_profit ?? 0),
+        };
+        return next;
+      });
     },
-    [fetchData, getRange]
+    [getRange]
   );
 
   useEffect(() => {
