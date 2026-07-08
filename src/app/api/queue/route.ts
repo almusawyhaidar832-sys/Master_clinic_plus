@@ -238,6 +238,8 @@ export async function POST(req: NextRequest) {
 
       if (entry.status === "waiting") {
         await sendQueueEntryToDoctor(entryId, true);
+      } else if (entry.status === "called" || entry.status === "in_progress") {
+        await recallAccountantNotification(entryId);
       }
 
       return NextResponse.json({ success: true });

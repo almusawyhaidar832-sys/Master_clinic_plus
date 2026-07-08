@@ -149,21 +149,40 @@ function alertAccountantBillingFromRow(
 }
 
 function alertAccountantFromBroadcast(
-  payload: { name?: string; entryId?: string; gender?: PatientGender; audioUrl?: string },
+  payload: {
+    name?: string;
+    entryId?: string;
+    gender?: PatientGender;
+    audioUrl?: string;
+    recall?: boolean;
+    sentAt?: string;
+  },
   seen: Set<string>,
   linkPath = "/dashboard/queue"
 ) {
   const entryId = payload.entryId;
-  const key = entryId ? `called-${entryId}` : `broadcast-${payload.name ?? Date.now()}`;
+  const recall = payload.recall === true;
+  const key = entryId
+    ? recall
+      ? `broadcast-recall-${entryId}-${payload.sentAt ?? "0"}`
+      : `called-${entryId}`
+    : `broadcast-${payload.name ?? Date.now()}`;
   if (seen.has(key)) return;
-  if (entryId && !shouldFireQueueAlert(`accountant-called-${entryId}`)) return;
+  const dedupeKey = entryId
+    ? recall
+      ? `accountant-recall-${entryId}-${payload.sentAt ?? "0"}`
+      : `accountant-called-${entryId}`
+    : null;
+  if (dedupeKey && !shouldFireQueueAlert(dedupeKey)) return;
   seen.add(key);
 
   const name = formatNameForSpeech(payload.name?.trim() || "مراجع");
   void triggerQueueAlert({
     kind: "accountant_admit",
-    title: "طلب دخول مراجع 🔔",
-    message: `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
+    title: recall ? "إعادة نداء — ادخل المراجع 🔔" : "طلب دخول مراجع 🔔",
+    message: recall
+      ? `تذكير: المراجع ${name} — يُرجى دخوله للعيادة الآن`
+      : `المراجع ${name} — يُرجى دخوله للعيادة الآن`,
     linkPath,
     entryId: entryId ?? undefined,
     patientName: name,
@@ -401,6 +420,8 @@ export function useAccountantQueueRealtime(
             entryId?: string;
             gender?: PatientGender;
             audioUrl?: string;
+            recall?: boolean;
+            sentAt?: string;
           };
           alertAccountantFromBroadcast(p, seenRef.current, admitLinkPath);
         }

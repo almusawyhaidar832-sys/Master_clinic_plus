@@ -276,11 +276,12 @@ function DoctorQueuePageContent() {
         body: JSON.stringify({ action: "recall", queue_entry_id: entry.id }),
       });
       const name = resolvePatientSpeechName(entry);
-      const doctorName = resolveDoctorSpeechName(entry.doctor);
       if (clinicId) {
         void broadcastAdmitRequest(supabase, clinicId, {
           name,
           entryId: entry.id,
+          recall: true,
+          sentAt: new Date().toISOString(),
         });
       }
     } catch (err) {
@@ -419,6 +420,20 @@ function DoctorQueuePageContent() {
                     {t("docFullPatientFile")}
                   </Link>
                 )}
+                <button
+                  type="button"
+                  onClick={() => void recallAdmit(clinicalEntry)}
+                  disabled={updating === clinicalEntry.id}
+                  className="flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/15 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/25 disabled:opacity-60"
+                  title={t("queueReCallTitle")}
+                >
+                  {updating === clinicalEntry.id ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  )}
+                  {t("queueReCallTitle")}
+                </button>
               </div>
             </div>
 
@@ -559,14 +574,15 @@ function DoctorQueuePageContent() {
                             )}
                             {t("docStartExamChart")}
                           </button>
-                          <button
-                            onClick={() => recallAdmit(entry)}
-                            disabled={updating === entry.id}
-                            className="flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-bold text-blue-700 disabled:opacity-60"
-                            title={t("docReEnterRequest")}
-                          >
-                            <RotateCcw className="h-4 w-4" />
-                          </button>
+                            <button
+                              onClick={() => recallAdmit(entry)}
+                              disabled={updating === entry.id}
+                              className="flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-bold text-blue-700 disabled:opacity-60"
+                              title={t("queueReCallTitle")}
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                              <span className="hidden sm:inline">{t("queueReCallTitle")}</span>
+                            </button>
                         </div>
                         <div className="flex gap-2">
                           <button
@@ -594,14 +610,29 @@ function DoctorQueuePageContent() {
                       </>
                     )}
                     {entry.status === "in_progress" && (
-                      <button
-                        type="button"
-                        onClick={() => openClinicalExam(entry)}
-                        className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 py-2.5 text-sm font-bold text-teal-900 hover:bg-teal-100"
-                      >
-                        <UserCheck className="h-4 w-4" />
-                        {isClinicalOpen ? t("docExamOpen") : t("docOpenChartXray")}
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openClinicalExam(entry)}
+                          className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 py-2.5 text-sm font-bold text-teal-900 hover:bg-teal-100"
+                        >
+                          <UserCheck className="h-4 w-4" />
+                          {isClinicalOpen ? t("docExamOpen") : t("docOpenChartXray")}
+                        </button>
+                        <button
+                          onClick={() => recallAdmit(entry)}
+                          disabled={updating === entry.id}
+                          className="flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-bold text-amber-700 disabled:opacity-60"
+                          title={t("queueReCallTitle")}
+                        >
+                          {updating === entry.id ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-4 w-4" />
+                          )}
+                          <span className="hidden sm:inline">{t("queueReCallTitle")}</span>
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

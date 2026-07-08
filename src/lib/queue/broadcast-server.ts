@@ -35,6 +35,8 @@ export type QueueAdmitPayload = {
   entryId?: string;
   gender?: PatientGender;
   audioUrl?: string;
+  recall?: boolean;
+  sentAt?: string;
 };
 
 function sendServerBroadcast(

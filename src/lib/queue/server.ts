@@ -578,7 +578,12 @@ export async function notifyAccountantsReadyForPayment(queueEntryId: string) {
 }
 
 /** Notify accountants: doctor ready for patient to enter */
-export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
+export async function notifyAccountantsPatientAdmit(
+  queueEntryId: string,
+  options?: { recall?: boolean }
+) {
+  const recall = options?.recall === true;
+  const sentAt = recall ? new Date().toISOString() : undefined;
   const admin = getAdminClient();
 
   const { data: entry, error } = await admin
@@ -623,6 +628,8 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
       entryId,
       gender: gender ?? undefined,
       audioUrl: admitAudioUrl,
+      recall,
+      sentAt,
     }),
   ]).catch((err) => {
     console.error("[queue] admit broadcast failed:", err);
@@ -634,6 +641,8 @@ export async function notifyAccountantsPatientAdmit(queueEntryId: string) {
     name,
     speechName,
     admitAudioUrl,
+    recall,
+    sentAt,
   }).catch((err) => {
     console.error("[queue] admit notify background failed:", err);
   });
@@ -645,7 +654,18 @@ async function deliverAccountantAdmitFollowups(input: {
   name: string;
   speechName: string;
   admitAudioUrl?: string;
+  recall?: boolean;
+  sentAt?: string;
 }) {
+  const recall = input.recall === true;
+  const titleAr = recall ? "إعادة نداء — ادخل المراجع" : "ادخل المراجع للعيادة";
+  const bodyAr = recall
+    ? `تذكير: المراجع ${input.name} — يُرجى دخوله للعيادة الآن`
+    : `المراجع ${input.name} — يُرجى دخوله للعيادة الآن`;
+  const pushTitle = recall ? "إعادة نداء — ادخل المراجع 🔔" : "طلب دخول مراجع 🔔";
+  const pushTag = recall
+    ? `admit-recall-${input.entryId}-${input.sentAt ?? Date.now()}`
+    : `admit-${input.entryId}`;
   const admin = getAdminClient();
   const { data: staff } = await admin
     .from("profiles")
@@ -660,17 +680,17 @@ async function deliverAccountantAdmitFollowups(input: {
       staff.map((s) => ({
         clinic_id: input.clinicId,
         recipient_profile_id: s.id,
-        title_ar: "ادخل المراجع للعيادة",
-        body_ar: `المراجع ${input.name} — يُرجى دخوله للعيادة الآن`,
+        title_ar: titleAr,
+        body_ar: bodyAr,
         link_path: "/dashboard/queue",
       }))
     ),
     ...staff.map((s) =>
       sendWebPushToProfile(s.id, {
-        title: "طلب دخول مراجع 🔔",
-        body: `المراجع ${input.name} — يُرجى دخوله للعيادة الآن`,
+        title: pushTitle,
+        body: bodyAr,
         url: "/dashboard/queue",
-        tag: `admit-${input.entryId}`,
+        tag: pushTag,
         entryId: input.entryId,
         patientName: input.speechName,
         kind: "accountant_admit",
@@ -710,14 +730,23 @@ export async function notifyPatientAdmitAllTargets(
   queueEntryId: string,
   options?: { recall?: boolean }
 ) {
+  const recall = options?.recall === true;
   await Promise.all([
-    notifyAccountantsPatientAdmit(queueEntryId),
-    emitQueueScreenCall(queueEntryId, { recall: options?.recall === true }),
+    notifyAccountantsPatientAdmit(queueEntryId, { recall }),
+    emitQueueScreenCall(queueEntryId, { recall }),
   ]);
 }
 
 /** Re-notify accountants + TV screen: doctor requests patient entry again */
 export async function recallAccountantNotification(queueEntryId: string) {
+  const admin = getAdminClient();
+  const now = new Date().toISOString();
+  await admin
+    .from("patient_queue")
+    .update({ called_at: now })
+    .eq("id", queueEntryId)
+    .in("status", ["called", "in_progress"]);
+
   await notifyPatientAdmitAllTargets(queueEntryId, { recall: true }).catch((err) => {
     console.error("[queue] admit recall failed:", err);
   });

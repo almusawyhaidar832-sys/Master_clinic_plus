@@ -59,7 +59,7 @@ export function broadcastPatientSentToDoctor(
 export function broadcastAdmitRequest(
   supabase: AppSupabaseClient,
   clinicId: string,
-  payload: { name: string; entryId?: string }
+  payload: { name: string; entryId?: string; recall?: boolean; sentAt?: string }
 ) {
   return sendBroadcast(
     supabase,

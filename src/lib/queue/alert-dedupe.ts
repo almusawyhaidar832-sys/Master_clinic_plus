@@ -62,7 +62,9 @@ export function queueAlertDedupeKey(input: {
 
   switch (kind) {
     case "accountant_admit":
-      return `accountant-called-${entryId}`;
+      return input.sentAt
+        ? `accountant-recall-${entryId}-${input.sentAt}`
+        : `accountant-called-${entryId}`;
     case "accountant_billing":
     case "accountant_payment":
       return `accountant-billing-${entryId}`;
