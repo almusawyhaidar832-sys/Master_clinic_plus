@@ -882,6 +882,7 @@ export async function fetchMasterClinicReport(
           totalRefunds: 0,
           clinicShareTotal: 0,
           doctorShareTotal: 0,
+          reviewFeesTotal: 0,
           totalExpenses: 0,
           totalSalariesPaid: 0,
           breakdown: [],
@@ -956,9 +957,7 @@ export async function fetchMasterClinicReport(
   const totalRevenue = monthCollected;
   const totalRefunds = Math.round(monthRefundsTotal * 100) / 100;
   const netProfit = profitStats.netProfit;
-  const reviewFees = profitStats.breakdown.find(
-    (b) => b.label === "كشفيات المراجعين"
-  )?.amount ?? 0;
+  const reviewFees = profitStats.reviewFeesTotal;
 
   const monthWithdrawals = await fetchClinicMonthWithdrawalLines(
     supabase,

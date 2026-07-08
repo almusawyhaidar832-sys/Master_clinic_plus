@@ -526,16 +526,19 @@ export interface ReportAlignedProfitMetrics {
   newPatients: number;
 }
 
-/** محاذاة اللوحة التنفيذية مع التقرير — حصة العيادة من clinic_share_amount وليس calc_clinic_operation_earned */
+/** محاذاة اللوحة التنفيذية مع الكشف المالي — علاج وكشفيات منفصلان في العرض */
 export function applyReportAlignedProfitMetrics<T extends ExecutiveSnapshotCore>(
   snap: T,
   aligned: ReportAlignedProfitMetrics
 ): T {
+  const clinicShareFromTreatment = roundMoney(
+    Math.max(0, aligned.clinicShareTotal - aligned.reviewFees)
+  );
   return {
     ...snap,
     revenue: aligned.revenue,
     collected: aligned.collected,
-    clinic_shares: aligned.clinicShareTotal,
+    clinic_shares: clinicShareFromTreatment,
     expenses: aligned.totalExpenses,
     review_fees: aligned.reviewFees,
     net_profit: aligned.netProfit,
@@ -604,27 +607,35 @@ export async function fetchResolvedSalaryDeductionForPeriod(
   );
 }
 
-/** كشفيات المراجع في الفترة — تُجمع كلما تُسجَّل جلسة بكشفية */
+/** كشفيات المراجع في الفترة — مدفوعة فقط، مع استنتاج السجلات القديمة */
 export async function fetchReviewFeesInPeriod(
   supabase: SupabaseClient,
   clinicId: string,
   from: string,
   to: string
 ): Promise<{ total: number; count: number }> {
-  const ops = await loadOperationsInPeriod(supabase, clinicId, from, to);
+  const {
+    loadClinicDefaultReviewFee,
+    resolveReviewFeeOnOperation,
+    sumReviewFeesInOperations,
+  } = await import("@/lib/services/doctor-wallet");
+  const [ops, clinicReviewFee] = await Promise.all([
+    loadOperationsInPeriod(supabase, clinicId, from, to),
+    loadClinicDefaultReviewFee(supabase, clinicId),
+  ]);
 
-  let total = 0;
   let count = 0;
   for (const row of ops) {
-    const fee = Number(
-      (row as unknown as Record<string, unknown>).review_fee_amount ?? 0
-    );
-    if (fee > 0) {
-      total += fee;
-      count += 1;
-    }
+    const paid = Number(row.paid_amount ?? 0);
+    if (paid <= 0) continue;
+    const fee = resolveReviewFeeOnOperation(row, clinicReviewFee);
+    if (fee > 0) count += 1;
   }
-  return { total, count };
+
+  return {
+    total: sumReviewFeesInOperations(ops, clinicReviewFee),
+    count,
+  };
 }
 
 export interface PeriodOperationFinancials {

@@ -111,6 +111,33 @@ export function resolveReviewFeeOnOperation(
   return paid;
 }
 
+/** كشفية العيادة الافتراضية — لاستنتاج review_fee_amount في السجلات القديمة */
+export async function loadClinicDefaultReviewFee(
+  supabase: SupabaseClient,
+  clinicId: string
+): Promise<number> {
+  return loadClinicReviewFeeForDoctor(supabase, clinicId);
+}
+
+/** مجموع كشفيات المراجعين — جلسات مدفوعة فقط */
+export function sumReviewFeesInOperations(
+  ops: Array<{
+    paid_amount?: number | string | null;
+    review_fee_amount?: number | string | null;
+    is_review_statement?: boolean | null;
+  }>,
+  clinicDefaultReviewFee = 0
+): number {
+  let total = 0;
+  for (const row of ops) {
+    const paid = Number(row.paid_amount ?? 0);
+    if (paid <= FINANCIAL_EPSILON) continue;
+    const fee = resolveReviewFeeOnOperation(row, clinicDefaultReviewFee);
+    if (fee > FINANCIAL_EPSILON) total += fee;
+  }
+  return roundMoney(total);
+}
+
 /** كشفية فقط — بدون مبلغ علاج ضمن نفس الدفعة */
 export function isReviewFeeOnlyPayment(
   row: {

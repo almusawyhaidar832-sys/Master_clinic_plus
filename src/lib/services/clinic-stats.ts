@@ -16,6 +16,7 @@ export interface ClinicProfitStats {
   totalRefunds: number;
   clinicShareTotal: number;
   doctorShareTotal: number;
+  reviewFeesTotal: number;
   totalExpenses: number;
   totalSalariesPaid: number;
   breakdown: {
@@ -67,6 +68,7 @@ const emptyProfitStats = (): ClinicProfitStats => ({
   totalRefunds: 0,
   clinicShareTotal: 0,
   doctorShareTotal: 0,
+  reviewFeesTotal: 0,
   totalExpenses: 0,
   totalSalariesPaid: 0,
   breakdown: [],
@@ -154,17 +156,16 @@ export async function fetchClinicProfitStatsForPeriod(
   const registeredAssistantClinicRounded = roundProfitMoney(registeredAssistantClinic);
   const totalSalariesPaidRounded = roundProfitMoney(totalSalariesPaid);
   const balanceTopupsRounded = roundProfitMoney(balanceTopups);
-  let reviewFeesTotal = 0;
-  for (const row of ops) {
-    const fee = Number(
-      (row as unknown as Record<string, unknown>).review_fee_amount ?? 0
-    );
-    if (fee > 0) reviewFeesTotal += fee;
-  }
-  reviewFeesTotal = roundProfitMoney(reviewFeesTotal);
+  const { loadClinicDefaultReviewFee, sumReviewFeesInOperations } =
+    await import("@/lib/services/doctor-wallet");
+  const clinicReviewFee = await loadClinicDefaultReviewFee(supabase, clinicId);
+  const reviewFeesTotal = sumReviewFeesInOperations(ops, clinicReviewFee);
+  /** حصة العيادة من الكشف المالي تتضمن الكشفيات — لا نجمعها مرة ثانية في الربح */
+  const clinicShareFromTreatment = roundProfitMoney(
+    Math.max(0, clinicShareTotal - reviewFeesTotal)
+  );
   const netProfit = roundProfitMoney(
-    clinicShareTotal +
-      reviewFeesTotal -
+    clinicShareTotal -
       totalExpenses -
       totalSalariesPaidRounded +
       balanceTopupsRounded
@@ -177,13 +178,14 @@ export async function fetchClinicProfitStatsForPeriod(
     totalRefunds: refundsRounded,
     clinicShareTotal,
     doctorShareTotal,
+    reviewFeesTotal,
     totalExpenses,
     totalSalariesPaid: totalSalariesPaidRounded,
     breakdown: [
       { label: "صافي المحصّل (بعد المرتجعات)", amount: cashInflow },
-      { label: "حصة العيادة من العمليات", amount: clinicShareTotal },
+      { label: "حصة العيادة من العلاج", amount: clinicShareFromTreatment },
       ...(reviewFeesTotal > 0
-        ? [{ label: "كشفيات المراجعين", amount: reviewFeesTotal }]
+        ? [{ label: "كشفيات المراجعين (ربح العيادة)", amount: reviewFeesTotal }]
         : []),
       ...(balanceTopupsRounded > 0
         ? [{ label: "شحن رصيد العيادة", amount: balanceTopupsRounded }]

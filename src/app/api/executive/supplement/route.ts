@@ -108,9 +108,7 @@ export async function GET(req: NextRequest) {
         fetchNewPatientsInPeriod(admin, clinicId, from, to),
       ]);
 
-    const reviewFees =
-      profitStats.breakdown.find((b) => b.label === "كشفيات المراجعين")
-        ?.amount ?? 0;
+    const reviewFees = profitStats.reviewFeesTotal;
 
     const revenue = Math.round(
       ops.reduce((s, op) => s + Number(op.total_amount ?? 0), 0) * 100
