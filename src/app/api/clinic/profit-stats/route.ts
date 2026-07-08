@@ -5,7 +5,11 @@ import {
 } from "@/lib/auth/api-session";
 import { resolveStaffApiClinicId } from "@/lib/auth/resolve-staff-clinic";
 import { getAdminClient } from "@/lib/supabase/admin";
-import { fetchClinicProfitStatsForPeriod } from "@/lib/services/clinic-stats";
+import {
+  applyClinicTopUpToProfitStats,
+  fetchClinicProfitStatsForPeriod,
+} from "@/lib/services/clinic-stats";
+import { fetchClinicBalanceTopupsForPeriod } from "@/lib/services/balance-topup";
 
 export const dynamic = "force-dynamic";
 
@@ -39,12 +43,18 @@ export async function GET(req: NextRequest) {
     }
 
     const admin = getAdminClient();
-    const stats = await fetchClinicProfitStatsForPeriod(
+    let stats = await fetchClinicProfitStatsForPeriod(admin, clinicId, from, to);
+
+    const topupsDirect = await fetchClinicBalanceTopupsForPeriod(
       admin,
       clinicId,
       from,
       to
     );
+    if (topupsDirect > stats.balanceTopupsTotal + 0.01) {
+      const delta = Math.round((topupsDirect - stats.balanceTopupsTotal) * 100) / 100;
+      stats = applyClinicTopUpToProfitStats(stats, delta);
+    }
 
     return NextResponse.json(stats, { headers: NO_STORE_HEADERS });
   } catch (e) {

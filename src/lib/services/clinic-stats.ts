@@ -286,6 +286,115 @@ export async function fetchClinicProfitStatsForPeriod(
   };
 }
 
+export type ClinicFinancialSnapshotRpc = {
+  netProfit: number;
+  balanceTopups: number;
+  collected: number;
+  clinicShares: number;
+  reviewFees: number;
+  expenses: number;
+  salariesPaid: number;
+  doctorShares: number;
+  debt: number;
+};
+
+/** نفس مصدر لوحة المحاسب — get_clinic_financial_snapshot */
+export async function fetchClinicFinancialSnapshotRpc(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<ClinicFinancialSnapshotRpc | null> {
+  try {
+    const { data, error } = await supabase.rpc("get_clinic_financial_snapshot", {
+      p_clinic_id: clinicId,
+      p_from: from,
+      p_to: to,
+    });
+    if (error || !data) return null;
+
+    const snap = data as Record<string, unknown>;
+    return {
+      netProfit: roundProfitMoney(Number(snap.net_profit ?? 0)),
+      balanceTopups: roundProfitMoney(Number(snap.balance_topups ?? 0)),
+      collected: roundProfitMoney(Number(snap.collected ?? 0)),
+      clinicShares: roundProfitMoney(Number(snap.clinic_shares ?? 0)),
+      reviewFees: roundProfitMoney(Number(snap.review_fees ?? 0)),
+      expenses: roundProfitMoney(Number(snap.expenses ?? 0)),
+      salariesPaid: roundProfitMoney(Number(snap.salaries_paid ?? 0)),
+      doctorShares: roundProfitMoney(Number(snap.doctor_shares ?? 0)),
+      debt: roundProfitMoney(Number(snap.debt ?? 0)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** يبني إحصائيات من لقطة RPC عند تعذّر الـ API */
+export function clinicProfitStatsFromFinancialSnapshot(
+  snap: ClinicFinancialSnapshotRpc
+): ClinicProfitStats {
+  const clinicShareTotal = roundProfitMoney(snap.clinicShares + snap.reviewFees);
+  return {
+    cashInflow: snap.collected,
+    outstandingDebts: snap.debt,
+    netProfit: snap.netProfit,
+    totalRefunds: 0,
+    clinicShareTotal,
+    doctorShareTotal: snap.doctorShares,
+    reviewFeesTotal: snap.reviewFees,
+    balanceTopupsTotal: snap.balanceTopups,
+    totalExpenses: snap.expenses,
+    totalSalariesPaid: snap.salariesPaid,
+    breakdown: [
+      { label: "صافي المحصّل (بعد المرتجعات)", amount: snap.collected },
+      {
+        label: "حصة العيادة من العلاج",
+        amount: roundProfitMoney(Math.max(0, clinicShareTotal - snap.reviewFees)),
+      },
+      ...(snap.reviewFees > 0
+        ? [{ label: "كشفيات المراجعين (ربح العيادة)", amount: snap.reviewFees }]
+        : []),
+      ...(snap.balanceTopups > 0
+        ? [{ label: BALANCE_TOPUP_LABEL, amount: snap.balanceTopups }]
+        : []),
+      { label: "صرفيات العيادة", amount: -snap.expenses },
+      { label: "رواتب مؤكَّد صرفها", amount: -snap.salariesPaid },
+      { label: NET_PROFIT_LABEL, amount: snap.netProfit },
+    ],
+  };
+}
+
+/** يدمج شحن الرصيد من لقطة RPC إن لم يعكسه الـ API */
+export function alignClinicProfitStatsWithFinancialSnapshot(
+  stats: ClinicProfitStats,
+  snap: ClinicFinancialSnapshotRpc
+): ClinicProfitStats {
+  let next = stats;
+  const topupGap = roundProfitMoney(snap.balanceTopups - stats.balanceTopupsTotal);
+
+  if (topupGap > 0.01) {
+    next = applyClinicTopUpToProfitStats(next, topupGap);
+  }
+
+  if (snap.netProfit > next.netProfit + 0.01) {
+    const netGap = roundProfitMoney(snap.netProfit - next.netProfit);
+    if (netGap > 0.01) {
+      next = {
+        ...next,
+        netProfit: snap.netProfit,
+        breakdown: next.breakdown.map((row) =>
+          row.label === NET_PROFIT_LABEL
+            ? { ...row, amount: snap.netProfit }
+            : row
+        ),
+      };
+    }
+  }
+
+  return next;
+}
+
 export async function fetchClinicProfitStats(
   supabase: SupabaseClient
 ): Promise<ClinicProfitStats> {

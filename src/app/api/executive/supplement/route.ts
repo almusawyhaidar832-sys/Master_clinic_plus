@@ -9,7 +9,11 @@ import {
   loadOperationsInPeriod,
 } from "@/lib/services/executive-snapshot";
 import { fetchPeriodCollectionFinancialTotals } from "@/lib/ledger/daily-collections";
-import { fetchClinicProfitStatsForPeriod } from "@/lib/services/clinic-stats";
+import {
+  applyClinicTopUpToProfitStats,
+  fetchClinicProfitStatsForPeriod,
+} from "@/lib/services/clinic-stats";
+import { fetchClinicBalanceTopupsForPeriod } from "@/lib/services/balance-topup";
 import { normalizeTopPerformersPayload } from "@/lib/services/doctor-performance";
 import type { TopPerformersPayload } from "@/lib/services/doctor-performance";
 
@@ -109,7 +113,7 @@ export async function GET(req: NextRequest) {
 
     const admin = getAdminClient();
     const ops = await loadOperationsInPeriod(admin, clinicId, from, to);
-    const [supplement, profitStats, collectionFinancials, topPerformers, newPatients] =
+    const [supplement, profitStatsRaw, collectionFinancials, topPerformers, newPatients] =
       await Promise.all([
         fetchExecutiveDashboardSupplement(admin, clinicId, from, to),
         fetchClinicProfitStatsForPeriod(admin, clinicId, from, to),
@@ -117,6 +121,19 @@ export async function GET(req: NextRequest) {
         fetchTopPerformersForPeriod(admin, clinicId, from, to),
         fetchNewPatientsInPeriod(admin, clinicId, from, to),
       ]);
+
+    let profitStats = profitStatsRaw;
+    const topupsDirect = await fetchClinicBalanceTopupsForPeriod(
+      admin,
+      clinicId,
+      from,
+      to
+    );
+    if (topupsDirect > profitStats.balanceTopupsTotal + 0.01) {
+      const delta =
+        Math.round((topupsDirect - profitStats.balanceTopupsTotal) * 100) / 100;
+      profitStats = applyClinicTopUpToProfitStats(profitStats, delta);
+    }
 
     const reviewFees = profitStats.reviewFeesTotal;
 

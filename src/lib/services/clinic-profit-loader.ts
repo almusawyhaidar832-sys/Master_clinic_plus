@@ -1,7 +1,11 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
 import {
+  alignClinicProfitStatsWithFinancialSnapshot,
   applyClinicTopUpToProfitStats,
+  clinicProfitStatsFromFinancialSnapshot,
+  fetchClinicFinancialSnapshotRpc,
   type ClinicProfitStats,
 } from "@/lib/services/clinic-stats";
 import { reconcilePendingClinicProfitStats } from "@/lib/services/clinic-profit-pending";
@@ -39,15 +43,12 @@ async function fetchProfitStatsWithPortalFallback(
 
 /** يدمج شحن الرصيد من جدول الحركات إن لم يعكسه الـ API */
 async function mergeClientBalanceTopupsIfNeeded(
+  supabase: SupabaseClient,
   clinicId: string,
   stats: ClinicProfitStats,
   period: { from: string; to: string }
 ): Promise<ClinicProfitStats> {
-  if (typeof window === "undefined") return stats;
-
   try {
-    const { createClient } = await import("@/lib/supabase/client");
-    const supabase = createClient();
     const { data } = await supabase
       .from("transactions")
       .select("amount")
@@ -68,10 +69,45 @@ async function mergeClientBalanceTopupsIfNeeded(
       return applyClinicTopUpToProfitStats(stats, delta);
     }
   } catch {
-    /* RLS أو اتصال — نعتمد على الـ API */
+    /* RLS أو اتصال — نعتمد على المصادر الأخرى */
   }
 
   return stats;
+}
+
+/** يطابق لوحة المحاسب — RPC + API + شحن معلّق */
+async function mergeFinancialSnapshotRpc(
+  supabase: SupabaseClient,
+  clinicId: string,
+  stats: ClinicProfitStats | null,
+  period: { from: string; to: string }
+): Promise<ClinicProfitStats> {
+  const snap = await fetchClinicFinancialSnapshotRpc(
+    supabase,
+    clinicId,
+    period.from,
+    period.to
+  );
+
+  if (!snap) {
+    return stats ?? clinicProfitStatsFromFinancialSnapshot({
+      netProfit: 0,
+      balanceTopups: 0,
+      collected: 0,
+      clinicShares: 0,
+      reviewFees: 0,
+      expenses: 0,
+      salariesPaid: 0,
+      doctorShares: 0,
+      debt: 0,
+    });
+  }
+
+  if (!stats) {
+    return clinicProfitStatsFromFinancialSnapshot(snap);
+  }
+
+  return alignClinicProfitStatsWithFinancialSnapshot(stats, snap);
 }
 
 /** تحميل ربح العيادة مع دمج أي شحن رصيد معلّق — مصدر موحّد للمحاسب والإدارة */
@@ -80,11 +116,29 @@ export async function fetchAlignedClinicProfitStats(
   _portal: AuthPortalId = "accountant",
   period: { from: string; to: string } = defaultClinicProfitPeriod()
 ): Promise<ClinicProfitStats> {
-  let stats = await fetchProfitStatsWithPortalFallback(
-    period.from,
-    period.to,
-    clinicId
-  );
-  stats = await mergeClientBalanceTopupsIfNeeded(clinicId, stats, period);
+  const { createClient } = await import("@/lib/supabase/client");
+  const supabase = createClient();
+
+  let stats: ClinicProfitStats | null = null;
+  try {
+    stats = await fetchProfitStatsWithPortalFallback(
+      period.from,
+      period.to,
+      clinicId
+    );
+  } catch {
+    stats = null;
+  }
+
+  if (stats) {
+    stats = await mergeClientBalanceTopupsIfNeeded(
+      supabase,
+      clinicId,
+      stats,
+      period
+    );
+  }
+
+  stats = await mergeFinancialSnapshotRpc(supabase, clinicId, stats, period);
   return reconcilePendingClinicProfitStats(clinicId, stats, period);
 }
