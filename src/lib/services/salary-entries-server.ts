@@ -48,7 +48,17 @@ async function fetchAssistantPendingDoctorShare(
   const dailyWage = isDailyWageAssistant(base.compensationMode);
   const { from, to } = monthDateRange(monthYear);
 
-  if (dailyWage) {
+  const { entries } = await listSalaryEntriesForPersonMonth(
+    admin,
+    clinicId,
+    monthYear,
+    { assistantId }
+  );
+  const hasDailyWageEntries = entries.some(
+    (entry) => entry.entry_type === "daily_wage"
+  );
+
+  if (dailyWage || hasDailyWageEntries) {
     const { fetchRegisteredAssistantPayrollDoctorDeductionForAssistant } =
       await import("@/lib/ledger/daily-assistant-payroll");
     return fetchRegisteredAssistantPayrollDoctorDeductionForAssistant(
