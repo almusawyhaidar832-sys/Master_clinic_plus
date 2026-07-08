@@ -473,7 +473,7 @@ export function ExecutiveDashboard() {
           period_to: to,
         };
 
-    let resolvedSnap: Snapshot = {
+    const resolvedSnap: Snapshot = {
       ...baseSnap,
       salaries_deducted_from_profit: salariesDeducted,
       debt: totalDebt.debt,

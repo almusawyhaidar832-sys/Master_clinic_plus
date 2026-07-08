@@ -9,7 +9,7 @@ import {
   fetchAlignedClinicProfitStats,
 } from "@/lib/services/clinic-profit-loader";
 import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
-import { currentMonthYear, formatCurrency } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { TrendingDown, TrendingUp, Wallet, AlertCircle } from "lucide-react";
 import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
