@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { notifyClinicSync } from "@/lib/sync/clinic-events";
+import type { BalanceTopUpTarget } from "@/lib/services/balance-topup";
 
 /** يُبث عند تغيّر المصروفات أو الرواتب — اللوحة التنفيذية تُحدَّث فوراً */
 export const CLINIC_PROFIT_REFRESH_EVENT = "clinic-profit-refresh";
@@ -37,6 +38,26 @@ export function notifyClinicProfitRefresh(clinicId?: string): void {
     notifyClinicSync({
       topic: ["profit", "financial"],
       clinicId,
+      source: "mutation",
+    });
+  }
+}
+
+/** إشعار فوري بعد شحن رصيد — يحدّث محفظة الطبيب والكشف المالي */
+export function notifyBalanceTopUpRefresh(options: {
+  clinicId?: string;
+  doctorId?: string | null;
+  target: BalanceTopUpTarget;
+}): void {
+  if (typeof window === "undefined") return;
+
+  notifyClinicProfitRefresh(options.clinicId);
+
+  if (options.target === "doctor" && options.doctorId) {
+    notifyClinicSync({
+      topic: "financial",
+      clinicId: options.clinicId,
+      doctorId: options.doctorId,
       source: "mutation",
     });
   }

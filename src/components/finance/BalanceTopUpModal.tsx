@@ -9,7 +9,7 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
-import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
+import { notifyBalanceTopUpRefresh } from "@/lib/services/clinic-profit";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn, formatCurrency, todayISO } from "@/lib/utils";
 import type { BalanceTopUpTarget } from "@/lib/services/balance-topup";
@@ -137,11 +137,26 @@ export function BalanceTopUpModal({
         return;
       }
 
-      notifyClinicProfitRefresh(clinicId ?? undefined);
-      if (target === "clinic" && json.amount) {
-        window.alert(
-          `تم شحن ${formatCurrency(json.amount)} لربح العيادة.\nيظهر في «توضيح الربح» والكشف المالي لنفس تاريخ الشحن.`
-        );
+      const toppedDoctorId =
+        target === "doctor" ? (json.doctor_id ?? doctorId) : undefined;
+      notifyBalanceTopUpRefresh({
+        clinicId: clinicId ?? undefined,
+        doctorId: toppedDoctorId,
+        target,
+      });
+
+      if (json.amount) {
+        if (target === "clinic") {
+          window.alert(
+            `تم شحن ${formatCurrency(json.amount)} لربح العيادة.\nيظهر في «توضيح الربح» والكشف المالي لنفس تاريخ الشحن.`
+          );
+        } else {
+          const doctorName =
+            doctors.find((d) => d.id === toppedDoctorId)?.name ?? t("doctor");
+          window.alert(
+            `تم شحن ${formatCurrency(json.amount)} لرصيد ${doctorName}.\nيرتفع الرصيد فوراً في محفظة الطبيب والكشف المالي لنفس تاريخ الشحن.`
+          );
+        }
       }
       onSuccess?.();
       onClose();

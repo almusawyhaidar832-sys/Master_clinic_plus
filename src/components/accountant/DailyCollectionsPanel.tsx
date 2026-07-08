@@ -31,6 +31,7 @@ import { withdrawalStatusLabel } from "@/lib/withdrawals/display";
 import type { ClinicBalanceTopUpLine } from "@/lib/services/balance-topup";
 import type { DoctorBalanceTopUpLine } from "@/lib/ledger/daily-doctor-balance-topups";
 import type { DailyDoctorExpenseLine } from "@/lib/ledger/daily-statement-expenses";
+import { BalanceTopUpButton } from "@/components/finance/BalanceTopUpModal";
 import {
   ClinicExpenseRow,
   DoctorExpenseRow,
@@ -798,6 +799,12 @@ export function DailyCollectionsPanel() {
             }))}
           />
           <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-1">
+            <BalanceTopUpButton
+              portal="accountant"
+              onSuccess={() => void loadCollections()}
+              size="sm"
+              variant="outline"
+            />
             <Button
               type="button"
               onClick={() => void loadCollections()}

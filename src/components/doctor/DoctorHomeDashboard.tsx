@@ -4,7 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser, getAuthProfile } from "@/lib/clinic-context";
-import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
+import {
+  fetchDoctorWalletStats,
+  type DoctorWalletStats,
+} from "@/lib/services/doctor-wallet";
+import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { fetchUnreadNotificationCountViaApi } from "@/lib/notifications/client";
 import { todayISO } from "@/lib/utils";
 import { doctorQuickActions, QUICK_ACTION_ICON_MAP } from "@/components/layout/DoctorMobileShell";
@@ -44,8 +48,7 @@ export function DoctorHomeDashboard() {
     setDoctorName(doctor.full_name_ar);
     setSpecialty(doctor.specialty_ar ?? "");
 
-    const [stats, opsRes, notifCount] = await Promise.all([
-      fetchDoctorWalletStats(supabase, doctor.id),
+    const [opsRes, notifCount] = await Promise.all([
       supabase
         .from("patient_operations")
         .select("id", { count: "exact", head: true })
@@ -53,6 +56,22 @@ export function DoctorHomeDashboard() {
         .eq("operation_date", todayISO()),
       fetchUnreadNotificationCountViaApi("doctor"),
     ]);
+
+    let stats: DoctorWalletStats | null = null;
+    try {
+      const res = await fetch("/api/doctor/wallet-stats", {
+        credentials: "include",
+        headers: authPortalHeaders("doctor"),
+      });
+      if (res.ok) {
+        stats = (await res.json()) as DoctorWalletStats;
+      }
+    } catch {
+      /* fallback below */
+    }
+    if (!stats) {
+      stats = await fetchDoctorWalletStats(supabase, doctor.id);
+    }
 
     setWallet(stats);
     setTodayOps(opsRes.count ?? 0);
