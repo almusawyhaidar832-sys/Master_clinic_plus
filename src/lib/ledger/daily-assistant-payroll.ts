@@ -5,7 +5,7 @@ import {
   normalizeAssistantCompensationMode,
 } from "@/lib/services/assistant-compensation";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
-import { assistantPendingDoctorShare } from "@/lib/services/payroll-paid-portions";
+import { assistantPendingDoctorShare, assistantPendingClinicShare } from "@/lib/services/payroll-paid-portions";
 import { todayISO } from "@/lib/utils";
 import type { PayrollRecord } from "@/types";
 
@@ -329,7 +329,7 @@ export function sumAssistantPayrollClinicShare(
   );
 }
 
-/** حصة العيادة من أجور مساعدين مسجّلة ولم تُؤكَّد صرفها بعد */
+/** حصة العيادة من أجور مساعدين مسجّلة ولم تُؤكَّد صرفها بعد — نفس الكشف المالي */
 export async function fetchRegisteredAssistantPayrollClinicDeduction(
   supabase: SupabaseClient,
   clinicId: string,
@@ -340,7 +340,64 @@ export async function fetchRegisteredAssistantPayrollClinicDeduction(
     dateFrom: from,
     dateTo: to,
   });
-  return sumAssistantPayrollClinicShare(lines, "registered");
+  let total = sumAssistantPayrollClinicShare(lines, "registered");
+
+  const handledAssistantIds = new Set<string>();
+  for (const line of lines) {
+    if (
+      line.statusLabel === "أجر مسجّل" &&
+      line.assistantId &&
+      line.clinicShare > FINANCIAL_EPSILON
+    ) {
+      handledAssistantIds.add(line.assistantId);
+    }
+  }
+
+  const { data: records, error } = await supabase
+    .from("payroll_records")
+    .select(
+      `
+      assistant_id,
+      clinic_share_amount,
+      paid_clinic_share_amount,
+      doctor_share_percentage,
+      assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
+    `
+    )
+    .eq("clinic_id", clinicId)
+    .neq("status", "paid");
+
+  if (!error && records?.length) {
+    for (const row of records) {
+      const assistantId = row.assistant_id ? String(row.assistant_id) : "";
+      if (!assistantId || handledAssistantIds.has(assistantId)) continue;
+
+      const assistantRaw = row.assistant;
+      const assistant = Array.isArray(assistantRaw)
+        ? assistantRaw[0]
+        : assistantRaw;
+      const dailyWage = isDailyWageAssistant(
+        normalizeAssistantCompensationMode(
+          (assistant as { compensation_mode?: string } | null)
+            ?.compensation_mode
+        )
+      );
+      if (!dailyWage) continue;
+
+      const doctorSharePct = Number(
+        (assistant as { doctor_share_percentage?: number } | null)
+          ?.doctor_share_percentage ?? row.doctor_share_percentage ?? 0
+      );
+      const pendingClinic = assistantPendingClinicShare(
+        row as PayrollRecordPendingRow,
+        { dailyWage: true, doctorSharePercentage: doctorSharePct }
+      );
+      if (pendingClinic <= FINANCIAL_EPSILON) continue;
+      total = roundMoney(total + pendingClinic);
+    }
+  }
+
+  return roundMoney(total);
 }
 
 export function sumAssistantPayrollDoctorDeduction(

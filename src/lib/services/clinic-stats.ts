@@ -1,15 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { calculateClinicProfit } from "@/lib/finance";
-import {
-  fetchClinicShareExpenseTotal,
-  fetchOutstandingDebts,
-  fetchTreatmentLevelShares,
-} from "@/lib/services/clinic-financial-aggregate";
-import {
-  fetchPeriodVisitorDebt,
-} from "@/lib/services/executive-snapshot";
 import { getActiveClinicId } from "@/lib/clinic-context";
-import { fetchClinicBalanceTopupsForPeriod, fetchClinicBalanceTopupsTotal } from "@/lib/services/balance-topup";
+import { fetchClinicBalanceTopupsForPeriod } from "@/lib/services/balance-topup";
 import { formatCurrency, todayISO } from "@/lib/utils";
 
 export interface TodaySummary {
@@ -81,6 +72,10 @@ const emptyProfitStats = (): ClinicProfitStats => ({
   breakdown: [],
 });
 
+function roundProfitMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 /** إحصائيات مالية لشهر أو فترة محددة — للتقارير التاريخية */
 export async function fetchClinicProfitStatsForPeriod(
   supabase: SupabaseClient,
@@ -91,7 +86,7 @@ export async function fetchClinicProfitStatsForPeriod(
   const { fetchTotalRefundsAmount } = await import(
     "@/lib/services/session-refunds"
   );
-  const { fetchResolvedSalaryDeductionForPeriod, loadOperationsInPeriod } =
+  const { fetchResolvedSalaryDeductionForPeriod, loadOperationsInPeriod, fetchPeriodVisitorDebt } =
     await import("@/lib/services/executive-snapshot");
   const { fetchPeriodCollectionFinancialTotals } = await import(
     "@/lib/ledger/daily-collections"
@@ -135,23 +130,30 @@ export async function fetchClinicProfitStatsForPeriod(
     fetchClinicBalanceTopupsForPeriod(supabase, clinicId, from, to),
   ]);
 
-  const confirmedSalariesPaid = Math.round(
-    (totalSalariesPaid - registeredAssistantClinic) * 100
-  ) / 100;
-
-  const cashInflow = collectionFinancials.collected;
-  const clinicShareTotal = collectionFinancials.clinicShareTotal;
-  const doctorShareTotal = collectionFinancials.doctorShareTotal;
-  const generalExpenses = (expensesRes.data ?? [])
-    .filter((r) => (r.expense_kind ?? "general") !== "doctor_salary")
-    .reduce((s, r) => s + Number(r.amount ?? 0), 0);
-  const clinicExpenseShare = (clinicExpenseShareRes.data ?? []).reduce(
-    (s, row) => s + Math.abs(Number(row.amount ?? 0)),
-    0
+  const confirmedSalariesPaid = roundProfitMoney(
+    totalSalariesPaid - registeredAssistantClinic
   );
-  const totalExpenses = generalExpenses + clinicExpenseShare;
-  const outstandingDebts = visitorDebt.debt;
-  const refundsRounded = Math.round(totalRefunds * 100) / 100;
+
+  const cashInflow = roundProfitMoney(collectionFinancials.collected);
+  const clinicShareTotal = roundProfitMoney(collectionFinancials.clinicShareTotal);
+  const doctorShareTotal = roundProfitMoney(collectionFinancials.doctorShareTotal);
+  const generalExpenses = roundProfitMoney(
+    (expensesRes.data ?? [])
+      .filter((r) => (r.expense_kind ?? "general") !== "doctor_salary")
+      .reduce((s, r) => s + Number(r.amount ?? 0), 0)
+  );
+  const clinicExpenseShare = roundProfitMoney(
+    (clinicExpenseShareRes.data ?? []).reduce(
+      (s, row) => s + Math.abs(Number(row.amount ?? 0)),
+      0
+    )
+  );
+  const totalExpenses = roundProfitMoney(generalExpenses + clinicExpenseShare);
+  const outstandingDebts = roundProfitMoney(visitorDebt.debt);
+  const refundsRounded = roundProfitMoney(totalRefunds);
+  const registeredAssistantClinicRounded = roundProfitMoney(registeredAssistantClinic);
+  const totalSalariesPaidRounded = roundProfitMoney(totalSalariesPaid);
+  const balanceTopupsRounded = roundProfitMoney(balanceTopups);
   let reviewFeesTotal = 0;
   for (const row of ops) {
     const fee = Number(
@@ -159,10 +161,14 @@ export async function fetchClinicProfitStatsForPeriod(
     );
     if (fee > 0) reviewFeesTotal += fee;
   }
-  const netProfit = Math.round(
-    (clinicShareTotal + reviewFeesTotal - totalExpenses - totalSalariesPaid + balanceTopups) *
-      100
-  ) / 100;
+  reviewFeesTotal = roundProfitMoney(reviewFeesTotal);
+  const netProfit = roundProfitMoney(
+    clinicShareTotal +
+      reviewFeesTotal -
+      totalExpenses -
+      totalSalariesPaidRounded +
+      balanceTopupsRounded
+  );
 
   return {
     cashInflow,
@@ -172,15 +178,15 @@ export async function fetchClinicProfitStatsForPeriod(
     clinicShareTotal,
     doctorShareTotal,
     totalExpenses,
-    totalSalariesPaid,
+    totalSalariesPaid: totalSalariesPaidRounded,
     breakdown: [
       { label: "صافي المحصّل (بعد المرتجعات)", amount: cashInflow },
       { label: "حصة العيادة من العمليات", amount: clinicShareTotal },
       ...(reviewFeesTotal > 0
         ? [{ label: "كشفيات المراجعين", amount: reviewFeesTotal }]
         : []),
-      ...(balanceTopups > 0
-        ? [{ label: "شحن رصيد العيادة", amount: balanceTopups }]
+      ...(balanceTopupsRounded > 0
+        ? [{ label: "شحن رصيد العيادة", amount: balanceTopupsRounded }]
         : []),
       { label: "صرفيات العيادة", amount: -generalExpenses },
       {
@@ -188,11 +194,11 @@ export async function fetchClinicProfitStatsForPeriod(
         amount: -clinicExpenseShare,
       },
       { label: "رواتب مؤكَّد صرفها", amount: -confirmedSalariesPaid },
-      ...(registeredAssistantClinic > 0
+      ...(registeredAssistantClinicRounded > 0
         ? [
             {
               label: "أجور مساعدين — مسجّلة (حصة العيادة)",
-              amount: -registeredAssistantClinic,
+              amount: -registeredAssistantClinicRounded,
             },
           ]
         : []),
@@ -212,112 +218,13 @@ export async function fetchClinicProfitStats(
     return emptyProfitStats();
   }
 
-  const { fetchTotalRefundsAmount } = await import(
-    "@/lib/services/session-refunds"
+  /** نفس منطق الكشف المالي والتقرير الشهري — مصدر واحد للربح */
+  return fetchClinicProfitStatsForPeriod(
+    supabase,
+    clinicId,
+    "2000-01-01",
+    todayISO()
   );
-  const { fetchRegisteredAssistantPayrollClinicDeduction } = await import(
-    "@/lib/ledger/daily-assistant-payroll"
-  );
-
-  const [
-    opsRes,
-    expensesRes,
-    salariesRes,
-    shares,
-    outstandingDebts,
-    totalRefunds,
-    clinicExpenseShare,
-    balanceTopups,
-    registeredAssistantClinic,
-  ] = await Promise.all([
-    supabase
-      .from("patient_operations")
-      .select("paid_amount")
-      .eq("clinic_id", clinicId),
-    supabase.from("expenses").select("amount").eq("clinic_id", clinicId),
-    supabase
-      .from("salary_slips")
-      .select("net_payout")
-      .eq("clinic_id", clinicId)
-      .eq("status", "paid"),
-    fetchTreatmentLevelShares(supabase, clinicId),
-    fetchOutstandingDebts(supabase, clinicId),
-    fetchTotalRefundsAmount(supabase, { clinicId }),
-    fetchClinicShareExpenseTotal(supabase, clinicId),
-    fetchClinicBalanceTopupsTotal(supabase, clinicId),
-    fetchRegisteredAssistantPayrollClinicDeduction(
-      supabase,
-      clinicId,
-      "2000-01-01",
-      todayISO()
-    ),
-  ]);
-
-  const ops = opsRes.data ?? [];
-  const cashInflow = ops.reduce((s, r) => s + Number(r.paid_amount ?? 0), 0);
-  const { clinicShareTotal, doctorShareTotal } = shares;
-  const generalExpenses = (expensesRes.data ?? []).reduce(
-    (s, r) => s + Number(r.amount ?? 0),
-    0
-  );
-  const totalExpenses = generalExpenses + clinicExpenseShare;
-  const totalSalariesPaid = (salariesRes.data ?? []).reduce(
-    (s, r) => s + Number(r.net_payout ?? 0),
-    0
-  );
-
-  calculateClinicProfit({
-    clinicShareFromOperations: clinicShareTotal,
-    totalOutstandingDebts: outstandingDebts,
-    totalStaffSalaries: totalSalariesPaid,
-    totalExpenses,
-    cashCollected: cashInflow,
-    doctorShareAccrued: doctorShareTotal,
-  });
-
-  const refundsRounded = Math.round(totalRefunds * 100) / 100;
-  const totalSalariesWithAssistant = Math.round(
-    (totalSalariesPaid + registeredAssistantClinic) * 100
-  ) / 100;
-  // paid_amount يشمل قيود الإرجاع السالبة — لا نطرح session_refunds مرة ثانية
-  const netProfit = Math.round(
-    (cashInflow - totalExpenses - totalSalariesWithAssistant + balanceTopups) *
-      100
-  ) / 100;
-
-  return {
-    cashInflow,
-    outstandingDebts,
-    netProfit,
-    totalRefunds: refundsRounded,
-    clinicShareTotal,
-    doctorShareTotal,
-    totalExpenses,
-    totalSalariesPaid: totalSalariesWithAssistant,
-    breakdown: [
-      { label: "صافي المحصّل (بعد المرتجعات)", amount: cashInflow },
-      ...(balanceTopups > 0
-        ? [{ label: "شحن رصيد العيادة", amount: balanceTopups }]
-        : []),
-      { label: "صرفيات العيادة", amount: -generalExpenses },
-      {
-        label: "حصة العيادة من صرفيات الأطباء",
-        amount: -clinicExpenseShare,
-      },
-      { label: "رواتب مدفوعة", amount: -totalSalariesPaid },
-      ...(registeredAssistantClinic > 0
-        ? [
-            {
-              label: "أجور مساعدين — مسجّلة (حصة العيادة)",
-              amount: -registeredAssistantClinic,
-            },
-          ]
-        : []),
-      { label: "حصة العيادة من العمليات", amount: clinicShareTotal },
-      { label: "أرباح الأطباء (محافظ — منفصلة)", amount: doctorShareTotal },
-      { label: "صافي ربح العيادة", amount: netProfit },
-    ],
-  };
 }
 
 export async function fetchDoctorWithdrawableBalance(
