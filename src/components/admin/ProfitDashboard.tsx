@@ -13,6 +13,7 @@ import { formatCurrency } from "@/lib/utils";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { TrendingDown, TrendingUp, Wallet, AlertCircle } from "lucide-react";
 import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
+import { subscribePendingClinicTopUpChanges } from "@/lib/services/clinic-profit-pending";
 
 interface ProfitDashboardProps {
   mobile?: boolean;
@@ -68,6 +69,12 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  useEffect(() => {
+    return subscribePendingClinicTopUpChanges(() => {
+      void load();
+    });
   }, [load]);
 
   useClinicSync({

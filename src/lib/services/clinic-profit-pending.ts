@@ -13,6 +13,7 @@ type PendingClinicTopUp = {
 
 const pendingByClinic = new Map<string, PendingClinicTopUp>();
 const STORAGE_KEY = "mc-pending-clinic-topup";
+const STORAGE_EVENT = "mc-pending-clinic-topup-changed";
 
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
@@ -23,19 +24,20 @@ function persistPending(): void {
   try {
     const payload = Object.fromEntries(pendingByClinic.entries());
     if (Object.keys(payload).length === 0) {
-      sessionStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(STORAGE_KEY);
       return;
     }
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    window.dispatchEvent(new CustomEvent(STORAGE_EVENT));
   } catch {
     /* ignore */
   }
 }
 
 function hydratePending(): void {
-  if (typeof window === "undefined" || pendingByClinic.size > 0) return;
+  if (typeof window === "undefined") return;
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw) as Record<string, PendingClinicTopUp>;
     for (const [clinicId, pending] of Object.entries(parsed)) {
@@ -44,7 +46,7 @@ function hydratePending(): void {
       }
     }
   } catch {
-    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
   }
 }
 
@@ -52,7 +54,26 @@ if (typeof window !== "undefined") {
   hydratePending();
 }
 
-/** يُسجَّل بعد شحن رصيد العيادة — يُشارَك بين المحاسب والإدارة */
+/** اشتراك لتحديث لوحة الإدارة عند الشحن من تبويب المحاسب */
+export function subscribePendingClinicTopUpChanges(
+  handler: () => void
+): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  const onCustom = () => handler();
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === STORAGE_KEY) handler();
+  };
+
+  window.addEventListener(STORAGE_EVENT, onCustom);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener(STORAGE_EVENT, onCustom);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+/** يُسجَّل بعد شحن رصيد العيادة — يُشارَك بين المحاسب والإدارة (كل التبويبات) */
 export function registerPendingClinicTopUp(
   clinicId: string,
   amount: number,
@@ -65,8 +86,8 @@ export function registerPendingClinicTopUp(
   pendingByClinic.set(clinicId, {
     delta: roundMoney((prev?.delta ?? 0) + amount),
     transactionDate: transactionDate.slice(0, 10),
-    minTopups: prev?.minTopups,
-    minNetProfit: prev?.minNetProfit,
+    minTopups: undefined,
+    minNetProfit: undefined,
   });
   persistPending();
 }
@@ -89,31 +110,25 @@ export function reconcilePendingClinicProfitStats(
     return stats;
   }
 
-  let targets = pending;
-  if (targets.minTopups == null || targets.minNetProfit == null) {
-    targets = {
-      ...pending,
-      minTopups: roundMoney(stats.balanceTopupsTotal + pending.delta),
-      minNetProfit: roundMoney(stats.netProfit + pending.delta),
-    };
-    pendingByClinic.set(clinicId, targets);
+  const expectedTopups = roundMoney(stats.balanceTopupsTotal + pending.delta);
+  const expectedNet = roundMoney(stats.netProfit + pending.delta);
+
+  if (
+    stats.balanceTopupsTotal + 0.01 >= expectedTopups &&
+    stats.netProfit + 0.01 >= expectedNet
+  ) {
+    pendingByClinic.delete(clinicId);
     persistPending();
+    return stats;
   }
 
   const result = reconcilePendingClinicTopUpInProfitStats(stats, {
-    minTopups: targets.minTopups!,
-    minNetProfit: targets.minNetProfit!,
+    minTopups: expectedTopups,
+    minNetProfit: expectedNet,
   });
 
   if (result.resolved) {
     pendingByClinic.delete(clinicId);
-    persistPending();
-  } else {
-    pendingByClinic.set(clinicId, {
-      ...targets,
-      minTopups: result.stats.balanceTopupsTotal,
-      minNetProfit: result.stats.netProfit,
-    });
     persistPending();
   }
 

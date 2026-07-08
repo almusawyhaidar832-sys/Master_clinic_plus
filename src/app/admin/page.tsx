@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { createClient } from "@/lib/supabase/client";
-import { getAuthProfile, getActiveClinicId } from "@/lib/clinic-context";
+import { getAuthProfile } from "@/lib/clinic-context";
 import { fetchDoctorLedgers } from "@/lib/services/clinic-reports";
 import {
   defaultClinicProfitPeriod,
@@ -32,19 +32,23 @@ import { ActivityFeed } from "@/components/admin/ActivityFeed";
 import { AdminDoctorPerformance } from "@/components/admin/AdminDoctorPerformance";
 import { BalanceTopUpButton } from "@/components/finance/BalanceTopUpModal";
 import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { useClinicSync } from "@/hooks/useClinicSync";
+import { subscribePendingClinicTopUpChanges } from "@/lib/services/clinic-profit-pending";
 
 export default function AdminHomePage() {
+  const { clinicId: activeClinicId } = useActiveClinicId();
   const [stats, setStats] = useState<ClinicProfitStats | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [doctorCount, setDoctorCount] = useState(0);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [clinicId, setClinicId] = useState<string | null>(null);
 
-  const loadStats = useCallback(async (activeClinicId: string) => {
+  const clinicId = activeClinicId ?? null;
+
+  const loadStats = useCallback(async (clinic: string) => {
     const period = defaultClinicProfitPeriod();
-    return fetchAlignedClinicProfitStats(activeClinicId, "admin", period);
+    return fetchAlignedClinicProfitStats(clinic, "admin", period);
   }, []);
 
   useEffect(() => {
@@ -52,19 +56,16 @@ export default function AdminHomePage() {
       const supabase = createClient();
       const profile = await getAuthProfile(supabase);
       setIsSuperAdmin(profile?.role === "super_admin");
-      const active = await getActiveClinicId(supabase);
-      const activeClinicId = active?.clinicId ?? null;
-      setClinicId(activeClinicId);
       const [profit, doctors, pending] = await Promise.all([
-        activeClinicId
-          ? loadStats(activeClinicId).catch(() => null)
+        clinicId
+          ? loadStats(clinicId).catch(() => null)
           : Promise.resolve(null),
         fetchDoctorLedgers(supabase),
-        activeClinicId
+        clinicId
           ? supabase
               .from("doctor_withdrawals")
               .select("*", { count: "exact", head: true })
-              .eq("clinic_id", activeClinicId)
+              .eq("clinic_id", clinicId)
               .eq("status", "pending")
           : Promise.resolve({ count: 0 }),
       ]);
@@ -72,8 +73,9 @@ export default function AdminHomePage() {
       setDoctorCount(doctors.length);
       setPendingCount(pending.count ?? 0);
     }
-    load();
-  }, [refreshKey, loadStats]);
+    if (activeClinicId === undefined) return;
+    void load();
+  }, [refreshKey, loadStats, clinicId, activeClinicId]);
 
   useClinicSync({
     topics: ["profit", "financial"],
@@ -87,7 +89,13 @@ export default function AdminHomePage() {
       setRefreshKey((k) => k + 1);
     }
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    const unsubPending = subscribePendingClinicTopUpChanges(() => {
+      setRefreshKey((k) => k + 1);
+    });
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      unsubPending();
+    };
   }, []);
 
   const handleBalanceTopUpSuccess = useCallback(
