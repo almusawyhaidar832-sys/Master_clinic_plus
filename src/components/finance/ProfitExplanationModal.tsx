@@ -17,7 +17,10 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { fetchProfitDeductionLedgerViaApi } from "@/lib/services/profit-ledger-api";
-import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
+import {
+  fetchAlignedClinicProfitStats,
+} from "@/lib/services/clinic-profit-loader";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import type {
   ProfitDeductionLedger,
   ProfitLedgerCategory,
@@ -121,6 +124,7 @@ export function ProfitExplanationModal({
   portal = "accountant",
   netProfit: initialNetProfit,
 }: ProfitExplanationModalProps) {
+  const { clinicId } = useActiveClinicId();
   const [period, setPeriod] = useState<ProfitPeriodPreset>("month");
   const [ledger, setLedger] = useState<ProfitDeductionLedger | null>(null);
   const [netProfit, setNetProfit] = useState<number | undefined>(initialNetProfit);
@@ -131,12 +135,16 @@ export function ProfitExplanationModal({
   const { from, to } = range;
 
   const load = useCallback(async () => {
+    if (!clinicId) return;
     setLoading(true);
     setError(null);
     try {
+      const periodRange = { from, to };
       const [data, stats] = await Promise.all([
-        fetchProfitDeductionLedgerViaApi(from, to, portal),
-        fetchClinicProfitStatsForPeriodViaApi(from, to, portal).catch(() => null),
+        fetchProfitDeductionLedgerViaApi(from, to, portal, clinicId),
+        fetchAlignedClinicProfitStats(clinicId, portal, periodRange).catch(
+          () => null
+        ),
       ]);
       setLedger(data);
       setNetProfit(stats?.netProfit ?? undefined);
@@ -147,7 +155,7 @@ export function ProfitExplanationModal({
     } finally {
       setLoading(false);
     }
-  }, [from, to, portal]);
+  }, [from, to, portal, clinicId]);
 
   useEffect(() => {
     if (open) {

@@ -5,15 +5,18 @@ import type { ProfitDeductionLedger } from "@/lib/services/profit-deduction-ledg
 export async function fetchProfitDeductionLedgerViaApi(
   from: string,
   to: string,
-  portal: AuthPortalId = "accountant"
+  portal: AuthPortalId = "accountant",
+  clinicId?: string | null
 ): Promise<ProfitDeductionLedger> {
-  const res = await fetch(
-    `/api/clinic/profit-ledger?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-    {
-      credentials: "include",
-      headers: authPortalHeaders(portal),
-    }
-  );
+  const params = new URLSearchParams({ from, to });
+  if (clinicId) {
+    params.set("clinic_id", clinicId);
+  }
+
+  const res = await fetch(`/api/clinic/profit-ledger?${params.toString()}`, {
+    credentials: "include",
+    headers: authPortalHeaders(portal),
+  });
   const json = (await res.json().catch(() => ({}))) as ProfitDeductionLedger & {
     error?: string;
   };

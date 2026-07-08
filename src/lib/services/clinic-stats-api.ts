@@ -6,16 +6,23 @@ import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 export async function fetchClinicProfitStatsForPeriodViaApi(
   from: string,
   to: string,
-  portal: AuthPortalId = "admin"
+  portal: AuthPortalId = "admin",
+  clinicId?: string | null
 ): Promise<ClinicProfitStats> {
-  const res = await fetch(
-    `/api/clinic/profit-stats?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&_t=${Date.now()}`,
-    {
-      credentials: "include",
-      headers: authPortalHeaders(portal),
-      cache: "no-store",
-    }
-  );
+  const params = new URLSearchParams({
+    from,
+    to,
+    _t: String(Date.now()),
+  });
+  if (clinicId) {
+    params.set("clinic_id", clinicId);
+  }
+
+  const res = await fetch(`/api/clinic/profit-stats?${params.toString()}`, {
+    credentials: "include",
+    headers: authPortalHeaders(portal),
+    cache: "no-store",
+  });
   const json = (await res.json().catch(() => ({}))) as ClinicProfitStats & {
     error?: string;
   };

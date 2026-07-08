@@ -17,8 +17,9 @@ import {
   type ExecutiveSnapshotCore,
   type ReportAlignedProfitMetrics,
 } from "@/lib/services/executive-snapshot";
-import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
-import { reconcilePendingClinicProfitStats } from "@/lib/services/clinic-profit-pending";
+import {
+  fetchAlignedClinicProfitStats,
+} from "@/lib/services/clinic-profit-loader";
 import type { BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import {
@@ -356,16 +357,16 @@ export function ExecutiveDashboard() {
         p_clinic_id: clinicId, p_from: from, p_to: to,
       }),
       fetch(
-        `/api/executive/supplement?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&_t=${cacheBust}`,
+        `/api/executive/supplement?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&clinic_id=${encodeURIComponent(clinicId)}&_t=${cacheBust}`,
         {
           credentials: "include",
           headers: authPortalHeaders("accountant"),
           cache: "no-store",
         }
       ),
-      fetchClinicProfitStatsForPeriodViaApi(from, to, "accountant")
-        .then((stats) => reconcilePendingClinicProfitStats(clinicId, stats, { from, to }))
-        .catch(() => null),
+      fetchAlignedClinicProfitStats(clinicId, "accountant", { from, to }).catch(
+        () => null
+      ),
     ]);
 
     const supplementJson = supplementRes.ok

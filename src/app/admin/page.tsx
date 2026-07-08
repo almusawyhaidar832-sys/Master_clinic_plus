@@ -39,6 +39,7 @@ import { subscribePendingClinicTopUpChanges } from "@/lib/services/clinic-profit
 export default function AdminHomePage() {
   const { clinicId: activeClinicId } = useActiveClinicId();
   const [stats, setStats] = useState<ClinicProfitStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [doctorCount, setDoctorCount] = useState(0);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
@@ -58,7 +59,11 @@ export default function AdminHomePage() {
       setIsSuperAdmin(profile?.role === "super_admin");
       const [profit, doctors, pending] = await Promise.all([
         clinicId
-          ? loadStats(clinicId).catch(() => null)
+          ? loadStats(clinicId).catch((err) => {
+              console.error("[admin] profit stats failed:", err);
+              setStatsError("تعذر تحميل صافي الربح — اسحب للتحديث");
+              return null;
+            })
           : Promise.resolve(null),
         fetchDoctorLedgers(supabase),
         clinicId
@@ -70,6 +75,7 @@ export default function AdminHomePage() {
           : Promise.resolve({ count: 0 }),
       ]);
       setStats(profit);
+      if (profit) setStatsError(null);
       setDoctorCount(doctors.length);
       setPendingCount(pending.count ?? 0);
     }
@@ -136,6 +142,10 @@ export default function AdminHomePage() {
           </div>
         }
       />
+
+      {statsError && !stats && (
+        <p className="text-center text-sm text-debt-text">{statsError}</p>
+      )}
 
       {stats && (
         <div className="relative overflow-hidden rounded-mc-2xl bg-mc-navy p-5 text-white shadow-premium">

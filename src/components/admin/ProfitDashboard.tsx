@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import {
   defaultClinicProfitPeriod,
   fetchAlignedClinicProfitStats,
 } from "@/lib/services/clinic-profit-loader";
+import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 import { formatCurrency } from "@/lib/utils";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
@@ -22,13 +22,15 @@ interface ProfitDashboardProps {
 /** إجمالي الذمم الحالية على كل مرضى العيادة — عبر نفس مصدر اللوحة التنفيذية */
 async function fetchTotalOutstandingDebt(
   from: string,
-  to: string
+  to: string,
+  clinicId: string
 ): Promise<number | null> {
   try {
-    const res = await fetch(
-      `/api/executive/supplement?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-      { credentials: "include", headers: authPortalHeaders("admin") }
-    );
+    const params = new URLSearchParams({ from, to, clinic_id: clinicId });
+    const res = await fetch(`/api/executive/supplement?${params.toString()}`, {
+      credentials: "include",
+      headers: authPortalHeaders("admin"),
+    });
     if (!res.ok) return null;
     const json = (await res.json()) as {
       totalDebt?: { debt: number; debtorCount: number };
@@ -40,8 +42,7 @@ async function fetchTotalOutstandingDebt(
 }
 
 export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
-  const { profile } = useClinicProfile();
-  const clinicId = profile?.id ?? null;
+  const { clinicId, loading: clinicLoading } = useActiveClinicId();
   const [stats, setStats] = useState<ClinicProfitStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +56,7 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
       const period = defaultClinicProfitPeriod();
       const [data, totalDebt] = await Promise.all([
         fetchAlignedClinicProfitStats(clinicId, "admin", period),
-        fetchTotalOutstandingDebt(period.from, period.to),
+        fetchTotalOutstandingDebt(period.from, period.to, clinicId),
       ]);
       setStats(
         totalDebt !== null ? { ...data, outstandingDebts: totalDebt } : data
@@ -84,7 +85,7 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
     enabled: !!clinicId,
   });
 
-  if (loading) {
+  if (clinicLoading || loading) {
     return (
       <p className="text-center text-slate-muted py-12">جاري تحميل لوحة الأرباح...</p>
     );

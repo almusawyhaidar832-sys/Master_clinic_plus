@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getApiActiveClinicId,
   getApiCallerProfile,
   isApiStaffRole,
 } from "@/lib/auth/api-session";
+import { resolveStaffApiClinicId } from "@/lib/auth/resolve-staff-clinic";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { fetchClinicProfitStatsForPeriod } from "@/lib/services/clinic-stats";
 
@@ -24,9 +24,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
     }
 
-    const clinicId = await getApiActiveClinicId(req);
+    const clinicId = await resolveStaffApiClinicId(req, caller);
     if (!clinicId) {
-      return NextResponse.json({ error: "حسابك غير مربوط بعيادة" }, { status: 400 });
+      return NextResponse.json(
+        { error: "حسابك غير مربوط بعيادة أو العيادة المطلوبة غير مصرح بها" },
+        { status: 400 }
+      );
     }
 
     const from = req.nextUrl.searchParams.get("from")?.trim() ?? "";
