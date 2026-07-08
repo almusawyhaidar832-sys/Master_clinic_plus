@@ -5,6 +5,13 @@ export const BALANCE_TOPUP_DOCTOR_TYPE = "balance_topup_doctor";
 
 export type BalanceTopUpTarget = "clinic" | "doctor";
 
+export interface ClinicBalanceTopUpLine {
+  id: string;
+  amount: number;
+  label: string;
+  effectiveDate: string;
+}
+
 function sumPositiveAmounts(
   rows: { amount: number | string }[] | null | undefined
 ): number {
@@ -46,6 +53,32 @@ export async function fetchClinicBalanceTopupsForPeriod(
     .lte("transaction_date", to);
 
   return sumPositiveAmounts(data);
+}
+
+/** سطور شحن رصيد العيادة ضمن فترة الكشف */
+export async function fetchClinicBalanceTopUpLines(
+  supabase: SupabaseClient,
+  clinicId: string,
+  opts: { dateFrom: string; dateTo: string }
+): Promise<ClinicBalanceTopUpLine[]> {
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("id, amount, transaction_date, description_ar")
+    .eq("clinic_id", clinicId)
+    .eq("type", BALANCE_TOPUP_CLINIC_TYPE)
+    .gt("amount", 0)
+    .gte("transaction_date", opts.dateFrom)
+    .lte("transaction_date", opts.dateTo)
+    .order("transaction_date", { ascending: false });
+
+  if (error) return [];
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    amount: Math.max(0, Number(row.amount ?? 0)),
+    label: String(row.description_ar ?? "").trim() || "شحن رصيد العيادة",
+    effectiveDate: String(row.transaction_date).slice(0, 10),
+  }));
 }
 
 /** شحن رصيد العيادة — إجمالي */

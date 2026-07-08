@@ -116,5 +116,9 @@ export async function assertCanManageClinicFinance(req?: Request) {
     throw new StaffAccessError(400, "حسابك غير مربوط بعيادة");
   }
 
+  if (!["accountant", "super_admin"].includes(String(profile.role ?? ""))) {
+    throw new StaffAccessError(403, "صلاحيات غير كافية");
+  }
+
   return { user, profile, admin, clinicId: profile.clinic_id as string };
 }

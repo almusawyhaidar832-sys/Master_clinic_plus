@@ -128,6 +128,8 @@ export function BalanceTopUpModal({
       const json = (await res.json().catch(() => ({}))) as {
         error?: string;
         success?: boolean;
+        amount?: number;
+        target?: BalanceTopUpTarget;
       };
 
       if (!res.ok) {
@@ -136,6 +138,11 @@ export function BalanceTopUpModal({
       }
 
       notifyClinicProfitRefresh(clinicId ?? undefined);
+      if (target === "clinic" && json.amount) {
+        window.alert(
+          `تم شحن ${formatCurrency(json.amount)} لربح العيادة.\nيظهر في «توضيح الربح» والكشف المالي لنفس تاريخ الشحن.`
+        );
+      }
       onSuccess?.();
       onClose();
     } catch {

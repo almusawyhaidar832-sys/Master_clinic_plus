@@ -5,12 +5,9 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { createClient } from "@/lib/supabase/client";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicSync } from "@/hooks/useClinicSync";
-import {
-  fetchClinicProfitStats,
-  fetchTodaySummary,
-  type ClinicProfitStats,
-} from "@/lib/services/clinic-stats";
-import { formatCurrency } from "@/lib/utils";
+import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
+import { fetchTodaySummary, type ClinicProfitStats } from "@/lib/services/clinic-stats";
+import { formatCurrency, todayISO } from "@/lib/utils";
 import { TrendingUp, Wallet, Receipt, AlertCircle } from "lucide-react";
 
 export function ClinicFinancialOverview() {
@@ -28,7 +25,9 @@ export function ClinicFinancialOverview() {
     const supabase = createClient();
     const [t, p] = await Promise.all([
       fetchTodaySummary(supabase),
-      fetchClinicProfitStats(supabase),
+      fetchClinicProfitStatsForPeriodViaApi("2000-01-01", todayISO(), "accountant").catch(
+        () => null
+      ),
     ]);
     setToday(t);
     setProfit(p);

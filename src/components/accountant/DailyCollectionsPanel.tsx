@@ -28,6 +28,7 @@ import {
 import type { DailyAssistantPayrollLine } from "@/lib/ledger/daily-assistant-payroll";
 import type { DoctorWithdrawalLine } from "@/lib/withdrawals/display";
 import { withdrawalStatusLabel } from "@/lib/withdrawals/display";
+import type { ClinicBalanceTopUpLine } from "@/lib/services/balance-topup";
 import type { DoctorBalanceTopUpLine } from "@/lib/ledger/daily-doctor-balance-topups";
 import type { DailyDoctorExpenseLine } from "@/lib/ledger/daily-statement-expenses";
 import {
@@ -355,6 +356,28 @@ function BalanceTopUpRow({ line }: { line: DoctorBalanceTopUpLine }) {
       </div>
       <div className="text-right">
         <p className="text-[11px] text-slate-muted">شحن رصيد</p>
+        <p className="font-bold tabular-nums text-emerald-700">
+          + {formatCurrency(line.amount)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ClinicBalanceTopUpRow({ line }: { line: ClinicBalanceTopUpLine }) {
+  return (
+    <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-emerald-50/30 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <ArrowUpToLine className="h-4 w-4 shrink-0 text-emerald-600" />
+          <p className="font-semibold text-slate-text">{line.label}</p>
+        </div>
+        <p className="mt-1 text-xs text-slate-muted">
+          {formatDate(line.effectiveDate)} · يُضاف لصافي ربح العيادة
+        </p>
+      </div>
+      <div className="text-right">
+        <p className="text-[11px] text-slate-muted">شحن رصيد العيادة</p>
         <p className="font-bold tabular-nums text-emerald-700">
           + {formatCurrency(line.amount)}
         </p>
@@ -928,6 +951,13 @@ export function DailyCollectionsPanel() {
                 className="border-emerald-200 bg-emerald-50/50 text-emerald-700"
               />
             )}
+            {result.totals.totalClinicToppedUpInPeriod > 0 && (
+              <SummaryChip
+                label="شحن رصيد العيادة"
+                value={`+ ${formatCurrency(result.totals.totalClinicToppedUpInPeriod)}`}
+                className="border-emerald-300 bg-emerald-50/70 text-emerald-800"
+              />
+            )}
             {result.totals.totalDoctorExpenseDeduction > 0 && (
               <SummaryChip
                 label="خصم فواتير أطباء"
@@ -962,7 +992,7 @@ export function DailyCollectionsPanel() {
         </div>
       )}
 
-      {!loading && result && result.doctors.length === 0 && result.clinicExpenses.length === 0 && (
+      {!loading && result && result.doctors.length === 0 && result.clinicExpenses.length === 0 && result.clinicBalanceTopups.length === 0 && (
         <Alert variant="info">
           لا توجد بيانات مالية لـ {periodLabel}
           {doctorId ? " لهذا الطبيب" : ""}.
@@ -989,6 +1019,25 @@ export function DailyCollectionsPanel() {
             defaultOpen={!!selectedDoctorId || index < 5}
           />
         ))}
+
+      {!loading && result && result.clinicBalanceTopups.length > 0 && (
+        <Card className="overflow-hidden p-0">
+          <div className="border-b border-slate-border bg-surface-card px-5 py-4">
+            <p className="flex items-center gap-2 font-bold text-slate-text">
+              <ArrowUpToLine className="h-5 w-5 text-emerald-600" />
+              شحن رصيد العيادة
+            </p>
+            <p className="mt-0.5 text-xs text-slate-muted">
+              يُضاف مباشرة إلى صافي ربح العيادة — يظهر أيضاً في «توضيح الربح»
+            </p>
+          </div>
+          <div>
+            {result.clinicBalanceTopups.map((line) => (
+              <ClinicBalanceTopUpRow key={line.id} line={line} />
+            ))}
+          </div>
+        </Card>
+      )}
 
       {!loading && result && result.clinicExpenses.length > 0 && (
         <Card className="overflow-hidden p-0">

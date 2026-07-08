@@ -38,6 +38,10 @@ import {
   type DoctorBalanceTopUpLine,
 } from "@/lib/ledger/daily-doctor-balance-topups";
 import {
+  fetchClinicBalanceTopUpLines,
+  type ClinicBalanceTopUpLine,
+} from "@/lib/services/balance-topup";
+import {
   fetchDailyClinicExpenseLines,
   fetchDailyDoctorExpenseLines,
   sumClinicGeneralExpenses,
@@ -141,8 +145,10 @@ export type DailyCollectionsResult = {
   dateTo: string;
   doctors: DoctorDailySummary[];
   clinicExpenses: DailyClinicExpenseLine[];
+  clinicBalanceTopups: ClinicBalanceTopUpLine[];
   totals: DoctorDailySummary["stats"] & {
     totalClinicGeneralExpenses: number;
+    totalClinicToppedUpInPeriod: number;
   };
 };
 
@@ -1233,19 +1239,26 @@ export async function fetchDailyCollections(
     topupLinesByDoctor.set(line.doctorId, list);
   }
 
-  const [doctorExpenseLines, clinicExpenseLines] = await Promise.all([
-    fetchDailyDoctorExpenseLines(supabase, clinicId, {
-      dateFrom: effectiveFrom,
-      dateTo: effectiveTo,
-      doctorId: input.doctorId,
-    }),
-    input.doctorId
-      ? Promise.resolve([] as DailyClinicExpenseLine[])
-      : fetchDailyClinicExpenseLines(supabase, clinicId, {
-          dateFrom: effectiveFrom,
-          dateTo: effectiveTo,
-        }),
-  ]);
+  const [doctorExpenseLines, clinicExpenseLines, clinicBalanceTopups] =
+    await Promise.all([
+      fetchDailyDoctorExpenseLines(supabase, clinicId, {
+        dateFrom: effectiveFrom,
+        dateTo: effectiveTo,
+        doctorId: input.doctorId,
+      }),
+      input.doctorId
+        ? Promise.resolve([] as DailyClinicExpenseLine[])
+        : fetchDailyClinicExpenseLines(supabase, clinicId, {
+            dateFrom: effectiveFrom,
+            dateTo: effectiveTo,
+          }),
+      input.doctorId
+        ? Promise.resolve([] as ClinicBalanceTopUpLine[])
+        : fetchClinicBalanceTopUpLines(supabase, clinicId, {
+            dateFrom: effectiveFrom,
+            dateTo: effectiveTo,
+          }),
+    ]);
 
   const doctorExpenseLinesByDoctor = new Map<string, DailyDoctorExpenseLine[]>();
   for (const line of doctorExpenseLines) {
@@ -1633,9 +1646,14 @@ export async function fetchDailyCollections(
 
   doctors.sort((a, b) => a.doctorName.localeCompare(b.doctorName, "ar"));
 
+  const totalClinicToppedUpInPeriod = roundMoney(
+    clinicBalanceTopups.reduce((sum, line) => sum + line.amount, 0)
+  );
+
   const totals = {
     ...emptyStats(),
     totalClinicGeneralExpenses: sumClinicGeneralExpenses(clinicExpenseLines),
+    totalClinicToppedUpInPeriod,
   };
   for (const group of doctors) {
     mergeStats(totals, group.stats);
@@ -1647,6 +1665,7 @@ export async function fetchDailyCollections(
     dateTo: effectiveTo,
     doctors,
     clinicExpenses: clinicExpenseLines,
+    clinicBalanceTopups,
     totals,
   };
 }
