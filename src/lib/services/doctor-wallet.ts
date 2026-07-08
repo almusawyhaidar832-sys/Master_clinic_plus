@@ -419,33 +419,29 @@ export async function fetchDoctorExpenseDeductionsTotal(
   );
 }
 
-/** خصومات رواتب المساعدين — صرف مؤكّد ناقص تصحيحات (حركات سالبة − موجبة) */
+/** خصومات مساعدين — نفس الكشف المالي (سطور يومية + شهري متبقي) بدون تكرار transactions */
+export async function fetchDoctorTotalPayrollDeductions(
+  supabase: SupabaseClient,
+  doctorId: string
+): Promise<number> {
+  const { fetchDoctorAssistantPayrollDeductionByDoctor } = await import(
+    "@/lib/ledger/daily-assistant-payroll"
+  );
+  const map = await fetchDoctorAssistantPayrollDeductionByDoctor(supabase, [
+    doctorId,
+  ]);
+  return map.get(doctorId) ?? 0;
+}
+
+/** @deprecated للتقارير الداخلية — استخدم fetchDoctorTotalPayrollDeductions */
 export async function fetchDoctorPayrollDeductionsTotal(
   supabase: SupabaseClient,
   doctorId: string
 ): Promise<number> {
-  const { data: txns } = await supabase
-    .from("transactions")
-    .select("amount")
-    .eq("doctor_id", doctorId)
-    .eq("type", "assistant_payroll_doctor");
-
-  return netPayrollDeductionFromRows(txns);
+  return fetchDoctorTotalPayrollDeductions(supabase, doctorId);
 }
 
-function netPayrollDeductionFromRows(
-  rows: { amount: number | string }[] | null | undefined
-): number {
-  let total = 0;
-  for (const row of rows ?? []) {
-    const amt = Number(row.amount ?? 0);
-    if (amt < 0) total += Math.abs(amt);
-    else if (amt > 0) total -= amt;
-  }
-  return Math.round(Math.max(0, total) * 100) / 100;
-}
-
-/** حصة الطبيب من أجور مساعديه المسجّلة — نفس منطق الكشف المالي */
+/** حصة الطبيب من أجور مساعديه المسجّلة فقط — قبل تأكيد الصرف */
 export async function fetchDoctorPendingAssistantPayrollDeductions(
   supabase: SupabaseClient,
   doctorId: string
@@ -459,26 +455,14 @@ export async function fetchDoctorPendingAssistantPayrollDeductions(
   return map.get(doctorId) ?? 0;
 }
 
-/** خصومات مساعدين — مؤكّدة + مسجّلة (أجر يومي قبل الصرف) */
-export async function fetchDoctorTotalPayrollDeductions(
-  supabase: SupabaseClient,
-  doctorId: string
-): Promise<number> {
-  const [confirmed, pending] = await Promise.all([
-    fetchDoctorPayrollDeductionsTotal(supabase, doctorId),
-    fetchDoctorPendingAssistantPayrollDeductions(supabase, doctorId),
-  ]);
-  return Math.round((confirmed + pending) * 100) / 100;
-}
-
-async function fetchPendingAssistantPayrollByDoctor(
+async function fetchAssistantPayrollDeductionByDoctor(
   supabase: SupabaseClient,
   doctorIds: string[]
 ): Promise<Map<string, number>> {
-  const { fetchWalletAssistantPayrollPendingByDoctor } = await import(
+  const { fetchDoctorAssistantPayrollDeductionByDoctor } = await import(
     "@/lib/ledger/daily-assistant-payroll"
   );
-  return fetchWalletAssistantPayrollPendingByDoctor(supabase, doctorIds);
+  return fetchDoctorAssistantPayrollDeductionByDoctor(supabase, doctorIds);
 }
 
 export function computeWalletStats(
@@ -697,21 +681,6 @@ function groupDeductionsByDoctor(
   return map;
 }
 
-function groupPayrollDeductionsByDoctor(
-  rows: { doctor_id: string; amount: number | string }[] | null
-): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const row of rows ?? []) {
-    const id = row.doctor_id;
-    const prev = map.get(id) ?? 0;
-    const amt = Number(row.amount ?? 0);
-    const next =
-      amt < 0 ? prev + Math.abs(amt) : amt > 0 ? prev - amt : prev;
-    map.set(id, Math.round(Math.max(0, next) * 100) / 100);
-  }
-  return map;
-}
-
 /** محافظ عدة أطباء — استعلامات مجمّعة */
 export async function fetchDoctorWalletStatsBatch(
   supabase: SupabaseClient,
@@ -727,9 +696,8 @@ export async function fetchDoctorWalletStatsBatch(
     earningsMap,
     withdrawalsRes,
     expenseRows,
-    payrollRows,
+    payrollDeductionsByDoctor,
     topupRows,
-    pendingPayrollByDoctor,
     paymentMap,
     salaryPayoutsMap,
     doctorsRes,
@@ -751,18 +719,13 @@ export async function fetchDoctorWalletStatsBatch(
       .in("doctor_id", doctorIds)
       .eq("type", "doctor_expense_doctor")
       .lt("amount", 0),
-    supabase
-      .from("transactions")
-      .select("doctor_id, amount")
-      .in("doctor_id", doctorIds)
-      .eq("type", "assistant_payroll_doctor"),
+    fetchAssistantPayrollDeductionByDoctor(supabase, doctorIds),
     supabase
       .from("transactions")
       .select("doctor_id, amount")
       .in("doctor_id", doctorIds)
       .eq("type", BALANCE_TOPUP_DOCTOR_TYPE)
       .gt("amount", 0),
-    fetchPendingAssistantPayrollByDoctor(supabase, doctorIds),
     fetchDoctorPaymentMap(supabase, doctorIds),
     fetchDoctorSalaryPayoutsByDoctor(
       supabase,
@@ -801,16 +764,12 @@ export async function fetchDoctorWalletStatsBatch(
 
   const withdrawalsByDoctor = groupWithdrawalsByDoctor(withdrawalsRes.data);
   const expenseByDoctor = groupDeductionsByDoctor(expenseRows.data);
-  const payrollByDoctor = groupPayrollDeductionsByDoctor(payrollRows.data);
   const topupByDoctor = groupDoctorBalanceTopupsByDoctor(topupRows.data);
 
   for (const doctorId of doctorIds) {
     const meta = paymentMap.get(doctorId) ?? { pct: 0.5, isSalary: false };
-    const payrollDeductions = Math.round(
-      ((payrollByDoctor.get(doctorId) ?? 0) +
-        (pendingPayrollByDoctor.get(doctorId) ?? 0)) *
-        100
-    ) / 100;
+    const payrollDeductions =
+      payrollDeductionsByDoctor.get(doctorId) ?? 0;
     const balanceCredits = topupByDoctor.get(doctorId) ?? 0;
 
     if (meta.isSalary) {
