@@ -737,15 +737,94 @@ export async function notifyDoctorAssistantPayrollConfirmed(input: {
     parts.push(`${formatCurrency(input.clinicDeducted)} من ربح العيادة`);
   }
 
+  const titleAr = "تأكيد صرف راتب مساعد";
+  const bodyAr = `${input.assistantName} — ${input.monthYear}: ${parts.join(" — ")}`;
+
   await insertNotifications([
     {
       clinic_id: input.clinicId,
       recipient_profile_id: profileId,
-      title_ar: "تأكيد صرف راتب مساعد",
-      body_ar: `${input.assistantName} — ${input.monthYear}: ${parts.join(" — ")}`,
-      link_path: "/doctor/ledger",
+      title_ar: titleAr,
+      body_ar: bodyAr,
+      link_path: "/doctor/wallet",
     },
   ]);
+
+  await sendWebPushToProfile(profileId, {
+    title: titleAr,
+    body: bodyAr,
+    url: "/doctor/wallet",
+    tag: `doctor-assistant-payroll-confirmed-${input.doctorId}-${input.monthYear}`,
+    kind: "assistant_payroll_deduction",
+  }).catch((err) => {
+    console.error("[notifications] assistant payroll confirm push failed:", err);
+  });
+}
+
+/** إشعار الطبيب عند تسجيل/تعديل أجر مساعد — خصم أو استرجاع من حصته */
+export async function notifyDoctorAssistantPayrollDeduction(input: {
+  clinicId: string;
+  doctorId: string;
+  assistantName: string;
+  monthYear: string;
+  amountDelta: number;
+  action: "registered" | "updated" | "removed";
+  entryDate?: string;
+}) {
+  const delta = Math.round(input.amountDelta * 100) / 100;
+  if (Math.abs(delta) <= FINANCIAL_EPSILON) return;
+
+  const admin = adminClient();
+  const profileId = await resolveDoctorProfileId(
+    admin,
+    input.doctorId,
+    input.clinicId
+  );
+  if (!profileId) return;
+
+  const absAmount = formatCurrency(Math.abs(delta));
+  const datePart = input.entryDate ? ` — ${input.entryDate}` : "";
+  let titleAr: string;
+  let bodyAr: string;
+
+  if (delta > 0) {
+    if (input.action === "registered") {
+      titleAr = "خصم من حصتك — أجر مساعد";
+      bodyAr = `${input.assistantName}: خصم ${absAmount} من حصتك — ${input.monthYear}${datePart}`;
+    } else if (input.action === "updated") {
+      titleAr = "تعديل أجر مساعد — زيادة الخصم";
+      bodyAr = `${input.assistantName}: زيادة الخصم ${absAmount} — ${input.monthYear}${datePart}`;
+    } else {
+      titleAr = "تعديل أجر مساعد";
+      bodyAr = `${input.assistantName}: خصم ${absAmount} من حصتك — ${input.monthYear}${datePart}`;
+    }
+  } else if (input.action === "removed") {
+    titleAr = "إلغاء أجر مساعد — استرجاع لحصتك";
+    bodyAr = `${input.assistantName}: استرجاع ${absAmount} لحصتك — ${input.monthYear}${datePart}`;
+  } else {
+    titleAr = "تعديل أجر مساعد — تقليل الخصم";
+    bodyAr = `${input.assistantName}: تقليل الخصم ${absAmount} — ${input.monthYear}${datePart}`;
+  }
+
+  await insertNotifications([
+    {
+      clinic_id: input.clinicId,
+      recipient_profile_id: profileId,
+      title_ar: titleAr,
+      body_ar: bodyAr,
+      link_path: "/doctor/wallet",
+    },
+  ]);
+
+  await sendWebPushToProfile(profileId, {
+    title: titleAr,
+    body: bodyAr,
+    url: "/doctor/wallet",
+    tag: `doctor-assistant-payroll-${input.action}-${input.doctorId}-${Date.now()}`,
+    kind: "assistant_payroll_deduction",
+  }).catch((err) => {
+    console.error("[notifications] assistant payroll deduction push failed:", err);
+  });
 }
 
 const NOTIFICATION_INBOX_BASE =

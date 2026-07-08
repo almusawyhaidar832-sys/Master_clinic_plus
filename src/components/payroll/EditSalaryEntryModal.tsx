@@ -4,6 +4,8 @@ import { useState } from "react";
 import { X, RefreshCw, Trash2 } from "lucide-react";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { translateDbError } from "@/lib/db-errors";
+import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
+import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
 import {
   isSalaryReasonRequired,
   validateSalaryEntryReason,
@@ -26,6 +28,8 @@ type EditSalaryEntryModalProps = {
   monthFrom: string;
   monthTo: string;
   boardLocked: boolean;
+  clinicId?: string;
+  doctorId?: string | null;
   onClose: () => void;
   onSaved: (result: {
     entries: SalaryEntry[];
@@ -42,6 +46,8 @@ export function EditSalaryEntryModal({
   monthFrom,
   monthTo,
   boardLocked,
+  clinicId,
+  doctorId,
   onClose,
   onSaved,
 }: EditSalaryEntryModalProps) {
@@ -54,6 +60,18 @@ export function EditSalaryEntryModal({
 
   function parseAmount(): number | null {
     return parsePositiveAmount(amount);
+  }
+
+  function notifyProfitAndWallet(payrollRecord?: PayrollRecord | null) {
+    notifyClinicProfitRefresh(clinicId);
+    const affectedDoctorId =
+      payrollRecord?.doctor_id ?? doctorId ?? entry.doctor_id ?? undefined;
+    if (clinicId) {
+      notifyFinancialMutation({
+        clinicId,
+        ...(affectedDoctorId ? { doctorId: affectedDoctorId } : {}),
+      });
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -110,6 +128,7 @@ export function EditSalaryEntryModal({
         return;
       }
 
+      notifyProfitAndWallet(json.payroll_record);
       onSaved({
         entries: json.entries ?? [],
         slip: json.slip,
@@ -155,6 +174,7 @@ export function EditSalaryEntryModal({
         return;
       }
 
+      notifyProfitAndWallet(json.payroll_record);
       onSaved({
         entries: json.entries ?? [],
         slip: json.slip,

@@ -10,6 +10,7 @@ function FinancialSyncTables({ clinicId }: { clinicId: string | null }) {
   useClinicTableRealtime("doctor_withdrawals", clinicId);
   useClinicTableRealtime("transactions", clinicId);
   useClinicTableRealtime("doctor_expenses", clinicId);
+  useClinicTableRealtime("salary_entries", clinicId);
   return null;
 }
 

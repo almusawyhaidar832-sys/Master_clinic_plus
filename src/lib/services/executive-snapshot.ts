@@ -590,13 +590,17 @@ export async function fetchResolvedSalaryDeductionForPeriod(
   from: string,
   to: string
 ): Promise<number> {
-  const [payrollAccruals, bundle] = await Promise.all([
+  const { fetchRegisteredAssistantPayrollClinicDeduction } = await import(
+    "@/lib/ledger/daily-assistant-payroll"
+  );
+  const [payrollAccruals, bundle, registeredAssistantClinic] = await Promise.all([
     fetchConfirmedPayrollProfitDeduction(supabase, clinicId, from, to),
     fetchPaidSalariesBundle(supabase, clinicId, from, to),
+    fetchRegisteredAssistantPayrollClinicDeduction(supabase, clinicId, from, to),
   ]);
-  return resolveExecutiveSalaryDeduction(
-    payrollAccruals,
-    bundle.profitDeduction
+  return roundMoney(
+    resolveExecutiveSalaryDeduction(payrollAccruals, bundle.profitDeduction) +
+      registeredAssistantClinic
   );
 }
 

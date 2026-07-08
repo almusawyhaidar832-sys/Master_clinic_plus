@@ -7,6 +7,8 @@ export type DailyAssistantPayrollLine = {
   doctorId: string;
   assistantId: string | null;
   assistantName: string;
+  /** تاريخ الحركة — للعرض في الكشف المالي */
+  lineDate: string;
   /** إجمالي أجر المساعد */
   totalSalary: number;
   /** ما يُخصم من الطبيب */
@@ -74,6 +76,7 @@ export async function fetchDailyAssistantPayrollLines(
     .eq("clinic_id", clinicId)
     .gte("entry_date", input.dateFrom)
     .lte("entry_date", input.dateTo)
+    .eq("entry_type", "daily_wage")
     .not("assistant_id", "is", null);
 
   const [txRes, entriesRes] = await Promise.all([txQuery, entriesQuery]);
@@ -134,7 +137,7 @@ export async function fetchDailyAssistantPayrollLines(
   }
 
   const lines: DailyAssistantPayrollLine[] = [];
-  const confirmedAssistantIds = new Set<string>();
+  const confirmedTotalsByAssistant = new Map<string, number>();
 
   for (const [batchKey, batch] of batches) {
     const doctorDeduction = roundMoney(
@@ -154,7 +157,14 @@ export async function fetchDailyAssistantPayrollLines(
     if (doctorId && resolvedDoctorId !== doctorId) continue;
 
     const assistantId = record?.assistant_id ?? null;
-    if (assistantId) confirmedAssistantIds.add(assistantId);
+    if (assistantId) {
+      confirmedTotalsByAssistant.set(
+        assistantId,
+        roundMoney(
+          (confirmedTotalsByAssistant.get(assistantId) ?? 0) + totalSalary
+        )
+      );
+    }
 
     const pct =
       record?.doctor_share_percentage ??
@@ -169,6 +179,11 @@ export async function fetchDailyAssistantPayrollLines(
       assistantName: record?.assistant_name_ar ?? extractAssistantNameFromDesc(
         batch.doctor?.description_ar ?? batch.clinic?.description_ar
       ),
+      lineDate: String(
+        batch.doctor?.transaction_date ??
+          batch.clinic?.transaction_date ??
+          input.dateTo
+      ),
       totalSalary,
       doctorDeduction,
       clinicShare,
@@ -177,10 +192,19 @@ export async function fetchDailyAssistantPayrollLines(
     });
   }
 
-  for (const raw of entriesRes.data ?? []) {
+  const coveredByAssistant = new Map(confirmedTotalsByAssistant);
+  const entryRows = [...(entriesRes.data ?? [])].sort((a, b) => {
+    const dateCmp = String(a.entry_date ?? "").localeCompare(
+      String(b.entry_date ?? "")
+    );
+    if (dateCmp !== 0) return dateCmp;
+    return String(a.id ?? "").localeCompare(String(b.id ?? ""));
+  });
+
+  for (const raw of entryRows) {
     const row = raw as Record<string, unknown>;
     const assistantId = row.assistant_id ? String(row.assistant_id) : null;
-    if (!assistantId || confirmedAssistantIds.has(assistantId)) continue;
+    if (!assistantId) continue;
 
     const assistantRaw = row.assistant;
     const assistant = Array.isArray(assistantRaw)
@@ -195,9 +219,20 @@ export async function fetchDailyAssistantPayrollLines(
     const amount = roundMoney(num(row.amount));
     if (amount <= FINANCIAL_EPSILON) continue;
 
+    const covered = roundMoney(coveredByAssistant.get(assistantId) ?? 0);
+    if (covered >= amount - FINANCIAL_EPSILON) {
+      coveredByAssistant.set(assistantId, roundMoney(covered - amount));
+      continue;
+    }
+    if (covered > FINANCIAL_EPSILON) {
+      coveredByAssistant.set(assistantId, 0);
+    }
+    const pendingAmount = roundMoney(amount - Math.max(0, covered));
+    if (pendingAmount <= FINANCIAL_EPSILON) continue;
+
     const pct = num(assistant.doctor_share_percentage);
     const breakdown = breakdownAssistantSalary({
-      total_salary: amount,
+      total_salary: pendingAmount,
       doctor_share_percentage: pct,
     });
 
@@ -206,6 +241,7 @@ export async function fetchDailyAssistantPayrollLines(
       doctorId: resolvedDoctorId,
       assistantId,
       assistantName: String(assistant.full_name_ar ?? "مساعد"),
+      lineDate: String(row.entry_date ?? input.dateTo),
       totalSalary: breakdown.totalSalary,
       doctorDeduction: breakdown.doctorShare,
       clinicShare: breakdown.clinicShare,
@@ -214,9 +250,11 @@ export async function fetchDailyAssistantPayrollLines(
     });
   }
 
-  return lines.sort((a, b) =>
-    a.assistantName.localeCompare(b.assistantName, "ar")
-  );
+  return lines.sort((a, b) => {
+    const dateCmp = b.lineDate.localeCompare(a.lineDate);
+    if (dateCmp !== 0) return dateCmp;
+    return a.assistantName.localeCompare(b.assistantName, "ar");
+  });
 }
 
 function extractAssistantNameFromDesc(desc: string | null | undefined): string {
@@ -224,6 +262,35 @@ function extractAssistantNameFromDesc(desc: string | null | undefined): string {
   const m = text.match(/مساعد\s+(.+?)\s+—/);
   if (m?.[1]) return m[1].trim();
   return "مساعد";
+}
+
+export function sumAssistantPayrollClinicShare(
+  lines: DailyAssistantPayrollLine[],
+  mode: "all" | "registered" | "confirmed" = "all"
+): number {
+  return roundMoney(
+    lines
+      .filter((line) => {
+        if (mode === "registered") return line.statusLabel === "أجر مسجّل";
+        if (mode === "confirmed") return line.statusLabel === "صرف مؤكّد";
+        return true;
+      })
+      .reduce((sum, line) => sum + line.clinicShare, 0)
+  );
+}
+
+/** حصة العيادة من أجور مساعدين مسجّلة ولم تُؤكَّد صرفها بعد */
+export async function fetchRegisteredAssistantPayrollClinicDeduction(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<number> {
+  const lines = await fetchDailyAssistantPayrollLines(supabase, clinicId, {
+    dateFrom: from,
+    dateTo: to,
+  });
+  return sumAssistantPayrollClinicShare(lines, "registered");
 }
 
 export function sumAssistantPayrollByDoctor(

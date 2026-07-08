@@ -24,6 +24,8 @@ import type { SalaryEntryType } from "@/types";
 import type { InvoiceHistoryRow } from "@/lib/services/invoice-archive";
 import { fetchInvoiceHistory } from "@/lib/services/invoice-history-query";
 import { doctorExpenseHasAttachmentHint } from "@/lib/services/doctor-expense-invoice-file";
+import { fetchDailyAssistantPayrollLines } from "@/lib/ledger/daily-assistant-payroll";
+import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { opName, type Doctor, type PatientOperation } from "@/types";
 import type { WithdrawalStatus } from "@/types";
 
@@ -859,9 +861,8 @@ export async function fetchDoctorLedgerFinancialOps(
         label = (txRow.description_ar as string) || "صرف راتب شهري";
         break;
       case "assistant_payroll_doctor":
-        kind = "payroll_deduction";
-        label = (txRow.description_ar as string) || "خصم راتب مساعد";
-        break;
+        // يُعرض عبر fetchDailyAssistantPayrollLines (مؤكّد + مسجّل)
+        continue;
       case "balance_topup_doctor":
         kind = "balance_credit";
         label = (txRow.description_ar as string) || "شحن رصيد";
@@ -891,6 +892,26 @@ export async function fetchDoctorLedgerFinancialOps(
       amount: Number(entry.amount ?? 0),
       operation_date: entry.entry_date as string,
       status: entryType,
+    });
+  }
+
+  const assistantFrom = filters.dateFrom ?? "1970-01-01";
+  const assistantTo = filters.dateTo ?? "2999-12-31";
+  const assistantLines = await fetchDailyAssistantPayrollLines(
+    admin,
+    clinicId,
+    { dateFrom: assistantFrom, dateTo: assistantTo },
+    doctorId
+  );
+  for (const line of assistantLines) {
+    if (line.doctorDeduction <= FINANCIAL_EPSILON) continue;
+    rows.push({
+      id: line.id,
+      kind: "payroll_deduction",
+      label: `مساعد ${line.assistantName} — ${line.statusLabel}`,
+      amount: line.doctorDeduction,
+      operation_date: line.lineDate,
+      status: line.statusLabel,
     });
   }
 

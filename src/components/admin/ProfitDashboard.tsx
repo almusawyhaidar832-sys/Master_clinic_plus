@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { useClinicProfile } from "@/contexts/ClinicProfileContext";
+import { useClinicSync } from "@/hooks/useClinicSync";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
 import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 import { currentMonthYear, formatCurrency, monthDateRange } from "@/lib/utils";
@@ -34,30 +36,39 @@ async function fetchTotalOutstandingDebt(
 }
 
 export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
+  const { profile } = useClinicProfile();
+  const clinicId = profile?.id ?? null;
   const [stats, setStats] = useState<ClinicProfitStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const { from, to } = monthDateRange(currentMonthYear());
-        const [data, totalDebt] = await Promise.all([
-          fetchClinicProfitStatsForPeriodViaApi(from, to, "admin"),
-          fetchTotalOutstandingDebt(from, to),
-        ]);
-        // الذمم رصيد حالي مستمر — لا تتبع فترة الشهر المختار، فتصفيرها
-        // ببداية شهر جديد (لعدم وجود زوار بعد) مضلِّل لصاحب العيادة.
-        setStats(
-          totalDebt !== null ? { ...data, outstandingDebts: totalDebt } : data
-        );
-      } catch {
-        setError("تعذر تحميل بيانات الأرباح");
-      }
-      setLoading(false);
+  const load = useCallback(async () => {
+    try {
+      const { from, to } = monthDateRange(currentMonthYear());
+      const [data, totalDebt] = await Promise.all([
+        fetchClinicProfitStatsForPeriodViaApi(from, to, "admin"),
+        fetchTotalOutstandingDebt(from, to),
+      ]);
+      setStats(
+        totalDebt !== null ? { ...data, outstandingDebts: totalDebt } : data
+      );
+      setError(null);
+    } catch {
+      setError("تعذر تحميل بيانات الأرباح");
     }
-    load();
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useClinicSync({
+    topics: ["profit", "financial"],
+    clinicId,
+    onRefresh: () => void load(),
+    enabled: !!clinicId,
+  });
 
   if (loading) {
     return (

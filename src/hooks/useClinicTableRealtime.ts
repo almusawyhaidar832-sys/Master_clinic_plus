@@ -16,7 +16,8 @@ type RealtimeTable =
   | "invoices_history"
   | "doctor_withdrawals"
   | "transactions"
-  | "doctor_expenses";
+  | "doctor_expenses"
+  | "salary_entries";
 
 const TABLE_TOPICS: Record<RealtimeTable, ClinicSyncTopic[]> = {
   patient_operations: ["sessions", "financial", "profit"],
@@ -27,6 +28,7 @@ const TABLE_TOPICS: Record<RealtimeTable, ClinicSyncTopic[]> = {
   doctor_withdrawals: ["financial"],
   transactions: ["financial", "profit"],
   doctor_expenses: ["financial"],
+  salary_entries: ["financial", "profit"],
 };
 
 function rowDoctorId(payload: RealtimePostgresChangesPayload<Record<string, unknown>>): string | undefined {

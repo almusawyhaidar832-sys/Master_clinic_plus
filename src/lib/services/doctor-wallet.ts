@@ -4,10 +4,12 @@ import {
   computeLiveDoctorShare,
   doctorPaymentPct,
 } from "@/lib/services/patient-financial-plan";
+import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import {
   isDailyWageAssistant,
   normalizeAssistantCompensationMode,
 } from "@/lib/services/assistant-compensation";
+import { computeAssistantNetPay } from "@/lib/services/salary-entry-math";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import { assistantPendingDoctorShare } from "@/lib/services/payroll-paid-portions";
 import {
@@ -450,68 +452,211 @@ function netPayrollDeductionFromRows(
   return Math.round(Math.max(0, total) * 100) / 100;
 }
 
+function parsePayrollReferenceParentId(
+  referenceId: string | null | undefined
+): string | null {
+  if (!referenceId) return null;
+  const idx = referenceId.indexOf(":from:");
+  if (idx > 0) return referenceId.slice(0, idx);
+  return referenceId.trim() || null;
+}
+
+type PayrollRecordPendingRow = Pick<
+  PayrollRecord,
+  | "doctor_share_amount"
+  | "paid_doctor_share_amount"
+  | "clinic_share_amount"
+  | "paid_clinic_share_amount"
+  | "total_salary"
+  | "paid_total_salary"
+  | "status"
+  | "doctor_share_percentage"
+> & {
+  assistant?:
+    | { compensation_mode?: string; doctor_share_percentage?: number }
+    | { compensation_mode?: string; doctor_share_percentage?: number }[]
+    | null;
+};
+
+function monthlyPayrollRecordPendingDoctorShare(row: PayrollRecordPendingRow): number {
+  const assistantRaw = row.assistant;
+  const assistant = Array.isArray(assistantRaw) ? assistantRaw[0] : assistantRaw;
+  const dailyWage = isDailyWageAssistant(
+    normalizeAssistantCompensationMode(
+      (assistant as { compensation_mode?: string } | null)?.compensation_mode
+    )
+  );
+  if (dailyWage) return 0;
+
+  const doctorSharePct = Number(
+    (assistant as { doctor_share_percentage?: number } | null)
+      ?.doctor_share_percentage ?? row.doctor_share_percentage ?? 0
+  );
+  return assistantPendingDoctorShare(row, {
+    dailyWage: false,
+    doctorSharePercentage: doctorSharePct,
+  });
+}
+
+/**
+ * أجر يومي مسجّل — نفس منطق الكشف المالي: salary_entries ناقص الصرف المؤكّد.
+ * يضمن خصم الرصيد فور التسجيل حتى لو تأخر تحديث payroll_records.
+ */
+async function fetchDailyAssistantPayrollPendingByDoctor(
+  supabase: SupabaseClient,
+  doctorIds?: string[]
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+
+  let assistantsQuery = supabase
+    .from("assistants")
+    .select("id, doctor_id, doctor_share_percentage, compensation_mode")
+    .eq("is_active", true);
+  if (doctorIds?.length) {
+    assistantsQuery = assistantsQuery.in("doctor_id", doctorIds);
+  }
+
+  const { data: assistants, error: asstErr } = await assistantsQuery;
+  if (asstErr || !assistants?.length) return map;
+
+  const dailyAssistants = assistants.filter((assistant) =>
+    isDailyWageAssistant(
+      normalizeAssistantCompensationMode(
+        assistant.compensation_mode as string | undefined
+      )
+    )
+  );
+  if (!dailyAssistants.length) return map;
+
+  const assistantMeta = new Map(
+    dailyAssistants.map((assistant) => [String(assistant.id), assistant])
+  );
+  const assistantIds = [...assistantMeta.keys()];
+  const scopedDoctorIds = doctorIds?.length
+    ? doctorIds
+    : [...new Set(dailyAssistants.map((assistant) => String(assistant.doctor_id)))];
+
+  const [entriesRes, txRes, recordsRes] = await Promise.all([
+    supabase
+      .from("salary_entries")
+      .select("id, assistant_id, amount, entry_type, entry_date")
+      .in("assistant_id", assistantIds),
+    supabase
+      .from("transactions")
+      .select("doctor_id, amount, reference_id")
+      .eq("type", "assistant_payroll_doctor")
+      .in("doctor_id", scopedDoctorIds),
+    supabase
+      .from("payroll_records")
+      .select("id, assistant_id")
+      .in("assistant_id", assistantIds),
+  ]);
+
+  const recordAssistant = new Map(
+    (recordsRes.data ?? []).map((record) => [
+      String(record.id),
+      String(record.assistant_id),
+    ])
+  );
+
+  const confirmedByAssistant = new Map<string, number>();
+  for (const tx of txRes.data ?? []) {
+    const amt = Number(tx.amount ?? 0);
+    const deduction = amt < 0 ? Math.abs(amt) : amt > 0 ? -amt : 0;
+    if (deduction <= FINANCIAL_EPSILON) continue;
+
+    const parentId = parsePayrollReferenceParentId(
+      tx.reference_id as string | null
+    );
+    const assistantId = parentId ? recordAssistant.get(parentId) : null;
+    if (!assistantId) continue;
+
+    confirmedByAssistant.set(
+      assistantId,
+      Math.round(((confirmedByAssistant.get(assistantId) ?? 0) + deduction) * 100) /
+        100
+    );
+  }
+
+  const entriesByAssistant = new Map<
+    string,
+    NonNullable<typeof entriesRes.data>
+  >();
+  for (const entry of entriesRes.data ?? []) {
+    const assistantId = String(entry.assistant_id);
+    const list = entriesByAssistant.get(assistantId) ?? [];
+    list.push(entry);
+    entriesByAssistant.set(assistantId, list);
+  }
+
+  for (const [assistantId, assistantEntries] of entriesByAssistant) {
+    const meta = assistantMeta.get(assistantId);
+    if (!meta) continue;
+
+    const doctorId = String(meta.doctor_id);
+    if (doctorIds?.length && !doctorIds.includes(doctorId)) continue;
+
+    const compensationMode = normalizeAssistantCompensationMode(
+      meta.compensation_mode as string | undefined
+    );
+    const { netPayout } = computeAssistantNetPay(compensationMode, 0, assistantEntries);
+    const { doctorShare } = breakdownAssistantSalary({
+      total_salary: netPayout,
+      doctor_share_percentage: Number(meta.doctor_share_percentage ?? 0),
+    });
+    const confirmed = confirmedByAssistant.get(assistantId) ?? 0;
+    const pending = Math.round(Math.max(0, doctorShare - confirmed) * 100) / 100;
+    if (pending <= FINANCIAL_EPSILON) continue;
+
+    map.set(
+      doctorId,
+      Math.round(((map.get(doctorId) ?? 0) + pending) * 100) / 100
+    );
+  }
+
+  return map;
+}
+
 /** حصة الطبيب من أجور مساعديه المسجّلة ولم تُصرف بعد */
 export async function fetchDoctorPendingAssistantPayrollDeductions(
   supabase: SupabaseClient,
   doctorId: string
 ): Promise<number> {
-  const { data, error } = await supabase
-    .from("payroll_records")
-    .select(
+  const [recordsRes, dailyPendingMap] = await Promise.all([
+    supabase
+      .from("payroll_records")
+      .select(
+        `
+        doctor_id,
+        doctor_share_percentage,
+        doctor_share_amount,
+        paid_doctor_share_amount,
+        clinic_share_amount,
+        paid_clinic_share_amount,
+        total_salary,
+        paid_total_salary,
+        status,
+        assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
       `
-      doctor_id,
-      doctor_share_percentage,
-      doctor_share_amount,
-      paid_doctor_share_amount,
-      clinic_share_amount,
-      paid_clinic_share_amount,
-      total_salary,
-      paid_total_salary,
-      status,
-      assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
-    `
-    )
-    .eq("doctor_id", doctorId);
-
-  if (error || !data?.length) return 0;
-
-  let total = 0;
-  for (const row of data) {
-    const assistantRaw = row.assistant;
-    const assistant = Array.isArray(assistantRaw)
-      ? assistantRaw[0]
-      : assistantRaw;
-    const dailyWage = isDailyWageAssistant(
-      normalizeAssistantCompensationMode(
-        (assistant as { compensation_mode?: string } | null)
-          ?.compensation_mode
       )
-    );
-    const doctorSharePct = Number(
-      (assistant as { doctor_share_percentage?: number } | null)
-        ?.doctor_share_percentage ??
-        (row as { doctor_share_percentage?: number }).doctor_share_percentage ??
-        0
-    );
-    total += assistantPendingDoctorShare(
-      row as Pick<
-        PayrollRecord,
-        | "doctor_share_amount"
-        | "paid_doctor_share_amount"
-        | "clinic_share_amount"
-        | "paid_clinic_share_amount"
-        | "total_salary"
-        | "paid_total_salary"
-        | "status"
-      >,
-      {
-        dailyWage,
-        doctorSharePercentage: doctorSharePct,
-      }
-    );
+      .eq("doctor_id", doctorId),
+    fetchDailyAssistantPayrollPendingByDoctor(supabase, [doctorId]),
+  ]);
+
+  let monthlyPending = 0;
+  if (!recordsRes.error && recordsRes.data?.length) {
+    for (const row of recordsRes.data) {
+      monthlyPending += monthlyPayrollRecordPendingDoctorShare(
+        row as PayrollRecordPendingRow
+      );
+    }
   }
 
-  return Math.round(total * 100) / 100;
+  return (
+    Math.round(
+      (monthlyPending + (dailyPendingMap.get(doctorId) ?? 0)) * 100
+    ) / 100
+  );
 }
 
 /** خصومات مساعدين — مؤكّدة + مسجّلة (أجر يومي قبل الصرف) */
@@ -533,63 +678,48 @@ async function fetchPendingAssistantPayrollByDoctor(
   const map = new Map<string, number>();
   if (!doctorIds.length) return map;
 
-  const { data, error } = await supabase
-    .from("payroll_records")
-    .select(
+  const [recordsRes, dailyPendingMap] = await Promise.all([
+    supabase
+      .from("payroll_records")
+      .select(
+        `
+        doctor_id,
+        doctor_share_percentage,
+        doctor_share_amount,
+        paid_doctor_share_amount,
+        clinic_share_amount,
+        paid_clinic_share_amount,
+        total_salary,
+        paid_total_salary,
+        status,
+        assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
       `
-      doctor_id,
-      doctor_share_percentage,
-      doctor_share_amount,
-      paid_doctor_share_amount,
-      clinic_share_amount,
-      paid_clinic_share_amount,
-      total_salary,
-      paid_total_salary,
-      status,
-      assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
-    `
-    )
-    .in("doctor_id", doctorIds);
-
-  if (error || !data?.length) return map;
-
-  for (const row of data) {
-    const doctorId = String(row.doctor_id ?? "");
-    if (!doctorId) continue;
-    const assistantRaw = row.assistant;
-    const assistant = Array.isArray(assistantRaw)
-      ? assistantRaw[0]
-      : assistantRaw;
-    const dailyWage = isDailyWageAssistant(
-      normalizeAssistantCompensationMode(
-        (assistant as { compensation_mode?: string } | null)
-          ?.compensation_mode
       )
-    );
-    const doctorSharePct = Number(
-      (assistant as { doctor_share_percentage?: number } | null)
-        ?.doctor_share_percentage ??
-        (row as { doctor_share_percentage?: number }).doctor_share_percentage ??
-        0
-    );
-    const pending = assistantPendingDoctorShare(
-      row as Pick<
-        PayrollRecord,
-        | "doctor_share_amount"
-        | "paid_doctor_share_amount"
-        | "clinic_share_amount"
-        | "paid_clinic_share_amount"
-        | "total_salary"
-        | "paid_total_salary"
-        | "status"
-      >,
-      {
-        dailyWage,
-        doctorSharePercentage: doctorSharePct,
-      }
-    );
+      .in("doctor_id", doctorIds),
+    fetchDailyAssistantPayrollPendingByDoctor(supabase, doctorIds),
+  ]);
+
+  if (!recordsRes.error && recordsRes.data?.length) {
+    for (const row of recordsRes.data) {
+      const doctorId = String(row.doctor_id ?? "");
+      if (!doctorId) continue;
+      const pending = monthlyPayrollRecordPendingDoctorShare(
+        row as PayrollRecordPendingRow
+      );
+      if (pending <= FINANCIAL_EPSILON) continue;
+      map.set(
+        doctorId,
+        Math.round(((map.get(doctorId) ?? 0) + pending) * 100) / 100
+      );
+    }
+  }
+
+  for (const [doctorId, pending] of dailyPendingMap) {
     if (pending <= FINANCIAL_EPSILON) continue;
-    map.set(doctorId, Math.round(((map.get(doctorId) ?? 0) + pending) * 100) / 100);
+    map.set(
+      doctorId,
+      Math.round(((map.get(doctorId) ?? 0) + pending) * 100) / 100
+    );
   }
 
   return map;
