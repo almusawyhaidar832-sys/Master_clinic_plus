@@ -1,14 +1,11 @@
 import {
   applyClinicTopUpToProfitStats,
-  reconcilePendingClinicTopUpInProfitStats,
   type ClinicProfitStats,
 } from "@/lib/services/clinic-stats";
 
 type PendingClinicTopUp = {
   delta: number;
   transactionDate: string;
-  minTopups?: number;
-  minNetProfit?: number;
 };
 
 const pendingByClinic = new Map<string, PendingClinicTopUp>();
@@ -86,13 +83,11 @@ export function registerPendingClinicTopUp(
   pendingByClinic.set(clinicId, {
     delta: roundMoney((prev?.delta ?? 0) + amount),
     transactionDate: transactionDate.slice(0, 10),
-    minTopups: undefined,
-    minNetProfit: undefined,
   });
   persistPending();
 }
 
-/** دمج شحن معلّق — يُستخدم في المحاسب والإدارة */
+/** دمج شحن معلّق فقط إن لم يعكسه السيرفر بعد — بدون جمع مزدوج */
 export function reconcilePendingClinicProfitStats(
   clinicId: string,
   stats: ClinicProfitStats,
@@ -110,29 +105,21 @@ export function reconcilePendingClinicProfitStats(
     return stats;
   }
 
-  const expectedTopups = roundMoney(stats.balanceTopupsTotal + pending.delta);
-  const expectedNet = roundMoney(stats.netProfit + pending.delta);
-
-  if (
-    stats.balanceTopupsTotal + 0.01 >= expectedTopups &&
-    stats.netProfit + 0.01 >= expectedNet
-  ) {
+  // السيرفر يعكس الشحن بالفعل — لا نضيفه مرة ثانية
+  if (stats.balanceTopupsTotal + 0.01 >= pending.delta) {
     pendingByClinic.delete(clinicId);
     persistPending();
     return stats;
   }
 
-  const result = reconcilePendingClinicTopUpInProfitStats(stats, {
-    minTopups: expectedTopups,
-    minNetProfit: expectedNet,
-  });
-
-  if (result.resolved) {
+  const topupGap = roundMoney(pending.delta - stats.balanceTopupsTotal);
+  if (topupGap > 0.01) {
     pendingByClinic.delete(clinicId);
     persistPending();
+    return applyClinicTopUpToProfitStats(stats, topupGap);
   }
 
-  return result.stats;
+  return stats;
 }
 
 /** تحديث فوري للواجهة بعد شحن ناجح */

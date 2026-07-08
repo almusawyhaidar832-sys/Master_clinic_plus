@@ -365,34 +365,18 @@ export function clinicProfitStatsFromFinancialSnapshot(
   };
 }
 
-/** يدمج شحن الرصيد من لقطة RPC إن لم يعكسه الـ API */
+/** يدمج شحن الرصيد من لقطة RPC إن لم يعكسه الـ API — لا نستخدم صافي RPC (لا يخصم الرواتب) */
 export function alignClinicProfitStatsWithFinancialSnapshot(
   stats: ClinicProfitStats,
   snap: ClinicFinancialSnapshotRpc
 ): ClinicProfitStats {
-  let next = stats;
   const topupGap = roundProfitMoney(snap.balanceTopups - stats.balanceTopupsTotal);
 
   if (topupGap > 0.01) {
-    next = applyClinicTopUpToProfitStats(next, topupGap);
+    return applyClinicTopUpToProfitStats(stats, topupGap);
   }
 
-  if (snap.netProfit > next.netProfit + 0.01) {
-    const netGap = roundProfitMoney(snap.netProfit - next.netProfit);
-    if (netGap > 0.01) {
-      next = {
-        ...next,
-        netProfit: snap.netProfit,
-        breakdown: next.breakdown.map((row) =>
-          row.label === NET_PROFIT_LABEL
-            ? { ...row, amount: snap.netProfit }
-            : row
-        ),
-      };
-    }
-  }
-
-  return next;
+  return stats;
 }
 
 export async function fetchClinicProfitStats(
