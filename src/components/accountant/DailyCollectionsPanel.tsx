@@ -291,23 +291,49 @@ function AssistantPayrollRow({ line }: { line: DailyAssistantPayrollLine }) {
 }
 
 function WithdrawalRow({ line }: { line: DoctorWithdrawalLine }) {
+  const isPending = line.status === "pending";
   return (
-    <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-red-50/20 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+    <div
+      className={cn(
+        "flex flex-col gap-3 border-b border-slate-border/60 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between",
+        isPending ? "bg-amber-50/30" : "bg-red-50/20"
+      )}
+    >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <ArrowDownToLine className="h-4 w-4 shrink-0 text-red-600" />
+          <ArrowDownToLine
+            className={cn(
+              "h-4 w-4 shrink-0",
+              isPending ? "text-amber-600" : "text-red-600"
+            )}
+          />
           <p className="font-semibold text-slate-text">{line.source}</p>
-          <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-800">
+          <span
+            className={cn(
+              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+              isPending
+                ? "bg-amber-100 text-amber-900"
+                : "bg-red-100 text-red-800"
+            )}
+          >
             {withdrawalStatusLabel(line.status)}
           </span>
         </div>
         <p className="mt-1 text-xs text-slate-muted">
           {formatDate(line.effectiveDate)}
+          {isPending && " · يُحجز من الرصيد المتاح للسحب حتى الموافقة"}
         </p>
       </div>
       <div className="text-right">
-        <p className="text-[11px] text-slate-muted">سحب رصيد</p>
-        <p className="font-bold tabular-nums text-red-600">
+        <p className="text-[11px] text-slate-muted">
+          {isPending ? "طلب سحب رصيد" : "سحب رصيد"}
+        </p>
+        <p
+          className={cn(
+            "font-bold tabular-nums",
+            isPending ? "text-amber-700" : "text-red-600"
+          )}
+        >
           − {formatCurrency(line.amount)}
         </p>
       </div>
@@ -430,6 +456,18 @@ function DoctorSection({
                   </span>
                 </>
               )}
+              {stats.totalPendingWithdrawalInPeriod > 0 && (
+                <>
+                  {(stats.totalPatients > 0 ||
+                    stats.assistantDoctorDeduction > 0 ||
+                    stats.totalWithdrawnInPeriod > 0) &&
+                    " · "}
+                  <span className="font-medium text-amber-700">
+                    طلب سحب معلّق −
+                    {formatCurrency(stats.totalPendingWithdrawalInPeriod)}
+                  </span>
+                </>
+              )}
               {stats.totalToppedUpInPeriod > 0 && (
                 <>
                   {(stats.totalPatients > 0 ||
@@ -444,9 +482,16 @@ function DoctorSection({
               {stats.availableBalance != null && (
                 <>
                   {" · "}
-                  رصيد متبقي {formatCurrency(stats.availableBalance)}
+                  رصيد محاسبي {formatCurrency(stats.availableBalance)}
                 </>
               )}
+              {stats.withdrawableLimit != null &&
+                stats.withdrawableLimit !== stats.availableBalance && (
+                  <>
+                    {" · "}
+                    متاح للسحب {formatCurrency(stats.withdrawableLimit)}
+                  </>
+                )}
             </p>
           </div>
         </div>
@@ -867,6 +912,13 @@ export function DailyCollectionsPanel() {
                 label="سحوبات الأطباء"
                 value={`− ${formatCurrency(result.totals.totalWithdrawnInPeriod)}`}
                 className="border-red-200 bg-red-50/50 text-red-700"
+              />
+            )}
+            {result.totals.totalPendingWithdrawalInPeriod > 0 && (
+              <SummaryChip
+                label="طلبات سحب معلّقة"
+                value={`− ${formatCurrency(result.totals.totalPendingWithdrawalInPeriod)}`}
+                className="border-amber-200 bg-amber-50/50 text-amber-800"
               />
             )}
             {result.totals.totalToppedUpInPeriod > 0 && (

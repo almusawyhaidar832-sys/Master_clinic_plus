@@ -9,7 +9,14 @@ import {
   withdrawalSourceLabel,
 } from "@/lib/withdrawals/display";
 
-const STATEMENT_WITHDRAWAL_STATUSES = new Set(["approved", "paid"]);
+/** يظهر في الكشف المالي — كل الحالات ما عدا المرفوض */
+const STATEMENT_WITHDRAWAL_STATUSES = new Set([
+  "pending",
+  "approved",
+  "paid",
+]);
+
+const CONFIRMED_WITHDRAWAL_STATUSES = new Set(["approved", "paid"]);
 
 type WithdrawalDbRow = {
   id: string;
@@ -41,7 +48,7 @@ function mapWithdrawalLine(row: WithdrawalDbRow): DoctorWithdrawalLine {
   };
 }
 
-/** سحوبات الأطباء ضمن فترة الكشف — موافق عليها أو مُصرفة */
+/** سحوبات الأطباء ضمن فترة الكشف — معلّقة أو موافق عليها أو مُصرفة */
 export async function fetchDailyDoctorWithdrawalLines(
   supabase: SupabaseClient,
   clinicId: string,
@@ -56,7 +63,7 @@ export async function fetchDailyDoctorWithdrawalLines(
     .from("doctor_withdrawals")
     .select(selectWithSource)
     .eq("clinic_id", clinicId)
-    .in("status", [...STATEMENT_WITHDRAWAL_STATUSES])
+    .neq("status", "rejected")
     .order("requested_at", { ascending: false });
 
   if (opts.doctorId) {
@@ -70,7 +77,7 @@ export async function fetchDailyDoctorWithdrawalLines(
       .from("doctor_withdrawals")
       .select(selectBase)
       .eq("clinic_id", clinicId)
-      .in("status", [...STATEMENT_WITHDRAWAL_STATUSES])
+      .neq("status", "rejected")
       .order("requested_at", { ascending: false });
     if (opts.doctorId) {
       fallbackQuery = fallbackQuery.eq("doctor_id", opts.doctorId);
@@ -90,17 +97,40 @@ export async function fetchDailyDoctorWithdrawalLines(
   return inPeriod.map((row) => mapWithdrawalLine(row as WithdrawalDbRow));
 }
 
-export function sumWithdrawalsByDoctor(
-  lines: DoctorWithdrawalLine[]
+function sumWithdrawalsByDoctorWithStatuses(
+  lines: DoctorWithdrawalLine[],
+  statuses: Set<string>
 ): Map<string, number> {
   const map = new Map<string, number>();
   for (const line of lines) {
+    if (!statuses.has(line.status)) continue;
     map.set(
       line.doctorId,
       roundMoney((map.get(line.doctorId) ?? 0) + line.amount)
     );
   }
   return map;
+}
+
+/** مسحوب / موافق عليه خلال الفترة */
+export function sumConfirmedWithdrawalsByDoctor(
+  lines: DoctorWithdrawalLine[]
+): Map<string, number> {
+  return sumWithdrawalsByDoctorWithStatuses(lines, CONFIRMED_WITHDRAWAL_STATUSES);
+}
+
+/** طلبات سحب معلّقة خلال الفترة */
+export function sumPendingWithdrawalsByDoctor(
+  lines: DoctorWithdrawalLine[]
+): Map<string, number> {
+  return sumWithdrawalsByDoctorWithStatuses(lines, new Set(["pending"]));
+}
+
+/** @deprecated use sumConfirmedWithdrawalsByDoctor */
+export function sumWithdrawalsByDoctor(
+  lines: DoctorWithdrawalLine[]
+): Map<string, number> {
+  return sumConfirmedWithdrawalsByDoctor(lines);
 }
 
 function roundMoney(n: number): number {

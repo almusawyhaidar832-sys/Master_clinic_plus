@@ -46,6 +46,30 @@ async function fetchAssistantPendingDoctorShare(
   if (base.error) return 0;
 
   const dailyWage = isDailyWageAssistant(base.compensationMode);
+  const { from, to } = monthDateRange(monthYear);
+
+  const { entries } = await listSalaryEntriesForPersonMonth(
+    admin,
+    clinicId,
+    monthYear,
+    { assistantId }
+  );
+  const hasDailyWageEntries = entries.some(
+    (entry) => entry.entry_type === "daily_wage"
+  );
+
+  if (dailyWage || hasDailyWageEntries) {
+    const { fetchRegisteredAssistantPayrollDoctorDeductionForAssistant } =
+      await import("@/lib/ledger/daily-assistant-payroll");
+    return fetchRegisteredAssistantPayrollDoctorDeductionForAssistant(
+      admin,
+      clinicId,
+      assistantId,
+      from,
+      to
+    );
+  }
+
   const { data: record } = await admin
     .from("payroll_records")
     .select(
@@ -58,71 +82,93 @@ async function fetchAssistantPendingDoctorShare(
 
   if (record) {
     return assistantPendingDoctorShare(record as PayrollRecord, {
-      dailyWage,
+      dailyWage: false,
       doctorSharePercentage: base.doctorSharePercentage,
     });
   }
 
-  if (!dailyWage) return 0;
+  return 0;
+}
 
-  const { entries } = await listSalaryEntriesForPersonMonth(
-    admin,
-    clinicId,
-    monthYear,
-    { assistantId }
-  );
-  const { netPayout } = computeAssistantNetPay(
-    base.compensationMode,
-    base.baseSalary,
-    entries
-  );
+function doctorShareFromDailyWage(
+  wageAmount: number,
+  doctorSharePercentage: number
+): number {
   return breakdownAssistantSalary({
-    total_salary: netPayout,
-    doctor_share_percentage: base.doctorSharePercentage,
+    total_salary: wageAmount,
+    doctor_share_percentage: doctorSharePercentage,
   }).doctorShare;
 }
 
-function notifyDoctorAssistantPayrollChangeIfNeeded(
+async function notifyDoctorAssistantPayrollChangeIfNeeded(
   admin: SupabaseClient,
   clinicId: string,
   assistantId: string,
   monthYear: string,
   beforePending: number,
   action: "registered" | "updated" | "removed",
-  entryDate?: string
-): void {
-  void (async () => {
+  entryDate?: string,
+  opts?: {
+    entryType?: SalaryEntryType;
+    wageAmount?: number;
+    previousWageAmount?: number;
+    doctorSharePercentage?: number;
+  }
+): Promise<void> {
+  let amountDelta = 0;
+
+  if (
+    opts?.entryType === "daily_wage" &&
+    opts.wageAmount != null &&
+    opts.doctorSharePercentage != null
+  ) {
+    const doctorSharePct = opts.doctorSharePercentage;
+    if (action === "removed") {
+      amountDelta = roundMoney(
+        -doctorShareFromDailyWage(opts.wageAmount, doctorSharePct)
+      );
+    } else if (action === "registered") {
+      amountDelta = roundMoney(
+        doctorShareFromDailyWage(opts.wageAmount, doctorSharePct)
+      );
+    } else {
+      const previousAmount = opts.previousWageAmount ?? 0;
+      amountDelta = roundMoney(
+        doctorShareFromDailyWage(opts.wageAmount, doctorSharePct) -
+          doctorShareFromDailyWage(previousAmount, doctorSharePct)
+      );
+    }
+  } else {
     const afterPending = await fetchAssistantPendingDoctorShare(
       admin,
       clinicId,
       assistantId,
       monthYear
     );
-    const amountDelta = roundMoney(afterPending - beforePending);
-    if (Math.abs(amountDelta) <= FINANCIAL_EPSILON) return;
+    amountDelta = roundMoney(afterPending - beforePending);
+  }
 
-    const { data: assistant } = await admin
-      .from("assistants")
-      .select("doctor_id, full_name_ar")
-      .eq("id", assistantId)
-      .eq("clinic_id", clinicId)
-      .maybeSingle();
-    if (!assistant?.doctor_id) return;
+  if (Math.abs(amountDelta) <= FINANCIAL_EPSILON) return;
 
-    const { notifyDoctorAssistantPayrollDeduction } = await import(
-      "@/lib/notifications/server"
-    );
-    await notifyDoctorAssistantPayrollDeduction({
-      clinicId,
-      doctorId: String(assistant.doctor_id),
-      assistantName: String(assistant.full_name_ar ?? "مساعد"),
-      monthYear,
-      amountDelta,
-      action,
-      entryDate,
-    });
-  })().catch((err) => {
-    console.error("[salary-entry] doctor payroll deduction notify failed:", err);
+  const { data: assistant } = await admin
+    .from("assistants")
+    .select("doctor_id, full_name_ar")
+    .eq("id", assistantId)
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (!assistant?.doctor_id) return;
+
+  const { notifyDoctorAssistantPayrollDeduction } = await import(
+    "@/lib/notifications/server"
+  );
+  await notifyDoctorAssistantPayrollDeduction({
+    clinicId,
+    doctorId: String(assistant.doctor_id),
+    assistantName: String(assistant.full_name_ar ?? "مساعد"),
+    monthYear,
+    amountDelta,
+    action,
+    entryDate,
   });
 }
 
@@ -834,6 +880,7 @@ export async function createSalaryEntry(
 }> {
   let notice: string | undefined;
   let assistantPayrollPendingBefore = 0;
+  let assistantDoctorSharePct = 0;
   const staffId = input.staffId?.trim() ?? "";
   const assistantId = input.assistantId?.trim() ?? "";
   const doctorId = input.doctorId?.trim() ?? "";
@@ -1023,7 +1070,7 @@ export async function createSalaryEntry(
   } else {
     const { data: assistant, error: asstErr } = await admin
       .from("assistants")
-      .select("id, total_salary, compensation_mode")
+      .select("id, total_salary, compensation_mode, doctor_share_percentage")
       .eq("id", assistantId)
       .eq("clinic_id", input.clinicId)
       .maybeSingle();
@@ -1076,6 +1123,7 @@ export async function createSalaryEntry(
       ? 0
       : Number(assistant.total_salary ?? input.baseSalary);
     assistantCompensationMode = compensationMode;
+    assistantDoctorSharePct = Number(assistant.doctor_share_percentage ?? 0);
 
     const { data: existingRecord } = await admin
       .from("payroll_records")
@@ -1258,15 +1306,27 @@ export async function createSalaryEntry(
         console.error("[salary-entry] assistant notification failed:", err);
       });
 
-    notifyDoctorAssistantPayrollChangeIfNeeded(
-      admin,
-      input.clinicId,
-      assistantId,
-      input.monthYear,
-      assistantPayrollPendingBefore,
-      "registered",
-      input.entryDate
-    );
+    try {
+      await notifyDoctorAssistantPayrollChangeIfNeeded(
+        admin,
+        input.clinicId,
+        assistantId,
+        input.monthYear,
+        assistantPayrollPendingBefore,
+        "registered",
+        input.entryDate,
+        {
+          entryType: input.entryType,
+          wageAmount: input.amount,
+          doctorSharePercentage: assistantDoctorSharePct,
+        }
+      );
+    } catch (err) {
+      console.error(
+        "[salary-entry] doctor payroll deduction notify failed:",
+        err
+      );
+    }
   }
 
   return {
@@ -2023,15 +2083,30 @@ export async function deleteSalaryEntry(
     monthYear
   );
   if (assistantId) {
-    notifyDoctorAssistantPayrollChangeIfNeeded(
-      admin,
-      clinicId,
-      assistantId,
-      monthYear,
-      assistantPayrollPendingBefore,
-      "removed",
-      entry.entry_date
-    );
+    const base = await loadAssistantPayrollBase(admin, clinicId, assistantId);
+    try {
+      await notifyDoctorAssistantPayrollChangeIfNeeded(
+        admin,
+        clinicId,
+        assistantId,
+        monthYear,
+        assistantPayrollPendingBefore,
+        "removed",
+        entry.entry_date,
+        entry.entry_type === "daily_wage" && !base.error
+          ? {
+              entryType: "daily_wage",
+              wageAmount: Number(entry.amount),
+              doctorSharePercentage: base.doctorSharePercentage,
+            }
+          : undefined
+      );
+    } catch (err) {
+      console.error(
+        "[salary-entry] doctor payroll deduction notify failed:",
+        err
+      );
+    }
   }
   return { ...synced, deleted: true, notice: reconcile.notice };
 }
@@ -2301,15 +2376,31 @@ export async function updateSalaryEntry(
   );
 
   if (assistantId) {
-    notifyDoctorAssistantPayrollChangeIfNeeded(
-      admin,
-      clinicId,
-      assistantId,
-      nextMonthYear,
-      assistantPayrollPendingBefore,
-      "updated",
-      nextDate
-    );
+    const base = await loadAssistantPayrollBase(admin, clinicId, assistantId);
+    try {
+      await notifyDoctorAssistantPayrollChangeIfNeeded(
+        admin,
+        clinicId,
+        assistantId,
+        nextMonthYear,
+        assistantPayrollPendingBefore,
+        "updated",
+        nextDate,
+        entry.entry_type === "daily_wage" && !base.error
+          ? {
+              entryType: "daily_wage",
+              wageAmount: nextAmount,
+              previousWageAmount: Number(entry.amount),
+              doctorSharePercentage: base.doctorSharePercentage,
+            }
+          : undefined
+      );
+    } catch (err) {
+      console.error(
+        "[salary-entry] doctor payroll deduction notify failed:",
+        err
+      );
+    }
   }
 
   return {

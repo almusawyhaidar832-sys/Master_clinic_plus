@@ -29,7 +29,8 @@ import {
 } from "@/lib/ledger/daily-assistant-payroll";
 import {
   fetchDailyDoctorWithdrawalLines,
-  sumWithdrawalsByDoctor,
+  sumConfirmedWithdrawalsByDoctor,
+  sumPendingWithdrawalsByDoctor,
 } from "@/lib/ledger/daily-doctor-withdrawals";
 import {
   fetchDailyDoctorBalanceTopUpLines,
@@ -123,10 +124,14 @@ export type DoctorDailySummary = {
     totalDoctorExpenseClinicShare: number;
     /** مسحوب / موافق عليه خلال الفترة */
     totalWithdrawnInPeriod: number;
+    /** طلبات سحب معلّقة خلال الفترة */
+    totalPendingWithdrawalInPeriod: number;
     /** شحن رصيد خلال الفترة */
     totalToppedUpInPeriod: number;
     /** الرصيد المحاسبي الحالي للطبيب بعد كل الصرفيات */
     availableBalance: number | null;
+    /** أقصى مبلغ يمكن سحبه الآن (بعد حجز الطلبات المعلّقة) */
+    withdrawableLimit: number | null;
   };
 };
 
@@ -686,10 +691,12 @@ function emptyStats(): DoctorDailySummary["stats"] {
     assistantClinicShare: 0,
     netDoctorShareToday: 0,
     totalWithdrawnInPeriod: 0,
+    totalPendingWithdrawalInPeriod: 0,
     totalToppedUpInPeriod: 0,
     totalDoctorExpenseDeduction: 0,
     totalDoctorExpenseClinicShare: 0,
     availableBalance: null,
+    withdrawableLimit: null,
   };
 }
 
@@ -784,10 +791,10 @@ function applyBalanceTopupsToStats(
 function applyWithdrawalsToStats(
   stats: DoctorDailySummary["stats"],
   withdrawnInPeriod: number,
-  availableBalance: number | null
+  pendingInPeriod: number
 ): void {
   stats.totalWithdrawnInPeriod = withdrawnInPeriod;
-  stats.availableBalance = availableBalance;
+  stats.totalPendingWithdrawalInPeriod = pendingInPeriod;
 }
 
 /** صف واحد لكل مراجع + طبيب في اليوم — بدل تكرار الاسم لكل سجل */
@@ -968,6 +975,7 @@ function mergeStats(
   target.assistantClinicShare += source.assistantClinicShare;
   target.netDoctorShareToday += source.netDoctorShareToday;
   target.totalWithdrawnInPeriod += source.totalWithdrawnInPeriod;
+  target.totalPendingWithdrawalInPeriod += source.totalPendingWithdrawalInPeriod;
   target.totalToppedUpInPeriod += source.totalToppedUpInPeriod;
   target.totalDoctorExpenseDeduction += source.totalDoctorExpenseDeduction;
   target.totalDoctorExpenseClinicShare += source.totalDoctorExpenseClinicShare;
@@ -1199,7 +1207,8 @@ export async function fetchDailyCollections(
       doctorId: input.doctorId,
     }
   );
-  const withdrawalsByDoctor = sumWithdrawalsByDoctor(withdrawalLines);
+  const withdrawalsByDoctor = sumConfirmedWithdrawalsByDoctor(withdrawalLines);
+  const pendingWithdrawalsByDoctor = sumPendingWithdrawalsByDoctor(withdrawalLines);
   const withdrawalLinesByDoctor = new Map<string, DoctorWithdrawalLine[]>();
   for (const line of withdrawalLines) {
     const list = withdrawalLinesByDoctor.get(line.doctorId) ?? [];
@@ -1252,7 +1261,7 @@ export async function fetchDailyCollections(
     applyWithdrawalsToStats(
       stats,
       withdrawalsByDoctor.get(doctorId) ?? 0,
-      null
+      pendingWithdrawalsByDoctor.get(doctorId) ?? 0
     );
     applyBalanceTopupsToStats(stats, topupsByDoctor.get(doctorId) ?? 0);
     applyDoctorExpensesToStats(
@@ -1557,7 +1566,9 @@ export async function fetchDailyCollections(
     });
   }
 
-  for (const doctorId of withdrawalsByDoctor.keys()) {
+  const withdrawalDoctorIds = new Set(withdrawalLines.map((line) => line.doctorId));
+
+  for (const doctorId of withdrawalDoctorIds) {
     if (doctors.some((d) => d.doctorId === doctorId)) continue;
     const stats = emptyStats();
     applyDoctorFinancialExtras(stats, doctorId);
@@ -1617,6 +1628,7 @@ export async function fetchDailyCollections(
   for (const group of doctors) {
     const wallet = walletStatsMap.get(group.doctorId);
     group.stats.availableBalance = wallet?.availableBalance ?? null;
+    group.stats.withdrawableLimit = wallet?.withdrawableLimit ?? null;
   }
 
   doctors.sort((a, b) => a.doctorName.localeCompare(b.doctorName, "ar"));

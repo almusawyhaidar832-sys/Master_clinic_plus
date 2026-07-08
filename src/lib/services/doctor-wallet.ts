@@ -4,12 +4,7 @@ import {
   computeLiveDoctorShare,
   doctorPaymentPct,
 } from "@/lib/services/patient-financial-plan";
-import {
-  isDailyWageAssistant,
-  normalizeAssistantCompensationMode,
-} from "@/lib/services/assistant-compensation";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
-import { assistantPendingDoctorShare } from "@/lib/services/payroll-paid-portions";
 import {
   fetchDoctorMonthSalaryBreakdown,
   fetchDoctorSalaryBreakdownsBatch,
@@ -21,7 +16,7 @@ import {
 } from "@/lib/services/balance-topup";
 import { currentMonthYear, monthDateRange } from "@/lib/utils";
 import { DOCTOR_FINANCE_SELECT } from "@/lib/services/doctor-db-select";
-import type { Doctor, PayrollRecord } from "@/types";
+import type { Doctor } from "@/types";
 
 export interface DoctorWalletStats {
   totalEarnings: number;
@@ -450,72 +445,18 @@ function netPayrollDeductionFromRows(
   return Math.round(Math.max(0, total) * 100) / 100;
 }
 
-type PayrollRecordPendingRow = Pick<
-  PayrollRecord,
-  | "doctor_share_amount"
-  | "paid_doctor_share_amount"
-  | "clinic_share_amount"
-  | "paid_clinic_share_amount"
-  | "total_salary"
-  | "paid_total_salary"
-  | "status"
-  | "doctor_share_percentage"
-> & {
-  assistant?:
-    | { compensation_mode?: string; doctor_share_percentage?: number }
-    | { compensation_mode?: string; doctor_share_percentage?: number }[]
-    | null;
-};
-
-function pendingDoctorShareFromPayrollRow(row: PayrollRecordPendingRow): number {
-  const assistantRaw = row.assistant;
-  const assistant = Array.isArray(assistantRaw) ? assistantRaw[0] : assistantRaw;
-  const dailyWage = isDailyWageAssistant(
-    normalizeAssistantCompensationMode(
-      (assistant as { compensation_mode?: string } | null)?.compensation_mode
-    )
-  );
-  const doctorSharePct = Number(
-    (assistant as { doctor_share_percentage?: number } | null)
-      ?.doctor_share_percentage ?? row.doctor_share_percentage ?? 0
-  );
-  return assistantPendingDoctorShare(row, {
-    dailyWage,
-    doctorSharePercentage: doctorSharePct,
-  });
-}
-
-/** حصة الطبيب من أجور مساعديه المسجّلة ولم تُصرف بعد — من payroll_records */
+/** حصة الطبيب من أجور مساعديه المسجّلة — نفس منطق الكشف المالي */
 export async function fetchDoctorPendingAssistantPayrollDeductions(
   supabase: SupabaseClient,
   doctorId: string
 ): Promise<number> {
-  const { data, error } = await supabase
-    .from("payroll_records")
-    .select(
-      `
-      doctor_id,
-      doctor_share_percentage,
-      doctor_share_amount,
-      paid_doctor_share_amount,
-      clinic_share_amount,
-      paid_clinic_share_amount,
-      total_salary,
-      paid_total_salary,
-      status,
-      assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
-    `
-    )
-    .eq("doctor_id", doctorId);
-
-  if (error || !data?.length) return 0;
-
-  let total = 0;
-  for (const row of data) {
-    total += pendingDoctorShareFromPayrollRow(row as PayrollRecordPendingRow);
-  }
-
-  return Math.round(total * 100) / 100;
+  const { fetchWalletAssistantPayrollPendingByDoctor } = await import(
+    "@/lib/ledger/daily-assistant-payroll"
+  );
+  const map = await fetchWalletAssistantPayrollPendingByDoctor(supabase, [
+    doctorId,
+  ]);
+  return map.get(doctorId) ?? 0;
 }
 
 /** خصومات مساعدين — مؤكّدة + مسجّلة (أجر يومي قبل الصرف) */
@@ -534,43 +475,10 @@ async function fetchPendingAssistantPayrollByDoctor(
   supabase: SupabaseClient,
   doctorIds: string[]
 ): Promise<Map<string, number>> {
-  const map = new Map<string, number>();
-  if (!doctorIds.length) return map;
-
-  const { data, error } = await supabase
-    .from("payroll_records")
-    .select(
-      `
-      doctor_id,
-      doctor_share_percentage,
-      doctor_share_amount,
-      paid_doctor_share_amount,
-      clinic_share_amount,
-      paid_clinic_share_amount,
-      total_salary,
-      paid_total_salary,
-      status,
-      assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
-    `
-    )
-    .in("doctor_id", doctorIds);
-
-  if (error || !data?.length) return map;
-
-  for (const row of data) {
-    const doctorId = String(row.doctor_id ?? "");
-    if (!doctorId) continue;
-    const pending = pendingDoctorShareFromPayrollRow(
-      row as PayrollRecordPendingRow
-    );
-    if (pending <= FINANCIAL_EPSILON) continue;
-    map.set(
-      doctorId,
-      Math.round(((map.get(doctorId) ?? 0) + pending) * 100) / 100
-    );
-  }
-
-  return map;
+  const { fetchWalletAssistantPayrollPendingByDoctor } = await import(
+    "@/lib/ledger/daily-assistant-payroll"
+  );
+  return fetchWalletAssistantPayrollPendingByDoctor(supabase, doctorIds);
 }
 
 export function computeWalletStats(
