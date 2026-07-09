@@ -33,6 +33,13 @@ import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { ArrowRight, FileText, Plus, X } from "lucide-react";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { OfflineViewBanner } from "@/components/offline/OfflineViewBanner";
+import { isBrowserOffline } from "@/lib/offline/network";
+import {
+  readPatientProfileCache,
+  readPatientProfileCacheForPatient,
+  writePatientProfileCache,
+} from "@/lib/offline/patient-profile-cache";
 import {
   doctorPatientLogDraftKey,
   hasDoctorPatientLogDraftContent,
@@ -55,6 +62,10 @@ export default function DoctorPatientDetailPage() {
   const [showClinicalPanel, setShowClinicalPanel] = useState(false);
   const [clinicalByOp, setClinicalByOp] = useState<ClinicalByOperationId>({});
   const [accessDenied, setAccessDenied] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [offlineView, setOfflineView] = useState(false);
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
+  const [offlineMiss, setOfflineMiss] = useState(false);
 
   const applyLogDraft = useCallback((draft: DoctorPatientLogDraft) => {
     setNewLog(draft.newLog);
@@ -124,16 +135,54 @@ export default function DoctorPatientDetailPage() {
 
   useEffect(() => {
     async function load() {
+      setOfflineMiss(false);
+      setRefreshing(false);
+
       const supabase = createClient();
       const doc = await getDoctorForCurrentUser(supabase);
       setDoctor(doc);
+
+      const applyBundle = (
+        bundle: NonNullable<ReturnType<typeof readPatientProfileCache>>
+      ) => {
+        setPatient(bundle.patient);
+        setOperations(bundle.operations);
+        setTreatmentCases(bundle.treatmentCases);
+        setClinicalByOp(bundle.clinicalByOp);
+        setLogs(bundle.medicalLogs);
+        setTreatments(bundle.treatments ?? []);
+        setCachedAt(bundle.cachedAt);
+      };
+
+      const cached = readPatientProfileCacheForPatient("doctor", id, doc?.id);
+
+      if (cached && (!doc?.id || !cached.doctorId || cached.doctorId === doc.id)) {
+        applyBundle(cached);
+        setAccessDenied(false);
+        if (isBrowserOffline()) {
+          setOfflineView(true);
+          return;
+        }
+        setOfflineView(false);
+        setRefreshing(true);
+      }
+
       if (!doc) {
-        setAccessDenied(true);
+        if (!cached) setAccessDenied(true);
+        setRefreshing(false);
         return;
       }
+
+      if (isBrowserOffline()) {
+        if (!cached) setOfflineMiss(true);
+        setRefreshing(false);
+        return;
+      }
+
       const allowed = await patientBelongsToDoctor(supabase, id, doc.id);
       if (!allowed) {
         setAccessDenied(true);
+        setRefreshing(false);
         return;
       }
       setAccessDenied(false);
@@ -155,10 +204,38 @@ export default function DoctorPatientDetailPage() {
       ]);
 
       if (pRes.data) setPatient(pRes.data as Patient);
-      setLogs((lRes.data as MedicalLog[]) || []);
-      setTreatments((tRes.data as Treatment[]) || []);
+      const nextLogs = (lRes.data as MedicalLog[]) || [];
+      const nextTreatments = (tRes.data as Treatment[]) || [];
+      setLogs(nextLogs);
+      setTreatments(nextTreatments);
 
-      await Promise.all([reloadOperations(), loadTreatmentCases()]);
+      const [ops, clinical, cases] = await Promise.all([
+        fetchPatientOperationsForProfile(supabase, id, { doctorId: doc.id }),
+        fetchPatientClinicalRecords(id),
+        fetchPatientTreatmentCases(supabase, id),
+      ]);
+      setOperations(ops);
+      setClinicalByOp(clinical);
+      setTreatmentCases(cases);
+
+      if (pRes.data) {
+        writePatientProfileCache({
+          portal: "doctor",
+          clinicId: doc.clinic_id,
+          patientId: id,
+          doctorId: doc.id,
+          patient: pRes.data as Patient,
+          operations: ops,
+          treatmentCases: cases,
+          clinicalByOp: clinical,
+          medicalLogs: nextLogs,
+          treatments: nextTreatments,
+        });
+      }
+
+      setOfflineView(false);
+      setCachedAt(Date.now());
+      setRefreshing(false);
     }
     if (id) load();
   }, [id, reloadOperations, loadTreatmentCases]);
@@ -216,11 +293,31 @@ export default function DoctorPatientDetailPage() {
   }
 
   if (!patient) {
+    if (offlineMiss) {
+      return (
+        <div className="space-y-4">
+          <Link href="/doctor/patients">
+            <Button variant="ghost" size="sm">
+              <ArrowRight className="h-4 w-4" />
+              {t("docPatientList")}
+            </Button>
+          </Link>
+          <Alert variant="warning">{t("offlinePatientCacheMiss")}</Alert>
+        </div>
+      );
+    }
     return <p className="text-slate-muted">{t("loading")}</p>;
   }
 
   return (
     <div className="space-y-4">
+      <OfflineViewBanner
+        refreshing={refreshing}
+        offline={offlineView}
+        cachedAt={cachedAt}
+        refreshingLabel={t("offlineViewRefreshing")}
+        offlineLabel={t("offlineViewCachedAt")}
+      />
       <Link href="/doctor/patients">
         <Button variant="ghost" size="sm">
           <ArrowRight className="h-4 w-4" />

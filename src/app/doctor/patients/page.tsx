@@ -7,6 +7,8 @@ import {
   cacheRecentPatients,
   getCachedRecentPatients,
 } from "@/lib/offline-cache";
+import { mergeRecentPatients } from "@/lib/offline/recent-patients-index";
+import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { createClient } from "@/lib/supabase/client";
 import { fetchPatientsForCurrentDoctor } from "@/lib/services/doctor-patients";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -26,9 +28,21 @@ export default function DoctorPatientsPage() {
         return;
       }
       const supabase = createClient();
+      const doctor = await getDoctorForCurrentUser(supabase);
       const list = await fetchPatientsForCurrentDoctor(supabase);
       setPatients(list);
       cacheRecentPatients(list);
+      if (doctor?.clinic_id) {
+        mergeRecentPatients(
+          "doctor",
+          doctor.clinic_id,
+          list.map((p) => ({
+            id: p.id,
+            full_name_ar: p.full_name_ar,
+            phone: p.phone ?? null,
+          }))
+        );
+      }
       setLoading(false);
     }
     load();

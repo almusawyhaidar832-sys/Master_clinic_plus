@@ -42,6 +42,12 @@ import { PatientBasicInfoEditor } from "@/components/patients/PatientBasicInfoEd
 import { PatientSpeechNameEditor } from "@/components/patients/PatientSpeechNameEditor";
 import type { PatientPrimaryDoctor } from "@/lib/services/patient-primary-doctor";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
+import { OfflineViewBanner } from "@/components/offline/OfflineViewBanner";
+import { isBrowserOffline } from "@/lib/offline/network";
+import {
+  readPatientProfileCacheForPatient,
+  writePatientProfileCache,
+} from "@/lib/offline/patient-profile-cache";
 import { ArrowRight, Plus, X } from "lucide-react";
 
 export default function PatientProfilePage() {
@@ -69,6 +75,10 @@ export default function PatientProfilePage() {
     Record<string, PatientPrimaryDoctor>
   >({});
   const [accessDenied, setAccessDenied] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [offlineView, setOfflineView] = useState(false);
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
+  const [offlineMiss, setOfflineMiss] = useState(false);
 
   const continueCase = useMemo(
     () => treatmentCases.find((c) => c.id === continueCaseId) ?? null,
@@ -159,12 +169,46 @@ export default function PatientProfilePage() {
 
   useEffect(() => {
     async function load() {
+      setOfflineMiss(false);
+      setRefreshing(false);
+
+      const applyBundle = (
+        bundle: NonNullable<ReturnType<typeof readPatientProfileCacheForPatient>>
+      ) => {
+        setPatient(bundle.patient);
+        setOperations(bundle.operations);
+        setTreatmentCases(bundle.treatmentCases);
+        setClinicalByOp(bundle.clinicalByOp);
+        setMedicalLogs(bundle.medicalLogs);
+        setCachedAt(bundle.cachedAt);
+        setAccessDenied(false);
+      };
+
+      const cached = readPatientProfileCacheForPatient("accountant", id);
+      if (cached) {
+        applyBundle(cached);
+        if (isBrowserOffline()) {
+          setOfflineView(true);
+          return;
+        }
+        setOfflineView(false);
+        setRefreshing(true);
+      }
+
+      if (isBrowserOffline()) {
+        if (!cached) setOfflineMiss(true);
+        setRefreshing(false);
+        return;
+      }
+
       const supabase = createClient();
       const clinic = await getActiveClinicId(supabase);
       if (!clinic?.clinicId) {
-        setAccessDenied(true);
+        if (!cached) setAccessDenied(true);
+        setRefreshing(false);
         return;
       }
+
       const { data: pRes } = await supabase
         .from("patients")
         .select("*")
@@ -173,20 +217,48 @@ export default function PatientProfilePage() {
         .maybeSingle();
       if (!pRes) {
         setAccessDenied(true);
+        setRefreshing(false);
         return;
       }
       setAccessDenied(false);
       setPatient(pRes as Patient);
+
       const logsRes = await supabase
         .from("medical_logs")
         .select("*, doctor:doctors!doctor_id(full_name_ar)")
         .eq("patient_id", id)
         .order("log_date", { ascending: false });
-      setMedicalLogs((logsRes.data as typeof medicalLogs) ?? []);
-      await Promise.all([loadOperations(), loadTreatmentCases()]);
+      const nextLogs = (logsRes.data as typeof medicalLogs) ?? [];
+      setMedicalLogs(nextLogs);
+
+      const [ops, clinical, cases] = await Promise.all([
+        fetchPatientOperationsForProfile(supabase, id, {
+          clinicId: clinic.clinicId,
+        }),
+        fetchPatientClinicalRecords(id, "accountant"),
+        fetchPatientTreatmentCases(supabase, id, clinic.clinicId),
+      ]);
+      setOperations(ops);
+      setClinicalByOp(clinical);
+      setTreatmentCases(cases);
+
+      writePatientProfileCache({
+        portal: "accountant",
+        clinicId: clinic.clinicId,
+        patientId: id,
+        patient: pRes as Patient,
+        operations: ops,
+        treatmentCases: cases,
+        clinicalByOp: clinical,
+        medicalLogs: nextLogs,
+      });
+
+      setOfflineView(false);
+      setCachedAt(Date.now());
+      setRefreshing(false);
     }
     if (id) load();
-  }, [id, loadOperations, loadTreatmentCases]);
+  }, [id]);
 
   useClinicSync({
     topics: ["sessions", "financial"],
@@ -260,6 +332,21 @@ export default function PatientProfilePage() {
   }
 
   if (!patient) {
+    if (offlineMiss) {
+      return (
+        <div className="space-y-4 py-8">
+          <Link href="/dashboard/patients">
+            <Button variant="ghost" size="sm">
+              <ArrowRight className="h-4 w-4" />
+              العودة للبحث
+            </Button>
+          </Link>
+          <Alert variant="warning">
+            لا يوجد اتصال ولا نسخة محفوظة لهذا المريض — افتح ملفه مرة مع النت أولاً.
+          </Alert>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center py-16 text-slate-muted">
         جاري تحميل ملف المريض...
@@ -269,6 +356,13 @@ export default function PatientProfilePage() {
 
   return (
     <div className="space-y-6">
+      <OfflineViewBanner
+        refreshing={refreshing}
+        offline={offlineView}
+        cachedAt={cachedAt}
+        refreshingLabel="عرض سريع من الذاكرة — جاري التحديث من السيرفر…"
+        offlineLabel="بدون اتصال — آخر تحديث: {time}"
+      />
       <Link href="/dashboard/patients">
         <Button variant="ghost" size="sm">
           <ArrowRight className="h-4 w-4" />

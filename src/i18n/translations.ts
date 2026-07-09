@@ -24,6 +24,10 @@ const translations = {
     offlineSyncNow:     "رفع الآن",
     offlineSyncDone:    "تم رفع {n} عملية بنجاح",
     offlineSyncPartialFail: "تعذر رفع بعض العمليات — سيتم إعادة المحاولة تلقائياً",
+    offlineViewRefreshing: "عرض سريع من الذاكرة — جاري التحديث من السيرفر…",
+    offlineViewCachedAt: "بدون اتصال — آخر تحديث: {time}",
+    offlinePatientCacheMiss: "لا يوجد اتصال ولا نسخة محفوظة لهذا المريض — افتح ملفه مرة مع النت أولاً.",
+    offlineWriteRequiresNetwork: "يتطلب هذا الإجراء اتصالاً بالإنترنت",
 
     // ── Navigation ──
     dashboard:          "لوحة التحكم",
@@ -813,6 +817,10 @@ const translations = {
     offlineSyncNow:     "Upload now",
     offlineSyncDone:    "Successfully uploaded {n} item(s)",
     offlineSyncPartialFail: "Some items failed to upload — will retry automatically",
+    offlineViewRefreshing: "Showing cached data — refreshing from server…",
+    offlineViewCachedAt: "Offline — last update: {time}",
+    offlinePatientCacheMiss: "No connection and no saved copy of this patient — open their file online first.",
+    offlineWriteRequiresNetwork: "This action requires an internet connection",
 
     // ── Navigation ──
     dashboard:          "Dashboard",

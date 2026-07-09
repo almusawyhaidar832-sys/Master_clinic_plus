@@ -8,6 +8,7 @@ import { getAuthProfile } from "@/lib/clinic-context";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { ClinicDataSyncBridge } from "@/components/sync/ClinicDataSyncBridge";
+import { warmAdminShellCache } from "@/lib/pwa/admin-shell-cache";
 
 export function AdminLayoutClient({
   children,
@@ -30,6 +31,15 @@ export function AdminLayoutClient({
     const interval = setInterval(() => void loadNotifications(), 30_000);
     return () => clearInterval(interval);
   }, [loadNotifications]);
+
+  useEffect(() => {
+    void warmAdminShellCache();
+    const onOnline = () => {
+      void warmAdminShellCache();
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
 
   useClinicSync({
     topics: ["notifications"],

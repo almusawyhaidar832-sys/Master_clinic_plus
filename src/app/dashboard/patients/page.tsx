@@ -10,6 +10,11 @@ import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { formatCurrency, cn } from "@/lib/utils";
 import { computeOutstandingDebtFromOperations } from "@/lib/services/patient-treatment-cases";
 import { searchPatientsViaApi } from "@/lib/services/patient-search";
+import { isBrowserOffline } from "@/lib/offline/network";
+import {
+  mergeRecentPatients,
+  searchRecentPatients,
+} from "@/lib/offline/recent-patients-index";
 import type { Patient, PatientOperation } from "@/types";
 import { Search, FileText, CalendarDays } from "lucide-react";
 import { AddPatientForm } from "@/components/patients/AddPatientForm";
@@ -45,6 +50,29 @@ export default function PatientsSearchPage() {
     setLoading(true);
     setSearched(true);
     setSearchError(null);
+
+    if (isBrowserOffline()) {
+      if (!clinicId) {
+        setResults([]);
+        setSearchError("لا يوجد اتصال — افتح ملفات المرضى مرة مع النت أولاً.");
+        setLoading(false);
+        return;
+      }
+      const recent = searchRecentPatients("accountant", clinicId, trimmed, 30);
+      setResults(
+        recent.map((p) => ({
+          id: p.id,
+          full_name_ar: p.full_name_ar,
+          phone: p.phone ?? undefined,
+          total_debt: p.total_debt ?? 0,
+        })) as PatientWithStats[]
+      );
+      if (recent.length === 0) {
+        setSearchError("لا يوجد اتصال ولا نتائج محفوظة لهذا البحث.");
+      }
+      setLoading(false);
+      return;
+    }
 
     const { patients, error } = await searchPatientsViaApi(trimmed, {
       portal: "accountant",
@@ -94,6 +122,18 @@ export default function PatientsSearchPage() {
         total_debt: debtMap[p.id] ?? 0,
       })) as PatientWithStats[]
     );
+    if (clinicId) {
+      mergeRecentPatients(
+        "accountant",
+        clinicId,
+        patients.map((p) => ({
+          id: p.id,
+          full_name_ar: p.full_name_ar,
+          phone: p.phone ?? null,
+          total_debt: debtMap[p.id] ?? 0,
+        }))
+      );
+    }
     setLoading(false);
   }, [clinicId]);
 

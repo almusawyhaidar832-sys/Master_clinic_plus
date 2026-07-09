@@ -1,22 +1,14 @@
-/**
- * يحمّل صفحات الطبيب الأساسية في كاش Service Worker
- * حتى تفتح بدون نت بعد أول زيارة مع اتصال.
- */
-
 import { SERVICE_WORKER_CACHE_NAME } from "@/lib/pwa/cache-name";
 
-export const DOCTOR_OFFLINE_PAGES = [
-  "/doctor",
-  "/doctor/queue",
-  "/doctor/patients",
-  "/doctor/wallet",
-  "/doctor/financial-ledger",
-  "/doctor/dental-chart",
+export const ADMIN_OFFLINE_PAGES = [
+  "/admin",
+  "/admin/daily-collections",
+  "/admin/doctors",
 ] as const;
 
 let warmInFlight = false;
 
-export async function warmDoctorShellCache(): Promise<void> {
+export async function warmAdminShellCache(): Promise<void> {
   if (typeof window === "undefined" || !("caches" in window)) return;
   if (!navigator.onLine || warmInFlight) return;
 
@@ -24,7 +16,7 @@ export async function warmDoctorShellCache(): Promise<void> {
   try {
     const cache = await caches.open(SERVICE_WORKER_CACHE_NAME);
     await Promise.all(
-      DOCTOR_OFFLINE_PAGES.map(async (path) => {
+      ADMIN_OFFLINE_PAGES.map(async (path) => {
         const existing = await cache.match(path);
         if (existing) return;
         try {

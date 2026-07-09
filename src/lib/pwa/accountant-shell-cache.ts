@@ -3,14 +3,14 @@
  * حتى تفتح بدون نت بعد أول زيارة مع اتصال — دون تعديل sw.js.
  */
 
-/** يجب أن يطابق CACHE_NAME في public/sw.js */
-const SERVICE_WORKER_CACHE_NAME = "mcp-app-v19-exam-autosave";
+import { SERVICE_WORKER_CACHE_NAME } from "@/lib/pwa/cache-name";
 
 export const ACCOUNTANT_OFFLINE_PAGES = [
   "/dashboard",
   "/dashboard/ledger",
   "/dashboard/patients",
   "/dashboard/queue",
+  "/dashboard/daily-collections",
 ] as const;
 
 let warmInFlight = false;

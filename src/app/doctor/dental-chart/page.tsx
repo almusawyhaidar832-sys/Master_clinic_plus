@@ -14,6 +14,13 @@ import {
   type PatientToothState,
 } from "@/lib/clinical/tooth-status";
 import { createClient } from "@/lib/supabase/client";
+import { isBrowserOffline } from "@/lib/offline/network";
+import {
+  readPatientToothChartCache,
+  writePatientToothChartCache,
+} from "@/lib/offline/patient-profile-cache";
+import { OfflineViewBanner } from "@/components/offline/OfflineViewBanner";
+import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import {
   fetchPatientToothChart,
   savePatientToothChart,
@@ -34,29 +41,67 @@ function DentalChartContent() {
     type: "success" | "error" | "info";
     text: string;
   } | null>(null);
+  const [offlineView, setOfflineView] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
+  const [clinicId, setClinicId] = useState<string | null>(null);
 
-  const loadChart = useCallback(async (id: string) => {
-    setLoading(true);
+  const loadChart = useCallback(async (id: string, clinic: string | null) => {
     setMessage(null);
+    const cached = clinic ? readPatientToothChartCache(clinic, id) : null;
+    if (cached) {
+      setChart(chartMapFromRows(cached.teeth));
+      setCachedAt(cached.cachedAt);
+      if (isBrowserOffline()) {
+        setOfflineView(true);
+        setRefreshing(false);
+        setLoading(false);
+        return;
+      }
+      setOfflineView(false);
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
     const { teeth, tablesMissing, error } = await fetchPatientToothChart(id);
     setLoading(false);
+    setRefreshing(false);
 
     if (tablesMissing) {
       setMessage({
         type: "info",
         text: t("docDentalChartMissing"),
       });
-      setChart({});
+      if (!cached) setChart({});
       return;
     }
 
     if (error) {
+      if (cached) {
+        setOfflineView(true);
+        return;
+      }
       setMessage({ type: "error", text: error });
       return;
     }
 
     setChart(chartMapFromRows(teeth));
+    setOfflineView(false);
+    setCachedAt(Date.now());
+    if (clinic) {
+      writePatientToothChartCache(clinic, id, teeth);
+    }
   }, [t]);
+
+  useEffect(() => {
+    async function loadDoctor() {
+      const supabase = createClient();
+      const doctor = await getDoctorForCurrentUser(supabase);
+      setClinicId(doctor?.clinic_id ?? null);
+    }
+    void loadDoctor();
+  }, []);
 
   useEffect(() => {
     if (!preselectedId) return;
@@ -81,11 +126,18 @@ function DentalChartContent() {
       setChart({});
       return;
     }
-    void loadChart(patientId);
-  }, [patientId, loadChart]);
+    void loadChart(patientId, clinicId);
+  }, [patientId, clinicId, loadChart]);
 
   async function persistTooth(update: PatientToothState) {
     if (!patientId) return;
+    if (isBrowserOffline()) {
+      setMessage({
+        type: "error",
+        text: t("offlineWriteRequiresNetwork"),
+      });
+      return;
+    }
     setSavingTooth(update.tooth_number);
     setMessage(null);
 
@@ -105,6 +157,13 @@ function DentalChartContent() {
       ...prev,
       [update.tooth_number]: update,
     }));
+    if (clinicId) {
+      const teeth = Object.values({
+        ...chart,
+        [update.tooth_number]: update,
+      });
+      writePatientToothChartCache(clinicId, patientId, teeth);
+    }
     setMessage({
       type: "success",
       text: bi(
@@ -116,6 +175,13 @@ function DentalChartContent() {
 
   async function resetTooth(toothNumber: number) {
     if (!patientId) return;
+    if (isBrowserOffline()) {
+      setMessage({
+        type: "error",
+        text: t("offlineWriteRequiresNetwork"),
+      });
+      return;
+    }
     setSavingTooth(toothNumber);
     setMessage(null);
 
@@ -143,6 +209,12 @@ function DentalChartContent() {
       delete next[toothNumber];
       return next;
     });
+    if (clinicId) {
+      const teeth = Object.values(chart).filter(
+        (row) => row.tooth_number !== toothNumber
+      );
+      writePatientToothChartCache(clinicId, patientId, teeth);
+    }
     setMessage({
       type: "success",
       text: bi(
@@ -163,6 +235,14 @@ function DentalChartContent() {
             {t("docDentalChartSubtitle")}
           </p>
         </div>
+
+        <OfflineViewBanner
+          refreshing={refreshing}
+          offline={offlineView}
+          cachedAt={cachedAt}
+          refreshingLabel={t("offlineViewRefreshing")}
+          offlineLabel={t("offlineViewCachedAt")}
+        />
 
         <div className="space-y-1.5">
           <label className="block text-sm font-medium text-slate-text">
@@ -209,11 +289,11 @@ function DentalChartContent() {
           </Alert>
         )}
 
-        {loading && (
+        {loading && !Object.keys(chart).length && (
           <p className="text-sm text-slate-muted">{t("docLoadingChart")}</p>
         )}
 
-        {patientId && !loading && (
+        {patientId && (!loading || cachedAt != null) && (
           <InteractiveDentalChart
             mode="patient"
             value={chart}
