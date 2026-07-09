@@ -8,12 +8,16 @@ import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import {
   BALANCE_TOPUP_CLINIC_TYPE,
   BALANCE_TOPUP_DOCTOR_TYPE,
+  fetchClinicBalanceTopupsForPeriod,
   type BalanceTopUpTarget,
 } from "@/lib/services/balance-topup";
 import { recordFinancialTransaction } from "@/lib/services/clinic-profit";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
 import { defaultClinicProfitPeriod } from "@/lib/services/clinic-profit-loader";
-import { fetchClinicProfitStatsForPeriod } from "@/lib/services/clinic-stats";
+import {
+  applyClinicTopUpToProfitStats,
+  fetchClinicProfitStatsForPeriod,
+} from "@/lib/services/clinic-stats";
 import { todayISO } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -116,31 +120,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (result.skipped) {
-      return NextResponse.json(
-        { error: "تم تسجيل هذا الشحن مسبقاً — حدّث الصفحة" },
-        { status: 409 }
-      );
-    }
+    const skipped = Boolean(result.skipped);
 
-    await writeAuditLog(admin, {
-      clinicId,
-      entityType: "financial_transaction",
-      entityId: txId,
-      action: "create",
-      changedBy: profile.id,
-      actorName: profile.full_name ?? null,
-      financialAmount: amount,
-      after: {
-        target,
-        doctor_id: doctorId,
-        amount,
-        transaction_date: transactionDate,
-        notes: notes || null,
-        type,
-      },
-      note: descriptionAr,
-    });
+    if (!skipped) {
+      await writeAuditLog(admin, {
+        clinicId,
+        entityType: "financial_transaction",
+        entityId: txId,
+        action: "create",
+        changedBy: profile.id,
+        actorName: profile.full_name ?? null,
+        financialAmount: amount,
+        after: {
+          target,
+          doctor_id: doctorId,
+          amount,
+          transaction_date: transactionDate,
+          notes: notes || null,
+          type,
+        },
+        note: descriptionAr,
+      });
+    }
 
     const doctorWallet =
       target === "doctor" && doctorId
@@ -156,11 +157,34 @@ export async function POST(req: NextRequest) {
         period.from,
         period.to
       );
+      const topupsDirect = await fetchClinicBalanceTopupsForPeriod(
+        admin,
+        clinicId,
+        period.from,
+        period.to
+      );
+      if (topupsDirect > profitStats.balanceTopupsTotal + 0.01) {
+        const delta =
+          Math.round((topupsDirect - profitStats.balanceTopupsTotal) * 100) /
+          100;
+        profitStats = applyClinicTopUpToProfitStats(profitStats, delta);
+      }
+      if (
+        !skipped &&
+        amount > profitStats.balanceTopupsTotal + 0.01 &&
+        amount > topupsDirect + 0.01
+      ) {
+        profitStats = applyClinicTopUpToProfitStats(
+          profitStats,
+          amount - profitStats.balanceTopupsTotal
+        );
+      }
     }
 
     return NextResponse.json(
       {
         success: true,
+        skipped,
         id: txId,
         target,
         amount,

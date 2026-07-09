@@ -14,6 +14,7 @@ import {
   fetchAlignedClinicProfitStats,
 } from "@/lib/services/clinic-profit-loader";
 import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
+import { applyClinicTopUpToProfitStats } from "@/lib/services/clinic-stats";
 import type { BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
 import { formatCurrency } from "@/lib/utils";
 import {
@@ -130,6 +131,14 @@ export default function AdminHomePage() {
   const handleBalanceTopUpSuccess = useCallback(
     (detail: BalanceTopUpSuccessDetail) => {
       if (detail.target !== "clinic" || detail.amount <= 0) return;
+      const period = defaultClinicProfitPeriod();
+      if (detail.transactionDate < period.from || detail.transactionDate > period.to) {
+        return;
+      }
+      setStats((prev) => {
+        if (!prev) return prev;
+        return applyClinicTopUpToProfitStats(prev, detail.amount);
+      });
       setRefreshKey((k) => k + 1);
     },
     []

@@ -10,7 +10,7 @@ import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { notifyBalanceTopUpRefresh } from "@/lib/services/clinic-profit";
-import { registerPendingClinicTopUp, resetClinicProfitClientCache } from "@/lib/services/clinic-profit-pending";
+import { registerPendingClinicTopUp } from "@/lib/services/clinic-profit-pending";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
 import { defaultClinicProfitPeriod } from "@/lib/services/clinic-profit-loader";
 import {
@@ -176,36 +176,37 @@ export function BalanceTopUpModal({
 
       if (target === "clinic" && clinicId && toppedAmount > 0) {
         const period = json.period ?? defaultClinicProfitPeriod();
+        const baseline = preTopUpBaseline ?? json.profit_stats ?? null;
         const serverProfit = json.profit_stats ?? null;
+        const serverReflectsTopUp =
+          serverProfit != null &&
+          serverProfit.balanceTopupsTotal + 0.01 >= toppedAmount &&
+          serverProfit.netProfit + 0.01 >=
+            (baseline?.netProfit ?? 0) + toppedAmount;
 
-        if (serverProfit) {
-          publishClinicProfitBroadcast({
-            clinicId,
-            periodFrom: period.from,
-            periodTo: period.to,
-            netProfit: serverProfit.netProfit,
-            balanceTopupsTotal: serverProfit.balanceTopupsTotal,
-          });
-          resetClinicProfitClientCache(clinicId);
-        } else {
+        if (!serverReflectsTopUp) {
           registerPendingClinicTopUp(
             clinicId,
             toppedAmount,
             transactionDate,
-            preTopUpBaseline ?? undefined
+            baseline ?? undefined
           );
-          const expected = buildExpectedProfitAfterTopUp(
-            preTopUpBaseline,
-            toppedAmount
-          );
-          publishClinicProfitBroadcast({
-            clinicId,
-            periodFrom: period.from,
-            periodTo: period.to,
-            netProfit: expected.netProfit,
-            balanceTopupsTotal: expected.balanceTopupsTotal,
-          });
         }
+
+        const expected = serverReflectsTopUp
+          ? {
+              netProfit: serverProfit.netProfit,
+              balanceTopupsTotal: serverProfit.balanceTopupsTotal,
+            }
+          : buildExpectedProfitAfterTopUp(baseline, toppedAmount);
+
+        publishClinicProfitBroadcast({
+          clinicId,
+          periodFrom: period.from,
+          periodTo: period.to,
+          netProfit: expected.netProfit,
+          balanceTopupsTotal: expected.balanceTopupsTotal,
+        });
       }
 
       notifyBalanceTopUpRefresh({
