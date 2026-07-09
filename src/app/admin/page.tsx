@@ -98,7 +98,7 @@ export default function AdminHomePage() {
       if (document.visibilityState === "visible") {
         setRefreshKey((k) => k + 1);
       }
-    }, 12_000);
+    }, 5_000);
 
     return () => clearInterval(interval);
   }, [clinicId]);

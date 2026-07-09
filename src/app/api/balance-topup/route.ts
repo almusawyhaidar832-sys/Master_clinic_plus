@@ -8,14 +8,13 @@ import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import {
   BALANCE_TOPUP_CLINIC_TYPE,
   BALANCE_TOPUP_DOCTOR_TYPE,
-  fetchClinicBalanceTopupsForPeriod,
   type BalanceTopUpTarget,
 } from "@/lib/services/balance-topup";
 import { recordFinancialTransaction } from "@/lib/services/clinic-profit";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
 import { defaultClinicProfitPeriod } from "@/lib/services/clinic-profit-loader";
 import {
-  applyClinicTopUpToProfitStats,
+  ensureBalanceTopupsInProfitStats,
   fetchClinicProfitStatsForPeriod,
 } from "@/lib/services/clinic-stats";
 import { todayISO } from "@/lib/utils";
@@ -151,29 +150,25 @@ export async function POST(req: NextRequest) {
     let profitStats = null;
     if (isClinic) {
       const period = defaultClinicProfitPeriod();
-      profitStats = await fetchClinicProfitStatsForPeriod(
+      profitStats = await ensureBalanceTopupsInProfitStats(
         admin,
         clinicId,
         period.from,
-        period.to
+        period.to,
+        await fetchClinicProfitStatsForPeriod(
+          admin,
+          clinicId,
+          period.from,
+          period.to
+        )
       );
-      const topupsDirect = await fetchClinicBalanceTopupsForPeriod(
-        admin,
-        clinicId,
-        period.from,
-        period.to
-      );
-      if (topupsDirect > profitStats.balanceTopupsTotal + 0.01) {
-        const delta =
-          Math.round((topupsDirect - profitStats.balanceTopupsTotal) * 100) /
-          100;
-        profitStats = applyClinicTopUpToProfitStats(profitStats, delta);
-      }
       if (
         !skipped &&
-        amount > profitStats.balanceTopupsTotal + 0.01 &&
-        amount > topupsDirect + 0.01
+        amount > profitStats.balanceTopupsTotal + 0.01
       ) {
+        const { applyClinicTopUpToProfitStats } = await import(
+          "@/lib/services/clinic-stats"
+        );
         profitStats = applyClinicTopUpToProfitStats(
           profitStats,
           amount - profitStats.balanceTopupsTotal

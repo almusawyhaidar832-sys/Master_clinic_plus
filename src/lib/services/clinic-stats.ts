@@ -379,6 +379,45 @@ export function alignClinicProfitStatsWithFinancialSnapshot(
   return stats;
 }
 
+/**
+ * يضمن أن صافي الربح يشمل شحن الرصيد من قاعدة البيانات — مصدر موحّد للإدارة والمحاسب.
+ * يُستخدم في API السيرفر حتى تتطابق الأجهزة بدون localStorage.
+ */
+export async function ensureBalanceTopupsInProfitStats(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string,
+  stats: ClinicProfitStats
+): Promise<ClinicProfitStats> {
+  const { fetchClinicBalanceTopupsForPeriod } = await import(
+    "@/lib/services/balance-topup"
+  );
+
+  const directTopups = roundProfitMoney(
+    await fetchClinicBalanceTopupsForPeriod(supabase, clinicId, from, to)
+  );
+
+  let aligned = stats;
+  if (directTopups > aligned.balanceTopupsTotal + 0.01) {
+    aligned = applyClinicTopUpToProfitStats(
+      aligned,
+      directTopups - aligned.balanceTopupsTotal
+    );
+  }
+
+  if (directTopups > 0.01) {
+    return aligned;
+  }
+
+  const snap = await fetchClinicFinancialSnapshotRpc(supabase, clinicId, from, to);
+  if (!snap || snap.balanceTopups <= aligned.balanceTopupsTotal + 0.01) {
+    return aligned;
+  }
+
+  return alignClinicProfitStatsWithFinancialSnapshot(aligned, snap);
+}
+
 export async function fetchClinicProfitStats(
   supabase: SupabaseClient
 ): Promise<ClinicProfitStats> {
