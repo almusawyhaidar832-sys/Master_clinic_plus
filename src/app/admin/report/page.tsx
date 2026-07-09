@@ -1,17 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
 import { MasterReportDocument } from "@/components/reports/MasterReportDocument";
 import { ReportActions } from "@/components/reports/ReportActions";
+import { OfflineViewBanner } from "@/components/offline/OfflineViewBanner";
 import { fetchMasterClinicReportViaApi } from "@/lib/services/clinic-reports-api";
 import {
   getReportPeriodOptions,
   type MasterClinicReport,
 } from "@/lib/services/clinic-reports";
 import { currentMonthYear } from "@/lib/utils";
+import { isBrowserOffline } from "@/lib/offline/network";
+import {
+  readMasterReportCache,
+  writeMasterReportCache,
+} from "@/lib/offline/master-report-cache";
 import { FileText, Loader2 } from "lucide-react";
 
 export default function AdminMasterReportPage() {
@@ -19,17 +25,58 @@ export default function AdminMasterReportPage() {
   const [report, setReport] = useState<MasterClinicReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offlineView, setOfflineView] = useState(false);
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
 
   const periodOptions = getReportPeriodOptions();
 
+  useEffect(() => {
+    const cached = readMasterReportCache("admin", monthYear);
+    if (cached) {
+      setReport(cached.report);
+      setCachedAt(cached.cachedAt);
+      setOfflineView(isBrowserOffline());
+      return;
+    }
+    if (isBrowserOffline()) {
+      setReport(null);
+      setOfflineView(true);
+      setError("لا يوجد اتصال — أنشئ التقرير مرة مع النت أولاً");
+    }
+  }, [monthYear]);
+
   async function generateReport() {
+    if (isBrowserOffline()) {
+      const cached = readMasterReportCache("admin", monthYear);
+      if (cached) {
+        setReport(cached.report);
+        setCachedAt(cached.cachedAt);
+        setOfflineView(true);
+        setError(null);
+        return;
+      }
+      setError("لا يوجد اتصال — أنشئ التقرير مرة مع النت أولاً");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       const data = await fetchMasterClinicReportViaApi(monthYear);
       setReport(data);
+      writeMasterReportCache("admin", monthYear, data);
+      setOfflineView(false);
+      setCachedAt(Date.now());
     } catch {
-      setError("تعذر إنشاء التقرير");
+      const cached = readMasterReportCache("admin", monthYear);
+      if (cached) {
+        setReport(cached.report);
+        setCachedAt(cached.cachedAt);
+        setOfflineView(true);
+        setError("تعذر التحديث — عرض نسخة محفوظة");
+      } else {
+        setError("تعذر إنشاء التقرير");
+      }
     }
     setLoading(false);
   }
@@ -43,6 +90,14 @@ export default function AdminMasterReportPage() {
         </p>
       </div>
 
+      <OfflineViewBanner
+        refreshing={false}
+        offline={offlineView}
+        cachedAt={cachedAt}
+        refreshingLabel="عرض سريع من الذاكرة — جاري التحديث من السيرفر…"
+        offlineLabel="بدون اتصال — آخر تحديث: {time}"
+      />
+
       <div className="no-print space-y-3 rounded-xl border border-slate-border bg-surface-card p-4">
         <Select
           label="الفترة"
@@ -50,6 +105,8 @@ export default function AdminMasterReportPage() {
           onChange={(e) => {
             setMonthYear(e.target.value);
             setReport(null);
+            setError(null);
+            setOfflineView(false);
           }}
           options={periodOptions}
         />
@@ -67,7 +124,7 @@ export default function AdminMasterReportPage() {
           ) : (
             <>
               <FileText className="h-5 w-5" />
-              إنشاء التقرير الشامل
+              {offlineView && report ? "عرض النسخة المحفوظة" : "إنشاء التقرير الشامل"}
             </>
           )}
         </Button>

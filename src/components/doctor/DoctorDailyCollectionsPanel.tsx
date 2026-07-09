@@ -39,6 +39,7 @@ import { cn, formatCurrency, formatDate, todayISO, addDaysISO } from "@/lib/util
 import {
   Calendar,
   RefreshCw,
+  Printer,
   ArrowDownToLine,
   ArrowUpToLine,
   UserRound,
@@ -535,6 +536,16 @@ export function DoctorDailyCollectionsPanel({
               <RefreshCw className="h-4 w-4" />
             )}
             {t("refresh")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => window.print()}
+            disabled={!result}
+          >
+            <Printer className="h-4 w-4" />
+            {t("print")}
           </Button>
         </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/Alert";
 import { MasterReportDocument } from "@/components/reports/MasterReportDocument";
 import { MonthlySettlementDocument } from "@/components/reports/MonthlySettlementDocument";
 import { ReportActions } from "@/components/reports/ReportActions";
+import { OfflineViewBanner } from "@/components/offline/OfflineViewBanner";
 import {
   downloadClinicReportPdf,
   downloadSettlementPdf,
@@ -21,6 +22,11 @@ import {
   type MonthlySettlementReport,
 } from "@/lib/services/clinic-reports";
 import { currentMonthYear } from "@/lib/utils";
+import { isBrowserOffline } from "@/lib/offline/network";
+import {
+  readMasterReportCache,
+  writeMasterReportCache,
+} from "@/lib/offline/master-report-cache";
 import { FileText, Loader2, ClipboardList, Scale } from "lucide-react";
 
 export default function AccountantReportsPage() {
@@ -34,10 +40,39 @@ export default function AccountantReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [settlementPdfLoading, setSettlementPdfLoading] = useState(false);
+  const [offlineView, setOfflineView] = useState(false);
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
 
   const periodOptions = getReportPeriodOptions();
 
+  useEffect(() => {
+    const cached = readMasterReportCache("accountant", monthYear);
+    if (cached) {
+      setReport(cached.report);
+      setCachedAt(cached.cachedAt);
+      setOfflineView(isBrowserOffline());
+      return;
+    }
+    if (isBrowserOffline()) {
+      setReport(null);
+      setOfflineView(true);
+    }
+  }, [monthYear]);
+
   async function generateReport() {
+    if (isBrowserOffline()) {
+      const cached = readMasterReportCache("accountant", monthYear);
+      if (cached) {
+        setReport(cached.report);
+        setCachedAt(cached.cachedAt);
+        setOfflineView(true);
+        setError(null);
+        return;
+      }
+      setError("لا يوجد اتصال — أنشئ التقرير مرة مع النت أولاً");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setSettlement(null);
@@ -45,8 +80,19 @@ export default function AccountantReportsPage() {
       const supabase = createClient();
       const data = await fetchAccountantClinicReport(supabase, monthYear);
       setReport(data);
+      writeMasterReportCache("accountant", monthYear, data);
+      setOfflineView(false);
+      setCachedAt(Date.now());
     } catch {
-      setError("تعذر تجميع التقرير. تحقق من الاتصال وقاعدة البيانات.");
+      const cached = readMasterReportCache("accountant", monthYear);
+      if (cached) {
+        setReport(cached.report);
+        setCachedAt(cached.cachedAt);
+        setOfflineView(true);
+        setError("تعذر التحديث — عرض نسخة محفوظة");
+      } else {
+        setError("تعذر تجميع التقرير. تحقق من الاتصال وقاعدة البيانات.");
+      }
     }
     setLoading(false);
   }
@@ -74,6 +120,14 @@ export default function AccountantReportsPage() {
         </p>
       </div>
 
+      <OfflineViewBanner
+        refreshing={false}
+        offline={offlineView}
+        cachedAt={cachedAt}
+        refreshingLabel="عرض سريع من الذاكرة — جاري التحديث من السيرفر…"
+        offlineLabel="بدون اتصال — آخر تحديث: {time}"
+      />
+
       <Card className="border-primary/20 bg-primary/5">
         <CardHeader>
           <div className="flex items-start gap-3">
@@ -98,6 +152,8 @@ export default function AccountantReportsPage() {
               setMonthYear(e.target.value);
               setReport(null);
               setSettlement(null);
+              setOfflineView(false);
+              setError(null);
             }}
             options={periodOptions}
           />

@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import Link from "next/link";
-import { cacheDoctorBalance, getCachedDoctorBalance } from "@/lib/offline-cache";
+import { cacheDoctorBalance } from "@/lib/offline-cache";
+import {
+  readDoctorWalletCache,
+  writeDoctorWalletCache,
+} from "@/lib/offline/doctor-wallet-cache";
+import { isBrowserOffline } from "@/lib/offline/network";
+import { OfflineViewBanner } from "@/components/offline/OfflineViewBanner";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
@@ -27,7 +33,9 @@ import { reconcilePendingDoctorWallet } from "@/lib/services/doctor-wallet-pendi
 export default function DoctorWalletPage() {
   const { t, formatMoney } = useLanguage();
   const [stats, setStats] = useState<DoctorWalletStats | null>(null);
-  const [offline, setOffline] = useState(false);
+  const [offlineView, setOfflineView] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
   const [doctorId, setDoctorId] = useState<string | null>(null);
   const [salaryDoctor, setSalaryDoctor] = useState(false);
   const [zeroHint, setZeroHint] = useState(false);
@@ -58,19 +66,30 @@ export default function DoctorWalletPage() {
     const isSalary = isSalaryDoctor(doctor);
     setSalaryDoctor(isSalary);
 
-    if (!navigator.onLine) {
-      setOffline(true);
-      const cached = getCachedDoctorBalance(doctor.id) ?? 0;
+    const cachedWallet = readDoctorWalletCache(doctor.id);
+    if (cachedWallet) {
+      setStats(cachedWallet.stats);
+      setCachedAt(cachedWallet.cachedAt);
+      if (isBrowserOffline()) {
+        setOfflineView(true);
+        setRefreshing(false);
+        return;
+      }
+      setOfflineView(true);
+      setRefreshing(true);
+    } else if (isBrowserOffline()) {
+      setOfflineView(true);
+      setRefreshing(false);
       setStats({
-        availableBalance: cached,
+        availableBalance: 0,
         totalEarnings: 0,
         totalWithdrawn: 0,
         pendingAmount: 0,
         approvedAmount: 0,
         expenseDeductions: 0,
         payrollDeductions: 0,
-        withdrawableLimit: Math.max(0, cached),
-        isDebtor: cached < 0,
+        withdrawableLimit: 0,
+        isDebtor: false,
       });
       return;
     }
@@ -111,6 +130,10 @@ export default function DoctorWalletPage() {
     setStats(live);
     setZeroHint(!isSalary && live.totalEarnings <= 0);
     cacheDoctorBalance(live.availableBalance, doctor.id);
+    writeDoctorWalletCache(doctor.id, live);
+    setOfflineView(false);
+    setRefreshing(false);
+    setCachedAt(Date.now());
   }, []);
 
   useEffect(() => {
@@ -176,11 +199,13 @@ export default function DoctorWalletPage() {
 
   return (
     <div className="space-y-4">
-      {offline && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          {t("docOfflineCached")}
-        </p>
-      )}
+      <OfflineViewBanner
+        refreshing={refreshing}
+        offline={offlineView}
+        cachedAt={cachedAt}
+        refreshingLabel={t("offlineViewRefreshing")}
+        offlineLabel={t("offlineViewCachedAt")}
+      />
       {!doctorId && stats?.availableBalance === 0 && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
           {t("docNotLinkedDoctor")}
@@ -287,7 +312,7 @@ export default function DoctorWalletPage() {
         {t("docWalletViewLedger")}
       </Link>
 
-      {!salaryDoctor && (
+      {!salaryDoctor && !offlineView && (
         <Link href="/doctor/withdraw">
           <Button className="w-full">
             <ArrowDownToLine className="h-4 w-4" />

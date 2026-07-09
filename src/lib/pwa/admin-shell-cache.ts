@@ -4,6 +4,8 @@ export const ADMIN_OFFLINE_PAGES = [
   "/admin",
   "/admin/daily-collections",
   "/admin/doctors",
+  "/admin/profits",
+  "/admin/report",
 ] as const;
 
 let warmInFlight = false;

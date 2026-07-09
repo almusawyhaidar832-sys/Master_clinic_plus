@@ -11,6 +11,7 @@ export const ACCOUNTANT_OFFLINE_PAGES = [
   "/dashboard/patients",
   "/dashboard/queue",
   "/dashboard/daily-collections",
+  "/dashboard/reports",
 ] as const;
 
 let warmInFlight = false;

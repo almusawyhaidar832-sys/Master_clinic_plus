@@ -37,6 +37,15 @@ import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationM
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
+import { OfflineViewBanner } from "@/components/offline/OfflineViewBanner";
+import { isBrowserOffline } from "@/lib/offline/network";
+import {
+  readExecutiveDashboardCache,
+  writeExecutiveDashboardCache,
+  type CachedExecutiveSnapshot,
+  type CachedTopPerformers,
+  type ExecutiveDashboardPeriod,
+} from "@/lib/offline/executive-dashboard-cache";
 import { cn, localDateISO, monthDateRange, todayISO, currentMonthYear } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, Minus,
@@ -325,6 +334,9 @@ export function ExecutiveDashboard() {
   const [top, setTop]   = useState<TopPerformers | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [offlineView, setOfflineView] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
   const fetchGenerationRef = useRef(0);
 
   // date range
@@ -350,9 +362,34 @@ export function ExecutiveDashboard() {
   const fetchData = useCallback(async (options?: { silent?: boolean }) => {
     if (!clinicId) return;
     const fetchGeneration = ++fetchGenerationRef.current;
-    if (!options?.silent) setLoading(true);
-    setFetchError(null);
     const { from, to } = getRange();
+    const cachePeriod: ExecutiveDashboardPeriod =
+      period === "custom" ? "month" : period;
+    const cacheQuery = { clinicId, period: cachePeriod, from, to };
+    const cached = readExecutiveDashboardCache(cacheQuery);
+
+    if (cached) {
+      setSnap(cached.snap as Snapshot);
+      setTop(cached.top as TopPerformers | null);
+      setCachedAt(cached.cachedAt);
+      if (!options?.silent) setLoading(false);
+      if (isBrowserOffline()) {
+        setOfflineView(true);
+        setRefreshing(false);
+        return;
+      }
+      setOfflineView(true);
+      setRefreshing(true);
+    } else {
+      if (!options?.silent) setLoading(true);
+      if (isBrowserOffline()) {
+        setFetchError(t("execLoadProfitError"));
+        setLoading(false);
+        return;
+      }
+    }
+
+    setFetchError(null);
     const cacheBust = Date.now();
 
     try {
@@ -495,10 +532,20 @@ export function ExecutiveDashboard() {
 
     if (topPerformers) setTop(topPerformers);
     else setTop(null);
+
+    writeExecutiveDashboardCache(cacheQuery, {
+      snap: resolvedSnap as CachedExecutiveSnapshot,
+      top: (topPerformers ?? null) as CachedTopPerformers | null,
+    });
+    setOfflineView(false);
+    setRefreshing(false);
+    setCachedAt(Date.now());
     } catch (err) {
-      setFetchError(
-        err instanceof Error ? err.message : t("execLoadProfitError")
-      );
+      if (!cached) {
+        setFetchError(
+          err instanceof Error ? err.message : t("execLoadProfitError")
+        );
+      }
     } finally {
     if (fetchGeneration === fetchGenerationRef.current) {
       setLoading(false);
@@ -595,6 +642,14 @@ export function ExecutiveDashboard() {
           <p className="mt-2 text-sm">{t("execDoctorPctHint")}</p>
         </Alert>
       )}
+
+      <OfflineViewBanner
+        refreshing={refreshing}
+        offline={offlineView}
+        cachedAt={cachedAt}
+        refreshingLabel={t("offlineViewRefreshing")}
+        offlineLabel={t("offlineViewCachedAt")}
+      />
 
       {loading || !snap ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

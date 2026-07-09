@@ -9,6 +9,7 @@ import { useClinicSync } from "@/hooks/useClinicSync";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { ClinicDataSyncBridge } from "@/components/sync/ClinicDataSyncBridge";
 import { warmAdminShellCache } from "@/lib/pwa/admin-shell-cache";
+import { prefetchAdminHomeProfitCache } from "@/lib/offline/clinic-profit-prefetch";
 
 export function AdminLayoutClient({
   children,
@@ -34,8 +35,11 @@ export function AdminLayoutClient({
 
   useEffect(() => {
     void warmAdminShellCache();
+    void prefetchAdminHomeProfitCache();
+
     const onOnline = () => {
       void warmAdminShellCache();
+      void prefetchAdminHomeProfitCache();
     };
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);

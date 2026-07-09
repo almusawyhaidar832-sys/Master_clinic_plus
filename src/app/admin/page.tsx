@@ -36,6 +36,12 @@ import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { subscribePendingClinicTopUpChanges } from "@/lib/services/clinic-profit-pending";
 import { subscribeClinicProfitBroadcast } from "@/lib/services/clinic-profit-broadcast";
+import { OfflineViewBanner } from "@/components/offline/OfflineViewBanner";
+import { isBrowserOffline } from "@/lib/offline/network";
+import {
+  readClinicProfitViewCache,
+  writeClinicProfitViewCache,
+} from "@/lib/offline/clinic-profit-view-cache";
 
 export default function AdminHomePage() {
   const { clinicId: activeClinicId } = useActiveClinicId();
@@ -45,6 +51,9 @@ export default function AdminHomePage() {
   const [doctorCount, setDoctorCount] = useState(0);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [offlineView, setOfflineView] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
 
   const clinicId = activeClinicId ?? null;
 
@@ -58,27 +67,70 @@ export default function AdminHomePage() {
       const supabase = createClient();
       const profile = await getAuthProfile(supabase);
       setIsSuperAdmin(profile?.role === "super_admin");
+
+      if (!clinicId) return;
+
+      const period = defaultClinicProfitPeriod();
+      const cached = readClinicProfitViewCache({
+        portal: "admin",
+        clinicId,
+        from: period.from,
+        to: period.to,
+      });
+
+      if (cached) {
+        setStats(cached.stats);
+        setPendingCount(cached.pendingCount ?? 0);
+        setDoctorCount(cached.doctorCount ?? 0);
+        setCachedAt(cached.cachedAt);
+        setStatsError(null);
+        if (isBrowserOffline()) {
+          setOfflineView(true);
+          setRefreshing(false);
+          return;
+        }
+        setOfflineView(true);
+        setRefreshing(true);
+      } else if (isBrowserOffline()) {
+        setOfflineView(true);
+        setStatsError("لا يوجد اتصال — افتح لوحة الإدارة مرة مع النت أولاً");
+        return;
+      }
+
       const [profit, doctors, pending] = await Promise.all([
-        clinicId
-          ? loadStats(clinicId).catch((err) => {
-              console.error("[admin] profit stats failed:", err);
-              setStatsError("تعذر تحميل صافي الربح — اسحب للتحديث");
-              return null;
-            })
-          : Promise.resolve(null),
+        loadStats(clinicId).catch((err) => {
+          console.error("[admin] profit stats failed:", err);
+          if (!cached) {
+            setStatsError("تعذر تحميل صافي الربح — اسحب للتحديث");
+          }
+          return null;
+        }),
         fetchDoctorLedgers(supabase),
-        clinicId
-          ? supabase
-              .from("doctor_withdrawals")
-              .select("*", { count: "exact", head: true })
-              .eq("clinic_id", clinicId)
-              .eq("status", "pending")
-          : Promise.resolve({ count: 0 }),
+        supabase
+          .from("doctor_withdrawals")
+          .select("*", { count: "exact", head: true })
+          .eq("clinic_id", clinicId)
+          .eq("status", "pending"),
       ]);
-      setStats(profit);
-      if (profit) setStatsError(null);
+
+      if (profit) {
+        setStats(profit);
+        setStatsError(null);
+        writeClinicProfitViewCache({
+          portal: "admin",
+          clinicId,
+          from: period.from,
+          to: period.to,
+          stats: profit,
+          pendingCount: pending.count ?? 0,
+          doctorCount: doctors.length,
+        });
+      }
       setDoctorCount(doctors.length);
       setPendingCount(pending.count ?? 0);
+      setOfflineView(false);
+      setRefreshing(false);
+      setCachedAt(Date.now());
     }
     if (activeClinicId === undefined) return;
     void load();
@@ -164,6 +216,14 @@ export default function AdminHomePage() {
             </span>
           </div>
         }
+      />
+
+      <OfflineViewBanner
+        refreshing={refreshing}
+        offline={offlineView}
+        cachedAt={cachedAt}
+        refreshingLabel="عرض سريع من الذاكرة — جاري التحديث من السيرفر…"
+        offlineLabel="بدون اتصال — آخر تحديث: {time}"
       />
 
       {statsError && !stats && (

@@ -15,6 +15,12 @@ import { TrendingDown, TrendingUp, Wallet, AlertCircle } from "lucide-react";
 import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
 import { subscribePendingClinicTopUpChanges } from "@/lib/services/clinic-profit-pending";
 import { subscribeClinicProfitBroadcast } from "@/lib/services/clinic-profit-broadcast";
+import { OfflineViewBanner } from "@/components/offline/OfflineViewBanner";
+import { isBrowserOffline } from "@/lib/offline/network";
+import {
+  readClinicProfitViewCache,
+  writeClinicProfitViewCache,
+} from "@/lib/offline/clinic-profit-view-cache";
 
 interface ProfitDashboardProps {
   mobile?: boolean;
@@ -47,24 +53,63 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
   const [stats, setStats] = useState<ClinicProfitStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [offlineView, setOfflineView] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     if (!clinicId) {
       setLoading(false);
       return;
     }
+    const period = defaultClinicProfitPeriod();
+    const cached = readClinicProfitViewCache({
+      portal: "admin",
+      clinicId,
+      from: period.from,
+      to: period.to,
+    });
+
+    if (cached) {
+      setStats(cached.stats);
+      setCachedAt(cached.cachedAt);
+      setError(null);
+      setLoading(false);
+      if (isBrowserOffline()) {
+        setOfflineView(true);
+        setRefreshing(false);
+        return;
+      }
+      setOfflineView(true);
+      setRefreshing(true);
+    } else if (isBrowserOffline()) {
+      setLoading(false);
+      setError("لا يوجد اتصال — افتح لوحة الأرباح مرة مع النت أولاً");
+      return;
+    }
+
     try {
-      const period = defaultClinicProfitPeriod();
       const [data, totalDebt] = await Promise.all([
         fetchAlignedClinicProfitStats(clinicId, "admin", period),
         fetchTotalOutstandingDebt(period.from, period.to, clinicId),
       ]);
-      setStats(
-        totalDebt !== null ? { ...data, outstandingDebts: totalDebt } : data
-      );
+      const nextStats =
+        totalDebt !== null ? { ...data, outstandingDebts: totalDebt } : data;
+      setStats(nextStats);
       setError(null);
+      writeClinicProfitViewCache({
+        portal: "admin",
+        clinicId,
+        from: period.from,
+        to: period.to,
+        stats: nextStats,
+        outstandingDebts: totalDebt,
+      });
+      setOfflineView(false);
+      setRefreshing(false);
+      setCachedAt(Date.now());
     } catch {
-      setError("تعذر تحميل بيانات الأرباح");
+      if (!cached) setError("تعذر تحميل بيانات الأرباح");
     }
     setLoading(false);
   }, [clinicId]);
@@ -135,6 +180,13 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      <OfflineViewBanner
+        refreshing={refreshing}
+        offline={offlineView}
+        cachedAt={cachedAt}
+        refreshingLabel="عرض سريع من الذاكرة — جاري التحديث من السيرفر…"
+        offlineLabel="بدون اتصال — آخر تحديث: {time}"
+      />
       <div
         className={
           mobile

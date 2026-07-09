@@ -56,6 +56,7 @@ import {
   ArrowUpToLine,
   Receipt,
   RefreshCw,
+  Printer,
   Stethoscope,
   UserRound,
   Users,
@@ -873,6 +874,16 @@ export function DailyCollectionsPanel() {
                 <RefreshCw className="h-4 w-4" />
               )}
               <span className="mr-2">تحديث</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => window.print()}
+              disabled={!result}
+              className="w-full sm:w-auto"
+            >
+              <Printer className="h-4 w-4" />
+              <span className="mr-2">طباعة</span>
             </Button>
           </div>
         </div>
