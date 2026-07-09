@@ -214,6 +214,9 @@ export async function recordAssistantPayrollPaidTransaction(
     paidClinic
   );
 
+  let actualDoctorAmount = 0;
+  let actualClinicAmount = 0;
+
   if (deltaDoctor > 0) {
     const doctorTx = await recordFinancialTransaction(admin, {
       clinicId,
@@ -227,6 +230,9 @@ export async function recordAssistantPayrollPaidTransaction(
     });
     if (!doctorTx.ok) {
       return { ok: false, error: doctorTx.error };
+    }
+    if (!doctorTx.skipped) {
+      actualDoctorAmount = deltaDoctor;
     }
   }
 
@@ -243,12 +249,15 @@ export async function recordAssistantPayrollPaidTransaction(
     if (!clinicTx.ok) {
       return { ok: false, error: clinicTx.error };
     }
+    if (!clinicTx.skipped) {
+      actualClinicAmount = deltaClinic;
+    }
   }
 
   return {
     ok: true,
-    doctorAmount: deltaDoctor,
-    clinicAmount: deltaClinic,
+    doctorAmount: actualDoctorAmount,
+    clinicAmount: actualClinicAmount,
   };
 }
 
@@ -323,6 +332,13 @@ export async function recordAssistantDailyEntryPaidTransaction(
     return { ok: true, doctorAmount: 0, clinicAmount: 0 };
   }
 
+  // إذا كانت الحركة موجودة مسبقاً (skipped) لم تُدرَج أي أموال جديدة فعلياً —
+  // يجب أن يعكس doctorAmount/clinicAmount ذلك بصفر، لا بالمبلغ المقصود، وإلا
+  // يُحدَّث paid_doctor_share_amount/paid_clinic_share_amount في الطرف المستدعي
+  // بمبلغ لم يُخصَم حقاً، وتُرسَل إشعارات "تم الخصم" للطبيب بلا خصم فعلي.
+  let actualDoctorAmount = 0;
+  let actualClinicAmount = 0;
+
   if (deltaDoctor > 0) {
     const doctorTx = await recordFinancialTransaction(admin, {
       clinicId,
@@ -336,6 +352,9 @@ export async function recordAssistantDailyEntryPaidTransaction(
     });
     if (!doctorTx.ok) {
       return { ok: false, error: doctorTx.error };
+    }
+    if (!doctorTx.skipped) {
+      actualDoctorAmount = deltaDoctor;
     }
   }
 
@@ -352,12 +371,15 @@ export async function recordAssistantDailyEntryPaidTransaction(
     if (!clinicTx.ok) {
       return { ok: false, error: clinicTx.error };
     }
+    if (!clinicTx.skipped) {
+      actualClinicAmount = deltaClinic;
+    }
   }
 
   return {
     ok: true,
-    doctorAmount: deltaDoctor,
-    clinicAmount: deltaClinic,
+    doctorAmount: actualDoctorAmount,
+    clinicAmount: actualClinicAmount,
   };
 }
 

@@ -2656,7 +2656,15 @@ export default function SalaryPage() {
       {entries.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>حركات {formatMonthYearAr(workMonth)}</CardTitle>
+            <CardTitle>
+              حركات {formatMonthYearAr(workMonth)}
+              {selectedPerson?.full_name_ar ? (
+                <span className="text-muted-foreground font-normal">
+                  {" "}
+                  — {selectedPerson.full_name_ar}
+                </span>
+              ) : null}
+            </CardTitle>
           </CardHeader>
           <ul className="space-y-2 text-sm">
             {entries.map((e) => {
