@@ -10,10 +10,9 @@ import {
 } from "@/lib/services/executive-snapshot";
 import { fetchPeriodCollectionFinancialTotals } from "@/lib/ledger/daily-collections";
 import {
-  applyClinicTopUpToProfitStats,
+  ensureBalanceTopupsInProfitStats,
   fetchClinicProfitStatsForPeriod,
 } from "@/lib/services/clinic-stats";
-import { fetchClinicBalanceTopupsForPeriod } from "@/lib/services/balance-topup";
 import { normalizeTopPerformersPayload } from "@/lib/services/doctor-performance";
 import type { TopPerformersPayload } from "@/lib/services/doctor-performance";
 
@@ -132,18 +131,13 @@ export async function GET(req: NextRequest) {
         fetchNewPatientsInPeriod(admin, clinicId, from, to),
       ]);
 
-    let profitStats = profitStatsRaw;
-    const topupsDirect = await fetchClinicBalanceTopupsForPeriod(
+    const profitStats = await ensureBalanceTopupsInProfitStats(
       admin,
       clinicId,
       from,
-      to
+      to,
+      profitStatsRaw
     );
-    if (topupsDirect > profitStats.balanceTopupsTotal + 0.01) {
-      const delta =
-        Math.round((topupsDirect - profitStats.balanceTopupsTotal) * 100) / 100;
-      profitStats = applyClinicTopUpToProfitStats(profitStats, delta);
-    }
 
     const reviewFees = profitStats.reviewFeesTotal;
 

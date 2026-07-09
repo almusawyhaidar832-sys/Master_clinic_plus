@@ -1,4 +1,5 @@
 import { getApiSessionUser, isApiStaffRole } from "@/lib/auth/api-session";
+import { resolveStaffApiClinicId } from "@/lib/auth/resolve-staff-clinic";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { isStaffRole } from "@/lib/withdrawals/update-status-client";
 
@@ -112,13 +113,17 @@ export async function assertCanManageClinicFinance(req?: Request) {
   const admin = getAdminClient();
   const profile = await loadStaffProfile(user.id);
 
-  if (!profile.clinic_id) {
-    throw new StaffAccessError(400, "حسابك غير مربوط بعيادة");
-  }
-
   if (!isApiStaffRole(profile.role)) {
     throw new StaffAccessError(403, "صلاحيات غير كافية");
   }
 
-  return { user, profile, admin, clinicId: profile.clinic_id as string };
+  const clinicId = req
+    ? await resolveStaffApiClinicId(req, profile)
+    : (profile.clinic_id as string | null);
+
+  if (!clinicId) {
+    throw new StaffAccessError(400, "حسابك غير مربوط بعيادة");
+  }
+
+  return { user, profile, admin, clinicId };
 }

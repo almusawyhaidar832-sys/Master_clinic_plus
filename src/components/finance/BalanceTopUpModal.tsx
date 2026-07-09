@@ -140,8 +140,10 @@ export function BalanceTopUpModal({
         headers: {
           "Content-Type": "application/json",
           ...authPortalHeaders(portal),
+          ...(clinicId ? { "X-Clinic-Id": clinicId } : {}),
         },
         body: JSON.stringify({
+          clinic_id: clinicId ?? undefined,
           target,
           doctor_id: target === "doctor" ? doctorId : undefined,
           amount: parsed,

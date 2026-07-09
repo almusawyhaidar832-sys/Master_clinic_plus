@@ -390,12 +390,12 @@ export async function ensureBalanceTopupsInProfitStats(
   to: string,
   stats: ClinicProfitStats
 ): Promise<ClinicProfitStats> {
-  const { fetchClinicBalanceTopupsForPeriod } = await import(
+  const { fetchClinicBalanceTopupsAuthoritative } = await import(
     "@/lib/services/balance-topup"
   );
 
   const directTopups = roundProfitMoney(
-    await fetchClinicBalanceTopupsForPeriod(supabase, clinicId, from, to)
+    await fetchClinicBalanceTopupsAuthoritative(supabase, clinicId, from, to)
   );
 
   let aligned = stats;
