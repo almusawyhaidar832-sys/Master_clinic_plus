@@ -629,27 +629,20 @@ legacy_staff_slips AS (
 legacy_assistant_records AS (
   SELECT
     pr.clinic_id,
-    ROUND(COALESCE(SUM(
-      CASE
-        WHEN COALESCE(pr.paid_clinic_share_amount, 0) > 0 THEN pr.paid_clinic_share_amount
-        WHEN pr.status = 'paid' THEN COALESCE(pr.clinic_share_amount, 0)
-        ELSE 0
-      END
+    ROUND(COALESCE(SUM(pr.paid_clinic_share_amount) FILTER (
+      WHERE COALESCE(pr.paid_clinic_share_amount, 0) > 0
     ), 0)::numeric, 2) AS assistant_legacy
   FROM public.payroll_records pr
   JOIN _acct_clinic c ON c.id = pr.clinic_id
   CROSS JOIN cfg
-  WHERE (
+  WHERE COALESCE(pr.paid_clinic_share_amount, 0) > 0
+    AND (
       (pr.paid_at IS NOT NULL AND pr.paid_at::date BETWEEN cfg.period_from AND cfg.period_to)
       OR (
         pr.month_year IS NOT NULL
         AND pr.month_year >= to_char(cfg.period_from, 'YYYY-MM')
         AND pr.month_year <= to_char(cfg.period_to, 'YYYY-MM')
       )
-    )
-    AND (
-      COALESCE(pr.paid_clinic_share_amount, 0) > 0
-      OR pr.status = 'paid'
     )
   GROUP BY pr.clinic_id
 ),
@@ -703,7 +696,7 @@ SELECT
     - (COALESCE(e.general_expenses, 0) + COALESCE(e.doctor_expense_clinic, 0))
     - CASE
         WHEN COALESCE(cp.confirmed_salaries, 0) > 0 THEN cp.confirmed_salaries
-        ELSE COALESCE(ls.staff_legacy, 0)
+        ELSE COALESCE(ls.staff_legacy, 0) + COALESCE(la.assistant_legacy, 0)
       END
     + COALESCE(tp.balance_topups, 0),
     2

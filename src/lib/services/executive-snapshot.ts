@@ -363,8 +363,13 @@ export interface PaidSalariesBundle {
   display: number;
   /** قسائم موظفين/أطباء — أرشيف عند غياب حركات مالية */
   profitDeduction: number;
-  /** حصة عيادة مساعدين من payroll_records — عرض فقط؛ الربح من حركات التأكيد */
+  /** حصة عيادة مساعدين المُصرفة فعلياً (paid_clinic_share) — أرشيف عند غياب حركات */
   assistantClinicLegacy: number;
+}
+
+/** خصم أرشيفي للربح — موظفين + مساعدين المُصرف فعلياً */
+export function bundleLegacyProfitDeduction(bundle: PaidSalariesBundle): number {
+  return roundMoney(bundle.profitDeduction + bundle.assistantClinicLegacy);
 }
 
 /** استعلام salary_slips — المُؤكَّد صرفه فقط (paid_net_payout)، مو المتبقي */
@@ -407,18 +412,13 @@ function sumAssistantClinicPaidInPeriod(
 ): number {
   return rows.reduce((sum, row) => {
     const paidClinic = roundMoney(Number(row.paid_clinic_share_amount ?? 0));
-    const payout =
-      paidClinic > 0
-        ? paidClinic
-        : row.status === "paid"
-          ? roundMoney(Number(row.clinic_share_amount ?? 0))
-          : 0;
-    if (payout <= 0) return sum;
+    /** حصة مُصرفة فعلياً فقط — لا نحسب clinic_share_amount الكامل بدون تأكيد */
+    if (paidClinic <= 0) return sum;
 
     const my = row.month_year as string | null;
     if (excludeClosedPayrollMonths && my && closedMonths.has(my)) return sum;
 
-    if (rowInSalaryPeriod(row, from, to, periodFilter)) return sum + payout;
+    if (rowInSalaryPeriod(row, from, to, periodFilter)) return sum + paidClinic;
 
     return sum;
   }, 0);
@@ -649,7 +649,7 @@ export async function fetchPaidSalariesInPeriod(
   return bundle.profitDeduction;
 }
 
-/** خصم الرواتب للتقارير — صرف مؤكَّد فقط (تأكيد الدفع يخصم فوراً من الربح) */
+/** خصم الرواتب للتقارير — حركات تأكيد أولاً، ثم أرشيف المُصرف فعلياً */
 export async function fetchResolvedSalaryDeductionForPeriod(
   supabase: SupabaseClient,
   clinicId: string,
@@ -660,7 +660,10 @@ export async function fetchResolvedSalaryDeductionForPeriod(
     fetchConfirmedPayrollProfitDeduction(supabase, clinicId, from, to),
     fetchPaidSalariesBundle(supabase, clinicId, from, to),
   ]);
-  return resolveExecutiveSalaryDeduction(payrollAccruals, bundle.profitDeduction);
+  return resolveExecutiveSalaryDeduction(
+    payrollAccruals,
+    bundleLegacyProfitDeduction(bundle)
+  );
 }
 
 /** كشفيات المراجع في الفترة — مدفوعة فقط، مع استنتاج السجلات القديمة */
