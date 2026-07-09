@@ -1,10 +1,11 @@
 import {
   applyClinicTopUpToProfitStats,
+  reconcilePendingClinicTopUpInProfitStats,
   type ClinicProfitStats,
+  type PendingClinicTopUpProfit,
 } from "@/lib/services/clinic-stats";
 
-type PendingClinicTopUp = {
-  amount: number;
+type PendingClinicTopUp = PendingClinicTopUpProfit & {
   transactionDate: string;
 };
 
@@ -31,6 +32,30 @@ function persistPending(): void {
   }
 }
 
+function normalizeStoredPending(
+  raw: Partial<PendingClinicTopUp> & { amount?: number; delta?: number }
+): PendingClinicTopUp | null {
+  const transactionDate = raw.transactionDate?.slice(0, 10) ?? "";
+  if (!transactionDate) return null;
+
+  const minTopups = roundMoney(Number(raw.minTopups ?? 0));
+  const minNetProfit = roundMoney(Number(raw.minNetProfit ?? 0));
+  if (minTopups > 0 && minNetProfit > 0) {
+    return { minTopups, minNetProfit, transactionDate };
+  }
+
+  const legacyDelta = roundMoney(
+    Number(raw.amount ?? raw.delta ?? raw.minTopups ?? 0)
+  );
+  if (legacyDelta <= 0) return null;
+
+  return {
+    minTopups: legacyDelta,
+    minNetProfit: 0,
+    transactionDate,
+  };
+}
+
 function hydratePending(): void {
   if (typeof window === "undefined") return;
   try {
@@ -38,18 +63,11 @@ function hydratePending(): void {
     if (!raw) return;
     const parsed = JSON.parse(raw) as Record<
       string,
-      PendingClinicTopUp & { delta?: number }
+      Partial<PendingClinicTopUp> & { amount?: number; delta?: number }
     >;
     for (const [clinicId, pending] of Object.entries(parsed)) {
-      const amount = roundMoney(
-        Number(pending?.amount ?? pending?.delta ?? 0)
-      );
-      if (amount > 0 && pending?.transactionDate) {
-        pendingByClinic.set(clinicId, {
-          amount,
-          transactionDate: pending.transactionDate.slice(0, 10),
-        });
-      }
+      const normalized = normalizeStoredPending(pending ?? {});
+      if (normalized) pendingByClinic.set(clinicId, normalized);
     }
   } catch {
     localStorage.removeItem(STORAGE_KEY);
@@ -79,7 +97,6 @@ export function subscribePendingClinicTopUpChanges(
   };
 }
 
-/** يُمسح عندما يعكس السيرفر الشحن */
 export function clearPendingClinicTopUp(clinicId: string): void {
   if (!clinicId) return;
   hydratePending();
@@ -88,23 +105,34 @@ export function clearPendingClinicTopUp(clinicId: string): void {
   persistPending();
 }
 
-/** يُسجَّل بعد شحن ناجح فقط — آخر مبلغ (لا يُجمع المحاولات السابقة) */
+/**
+ * يُسجَّل بعد شحن ناجح — آخر شحن فقط (لا يُجمع المحاولات).
+ * minNetProfit = صافي الربح المتوقع بعد هذا الشحن (مثلاً 1,156,500).
+ */
 export function registerPendingClinicTopUp(
   clinicId: string,
-  amount: number,
-  transactionDate: string
+  delta: number,
+  transactionDate: string,
+  baseline?: Pick<ClinicProfitStats, "netProfit" | "balanceTopupsTotal">
 ): void {
-  if (!clinicId || amount <= 0) return;
+  if (!clinicId || delta <= 0) return;
   hydratePending();
 
+  const roundedDelta = roundMoney(delta);
+  const serverTopups = roundMoney(baseline?.balanceTopupsTotal ?? 0);
+  const serverNet = roundMoney(baseline?.netProfit ?? 0);
+
   pendingByClinic.set(clinicId, {
-    amount: roundMoney(amount),
+    minTopups: baseline
+      ? roundMoney(serverTopups + roundedDelta)
+      : roundedDelta,
+    minNetProfit: baseline ? roundMoney(serverNet + roundedDelta) : 0,
     transactionDate: transactionDate.slice(0, 10),
   });
   persistPending();
 }
 
-/** للواجهة الفورية بعد شحن — قبل اكتمال تحديث السيرفر */
+/** يدمج شحناً معلّقاً حتى يعكسه السيرفر في الصافي والشحن معاً */
 export function applyOptimisticClinicTopUp(
   clinicId: string,
   stats: ClinicProfitStats,
@@ -112,7 +140,7 @@ export function applyOptimisticClinicTopUp(
 ): ClinicProfitStats {
   hydratePending();
   const pending = pendingByClinic.get(clinicId);
-  if (!pending || pending.amount <= 0) return stats;
+  if (!pending) return stats;
 
   if (
     pending.transactionDate < period.from ||
@@ -121,17 +149,27 @@ export function applyOptimisticClinicTopUp(
     return stats;
   }
 
-  if (stats.balanceTopupsTotal + 0.01 >= pending.amount) {
+  const target: PendingClinicTopUpProfit = {
+    minTopups: pending.minTopups,
+    minNetProfit:
+      pending.minNetProfit > 0
+        ? pending.minNetProfit
+        : roundMoney(
+            stats.netProfit +
+              Math.max(0, pending.minTopups - stats.balanceTopupsTotal)
+          ),
+  };
+
+  const { stats: merged, resolved } = reconcilePendingClinicTopUpInProfitStats(
+    stats,
+    target
+  );
+
+  if (resolved) {
     clearPendingClinicTopUp(clinicId);
-    return stats;
   }
 
-  const gap = roundMoney(pending.amount - stats.balanceTopupsTotal);
-  if (gap > 0.01) {
-    return applyClinicTopUpToProfitStats(stats, gap);
-  }
-
-  return stats;
+  return merged;
 }
 
 /** @deprecated استخدم applyOptimisticClinicTopUp */
@@ -143,7 +181,6 @@ export function reconcilePendingClinicProfitStats(
   return applyOptimisticClinicTopUp(clinicId, stats, period);
 }
 
-/** تحديث فوري للواجهة بعد شحن ناجح */
 export function applyPendingClinicTopUpToProfitStats(
   stats: ClinicProfitStats,
   amount: number

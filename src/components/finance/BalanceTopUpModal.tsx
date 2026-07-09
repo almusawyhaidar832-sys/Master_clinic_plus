@@ -11,6 +11,8 @@ import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { notifyBalanceTopUpRefresh } from "@/lib/services/clinic-profit";
 import { registerPendingClinicTopUp } from "@/lib/services/clinic-profit-pending";
+import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
+import { defaultClinicProfitPeriod } from "@/lib/services/clinic-profit-loader";
 import {
   registerPendingDoctorTopUpDelta,
   registerPendingDoctorWallet,
@@ -151,8 +153,21 @@ export function BalanceTopUpModal({
         target === "doctor" ? (json.doctor_id ?? doctorId) : undefined;
       const toppedAmount = Number(json.amount ?? parsed);
       const doctorWallet = json.doctor_wallet ?? undefined;
+
       if (target === "clinic" && clinicId && toppedAmount > 0) {
-        registerPendingClinicTopUp(clinicId, toppedAmount, transactionDate);
+        const period = defaultClinicProfitPeriod();
+        const baseline = await fetchClinicProfitStatsForPeriodViaApi(
+          period.from,
+          period.to,
+          portal,
+          clinicId
+        ).catch(() => null);
+        registerPendingClinicTopUp(
+          clinicId,
+          toppedAmount,
+          transactionDate,
+          baseline ?? undefined
+        );
       }
 
       notifyBalanceTopUpRefresh({

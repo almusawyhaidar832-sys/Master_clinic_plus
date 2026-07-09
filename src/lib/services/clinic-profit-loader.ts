@@ -1,12 +1,7 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
-import {
-  applyClinicTopUpToProfitStats,
-  type ClinicProfitStats,
-} from "@/lib/services/clinic-stats";
+import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 import { applyOptimisticClinicTopUp } from "@/lib/services/clinic-profit-pending";
-import { BALANCE_TOPUP_CLINIC_TYPE } from "@/lib/services/balance-topup";
 import { currentMonthYear, monthDateRange } from "@/lib/utils";
 
 /** نفس فترة اللوحة التنفيذية — من أول الشهر حتى آخر يوم فيه */
@@ -28,7 +23,7 @@ function pickBestProfitStats(candidates: ClinicProfitStats[]): ClinicProfitStats
   });
 }
 
-/** يجلب من السيرفر عبر جلسة المحاسب والإدارة — نفس النتيجة */
+/** السيرفر فقط — بدون دمج RLS من المتصفح (كان يسبب فرقاً بين المحاسب والإدارة) */
 async function fetchProfitStatsFromServer(
   from: string,
   to: string,
@@ -50,42 +45,8 @@ async function fetchProfitStatsFromServer(
   return pickBestProfitStats(ok);
 }
 
-/** يدمج شحن الرصيد من جدول الحركات إن لم يعكسه السيرفر */
-async function mergeClientBalanceTopupsIfNeeded(
-  supabase: SupabaseClient,
-  clinicId: string,
-  stats: ClinicProfitStats,
-  period: { from: string; to: string }
-): Promise<ClinicProfitStats> {
-  try {
-    const { data } = await supabase
-      .from("transactions")
-      .select("amount")
-      .eq("clinic_id", clinicId)
-      .eq("type", BALANCE_TOPUP_CLINIC_TYPE)
-      .gt("amount", 0)
-      .gte("transaction_date", period.from)
-      .lte("transaction_date", period.to);
-
-    const clientTopups =
-      Math.round(
-        (data ?? []).reduce((s, row) => s + Math.max(0, Number(row.amount ?? 0)), 0) *
-          100
-      ) / 100;
-
-    if (clientTopups > stats.balanceTopupsTotal + 0.01) {
-      const delta = Math.round((clientTopups - stats.balanceTopupsTotal) * 100) / 100;
-      return applyClinicTopUpToProfitStats(stats, delta);
-    }
-  } catch {
-    /* RLS — نعتمد على السيرفر */
-  }
-
-  return stats;
-}
-
 /**
- * مصدر موحّد للإدارة والمحاسب — السيرفر + شحن معلّق (آخر شحن ناجح فقط).
+ * مصدر موحّد للإدارة والمحاسب.
  * صافي الربح = حصة العيادة − مصروفات − رواتب + شحن الرصيد
  */
 export async function fetchAlignedClinicProfitStats(
@@ -93,18 +54,6 @@ export async function fetchAlignedClinicProfitStats(
   _portal: AuthPortalId = "accountant",
   period: { from: string; to: string } = defaultClinicProfitPeriod()
 ): Promise<ClinicProfitStats> {
-  const { createClientForPortal } = await import("@/lib/supabase/client");
-
-  let stats = await fetchProfitStatsFromServer(period.from, period.to, clinicId);
-
-  for (const portal of ["accountant", "admin"] as const) {
-    stats = await mergeClientBalanceTopupsIfNeeded(
-      createClientForPortal(portal),
-      clinicId,
-      stats,
-      period
-    );
-  }
-
+  const stats = await fetchProfitStatsFromServer(period.from, period.to, clinicId);
   return applyOptimisticClinicTopUp(clinicId, stats, period);
 }
