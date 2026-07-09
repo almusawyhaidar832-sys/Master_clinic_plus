@@ -599,6 +599,60 @@ confirmed_payroll AS (
     AND t.type IN ('staff_salary_paid', 'assistant_payroll_clinic', 'doctor_salary_paid')
   GROUP BY t.clinic_id
 ),
+legacy_staff_slips AS (
+  SELECT
+    ss.clinic_id,
+    ROUND(COALESCE(SUM(
+      CASE
+        WHEN COALESCE(ss.paid_net_payout, 0) > 0 THEN ss.paid_net_payout
+        WHEN ss.status = 'paid' THEN COALESCE(ss.net_payout, 0)
+        ELSE 0
+      END
+    ), 0)::numeric, 2) AS staff_legacy
+  FROM public.salary_slips ss
+  JOIN _acct_clinic c ON c.id = ss.clinic_id
+  CROSS JOIN cfg
+  WHERE (
+      (ss.paid_at IS NOT NULL AND ss.paid_at::date BETWEEN cfg.period_from AND cfg.period_to)
+      OR (
+        ss.month_year IS NOT NULL
+        AND ss.month_year >= to_char(cfg.period_from, 'YYYY-MM')
+        AND ss.month_year <= to_char(cfg.period_to, 'YYYY-MM')
+      )
+    )
+    AND (
+      COALESCE(ss.paid_net_payout, 0) > 0
+      OR ss.status = 'paid'
+    )
+  GROUP BY ss.clinic_id
+),
+legacy_assistant_records AS (
+  SELECT
+    pr.clinic_id,
+    ROUND(COALESCE(SUM(
+      CASE
+        WHEN COALESCE(pr.paid_clinic_share_amount, 0) > 0 THEN pr.paid_clinic_share_amount
+        WHEN pr.status = 'paid' THEN COALESCE(pr.clinic_share_amount, 0)
+        ELSE 0
+      END
+    ), 0)::numeric, 2) AS assistant_legacy
+  FROM public.payroll_records pr
+  JOIN _acct_clinic c ON c.id = pr.clinic_id
+  CROSS JOIN cfg
+  WHERE (
+      (pr.paid_at IS NOT NULL AND pr.paid_at::date BETWEEN cfg.period_from AND cfg.period_to)
+      OR (
+        pr.month_year IS NOT NULL
+        AND pr.month_year >= to_char(cfg.period_from, 'YYYY-MM')
+        AND pr.month_year <= to_char(cfg.period_to, 'YYYY-MM')
+      )
+    )
+    AND (
+      COALESCE(pr.paid_clinic_share_amount, 0) > 0
+      OR pr.status = 'paid'
+    )
+  GROUP BY pr.clinic_id
+),
 registered_assistant AS (
   SELECT
     se.clinic_id,
@@ -640,12 +694,17 @@ SELECT
   ROUND((cs.collected - cs.doctor_share)::numeric, 2) AS clinic_share,
   COALESCE(e.general_expenses, 0) + COALESCE(e.doctor_expense_clinic, 0) AS total_expenses,
   COALESCE(cp.confirmed_salaries, 0) AS confirmed_salaries,
+  COALESCE(ls.staff_legacy, 0) AS legacy_staff_slips,
+  COALESCE(la.assistant_legacy, 0) AS legacy_assistant_records,
   COALESCE(ra.registered_clinic_share, 0) AS registered_assistant_not_in_profit,
   COALESCE(tp.balance_topups, 0) AS balance_topups,
   ROUND(
     (cs.collected - cs.doctor_share)
     - (COALESCE(e.general_expenses, 0) + COALESCE(e.doctor_expense_clinic, 0))
-    - COALESCE(cp.confirmed_salaries, 0)
+    - CASE
+        WHEN COALESCE(cp.confirmed_salaries, 0) > 0 THEN cp.confirmed_salaries
+        ELSE COALESCE(ls.staff_legacy, 0)
+      END
     + COALESCE(tp.balance_topups, 0),
     2
   ) AS net_profit_app_formula,
@@ -662,5 +721,7 @@ CROSS JOIN cfg
 LEFT JOIN clinic_shares cs ON cs.clinic_id = c.id
 LEFT JOIN expenses e ON e.clinic_id = c.id
 LEFT JOIN confirmed_payroll cp ON cp.clinic_id = c.id
+LEFT JOIN legacy_staff_slips ls ON ls.clinic_id = c.id
+LEFT JOIN legacy_assistant_records la ON la.clinic_id = c.id
 LEFT JOIN registered_assistant ra ON ra.clinic_id = c.id
 LEFT JOIN topups tp ON tp.clinic_id = c.id;

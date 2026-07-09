@@ -361,7 +361,10 @@ export async function fetchPaidSalariesForProfitDeduction(
 
 export interface PaidSalariesBundle {
   display: number;
+  /** قسائم موظفين/أطباء — أرشيف عند غياب حركات مالية */
   profitDeduction: number;
+  /** حصة عيادة مساعدين من payroll_records — عرض فقط؛ الربح من حركات التأكيد */
+  assistantClinicLegacy: number;
 }
 
 /** استعلام salary_slips — المُؤكَّد صرفه فقط (paid_net_payout)، مو المتبقي */
@@ -498,7 +501,8 @@ export async function fetchPaidSalariesBundle(
 
   return {
     display: roundMoney(staffDisplay + assistantDisplay),
-    profitDeduction: roundMoney(staffProfit + assistantProfit),
+    profitDeduction: roundMoney(staffProfit),
+    assistantClinicLegacy: roundMoney(assistantProfit),
   };
 }
 
