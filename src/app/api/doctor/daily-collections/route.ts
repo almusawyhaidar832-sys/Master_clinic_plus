@@ -44,17 +44,10 @@ export async function GET(req: NextRequest) {
     const syncShares = searchParams.get("sync_shares") === "1";
     const effectiveTo = dateTo ?? dateFrom;
 
-    if (dateFrom && effectiveTo) {
-      await repairDoctorOperationShares(ctx.admin, ctx.clinicId, {
-        doctorId: ctx.doctorId,
-        dateFrom,
-        dateTo: effectiveTo,
-      });
-    }
-
     if (syncShares) {
       await repairDoctorOperationShares(ctx.admin, ctx.clinicId, {
         doctorId: ctx.doctorId,
+        ...(dateFrom && effectiveTo ? { dateFrom, dateTo: effectiveTo } : {}),
       });
     }
 

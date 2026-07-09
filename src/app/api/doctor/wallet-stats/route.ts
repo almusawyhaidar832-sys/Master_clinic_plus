@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getApiCallerProfile } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
-import { repairDoctorOperationShares } from "@/lib/services/operation-amount-edit";
 
 export const dynamic = "force-dynamic";
 
@@ -37,10 +36,6 @@ export async function GET(req: NextRequest) {
         { status: 404 }
       );
     }
-
-    await repairDoctorOperationShares(admin, doctor.clinic_id, {
-      doctorId: doctor.id,
-    });
 
     const stats = await fetchDoctorWalletStats(admin, doctor.id);
     return NextResponse.json(stats, { headers: NO_STORE_HEADERS });

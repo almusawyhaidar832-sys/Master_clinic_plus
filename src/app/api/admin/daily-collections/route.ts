@@ -48,17 +48,10 @@ export async function GET(req: NextRequest) {
     const admin = getAdminClient();
     const effectiveTo = dateTo ?? dateFrom;
 
-    if (dateFrom && effectiveTo) {
-      await repairDoctorOperationShares(admin, profile.clinic_id, {
-        doctorId,
-        dateFrom,
-        dateTo: effectiveTo,
-      });
-    }
-
     if (syncShares) {
       await repairDoctorOperationShares(admin, profile.clinic_id, {
         doctorId,
+        ...(dateFrom && effectiveTo ? { dateFrom, dateTo: effectiveTo } : {}),
       });
     }
 

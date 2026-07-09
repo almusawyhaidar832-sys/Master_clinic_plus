@@ -20,6 +20,7 @@ import { reconcileDailyCollectionsResult } from "@/lib/services/doctor-wallet-pe
 import {
   collectionStatusClass,
   collectionStatusLabel,
+  filterDailyCollectionsResult,
   type CollectionStatusFilter,
   type DailyCollectionsResult,
   type DailyCollectionRow,
@@ -321,7 +322,9 @@ export function DoctorDailyCollectionsPanel({
   const [dateTo, setDateTo] = useState(todayISO());
   const [statusFilter, setStatusFilter] =
     useState<CollectionStatusFilter>("all");
-  const [result, setResult] = useState<DailyCollectionsResult | null>(null);
+  const [queryFrom, setQueryFrom] = useState(todayISO());
+  const [queryTo, setQueryTo] = useState(todayISO());
+  const [rawResult, setRawResult] = useState<DailyCollectionsResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [appliedFrom, setAppliedFrom] = useState(todayISO());
@@ -329,6 +332,15 @@ export function DoctorDailyCollectionsPanel({
   const loadGenerationRef = useRef(0);
 
   const effectiveTo = dateTo >= dateFrom ? dateTo : dateFrom;
+  const queryEffectiveTo = queryTo >= queryFrom ? queryTo : queryFrom;
+
+  const result = useMemo(
+    () =>
+      rawResult
+        ? filterDailyCollectionsResult(rawResult, statusFilter)
+        : null,
+    [rawResult, statusFilter]
+  );
 
   const statusLabels: Record<(typeof STATUS_TABS)[number]["labelKey"], string> = {
     all: t("docDailyFilterAll"),
@@ -355,7 +367,7 @@ export function DoctorDailyCollectionsPanel({
 
   const loadCollections = useCallback(async () => {
     if (!doctorId) {
-      setResult(null);
+      setRawResult(null);
       setLoading(false);
       return;
     }
@@ -371,9 +383,9 @@ export function DoctorDailyCollectionsPanel({
     const needSync = repairKey ? needsSharesRepair(repairKey) : false;
 
     const params = new URLSearchParams({
-      date_from: dateFrom,
-      date_to: effectiveTo,
-      status_filter: statusFilter,
+      date_from: queryFrom,
+      date_to: queryEffectiveTo,
+      status_filter: "all",
       _t: String(Date.now()),
     });
     if (needSync) params.set("sync_shares", "1");
@@ -393,7 +405,7 @@ export function DoctorDailyCollectionsPanel({
 
       if (!res.ok) {
         setError(json.error ?? t("docDailyLoadFailed"));
-        setResult(null);
+        setRawResult(null);
         return;
       }
 
@@ -401,24 +413,34 @@ export function DoctorDailyCollectionsPanel({
         markSharesRepairDone({ clinicId, doctorId });
       }
 
-      setResult(reconcileDailyCollectionsResult(json.result ?? null));
-      setAppliedFrom(dateFrom);
-      setAppliedTo(effectiveTo);
+      setRawResult(reconcileDailyCollectionsResult(json.result ?? null));
+      setAppliedFrom(queryFrom);
+      setAppliedTo(queryEffectiveTo);
     } catch {
       if (loadGeneration !== loadGenerationRef.current) return;
       setError(t("errServerConnection"));
-      setResult(null);
+      setRawResult(null);
     } finally {
       if (loadGeneration === loadGenerationRef.current) {
         setLoading(false);
       }
     }
-  }, [doctorId, clinicId, dateFrom, effectiveTo, statusFilter, t]);
+  }, [doctorId, clinicId, queryFrom, queryEffectiveTo, t]);
 
   useEffect(() => {
     if (!doctorId) return;
     void loadCollections();
   }, [loadCollections, doctorId, refreshKey]);
+
+  const refreshCollections = useCallback(() => {
+    const to = effectiveTo;
+    if (dateFrom === queryFrom && to === queryEffectiveTo) {
+      void loadCollections();
+      return;
+    }
+    setQueryFrom(dateFrom);
+    setQueryTo(to);
+  }, [dateFrom, effectiveTo, queryFrom, queryEffectiveTo, loadCollections]);
 
   useClinicSync({
     topics: ["sessions", "financial"],
@@ -441,12 +463,17 @@ export function DoctorDailyCollectionsPanel({
     const today = todayISO();
     setDateFrom(today);
     setDateTo(today);
+    setQueryFrom(today);
+    setQueryTo(today);
   };
 
   const setLast7Days = () => {
     const today = todayISO();
-    setDateFrom(addDaysISO(today, -6));
+    const from = addDaysISO(today, -6);
+    setDateFrom(from);
     setDateTo(today);
+    setQueryFrom(from);
+    setQueryTo(today);
   };
 
   return (
@@ -493,7 +520,7 @@ export function DoctorDailyCollectionsPanel({
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => void loadCollections()}
+            onClick={() => void refreshCollections()}
             disabled={loading}
           >
             {loading ? (

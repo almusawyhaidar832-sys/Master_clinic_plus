@@ -20,6 +20,7 @@ import { buildLedgerPayUrl } from "@/lib/ledger/navigation";
 import {
   collectionStatusClass,
   collectionStatusLabel,
+  filterDailyCollectionsResult,
   type CollectionStatusFilter,
   type DailyCollectionsResult,
   type DailyCollectionRow,
@@ -612,16 +613,30 @@ export function DailyCollectionsPanel() {
   const [doctorId, setDoctorId] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<CollectionStatusFilter>("all");
+  const [queryFrom, setQueryFrom] = useState(todayISO());
+  const [queryTo, setQueryTo] = useState(todayISO());
+  const [queryDoctorId, setQueryDoctorId] = useState<string | undefined>();
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
-  const [result, setResult] = useState<DailyCollectionsResult | null>(null);
+  const [rawResult, setRawResult] = useState<DailyCollectionsResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [repairMsg, setRepairMsg] = useState<string | null>(null);
   const [repairing, setRepairing] = useState(false);
+  const [showDebtPanel, setShowDebtPanel] = useState(false);
   const [appliedFrom, setAppliedFrom] = useState(todayISO());
   const [appliedTo, setAppliedTo] = useState(todayISO());
   const loadGenerationRef = useRef(0);
 
   const effectiveTo = dateTo >= dateFrom ? dateTo : dateFrom;
+  const queryEffectiveTo = queryTo >= queryFrom ? queryTo : queryFrom;
+  const selectedDoctorId = doctorId.trim() || undefined;
+
+  const result = useMemo(
+    () =>
+      rawResult
+        ? filterDailyCollectionsResult(rawResult, statusFilter)
+        : null,
+    [rawResult, statusFilter]
+  );
 
   const loadDoctors = useCallback(async () => {
     if (!clinicId) {
@@ -638,27 +653,26 @@ export function DailyCollectionsPanel() {
     setDoctors((data as DoctorOption[]) ?? []);
   }, [clinicId]);
 
-  const selectedDoctorId = doctorId.trim() || undefined;
-
   const loadCollections = useCallback(async () => {
     if (!clinicId) {
-      setResult(null);
+      setRawResult(null);
       setLoading(false);
       return;
     }
     const loadGeneration = ++loadGenerationRef.current;
     setLoading(true);
+    setShowDebtPanel(false);
     try {
       const repairKey = clinicSharesRepairKey(clinicId);
       const needSync = needsSharesRepair(repairKey);
 
       const params = new URLSearchParams({
-        date_from: dateFrom,
-        date_to: effectiveTo,
-        status_filter: statusFilter,
+        date_from: queryFrom,
+        date_to: queryEffectiveTo,
+        status_filter: "all",
         _t: String(Date.now()),
       });
-      if (selectedDoctorId) params.set("doctor_id", selectedDoctorId);
+      if (queryDoctorId) params.set("doctor_id", queryDoctorId);
       if (needSync) params.set("sync_shares", "1");
 
       const res = await fetch(`/api/admin/daily-collections?${params}`, {
@@ -674,7 +688,7 @@ export function DailyCollectionsPanel() {
       if (loadGeneration !== loadGenerationRef.current) return;
 
       if (!res.ok) {
-        setResult(null);
+        setRawResult(null);
         return;
       }
 
@@ -682,18 +696,18 @@ export function DailyCollectionsPanel() {
         markSharesRepairDone({ clinicId });
       }
 
-      setResult(reconcileDailyCollectionsResult(json.result ?? null));
-      setAppliedFrom(dateFrom);
-      setAppliedTo(effectiveTo);
+      setRawResult(reconcileDailyCollectionsResult(json.result ?? null));
+      setAppliedFrom(queryFrom);
+      setAppliedTo(queryEffectiveTo);
     } catch {
       if (loadGeneration !== loadGenerationRef.current) return;
-      setResult(null);
+      setRawResult(null);
     } finally {
       if (loadGeneration === loadGenerationRef.current) {
         setLoading(false);
       }
     }
-  }, [clinicId, dateFrom, effectiveTo, selectedDoctorId, statusFilter]);
+  }, [clinicId, queryFrom, queryEffectiveTo, queryDoctorId]);
 
   const handleTopUpSuccess = useCallback(
     (detail: BalanceTopUpSuccessDetail) => {
@@ -702,7 +716,7 @@ export function DailyCollectionsPanel() {
         detail.doctorId &&
         detail.doctorWallet
       ) {
-        setResult((prev) =>
+        setRawResult((prev) =>
           prev
             ? applyDoctorWalletToCollectionsResult(
                 prev,
@@ -730,6 +744,38 @@ export function DailyCollectionsPanel() {
     void loadCollections();
   }, [clinicLoading, clinicId, loadCollections]);
 
+  useEffect(() => {
+    if (loading || !rawResult) {
+      setShowDebtPanel(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowDebtPanel(true), 400);
+    return () => window.clearTimeout(timer);
+  }, [loading, rawResult]);
+
+  const refreshCollections = useCallback(() => {
+    const to = effectiveTo;
+    if (
+      dateFrom === queryFrom &&
+      to === queryEffectiveTo &&
+      selectedDoctorId === queryDoctorId
+    ) {
+      void loadCollections();
+      return;
+    }
+    setQueryFrom(dateFrom);
+    setQueryTo(to);
+    setQueryDoctorId(selectedDoctorId);
+  }, [
+    dateFrom,
+    effectiveTo,
+    queryFrom,
+    queryEffectiveTo,
+    queryDoctorId,
+    selectedDoctorId,
+    loadCollections,
+  ]);
+
   useClinicSync({
     topics: ["sessions", "financial"],
     clinicId,
@@ -748,12 +794,17 @@ export function DailyCollectionsPanel() {
     const today = todayISO();
     setDateFrom(today);
     setDateTo(today);
+    setQueryFrom(today);
+    setQueryTo(today);
   };
 
   const setLast7Days = () => {
     const today = todayISO();
-    setDateFrom(addDaysISO(today, -6));
+    const from = addDaysISO(today, -6);
+    setDateFrom(from);
     setDateTo(today);
+    setQueryFrom(from);
+    setQueryTo(today);
   };
 
   const repairDoctorShares = useCallback(async () => {
@@ -762,12 +813,12 @@ export function DailyCollectionsPanel() {
     setRepairMsg(null);
     try {
       const params = new URLSearchParams({
-        date_from: dateFrom,
-        date_to: effectiveTo,
-        status_filter: statusFilter,
+        date_from: queryFrom,
+        date_to: queryEffectiveTo,
+        status_filter: "all",
         sync_shares: "1",
       });
-      if (selectedDoctorId) params.set("doctor_id", selectedDoctorId);
+      if (queryDoctorId) params.set("doctor_id", queryDoctorId);
 
       const res = await fetch(`/api/admin/daily-collections?${params}`, {
         credentials: "include",
@@ -782,16 +833,16 @@ export function DailyCollectionsPanel() {
         setRepairMsg(data.error ?? "تعذر إصلاح الحصص");
         return;
       }
-      setResult(data.result ?? null);
+      setRawResult(data.result ?? null);
       setRepairMsg("تم تصحيح الحصص وتحديث الكشف");
-      setAppliedFrom(dateFrom);
-      setAppliedTo(effectiveTo);
+      setAppliedFrom(queryFrom);
+      setAppliedTo(queryEffectiveTo);
     } catch {
       setRepairMsg("تعذر الاتصال بالخادم");
     } finally {
       setRepairing(false);
     }
-  }, [clinicId, dateFrom, effectiveTo, selectedDoctorId, statusFilter]);
+  }, [clinicId, queryFrom, queryEffectiveTo, queryDoctorId]);
 
   return (
     <div className="space-y-6">
@@ -846,7 +897,7 @@ export function DailyCollectionsPanel() {
             />
             <Button
               type="button"
-              onClick={() => void loadCollections()}
+              onClick={() => void refreshCollections()}
               disabled={loading}
               className="w-full sm:w-auto"
             >
@@ -1104,7 +1155,7 @@ export function DailyCollectionsPanel() {
         </Card>
       )}
 
-      {!loading && clinicId && (
+      {!loading && showDebtPanel && clinicId && (
         <OutstandingDebtPanel clinicId={clinicId} doctorId={selectedDoctorId} />
       )}
     </div>

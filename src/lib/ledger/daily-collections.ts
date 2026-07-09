@@ -1012,6 +1012,57 @@ export function matchesCollectionFilter(
   return true;
 }
 
+/** تصفية نتيجة الكشف المالي محلياً — بدون إعادة جلب من السيرفر */
+export function filterDailyCollectionsResult(
+  result: DailyCollectionsResult,
+  statusFilter: CollectionStatusFilter
+): DailyCollectionsResult {
+  if (statusFilter === "all") return result;
+
+  const groupByDay = result.dateFrom !== result.dateTo;
+
+  const doctors = result.doctors
+    .map((group) => {
+      const filteredRows = group.rows.filter((row) =>
+        matchesCollectionFilter(
+          row.paymentStatus,
+          statusFilter,
+          row.visitPaidToday
+        )
+      );
+      const stats = computeStats(filteredRows, groupByDay);
+      stats.assistantDoctorDeduction = group.stats.assistantDoctorDeduction;
+      stats.assistantClinicShare = group.stats.assistantClinicShare;
+      stats.netDoctorShareToday = Math.max(
+        0,
+        roundMoney(stats.doctorShareToday - stats.assistantDoctorDeduction)
+      );
+      stats.totalWithdrawnInPeriod = group.stats.totalWithdrawnInPeriod;
+      stats.totalPendingWithdrawalInPeriod =
+        group.stats.totalPendingWithdrawalInPeriod;
+      stats.totalToppedUpInPeriod = group.stats.totalToppedUpInPeriod;
+      stats.totalDoctorExpenseDeduction =
+        group.stats.totalDoctorExpenseDeduction;
+      stats.totalDoctorExpenseClinicShare =
+        group.stats.totalDoctorExpenseClinicShare;
+      stats.availableBalance = group.stats.availableBalance;
+      stats.withdrawableLimit = group.stats.withdrawableLimit;
+      return { ...group, rows: filteredRows, stats };
+    })
+    .filter((group) => group.rows.length > 0);
+
+  const totals = {
+    ...emptyStats(),
+    totalClinicGeneralExpenses: result.totals.totalClinicGeneralExpenses,
+    totalClinicToppedUpInPeriod: result.totals.totalClinicToppedUpInPeriod,
+  };
+  for (const group of doctors) {
+    mergeStats(totals, group.stats);
+  }
+
+  return { ...result, doctors, totals };
+}
+
 export function collectionStatusLabel(status: CollectionPaymentStatus): string {
   switch (status) {
     case "paid_full":
@@ -1639,7 +1690,8 @@ export async function fetchDailyCollections(
   const walletDoctorIds = doctors.map((d) => d.doctorId);
   const walletStatsMap = await fetchDoctorWalletStatsBatch(
     supabase,
-    walletDoctorIds
+    walletDoctorIds,
+    { from: effectiveFrom, to: effectiveTo }
   );
   for (const group of doctors) {
     const wallet = walletStatsMap.get(group.doctorId);
