@@ -2401,6 +2401,10 @@ export default function SalaryPage() {
                 <p className="text-center text-xs text-amber-800">
                   اختر موظفاً أو مساعداً من القائمة أعلاه أولاً
                 </p>
+              ) : isDailyAssistantSelected && slipConfirmedAmount > 0 && slipPendingAmount > 0 ? (
+                <p className="text-center text-xs text-teal-800">
+                  أكّد كل يوم من جدول الحركات أدناه بمبلغه المستقل فقط
+                </p>
               ) : isDailyWageSelected && slipConfirmedAmount > 0 && slipPendingAmount > 0 ? (
                 <p className="text-center text-xs text-teal-800">
                   مُؤكَّد {formatCurrency(slipConfirmedAmount)} — المتبقي{" "}
@@ -2482,7 +2486,7 @@ export default function SalaryPage() {
                   <hr className="border-slate-border" />
                   <p className="text-xs text-teal-800">
                     {isDailyAssistantSelected
-                      ? "أجر يومي: أكّد كل يوم من جدول الحركات، أو المتبقي دفعة واحدة أدناه — يظهر تلقائياً في «رواتب الشهر»."
+                      ? "أجر يومي: أكّد كل يوم من جدول الحركات أدناه — كل يوم يُخصم بمبلغه المكتوب وحده فقط، ولا يُجمَع مع أيام سابقة."
                       : "تأكيد الصرف من هنا يخصم فوراً من الطبيب والعيادة — يظهر مؤكداً في «رواتب الشهر» بدون تأكيد ثانٍ."}
                   </p>
                   <p className="text-xs text-slate-muted">
@@ -2495,6 +2499,7 @@ export default function SalaryPage() {
                   </p>
                   {!boardLocked && (
                     <div className="flex flex-wrap gap-2">
+                      {!isDailyAssistantSelected && (
                       <Button
                         type="button"
                         className="flex-1 min-w-[10rem]"
@@ -2511,6 +2516,7 @@ export default function SalaryPage() {
                             ? `تأكيد الصرف — ${formatCurrency(slipPendingAmount)}`
                             : "مُؤكَّد بالكامل"}
                       </Button>
+                      )}
                       <Button
                         type="button"
                         variant="outline"
