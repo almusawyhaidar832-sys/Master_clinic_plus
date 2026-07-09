@@ -10,52 +10,21 @@ export function defaultClinicProfitPeriod(): { from: string; to: string } {
   return monthDateRange(currentMonthYear());
 }
 
-/** يختار النتيجة التي فيها شحن رصيد — ثم أعلى صافي ربح */
-function pickBestProfitStats(candidates: ClinicProfitStats[]): ClinicProfitStats {
-  if (candidates.length === 0) {
-    throw new Error("تعذر تحميل بيانات الأرباح");
-  }
-
-  return candidates.reduce((best, cur) => {
-    if (cur.balanceTopupsTotal > best.balanceTopupsTotal + 0.01) return cur;
-    if (best.balanceTopupsTotal > cur.balanceTopupsTotal + 0.01) return best;
-    if (cur.netProfit > best.netProfit + 0.01) return cur;
-    return best;
-  });
-}
-
-/** السيرفر فقط — بدون دمج RLS من المتصفح (كان يسبب فرقاً بين المحاسب والإدارة) */
-async function fetchProfitStatsFromServer(
-  from: string,
-  to: string,
-  clinicId: string
-): Promise<ClinicProfitStats> {
-  const results = await Promise.all(
-    (["accountant", "admin"] as const).map((portal) =>
-      fetchClinicProfitStatsForPeriodViaApi(from, to, portal, clinicId).catch(
-        () => null
-      )
-    )
-  );
-
-  const ok = results.filter((r): r is ClinicProfitStats => r !== null);
-  if (ok.length === 0) {
-    throw new Error("تعذر تحميل بيانات الأرباح");
-  }
-
-  return pickBestProfitStats(ok);
-}
-
 /**
- * مصدر موحّد للإدارة والمحاسب.
+ * مصدر موحّد للإدارة والمحاسب — السيرفر أولاً ثم ذاكرة الشحن كاحتياط.
  * صافي الربح = حصة العيادة − مصروفات − رواتب + شحن الرصيد
  */
 export async function fetchAlignedClinicProfitStats(
   clinicId: string,
-  _portal: AuthPortalId = "accountant",
+  portal: AuthPortalId = "accountant",
   period: { from: string; to: string } = defaultClinicProfitPeriod()
 ): Promise<ClinicProfitStats> {
-  const stats = await fetchProfitStatsFromServer(period.from, period.to, clinicId);
+  const stats = await fetchClinicProfitStatsForPeriodViaApi(
+    period.from,
+    period.to,
+    portal,
+    clinicId
+  );
   const withBroadcast = applyClinicProfitBroadcast(clinicId, period, stats);
   return applyOptimisticClinicTopUp(clinicId, withBroadcast, period);
 }

@@ -12,6 +12,8 @@ import {
 } from "@/lib/services/balance-topup";
 import { recordFinancialTransaction } from "@/lib/services/clinic-profit";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
+import { defaultClinicProfitPeriod } from "@/lib/services/clinic-profit-loader";
+import { fetchClinicProfitStatsForPeriod } from "@/lib/services/clinic-stats";
 import { todayISO } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -145,6 +147,17 @@ export async function POST(req: NextRequest) {
         ? await fetchDoctorWalletStats(admin, doctorId)
         : null;
 
+    let profitStats = null;
+    if (isClinic) {
+      const period = defaultClinicProfitPeriod();
+      profitStats = await fetchClinicProfitStatsForPeriod(
+        admin,
+        clinicId,
+        period.from,
+        period.to
+      );
+    }
+
     return NextResponse.json(
       {
         success: true,
@@ -158,6 +171,8 @@ export async function POST(req: NextRequest) {
               withdrawableLimit: doctorWallet.withdrawableLimit,
             }
           : null,
+        profit_stats: profitStats,
+        period: isClinic ? defaultClinicProfitPeriod() : null,
       },
       { headers: NO_STORE_HEADERS }
     );

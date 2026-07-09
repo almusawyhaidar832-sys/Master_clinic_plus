@@ -49,7 +49,7 @@ export default function AdminHomePage() {
 
   const loadStats = useCallback(async (clinic: string) => {
     const period = defaultClinicProfitPeriod();
-    return fetchAlignedClinicProfitStats(clinic, "accountant", period);
+    return fetchAlignedClinicProfitStats(clinic, "admin", period);
   }, []);
 
   useEffect(() => {
@@ -89,6 +89,18 @@ export default function AdminHomePage() {
     onRefresh: () => setRefreshKey((k) => k + 1),
     enabled: !!clinicId,
   });
+
+  useEffect(() => {
+    if (!clinicId) return;
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        setRefreshKey((k) => k + 1);
+      }
+    }, 12_000);
+
+    return () => clearInterval(interval);
+  }, [clinicId]);
 
   useEffect(() => {
     function onFocus() {

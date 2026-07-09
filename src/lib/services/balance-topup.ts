@@ -49,28 +49,33 @@ export async function fetchDoctorBalanceTopupsTotal(
   return sumPositiveAmounts(data);
 }
 
-/** شحن رصيد العيادة لفترة — آخر شحن ناجح فقط (لا يُجمع المحاولات المكررة) */
+/** شحن رصيد العيادة لفترة — آخر شحن ناجح فقط */
 export async function fetchClinicBalanceTopupsForPeriod(
   supabase: SupabaseClient,
   clinicId: string,
   from: string,
   to: string
 ): Promise<number> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("transactions")
-    .select("amount")
+    .select("amount, transaction_date")
     .eq("clinic_id", clinicId)
     .eq("type", BALANCE_TOPUP_CLINIC_TYPE)
     .gt("amount", 0)
     .gte("transaction_date", from)
     .lte("transaction_date", to)
-    .order("transaction_date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("transaction_date", { ascending: false });
 
-  if (!data) return 0;
-  return Math.round(Math.max(0, Number(data.amount ?? 0)) * 100) / 100;
+  if (error || !data?.length) return 0;
+
+  const latestDate = String(data[0].transaction_date ?? "").slice(0, 10);
+  let latestAmount = 0;
+  for (const row of data) {
+    if (String(row.transaction_date ?? "").slice(0, 10) !== latestDate) break;
+    latestAmount = Math.max(latestAmount, Math.max(0, Number(row.amount ?? 0)));
+  }
+
+  return Math.round(latestAmount * 100) / 100;
 }
 
 /** سطور شحن رصيد العيادة ضمن فترة الكشف */

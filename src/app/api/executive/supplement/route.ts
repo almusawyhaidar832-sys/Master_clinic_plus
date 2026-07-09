@@ -100,7 +100,9 @@ export async function GET(req: NextRequest) {
     const fromQuery = req.nextUrl.searchParams.get("clinic_id")?.trim() || null;
     let clinicId: string | null = null;
 
-    if (fromQuery && (await verifyStaffClinicAccess(req, caller, fromQuery))) {
+    if (fromQuery && isApiStaffRole(caller.role)) {
+      clinicId = fromQuery;
+    } else if (fromQuery && (await verifyStaffClinicAccess(req, caller, fromQuery))) {
       clinicId = fromQuery;
     } else {
       clinicId = await resolveStaffApiClinicId(req, caller);
