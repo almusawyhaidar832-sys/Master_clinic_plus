@@ -7,12 +7,6 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import {
-  clinicSharesRepairKey,
-  doctorClinicSharesRepairKey,
-  markSharesRepairDone,
-  needsSharesRepair,
-} from "@/lib/finance/doctor-shares-repair-session";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { useClinicSync } from "@/hooks/useClinicSync";
@@ -376,19 +370,12 @@ export function DoctorDailyCollectionsPanel({
     setLoading(true);
     setError("");
 
-    const repairKey =
-      clinicId && doctorId
-        ? doctorClinicSharesRepairKey(clinicId, doctorId)
-        : "";
-    const needSync = repairKey ? needsSharesRepair(repairKey) : false;
-
     const params = new URLSearchParams({
       date_from: queryFrom,
       date_to: queryEffectiveTo,
       status_filter: "all",
       _t: String(Date.now()),
     });
-    if (needSync) params.set("sync_shares", "1");
 
     try {
       const res = await fetch(`/api/doctor/daily-collections?${params}`, {
@@ -409,10 +396,6 @@ export function DoctorDailyCollectionsPanel({
         return;
       }
 
-      if (needSync && res.ok) {
-        markSharesRepairDone({ clinicId, doctorId });
-      }
-
       setRawResult(reconcileDailyCollectionsResult(json.result ?? null));
       setAppliedFrom(queryFrom);
       setAppliedTo(queryEffectiveTo);
@@ -425,7 +408,7 @@ export function DoctorDailyCollectionsPanel({
         setLoading(false);
       }
     }
-  }, [doctorId, clinicId, queryFrom, queryEffectiveTo, t]);
+  }, [doctorId, queryFrom, queryEffectiveTo, t]);
 
   useEffect(() => {
     if (!doctorId) return;

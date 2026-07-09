@@ -6,7 +6,6 @@ import {
   fetchDailyCollections,
   type CollectionStatusFilter,
 } from "@/lib/ledger/daily-collections";
-import { repairDoctorOperationShares } from "@/lib/services/operation-amount-edit";
 
 export const dynamic = "force-dynamic";
 
@@ -43,17 +42,8 @@ export async function GET(req: NextRequest) {
     )
       ? (rawFilter as CollectionStatusFilter)
       : "all";
-    const syncShares = searchParams.get("sync_shares") === "1";
 
     const admin = getAdminClient();
-    const effectiveTo = dateTo ?? dateFrom;
-
-    if (syncShares) {
-      await repairDoctorOperationShares(admin, profile.clinic_id, {
-        doctorId,
-        ...(dateFrom && effectiveTo ? { dateFrom, dateTo: effectiveTo } : {}),
-      });
-    }
 
     const result = await fetchDailyCollections(admin, profile.clinic_id, {
       dateFrom,

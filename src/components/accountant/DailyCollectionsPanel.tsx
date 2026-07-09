@@ -8,11 +8,6 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import {
-  clinicSharesRepairKey,
-  markSharesRepairDone,
-  needsSharesRepair,
-} from "@/lib/finance/doctor-shares-repair-session";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { useClinicSync } from "@/hooks/useClinicSync";
@@ -619,8 +614,6 @@ export function DailyCollectionsPanel() {
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
   const [rawResult, setRawResult] = useState<DailyCollectionsResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const [repairMsg, setRepairMsg] = useState<string | null>(null);
-  const [repairing, setRepairing] = useState(false);
   const [showDebtPanel, setShowDebtPanel] = useState(false);
   const [appliedFrom, setAppliedFrom] = useState(todayISO());
   const [appliedTo, setAppliedTo] = useState(todayISO());
@@ -663,9 +656,6 @@ export function DailyCollectionsPanel() {
     setLoading(true);
     setShowDebtPanel(false);
     try {
-      const repairKey = clinicSharesRepairKey(clinicId);
-      const needSync = needsSharesRepair(repairKey);
-
       const params = new URLSearchParams({
         date_from: queryFrom,
         date_to: queryEffectiveTo,
@@ -673,7 +663,6 @@ export function DailyCollectionsPanel() {
         _t: String(Date.now()),
       });
       if (queryDoctorId) params.set("doctor_id", queryDoctorId);
-      if (needSync) params.set("sync_shares", "1");
 
       const res = await fetch(`/api/admin/daily-collections?${params}`, {
         credentials: "include",
@@ -690,10 +679,6 @@ export function DailyCollectionsPanel() {
       if (!res.ok) {
         setRawResult(null);
         return;
-      }
-
-      if (needSync && res.ok) {
-        markSharesRepairDone({ clinicId });
       }
 
       setRawResult(reconcileDailyCollectionsResult(json.result ?? null));
@@ -807,43 +792,6 @@ export function DailyCollectionsPanel() {
     setQueryTo(today);
   };
 
-  const repairDoctorShares = useCallback(async () => {
-    if (!clinicId) return;
-    setRepairing(true);
-    setRepairMsg(null);
-    try {
-      const params = new URLSearchParams({
-        date_from: queryFrom,
-        date_to: queryEffectiveTo,
-        status_filter: "all",
-        sync_shares: "1",
-      });
-      if (queryDoctorId) params.set("doctor_id", queryDoctorId);
-
-      const res = await fetch(`/api/admin/daily-collections?${params}`, {
-        credentials: "include",
-        headers: authPortalHeaders(staffPortalForCollections()),
-      });
-      const data = (await res.json()) as {
-        message?: string;
-        error?: string;
-        result?: DailyCollectionsResult;
-      };
-      if (!res.ok) {
-        setRepairMsg(data.error ?? "تعذر إصلاح الحصص");
-        return;
-      }
-      setRawResult(data.result ?? null);
-      setRepairMsg("تم تصحيح الحصص وتحديث الكشف");
-      setAppliedFrom(queryFrom);
-      setAppliedTo(queryEffectiveTo);
-    } catch {
-      setRepairMsg("تعذر الاتصال بالخادم");
-    } finally {
-      setRepairing(false);
-    }
-  }, [clinicId, queryFrom, queryEffectiveTo, queryDoctorId]);
-
   return (
     <div className="space-y-6">
       <div>
@@ -908,24 +856,6 @@ export function DailyCollectionsPanel() {
               )}
               <span className="mr-2">تحديث</span>
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void repairDoctorShares()}
-              disabled={loading || repairing}
-              className="w-full sm:w-auto"
-            >
-              {repairing ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <Stethoscope className="h-4 w-4" />
-              )}
-              <span className="mr-2">
-                {selectedDoctorId
-                  ? "إصلاح حصص الطبيب (كل الجلسات)"
-                  : "إصلاح حصص كل الأطباء"}
-              </span>
-            </Button>
           </div>
         </div>
 
@@ -945,15 +875,6 @@ export function DailyCollectionsPanel() {
             آخر 7 أيام
           </button>
         </div>
-
-        {repairMsg && (
-          <Alert
-            variant={repairMsg.includes("تعذر") ? "error" : "success"}
-            className="mt-4"
-          >
-            {repairMsg}
-          </Alert>
-        )}
 
         <div className="mt-4 flex flex-wrap gap-2">
           {STATUS_TABS.map((tab) => (
