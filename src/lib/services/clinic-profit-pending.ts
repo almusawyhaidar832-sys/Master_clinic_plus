@@ -105,6 +105,18 @@ export function clearPendingClinicTopUp(clinicId: string): void {
   persistPending();
 }
 
+/** يمسح كل الشحنات المعلّقة (بعد حذف الشحنات من السيرفر) */
+export function clearAllPendingClinicTopUps(): void {
+  if (typeof window === "undefined") return;
+  pendingByClinic.clear();
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new CustomEvent(STORAGE_EVENT));
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * يُسجَّل بعد شحن ناجح — آخر شحن فقط (لا يُجمع المحاولات).
  * minNetProfit = صافي الربح المتوقع بعد هذا الشحن (مثلاً 1,156,500).

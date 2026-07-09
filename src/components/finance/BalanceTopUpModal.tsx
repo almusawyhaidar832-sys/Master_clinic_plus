@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { X, Building2, Stethoscope, Wallet, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -10,7 +10,7 @@ import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { notifyBalanceTopUpRefresh } from "@/lib/services/clinic-profit";
-import { registerPendingClinicTopUp } from "@/lib/services/clinic-profit-pending";
+import { registerPendingClinicTopUp, clearPendingClinicTopUp } from "@/lib/services/clinic-profit-pending";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
 import { defaultClinicProfitPeriod } from "@/lib/services/clinic-profit-loader";
 import {
@@ -48,6 +48,7 @@ export function BalanceTopUpModal({
   const [loadingDoctors, setLoadingDoctors] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const submitLockRef = useRef(false);
 
   const reset = useCallback(() => {
     setStep("choose");
@@ -99,7 +100,7 @@ export function BalanceTopUpModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!target) return;
+    if (!target || submitLockRef.current) return;
 
     const parsed = Number(amount.replace(/,/g, ""));
     if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -114,6 +115,7 @@ export function BalanceTopUpModal({
 
     setSaving(true);
     setError("");
+    submitLockRef.current = true;
 
     try {
       const res = await fetch("/api/balance-topup", {
@@ -162,12 +164,17 @@ export function BalanceTopUpModal({
           portal,
           clinicId
         ).catch(() => null);
-        registerPendingClinicTopUp(
-          clinicId,
-          toppedAmount,
-          transactionDate,
-          baseline ?? undefined
-        );
+
+        if (baseline && baseline.balanceTopupsTotal + 0.01 >= toppedAmount) {
+          clearPendingClinicTopUp(clinicId);
+        } else {
+          registerPendingClinicTopUp(
+            clinicId,
+            toppedAmount,
+            transactionDate,
+            baseline ?? undefined
+          );
+        }
       }
 
       notifyBalanceTopUpRefresh({
@@ -211,6 +218,7 @@ export function BalanceTopUpModal({
       setError(t("errServerConnection"));
     } finally {
       setSaving(false);
+      submitLockRef.current = false;
     }
   }
 

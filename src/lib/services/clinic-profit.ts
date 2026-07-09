@@ -53,7 +53,7 @@ export function notifyBalanceTopUpRefresh(options: {
 
   if (options.target === "clinic") {
     notifyClinicSync({
-      topic: ["profit", "financial"],
+      topic: ["profit", "financial", "audit"],
       clinicId: options.clinicId,
       source: "mutation",
       force: true,

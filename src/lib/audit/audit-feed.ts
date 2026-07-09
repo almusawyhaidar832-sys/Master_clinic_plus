@@ -36,6 +36,7 @@ const ENTITY_LABELS: Record<string, string> = {
   patient: "ملف مريض",
   appointment: "موعد",
   expense: "مصروف",
+  financial_transaction: "حركة مالية",
   payroll: "رواتب",
 };
 
@@ -81,6 +82,18 @@ function buildSummary(row: AuditLogRow): string {
     const detail = parts.length ? ` — ${parts.join(" · ")}` : "";
     if (note) return `${action} موعد${detail}: ${note}`;
     return `${action} موعد${detail}`;
+  }
+
+  if (row.entity_type === "financial_transaction") {
+    const after = row.after_data as Record<string, unknown> | null;
+    const target = after?.target === "doctor" ? "طبيب" : "عيادة";
+    const amount = Number(after?.amount ?? row.financial_amount ?? 0);
+    const amountPart =
+      amount > 0 ? ` — ${amount.toLocaleString("ar-IQ")} د.ع` : "";
+    if (row.action === "delete") {
+      return note ?? `حذف شحنات رصيد العيادة${amountPart}`;
+    }
+    return note ?? `شحن رصيد ${target}${amountPart}`;
   }
 
   if (note) return `${action} — ${entity}: ${note}${payrollDetail ? ` (${payrollDetail})` : ""}`;

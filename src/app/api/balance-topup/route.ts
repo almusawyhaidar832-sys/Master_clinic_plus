@@ -114,6 +114,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (result.skipped) {
+      return NextResponse.json(
+        { error: "تم تسجيل هذا الشحن مسبقاً — حدّث الصفحة" },
+        { status: 409 }
+      );
+    }
+
     await writeAuditLog(admin, {
       clinicId,
       entityType: "financial_transaction",
