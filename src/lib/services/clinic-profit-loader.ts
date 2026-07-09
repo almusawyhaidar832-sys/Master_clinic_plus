@@ -7,7 +7,7 @@ import {
   applyClinicTopUpToProfitStats,
   fetchClinicFinancialSnapshotRpc,
 } from "@/lib/services/clinic-stats";
-import { fetchClinicBalanceTopupsAuthoritative } from "@/lib/services/balance-topup";
+import { fetchClinicBalanceTopupsForProfit } from "@/lib/services/balance-topup";
 import { applyOptimisticClinicTopUp } from "@/lib/services/clinic-profit-pending";
 import { applyClinicProfitBroadcast } from "@/lib/services/clinic-profit-broadcast";
 import { currentMonthYear, monthDateRange } from "@/lib/utils";
@@ -26,8 +26,8 @@ async function enrichClinicProfitWithLiveTopups(
   if (typeof window === "undefined") return stats;
 
   const supabase = createClient();
-  const [authoritativeTopups, rpcSnap] = await Promise.all([
-    fetchClinicBalanceTopupsAuthoritative(
+  const [profitTopups, rpcSnap] = await Promise.all([
+    fetchClinicBalanceTopupsForProfit(
       supabase,
       clinicId,
       period.from,
@@ -37,10 +37,10 @@ async function enrichClinicProfitWithLiveTopups(
   ]);
 
   let next = stats;
-  if (authoritativeTopups > next.balanceTopupsTotal + 0.01) {
+  if (profitTopups > next.balanceTopupsTotal + 0.01) {
     next = applyClinicTopUpToProfitStats(
       next,
-      authoritativeTopups - next.balanceTopupsTotal
+      profitTopups - next.balanceTopupsTotal
     );
   }
   if (rpcSnap) {

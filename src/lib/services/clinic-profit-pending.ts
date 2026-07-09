@@ -190,6 +190,15 @@ export function applyOptimisticClinicTopUp(
     return stats;
   }
 
+  /** شحن قديم في المتصفح بعد حذف الحركات — لا نرفع الربح فوق السيرفر */
+  if (
+    pending.minNetProfit > stats.netProfit + 0.01 &&
+    stats.balanceTopupsTotal + 0.01 < pending.minTopups
+  ) {
+    clearPendingClinicTopUp(clinicId);
+    return stats;
+  }
+
   const target: PendingClinicTopUpProfit = {
     minTopups: pending.minTopups,
     minNetProfit:

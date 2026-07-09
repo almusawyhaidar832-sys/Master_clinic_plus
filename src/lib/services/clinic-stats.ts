@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getActiveClinicId } from "@/lib/clinic-context";
-import { fetchClinicBalanceTopupsForPeriod } from "@/lib/services/balance-topup";
+import {
+  fetchClinicBalanceTopupsForPeriod,
+  fetchClinicBalanceTopupsForProfit,
+} from "@/lib/services/balance-topup";
 import { formatCurrency, todayISO } from "@/lib/utils";
 
 export interface TodaySummary {
@@ -376,7 +379,7 @@ export async function ensureBalanceTopupsInProfitStats(
   );
 
   const directTopups = roundProfitMoney(
-    await fetchClinicBalanceTopupsAuthoritative(supabase, clinicId, from, to)
+    await fetchClinicBalanceTopupsForProfit(supabase, clinicId, from, to)
   );
 
   let aligned = stats;

@@ -522,7 +522,7 @@ export async function fetchPaidSalariesBundle(
     to,
     closedMonths,
     false,
-    "cash_date"
+    "payroll_month"
   );
   const assistantProfit =
     assistantTxPaid > 0.01 ? assistantTxPaid : assistantLegacyPaid;

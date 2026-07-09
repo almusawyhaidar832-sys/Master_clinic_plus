@@ -112,8 +112,21 @@ export async function fetchClinicBalanceTopupsFromAudit(
 }
 
 /**
+ * مصدر شحن الرصيد لحساب الربح — حركات transactions فقط (يطابق سكربت 46).
+ * لا نستخدم audit_logs هنا حتى لا يعود شحن محذوف يضيف للربح.
+ */
+export async function fetchClinicBalanceTopupsForProfit(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<number> {
+  return fetchClinicBalanceTopupsForPeriod(supabase, clinicId, from, to);
+}
+
+/**
  * أقوى مصدر لشحن الرصيد — transactions + audit + آخر حركات.
- * يُستخدم على السيرفر والإدارة لضمان تطابق الأجهزة.
+ * للعرض والاستكشاف فقط — لا يُستخدم مباشرة في صافي الربح.
  */
 export async function fetchClinicBalanceTopupsAuthoritative(
   supabase: SupabaseClient,
