@@ -111,6 +111,15 @@ export function applyClinicProfitBroadcast(
   const targetNet = roundMoney(snap.netProfit);
   const targetTopups = roundMoney(snap.balanceTopupsTotal);
 
+  /** ذاكرة قديمة بعد حذف الشحنات — لا نرفع الربح فوق السيرفر */
+  if (
+    serverTopups < 0.01 &&
+    (targetTopups > 0.01 || targetNet > serverNet + 0.01)
+  ) {
+    clearClinicProfitBroadcast();
+    return stats;
+  }
+
   if (
     serverNet + 0.01 >= targetNet &&
     serverTopups + 0.01 >= targetTopups

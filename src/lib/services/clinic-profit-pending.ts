@@ -4,6 +4,7 @@ import {
   type ClinicProfitStats,
   type PendingClinicTopUpProfit,
 } from "@/lib/services/clinic-stats";
+import { clearClinicProfitBroadcast } from "@/lib/services/clinic-profit-broadcast";
 
 type PendingClinicTopUp = PendingClinicTopUpProfit & {
   transactionDate: string;
@@ -144,6 +145,16 @@ export function clearAllPendingClinicTopUps(): void {
   } catch {
     /* ignore */
   }
+}
+
+/** يمسح كل ذاكرة الربح المحلية (شحن معلّق + بث بين التبويبات) */
+export function clearAllClinicProfitClientCaches(clinicId?: string): void {
+  if (clinicId) {
+    clearPendingClinicTopUp(clinicId);
+  } else {
+    clearAllPendingClinicTopUps();
+  }
+  clearClinicProfitBroadcast();
 }
 
 /**

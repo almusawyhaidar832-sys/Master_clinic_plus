@@ -601,19 +601,12 @@ export function applyClinicTopUpToSnapshot<T extends ExecutiveSnapshotCore>(
   };
 }
 
-/** يدمج شحن الرصيد الناقص من لقطة RPC فقط — لا نرفع صافي الربح من RPC */
+/** يدمج أرقام التقرير المُحاذاة — مصدر الربح هو reportAligned فقط (لا نرفع من RPC) */
 export function mergeReportAlignedWithSnapshot<T extends ExecutiveSnapshotCore>(
   snap: T,
   aligned: ReportAlignedProfitMetrics
 ): T {
-  const snapTopups = roundMoney(Number(snap.balance_topups ?? 0));
-  const topupGap = roundMoney(Math.max(0, snapTopups - aligned.balanceTopups));
-  const merged: ReportAlignedProfitMetrics = {
-    ...aligned,
-    balanceTopups: Math.max(aligned.balanceTopups, snapTopups),
-    netProfit: roundMoney(aligned.netProfit + topupGap),
-  };
-  return applyReportAlignedProfitMetrics(snap, merged);
+  return applyReportAlignedProfitMetrics(snap, aligned);
 }
 
 /** محاذاة اللوحة التنفيذية مع الكشف المالي — علاج وكشفيات منفصلان في العرض */

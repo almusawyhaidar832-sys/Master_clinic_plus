@@ -3,9 +3,8 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
 import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 import {
-  alignClinicProfitStatsWithFinancialSnapshot,
   applyClinicTopUpToProfitStats,
-  fetchClinicFinancialSnapshotRpc,
+  type ClinicProfitStats,
 } from "@/lib/services/clinic-stats";
 import { fetchClinicBalanceTopupsForProfit } from "@/lib/services/balance-topup";
 import { applyOptimisticClinicTopUp } from "@/lib/services/clinic-profit-pending";
@@ -17,7 +16,7 @@ export function defaultClinicProfitPeriod(): { from: string; to: string } {
   return monthDateRange(currentMonthYear());
 }
 
-/** يدمج شحن الرصيد مباشرة من قاعدة البيانات — ضروري للإدارة على جهاز مختلف */
+/** يدمج شحن الرصيد من transactions فقط — لا نثق بلقطة RPC (قد تضيف شبحاً) */
 async function enrichClinicProfitWithLiveTopups(
   clinicId: string,
   period: { from: string; to: string },
@@ -26,27 +25,21 @@ async function enrichClinicProfitWithLiveTopups(
   if (typeof window === "undefined") return stats;
 
   const supabase = createClient();
-  const [profitTopups, rpcSnap] = await Promise.all([
-    fetchClinicBalanceTopupsForProfit(
-      supabase,
-      clinicId,
-      period.from,
-      period.to
-    ),
-    fetchClinicFinancialSnapshotRpc(supabase, clinicId, period.from, period.to),
-  ]);
+  const profitTopups = await fetchClinicBalanceTopupsForProfit(
+    supabase,
+    clinicId,
+    period.from,
+    period.to
+  );
 
-  let next = stats;
-  if (profitTopups > next.balanceTopupsTotal + 0.01) {
-    next = applyClinicTopUpToProfitStats(
-      next,
-      profitTopups - next.balanceTopupsTotal
-    );
+  if (profitTopups <= stats.balanceTopupsTotal + 0.01) {
+    return stats;
   }
-  if (rpcSnap) {
-    next = alignClinicProfitStatsWithFinancialSnapshot(next, rpcSnap);
-  }
-  return next;
+
+  return applyClinicTopUpToProfitStats(
+    stats,
+    profitTopups - stats.balanceTopupsTotal
+  );
 }
 
 /**

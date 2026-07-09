@@ -374,32 +374,18 @@ export async function ensureBalanceTopupsInProfitStats(
   to: string,
   stats: ClinicProfitStats
 ): Promise<ClinicProfitStats> {
-  const { fetchClinicBalanceTopupsAuthoritative } = await import(
-    "@/lib/services/balance-topup"
-  );
-
   const directTopups = roundProfitMoney(
     await fetchClinicBalanceTopupsForProfit(supabase, clinicId, from, to)
   );
 
-  let aligned = stats;
-  if (directTopups > aligned.balanceTopupsTotal + 0.01) {
-    aligned = applyClinicTopUpToProfitStats(
-      aligned,
-      directTopups - aligned.balanceTopupsTotal
-    );
+  if (directTopups <= stats.balanceTopupsTotal + 0.01) {
+    return stats;
   }
 
-  if (directTopups > 0.01) {
-    return aligned;
-  }
-
-  const snap = await fetchClinicFinancialSnapshotRpc(supabase, clinicId, from, to);
-  if (!snap || snap.balanceTopups <= aligned.balanceTopupsTotal + 0.01) {
-    return aligned;
-  }
-
-  return alignClinicProfitStatsWithFinancialSnapshot(aligned, snap);
+  return applyClinicTopUpToProfitStats(
+    stats,
+    directTopups - stats.balanceTopupsTotal
+  );
 }
 
 export async function fetchClinicProfitStats(
