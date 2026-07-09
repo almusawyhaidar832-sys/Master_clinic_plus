@@ -4,10 +4,6 @@ import {
   recordFinancialTransaction,
 } from "@/lib/services/clinic-profit";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
-import {
-  assistantPaidClinicShare,
-  assistantPaidDoctorShare,
-} from "@/lib/services/payroll-paid-portions";
 import { todayISO } from "@/lib/utils";
 import type { PayrollRecord, SalarySlip } from "@/types";
 
@@ -313,23 +309,15 @@ export async function recordAssistantDailyEntryPaidTransaction(
     total_salary: entryAmount,
     doctor_share_percentage: doctorSharePct,
   });
-  const paidDoctor = assistantPaidDoctorShare(record);
-  const paidClinic = assistantPaidClinicShare(record);
-  let deltaDoctor = entryBreakdown.doctorShare;
-  let deltaClinic = entryBreakdown.clinicShare;
-
-  const accrued = breakdownAssistantSalary({
-    total_salary: Number(record.total_salary ?? 0),
-    doctor_share_percentage: doctorSharePct,
-  });
-  const maxDoctor = roundMoney(Math.max(0, accrued.doctorShare - paidDoctor));
-  const maxClinic = roundMoney(Math.max(0, accrued.clinicShare - paidClinic));
-  if (deltaDoctor > maxDoctor + 0.01) {
-    deltaDoctor = maxDoctor;
-  }
-  if (deltaClinic > maxClinic + 0.01) {
-    deltaClinic = maxClinic;
-  }
+  // ملاحظة: لا نُقيّد deltaDoctor/deltaClinic بسقف مبني على record.total_salary
+  // هنا — بعد recomputeAssistantPayrollRecord تصبح تلك القيمة "المتبقي بعد
+  // الدفوعات" (net of paid) لا "الإجمالي المُستحَق"، فطرح paidDoctor/paidClinic
+  // منها ثانية كان يُضاعِف الخصم السابق ويُصفّر سقف التأكيدات اللاحقة (كل حركة
+  // تالية تُرفض بصمت: ok:true لكن doctorAmount/clinicAmount = 0). كل حركة أجر
+  // يومي فريدة بمعرّفها (entryId) والتحقق من عدم تكرار تأكيدها يتم مسبقاً في
+  // route.ts عبر isAssistantDailyEntryConfirmed، فمبلغ الحركة نفسه كافٍ كمرجع.
+  const deltaDoctor = entryBreakdown.doctorShare;
+  const deltaClinic = entryBreakdown.clinicShare;
 
   if (deltaDoctor <= 0 && deltaClinic <= 0) {
     return { ok: true, doctorAmount: 0, clinicAmount: 0 };
