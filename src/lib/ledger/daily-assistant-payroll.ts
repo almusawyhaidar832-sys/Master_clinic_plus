@@ -492,38 +492,33 @@ export async function fetchDoctorAssistantPayrollDeductionByDoctor(
 
   const range = dateRange ?? { from: "2000-01-01", to: todayISO() };
 
-  const { data: doctors } = await supabase
-    .from("doctors")
-    .select("id, clinic_id")
-    .in("id", doctorIds);
+  // نحسب من صافي حركات transactions مباشرة (موقّع، بلا فلترة amount < 0)
+  // وليس من تجميع الأسطر — لأن حركات "تصحيح" الموجبة (استرجاع جزء من خصم
+  // سابق بعد حذف/تعديل يوم عمل مساعد) كانت تُحسب كخصم إضافي بالخطأ بدل أن
+  // تُطرح من الخصم الكلي. هذا يطابق get_doctor_wallet_stats في القاعدة تماماً.
+  const { data } = await supabase
+    .from("transactions")
+    .select("doctor_id, amount")
+    .in("doctor_id", doctorIds)
+    .eq("type", "assistant_payroll_doctor")
+    .gte("transaction_date", range.from)
+    .lte("transaction_date", range.to);
 
-  const byClinic = new Map<string, Set<string>>();
-  for (const row of doctors ?? []) {
-    const clinicId = String(row.clinic_id ?? "");
-    const doctorId = String(row.id ?? "");
-    if (!clinicId || !doctorId) continue;
-    const scoped = byClinic.get(clinicId) ?? new Set<string>();
-    scoped.add(doctorId);
-    byClinic.set(clinicId, scoped);
+  const netByDoctor = new Map<string, number>();
+  for (const row of data ?? []) {
+    const doctorId = String(row.doctor_id ?? "");
+    if (!doctorId) continue;
+    netByDoctor.set(
+      doctorId,
+      roundMoney((netByDoctor.get(doctorId) ?? 0) + Number(row.amount ?? 0))
+    );
   }
 
-  for (const [clinicId, clinicDoctorIds] of byClinic) {
-    const lines = await fetchDailyAssistantPayrollLines(supabase, clinicId, {
-      dateFrom: range.from,
-      dateTo: range.to,
-    });
-    const confirmed = lines.filter(
-      (line) => line.statusLabel === "صرف مؤكّد"
-    );
-    const byDoctor = sumAssistantPayrollByDoctor(confirmed);
-    for (const [doctorId, totals] of byDoctor) {
-      if (!clinicDoctorIds.has(doctorId)) continue;
-      if (totals.doctorDeduction <= FINANCIAL_EPSILON) continue;
-      map.set(
-        doctorId,
-        roundMoney((map.get(doctorId) ?? 0) + totals.doctorDeduction)
-      );
-    }
+  for (const doctorId of doctorIds) {
+    const net = netByDoctor.get(doctorId) ?? 0;
+    const deduction = Math.max(0, roundMoney(-net));
+    if (deduction <= FINANCIAL_EPSILON) continue;
+    map.set(doctorId, roundMoney((map.get(doctorId) ?? 0) + deduction));
   }
 
   return map;

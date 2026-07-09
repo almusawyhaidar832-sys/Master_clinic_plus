@@ -75,7 +75,11 @@ export async function fetchOutstandingDebts(
   return debt;
 }
 
-/** حصة العيادة من صرفيات الأطباء (حركات doctor_expense_clinic) */
+/**
+ * حصة العيادة من صرفيات الأطباء (حركات doctor_expense_clinic).
+ * صافي موقّع (بلا فلترة amount < 0) — يطرح حركات التصحيح الموجبة تلقائياً
+ * من الإجمالي بدل تجاهلها.
+ */
 export async function fetchClinicShareExpenseTotal(
   supabase: SupabaseClient,
   clinicId: string
@@ -84,11 +88,8 @@ export async function fetchClinicShareExpenseTotal(
     .from("transactions")
     .select("amount")
     .eq("clinic_id", clinicId)
-    .eq("type", "doctor_expense_clinic")
-    .lt("amount", 0);
+    .eq("type", "doctor_expense_clinic");
 
-  return (data ?? []).reduce(
-    (s, row) => s + Math.abs(Number(row.amount ?? 0)),
-    0
-  );
+  const net = (data ?? []).reduce((s, row) => s + Number(row.amount ?? 0), 0);
+  return Math.max(0, net * -1);
 }

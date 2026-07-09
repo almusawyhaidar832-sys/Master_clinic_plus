@@ -424,7 +424,12 @@ function sumAssistantClinicPaidInPeriod(
   }, 0);
 }
 
-/** حصة عيادة مساعدين من حركات تأكيد فقط — أدق من paid_clinic_share المخزّن */
+/**
+ * حصة عيادة مساعدين من حركات تأكيد فقط — أدق من paid_clinic_share المخزّن.
+ * صافي موقّع (بلا فلترة amount < 0) — يطرح حركات التصحيح الموجبة (استرجاع
+ * جزء من خصم سابق بعد حذف/تعديل يوم عمل مساعد) من الإجمالي تلقائياً بدل
+ * جمعها كتكلفة إضافية بالخطأ.
+ */
 async function sumAssistantClinicPayrollTransactions(
   supabase: SupabaseClient,
   clinicId: string,
@@ -441,12 +446,8 @@ async function sumAssistantClinicPayrollTransactions(
 
   if (error || !data?.length) return 0;
 
-  return roundMoney(
-    data.reduce(
-      (sum, row) => sum + Math.abs(Number(row.amount ?? 0)),
-      0
-    )
-  );
+  const net = data.reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
+  return Math.max(0, roundMoney(-net));
 }
 
 async function fetchPayrollRecordsForProfitLegacy(

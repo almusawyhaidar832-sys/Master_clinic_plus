@@ -197,7 +197,6 @@ export async function fetchClinicProfitStatsForPeriod(
       .select("amount")
       .eq("clinic_id", clinicId)
       .eq("type", "doctor_expense_clinic")
-      .lt("amount", 0)
       .gte("transaction_date", from)
       .lte("transaction_date", to),
     fetchPeriodVisitorDebt(supabase, clinicId, from, to),
@@ -212,11 +211,13 @@ export async function fetchClinicProfitStatsForPeriod(
       .filter((r) => (r.expense_kind ?? "general") !== "doctor_salary")
       .reduce((s, r) => s + Number(r.amount ?? 0), 0)
   );
+  // صافي موقّع (بلا فلترة amount < 0) — يطرح حركات التصحيح الموجبة تلقائياً
+  const clinicExpenseShareNet = (clinicExpenseShareRes.data ?? []).reduce(
+    (s, row) => s + Number(row.amount ?? 0),
+    0
+  );
   const clinicExpenseShare = roundProfitMoney(
-    (clinicExpenseShareRes.data ?? []).reduce(
-      (s, row) => s + Math.abs(Number(row.amount ?? 0)),
-      0
-    )
+    Math.max(0, -clinicExpenseShareNet)
   );
   const totalExpenses = roundProfitMoney(generalExpenses + clinicExpenseShare);
   const outstandingDebts = roundProfitMoney(visitorDebt.debt);

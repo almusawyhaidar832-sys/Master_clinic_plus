@@ -442,17 +442,16 @@ export async function fetchDoctorExpenseDeductionsTotal(
   supabase: SupabaseClient,
   doctorId: string
 ): Promise<number> {
+  // صافي موقّع لكل حركات النوع (بلا فلترة amount < 0) — يطرح أي حركة تصحيح
+  // موجبة (استرجاع جزء من صرفية سابقة) من الخصم الكلي بدل تجاهلها.
   const { data } = await supabase
     .from("transactions")
     .select("amount")
     .eq("doctor_id", doctorId)
-    .eq("type", "doctor_expense_doctor")
-    .lt("amount", 0);
+    .eq("type", "doctor_expense_doctor");
 
-  return (data ?? []).reduce(
-    (s, row) => s + Math.abs(Number(row.amount ?? 0)),
-    0
-  );
+  const net = (data ?? []).reduce((s, row) => s + Number(row.amount ?? 0), 0);
+  return Math.max(0, Math.round(-net * 100) / 100);
 }
 
 /** خصومات مساعدين — نفس الكشف المالي (سطور يومية + شهري متبقي) بدون تكرار transactions */
@@ -723,13 +722,22 @@ function groupWithdrawalsByDoctor(
   return map;
 }
 
+/**
+ * صافي موقّع لكل مجموعة حركات لكل طبيب، مقلوباً لموجب (خصم) مع تصفير أي
+ * قيمة سالبة — يطرح حركات التصحيح الموجبة من الخصم الكلي تلقائياً بدل
+ * تجاهلها (كانت المشكلة السابقة: فلترة amount < 0 قبل هذا التجميع).
+ */
 function groupDeductionsByDoctor(
   rows: { doctor_id: string; amount: number | string }[] | null
 ): Map<string, number> {
-  const map = new Map<string, number>();
+  const net = new Map<string, number>();
   for (const row of rows ?? []) {
     const id = row.doctor_id;
-    map.set(id, (map.get(id) ?? 0) + Math.abs(Number(row.amount ?? 0)));
+    net.set(id, (net.get(id) ?? 0) + Number(row.amount ?? 0));
+  }
+  const map = new Map<string, number>();
+  for (const [id, total] of net) {
+    map.set(id, Math.max(0, Math.round(-total * 100) / 100));
   }
   return map;
 }
@@ -770,8 +778,7 @@ export async function fetchDoctorWalletStatsBatch(
       .from("transactions")
       .select("doctor_id, amount")
       .in("doctor_id", doctorIds)
-      .eq("type", "doctor_expense_doctor")
-      .lt("amount", 0),
+      .eq("type", "doctor_expense_doctor"),
     fetchAssistantPayrollDeductionByDoctor(supabase, doctorIds),
     supabase
       .from("transactions")
