@@ -39,6 +39,12 @@ import {
   StatementExpenseSection,
 } from "@/components/ledger/StatementExpenseRows";
 import { OutstandingDebtPanel } from "@/components/accountant/OutstandingDebtPanel";
+import { DailyCollectionsCacheBanner } from "@/components/ledger/DailyCollectionsCacheBanner";
+import {
+  fetchDailyCollectionsCached,
+  readDailyCollectionsCacheEntry,
+  readLatestDailyCollectionsCacheEntry,
+} from "@/lib/ledger/daily-collections-cache";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { cn, formatCurrency, formatDate, todayISO, addDaysISO } from "@/lib/utils";
@@ -614,6 +620,9 @@ export function DailyCollectionsPanel() {
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
   const [rawResult, setRawResult] = useState<DailyCollectionsResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [offlineView, setOfflineView] = useState(false);
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
   const [showDebtPanel, setShowDebtPanel] = useState(false);
   const [appliedFrom, setAppliedFrom] = useState(todayISO());
   const [appliedTo, setAppliedTo] = useState(todayISO());
@@ -650,48 +659,57 @@ export function DailyCollectionsPanel() {
     if (!clinicId) {
       setRawResult(null);
       setLoading(false);
+      setRefreshing(false);
       return;
     }
     const loadGeneration = ++loadGenerationRef.current;
-    setLoading(true);
-    setShowDebtPanel(false);
-    try {
-      const params = new URLSearchParams({
-        date_from: queryFrom,
-        date_to: queryEffectiveTo,
-        status_filter: "all",
-        _t: String(Date.now()),
-      });
-      if (queryDoctorId) params.set("doctor_id", queryDoctorId);
+    const query = {
+      portal: staffPortalForCollections(),
+      clinicId,
+      doctorId: queryDoctorId,
+      dateFrom: queryFrom,
+      dateTo: queryEffectiveTo,
+    };
+    const hasCachedSnapshot = Boolean(
+      readDailyCollectionsCacheEntry(query) ||
+        readLatestDailyCollectionsCacheEntry({
+          portal: query.portal,
+          clinicId: query.clinicId,
+          doctorId: query.doctorId,
+        })
+    );
 
-      const res = await fetch(`/api/admin/daily-collections?${params}`, {
-        credentials: "include",
-        headers: authPortalHeaders(staffPortalForCollections()),
-        cache: "no-store",
-      });
-      const json = (await res.json()) as {
-        result?: DailyCollectionsResult;
-        error?: string;
-      };
-
-      if (loadGeneration !== loadGenerationRef.current) return;
-
-      if (!res.ok) {
-        setRawResult(null);
-        return;
-      }
-
-      setRawResult(reconcileDailyCollectionsResult(json.result ?? null));
-      setAppliedFrom(queryFrom);
-      setAppliedTo(queryEffectiveTo);
-    } catch {
-      if (loadGeneration !== loadGenerationRef.current) return;
-      setRawResult(null);
-    } finally {
-      if (loadGeneration === loadGenerationRef.current) {
-        setLoading(false);
-      }
+    if (!hasCachedSnapshot) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
     }
+    setShowDebtPanel(false);
+    setOfflineView(false);
+
+    const outcome = await fetchDailyCollectionsCached({
+      query,
+      apiPath: "/api/admin/daily-collections",
+      headers: authPortalHeaders(staffPortalForCollections()),
+      onCacheHit: (result, at) => {
+        if (loadGeneration !== loadGenerationRef.current) return;
+        setRawResult(result);
+        setCachedAt(at);
+        setAppliedFrom(queryFrom);
+        setAppliedTo(queryEffectiveTo);
+        setLoading(false);
+      },
+    });
+
+    if (loadGeneration !== loadGenerationRef.current) return;
+
+    setRawResult(outcome.result);
+    setCachedAt(outcome.cachedAt);
+    setOfflineView(outcome.offline && outcome.source === "cache");
+    setAppliedFrom(queryFrom);
+    setAppliedTo(queryEffectiveTo);
+    setLoading(false);
+    setRefreshing(false);
   }, [clinicId, queryFrom, queryEffectiveTo, queryDoctorId]);
 
   const handleTopUpSuccess = useCallback(
@@ -849,7 +867,7 @@ export function DailyCollectionsPanel() {
               disabled={loading}
               className="w-full sm:w-auto"
             >
-              {loading ? (
+              {loading || refreshing ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
               ) : (
                 <RefreshCw className="h-4 w-4" />
@@ -895,7 +913,15 @@ export function DailyCollectionsPanel() {
         </div>
       </Card>
 
-      {result && !loading && (
+      <DailyCollectionsCacheBanner
+        refreshing={refreshing}
+        offline={offlineView}
+        cachedAt={cachedAt}
+        refreshingLabel="عرض سريع من الذاكرة — جاري التحديث من السيرفر…"
+        offlineLabel="بدون اتصال — آخر تحديث: {time}"
+      />
+
+      {result && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -999,7 +1025,7 @@ export function DailyCollectionsPanel() {
         </Card>
       )}
 
-      {loading && (
+      {loading && !rawResult && (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <div
@@ -1010,21 +1036,21 @@ export function DailyCollectionsPanel() {
         </div>
       )}
 
-      {!loading && result && result.doctors.length === 0 && result.clinicExpenses.length === 0 && result.clinicBalanceTopups.length === 0 && (
+      {result && result.doctors.length === 0 && result.clinicExpenses.length === 0 && result.clinicBalanceTopups.length === 0 && (
         <Alert variant="info">
           لا توجد بيانات مالية لـ {periodLabel}
           {doctorId ? " لهذا الطبيب" : ""}.
         </Alert>
       )}
 
-      {!loading && result && result.doctors.length > 0 && !selectedDoctorId && (
+      {result && result.doctors.length > 0 && !selectedDoctorId && (
         <p className="text-sm font-medium text-slate-muted">
           {result.doctors.length} طبيب في هذه الفترة
         </p>
       )}
 
-      {!loading &&
-        result?.doctors.map((group, index) => (
+      {result &&
+        result.doctors.map((group, index) => (
           <DoctorSection
             key={group.doctorId}
             doctorName={group.doctorName}
@@ -1038,7 +1064,7 @@ export function DailyCollectionsPanel() {
           />
         ))}
 
-      {!loading && result && result.clinicBalanceTopups.length > 0 && (
+      {result && result.clinicBalanceTopups.length > 0 && (
         <Card className="overflow-hidden p-0">
           <div className="border-b border-slate-border bg-surface-card px-5 py-4">
             <p className="flex items-center gap-2 font-bold text-slate-text">
@@ -1057,7 +1083,7 @@ export function DailyCollectionsPanel() {
         </Card>
       )}
 
-      {!loading && result && result.clinicExpenses.length > 0 && (
+      {result && result.clinicExpenses.length > 0 && (
         <Card className="overflow-hidden p-0">
           <div className="border-b border-slate-border bg-surface-card px-5 py-4">
             <p className="flex items-center gap-2 font-bold text-slate-text">

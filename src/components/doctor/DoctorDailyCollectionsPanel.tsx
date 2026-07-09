@@ -10,7 +10,12 @@ import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { useClinicSync } from "@/hooks/useClinicSync";
-import { reconcileDailyCollectionsResult } from "@/lib/services/doctor-wallet-pending";
+import { DailyCollectionsCacheBanner } from "@/components/ledger/DailyCollectionsCacheBanner";
+import {
+  fetchDailyCollectionsCached,
+  readDailyCollectionsCacheEntry,
+  readLatestDailyCollectionsCacheEntry,
+} from "@/lib/ledger/daily-collections-cache";
 import {
   collectionStatusClass,
   collectionStatusLabel,
@@ -320,6 +325,9 @@ export function DoctorDailyCollectionsPanel({
   const [queryTo, setQueryTo] = useState(todayISO());
   const [rawResult, setRawResult] = useState<DailyCollectionsResult | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [offlineView, setOfflineView] = useState(false);
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [appliedFrom, setAppliedFrom] = useState(todayISO());
   const [appliedTo, setAppliedTo] = useState(todayISO());
@@ -360,55 +368,70 @@ export function DoctorDailyCollectionsPanel({
   }, []);
 
   const loadCollections = useCallback(async () => {
-    if (!doctorId) {
+    if (!doctorId || !clinicId) {
       setRawResult(null);
       setLoading(false);
+      setRefreshing(false);
       return;
     }
 
     const loadGeneration = ++loadGenerationRef.current;
-    setLoading(true);
-    setError("");
+    const query = {
+      portal: "doctor" as const,
+      clinicId,
+      doctorId,
+      dateFrom: queryFrom,
+      dateTo: queryEffectiveTo,
+    };
+    const hasCachedSnapshot = Boolean(
+      readDailyCollectionsCacheEntry(query) ||
+        readLatestDailyCollectionsCacheEntry({
+          portal: query.portal,
+          clinicId: query.clinicId,
+          doctorId: query.doctorId,
+        })
+    );
 
-    const params = new URLSearchParams({
-      date_from: queryFrom,
-      date_to: queryEffectiveTo,
-      status_filter: "all",
-      _t: String(Date.now()),
+    if (!hasCachedSnapshot) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
+    setError("");
+    setOfflineView(false);
+
+    const outcome = await fetchDailyCollectionsCached({
+      query,
+      apiPath: "/api/doctor/daily-collections",
+      headers: authPortalHeaders("doctor"),
+      onCacheHit: (result, at) => {
+        if (loadGeneration !== loadGenerationRef.current) return;
+        setRawResult(result);
+        setCachedAt(at);
+        setAppliedFrom(queryFrom);
+        setAppliedTo(queryEffectiveTo);
+        setLoading(false);
+      },
     });
 
-    try {
-      const res = await fetch(`/api/doctor/daily-collections?${params}`, {
-        credentials: "include",
-        headers: authPortalHeaders("doctor"),
-        cache: "no-store",
-      });
-      const json = (await res.json()) as {
-        result?: DailyCollectionsResult;
-        error?: string;
-      };
+    if (loadGeneration !== loadGenerationRef.current) return;
 
-      if (loadGeneration !== loadGenerationRef.current) return;
-
-      if (!res.ok) {
-        setError(json.error ?? t("docDailyLoadFailed"));
-        setRawResult(null);
-        return;
-      }
-
-      setRawResult(reconcileDailyCollectionsResult(json.result ?? null));
-      setAppliedFrom(queryFrom);
-      setAppliedTo(queryEffectiveTo);
-    } catch {
-      if (loadGeneration !== loadGenerationRef.current) return;
-      setError(t("errServerConnection"));
-      setRawResult(null);
-    } finally {
-      if (loadGeneration === loadGenerationRef.current) {
-        setLoading(false);
-      }
+    if (!outcome.result && outcome.source === "none") {
+      setError(
+        outcome.offline ? t("docDailyOfflineCacheMiss") : t("docDailyLoadFailed")
+      );
+    } else {
+      setError("");
     }
-  }, [doctorId, queryFrom, queryEffectiveTo, t]);
+
+    setRawResult(outcome.result);
+    setCachedAt(outcome.cachedAt);
+    setOfflineView(outcome.offline && outcome.source === "cache");
+    setAppliedFrom(queryFrom);
+    setAppliedTo(queryEffectiveTo);
+    setLoading(false);
+    setRefreshing(false);
+  }, [doctorId, clinicId, queryFrom, queryEffectiveTo, t]);
 
   useEffect(() => {
     if (!doctorId) return;
@@ -506,7 +529,7 @@ export function DoctorDailyCollectionsPanel({
             onClick={() => void refreshCollections()}
             disabled={loading}
           >
-            {loading ? (
+            {loading || refreshing ? (
               <RefreshCw className="h-4 w-4 animate-spin" />
             ) : (
               <RefreshCw className="h-4 w-4" />
@@ -534,9 +557,17 @@ export function DoctorDailyCollectionsPanel({
         </div>
       </Card>
 
+      <DailyCollectionsCacheBanner
+        refreshing={refreshing}
+        offline={offlineView}
+        cachedAt={cachedAt}
+        refreshingLabel={t("docDailyCacheRefreshing")}
+        offlineLabel={t("docDailyCacheOffline")}
+      />
+
       {error && <Alert variant="error">{error}</Alert>}
 
-      {result && !loading && mySummary && (
+      {result && mySummary && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -632,7 +663,7 @@ export function DoctorDailyCollectionsPanel({
         </Card>
       )}
 
-      {loading && (
+      {loading && !rawResult && (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <div
@@ -643,13 +674,13 @@ export function DoctorDailyCollectionsPanel({
         </div>
       )}
 
-      {!loading && result && !mySummary?.rows.length && !mySummary?.assistantPayroll.length && !mySummary?.withdrawals.length && !mySummary?.balanceTopups.length && !mySummary?.doctorExpenses.length && (
+      {result && !mySummary?.rows.length && !mySummary?.assistantPayroll.length && !mySummary?.withdrawals.length && !mySummary?.balanceTopups.length && !mySummary?.doctorExpenses.length && (
         <Alert variant="info">
           {t("docDailyNoData")} {periodLabel}
         </Alert>
       )}
 
-      {!loading && mySummary && (mySummary.rows.length > 0 || mySummary.assistantPayroll.length > 0 || mySummary.withdrawals.length > 0 || mySummary.balanceTopups.length > 0 || mySummary.doctorExpenses.length > 0) && (
+      {mySummary && (mySummary.rows.length > 0 || mySummary.assistantPayroll.length > 0 || mySummary.withdrawals.length > 0 || mySummary.balanceTopups.length > 0 || mySummary.doctorExpenses.length > 0) && (
         <Card className="overflow-hidden p-0">
           <div className="border-b border-slate-border bg-surface-card px-4 py-3">
             <p className="flex items-center gap-2 text-sm font-bold text-slate-text">
