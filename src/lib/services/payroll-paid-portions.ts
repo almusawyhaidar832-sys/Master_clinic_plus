@@ -114,7 +114,12 @@ export function assistantPendingDoctorShare(
     return assistantPendingShares(record, mode.doctorSharePercentage).doctor;
   }
   if (mode?.dailyWage) {
-    return roundMoney(Number(record.doctor_share_amount ?? 0));
+    return roundMoney(
+      Math.max(
+        0,
+        Number(record.doctor_share_amount ?? 0) - assistantPaidDoctorShare(record)
+      )
+    );
   }
   return roundMoney(
     Math.max(
@@ -133,7 +138,12 @@ export function assistantPendingClinicShare(
     return assistantPendingShares(record, mode.doctorSharePercentage).clinic;
   }
   if (mode?.dailyWage) {
-    return roundMoney(Number(record.clinic_share_amount ?? 0));
+    return roundMoney(
+      Math.max(
+        0,
+        Number(record.clinic_share_amount ?? 0) - assistantPaidClinicShare(record)
+      )
+    );
   }
   return roundMoney(
     Math.max(
@@ -149,7 +159,12 @@ export function assistantPendingTotalSalary(
 ): number {
   if (!record) return 0;
   if (mode?.dailyWage) {
-    return roundMoney(Number(record.total_salary ?? 0));
+    return roundMoney(
+      Math.max(
+        0,
+        Number(record.total_salary ?? 0) - assistantPaidTotalSalary(record)
+      )
+    );
   }
   return roundMoney(
     Math.max(

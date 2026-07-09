@@ -82,6 +82,10 @@ import {
   payrollEntryFormSubtitle,
 } from "@/lib/services/salary-entry-display";
 import { ChevronDown } from "lucide-react";
+import {
+  assistantPayrollStatusLabel,
+  staffSlipPayrollStatusLabel,
+} from "@/lib/services/payroll-paid-sync";
 
 interface DoctorOption {
   id: string;
@@ -247,6 +251,7 @@ export default function SalaryPage() {
   const [activeAssistantsCount, setActiveAssistantsCount] = useState(0);
   const [generatingPayroll, setGeneratingPayroll] = useState(false);
   const [confirmingPayrollId, setConfirmingPayrollId] = useState<string | null>(null);
+  const [confirmingEntryId, setConfirmingEntryId] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<PayrollPerson | null>(null);
   const [editingPerson, setEditingPerson] = useState<PayrollPerson | null>(null);
@@ -1194,7 +1199,7 @@ export default function SalaryPage() {
 
   async function generateSlip() {
     if (isAssistantSelected) {
-      showMessage("قسائم المساعدين تُدار عبر «توليد رواتب الشهر»", false);
+      showMessage("مساعدو الأطباء: سجّل الحركات ثم «تأكيد الصرف» من بطاقة المساعد", false);
       return;
     }
     if ((!selectedStaff && !isDoctorSalarySelected) || !clinicId) {
@@ -1337,6 +1342,7 @@ export default function SalaryPage() {
         clinicId: clinicId ?? undefined,
         doctorId: result.doctor_id,
       });
+      notifyClinicProfitRefresh();
       const deducted = result.doctor_deducted ?? 0;
       const clinicPart = result.clinic_deducted ?? 0;
       showMessage(
@@ -1345,9 +1351,37 @@ export default function SalaryPage() {
           : "تم تأكيد الصرف — لا حصة للطبيب (النسبة 0%)",
         true
       );
-      void loadPayrollMonth();
+      await Promise.all([loadPayrollMonth(), loadEntries()]);
     } finally {
       setConfirmingPayrollId(null);
+    }
+  }
+
+  async function markAssistantEntryPaid(entryId: string) {
+    if (confirmingEntryId || confirmingPayrollId) return;
+    setConfirmingEntryId(entryId);
+    try {
+      const result = await confirmPayrollViaApi("assistant_entry", entryId);
+      if (!result.ok) {
+        showMessage(`تعذر تأكيد صرف الأجر: ${result.error}`, false);
+        return;
+      }
+      notifyPayrollConfirmRefresh({
+        clinicId: clinicId ?? undefined,
+        doctorId: result.doctor_id,
+      });
+      notifyClinicProfitRefresh();
+      const deducted = result.doctor_deducted ?? 0;
+      const clinicPart = result.clinic_deducted ?? 0;
+      showMessage(
+        deducted > 0 || clinicPart > 0
+          ? `تم تأكيد صرف اليوم — خُصم ${formatCurrency(deducted)} من الطبيب${clinicPart > 0 ? ` و${formatCurrency(clinicPart)} من ربح العيادة` : ""}`
+          : "تم تأكيد صرف اليوم",
+        true
+      );
+      await Promise.all([loadPayrollMonth(), loadEntries()]);
+    } finally {
+      setConfirmingEntryId(null);
     }
   }
 
@@ -1575,8 +1609,7 @@ export default function SalaryPage() {
             شهر مُغلق؟ اختره من القائمة للمراجعة فقط (أرشيف).
           </li>
           <li>
-            <strong>توليد رواتب الشهر:</strong> مساعدو الأطباء يُقسَّم راتبهم ·
-            موظفو الخدمات يُصرف راتبهم كاملاً من مصاريف العيادة (لا خصم من الأطباء).
+            <strong>توليد رواتب الشهر:</strong> لموظفي العيادة والأطباء · مساعدو الأطباء يُؤكَّد صرفهم من بطاقة المساعد مباشرة
           </li>
         </ul>
       </Alert>
@@ -1816,7 +1849,7 @@ export default function SalaryPage() {
               </div>
             )}
         <p className="mb-3 px-1 text-xs text-slate-muted">
-          <strong>مساعد طبيب:</strong> يُقسّم بين الطبيب والعيادة ·{" "}
+          <strong>مساعد طبيب:</strong> يُؤكَّد صرفه من بطاقة المساعد (ليس من هذا الجدول) ·{" "}
           <strong>موظف عيادة:</strong> راتبه كامل من مصاريف العيادة ·{" "}
           <strong>الخصم/المكافأة:</strong> لهذا الشهر فقط — الشهر الجديد يبدأ بالراتب الأساسي
         </p>
@@ -1889,57 +1922,61 @@ export default function SalaryPage() {
                         <td className="py-2 text-xs">
                           {isAssistant ? (
                             record ? (
-                              <div className="flex flex-wrap items-center gap-2">
+                              <div className="text-xs">
                                 <span>
-                                  {record.status === "paid" ? "مدفوع" : "مُولَّد"}
+                                  {assistantPayrollStatusLabel(
+                                    record,
+                                    person.compensation_mode === "daily_wage"
+                                  )}
                                 </span>
-                                {!boardLocked && (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={
-                                        record.status === "paid" ||
-                                        Boolean(confirmingPayrollId)
-                                      }
-                                      onClick={() =>
-                                        markAssistantPayrollPaid(record.id)
-                                      }
-                                    >
-                                      {confirmingPayrollId === record.id
-                                        ? "جاري التأكيد..."
-                                        : "تأكيد الصرف"}
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="border-amber-300 text-amber-800 hover:bg-amber-50"
-                                      disabled={record.status !== "paid"}
-                                      onClick={() =>
-                                        unmarkAssistantPayrollPaid(record.id)
-                                      }
-                                    >
-                                      إلغاء الصرف
-                                    </Button>
-                                  </>
+                                {(record.status === "paid" ||
+                                  assistantPaidClinicShare(record) > 0 ||
+                                  assistantPaidDoctorShare(record) > 0) && (
+                                  <span className="mt-0.5 block text-emerald-700">
+                                    ✓ دُفع — لا يُعاد التأكيد
+                                  </span>
+                                )}
+                                {record.status !== "paid" &&
+                                  assistantPaidClinicShare(record) <= 0 &&
+                                  assistantPaidDoctorShare(record) <= 0 && (
+                                  <span className="mt-0.5 block text-slate-muted">
+                                    يُؤكَّد من بطاقة المساعد أعلاه
+                                  </span>
                                 )}
                               </div>
                             ) : (
-                              <span className="text-amber-700">لم يُولَّد</span>
+                              <span className="text-amber-700">لم يُسجَّل بعد</span>
                             )
                           ) : slip ? (
                             <div className="flex flex-wrap items-center gap-2">
                               <span>
-                                {slip.status === "paid" ? "مدفوع" : "مسودة"}
+                                {staffSlipPayrollStatusLabel(
+                                  slip,
+                                  person.compensation_mode === "daily_wage"
+                                )}
                               </span>
-                              {!boardLocked && (
+                              {slipIsFullyPaid(slip, {
+                                dailyWage: person.compensation_mode === "daily_wage",
+                              }) && (
+                                <span className="text-emerald-700">
+                                  ✓ لا يُعاد التأكيد
+                                </span>
+                              )}
+                              {!boardLocked &&
+                                !slipIsFullyPaid(slip, {
+                                  dailyWage:
+                                    person.compensation_mode === "daily_wage",
+                                }) && (
                                 <>
                                   <Button
                                     size="sm"
                                     variant="outline"
                                     disabled={
-                                      slip.status === "paid" ||
-                                      Boolean(confirmingPayrollId)
+                                      slipIsFullyPaid(slip, {
+                                        dailyWage:
+                                          person.compensation_mode ===
+                                          "daily_wage",
+                                      }) || Boolean(confirmingPayrollId)
                                     }
                                     onClick={() => markSlipPaid(slip.id)}
                                   >
@@ -2183,8 +2220,8 @@ export default function SalaryPage() {
                   ? "موظف بأجر يومي — سجّل كل يوم من النموذج، ثم «توليد رواتب الشهر» و«تأكيد الصرف»."
                   : "الراتب كاملاً من مصاريف تشغيل العيادة — لا يُخصم من أي طبيب."
                 : assistantCompMode === "daily_wage"
-                  ? "مساعد بأجر يومي — سجّل كل يوم من النموذج، يُجمع الشهر ثم يُخصم عند التوليد والتأكيد."
-                  : "يُقسّم الراتب بين الطبيب والعيادة حسب النسبة عند توليد الرواتب."}
+                  ? "مساعد بأجر يومي — سجّل كل يوم ثم «تأكيد صرف» من بطاقة المساعد (يخصم فوراً من الطبيب والعيادة)."
+                  : "يُقسّم الراتب بين الطبيب والعيادة — يُؤكَّد الصرف من بطاقة المساعد فقط."}
             </p>
 
             <Button type="submit" size="sm" disabled={addingStaff}>
@@ -2209,7 +2246,7 @@ export default function SalaryPage() {
               <p className="text-xs text-teal-800">
                 {isDailyStaffSelected
                   ? "لكل يوم عمل: اختر «أجر يومي»، اكتب المبلغ، وحدّد تاريخ ذلك اليوم. ثم «توليد رواتب الشهر» و«تأكيد الصرف»."
-                  : "لكل يوم عمل: اختر «أجر يومي»، اكتب المبلغ (مثلاً 15,000 أو 10,000)، وحدّد تاريخ ذلك اليوم."}
+                  : "لكل يوم عمل: سجّل «أجر يومي» ثم «تأكيد صرف» من جدول الحركات أو من بطاقة المساعد — يُخصم فوراً ويظهر في رواتب الشهر."}
               </p>
             )}
           </CardHeader>
@@ -2445,6 +2482,11 @@ export default function SalaryPage() {
                     <span>{formatCurrency(selectedAssistantRecord.doctor_share_amount)}</span>
                   </div>
                   <hr className="border-slate-border" />
+                  <p className="text-xs text-teal-800">
+                    {isDailyAssistantSelected
+                      ? "أجر يومي: أكّد كل يوم من جدول الحركات، أو المتبقي دفعة واحدة أدناه — يظهر تلقائياً في «رواتب الشهر»."
+                      : "تأكيد الصرف من هنا يخصم فوراً من الطبيب والعيادة — يظهر مؤكداً في «رواتب الشهر» بدون تأكيد ثانٍ."}
+                  </p>
                   <p className="text-xs text-slate-muted">
                     الحالة:{" "}
                     {slipFullySettled && slipPendingAmount <= 0
@@ -2488,8 +2530,11 @@ export default function SalaryPage() {
               ) : (
                 <div className="space-y-3">
                   <p className="rounded-lg border border-dashed border-slate-border px-4 py-4 text-center text-sm text-slate-muted">
-                    لا يوجد سجل راتب لهذا المساعد في {formatMonthYearAr(workMonth)}
+                    {entries.length > 0
+                      ? `لا يوجد سجل مجمّع بعد — يُنشأ تلقائياً عند تسجيل الحركات. يمكنك تأكيد الصرف من جدول الحركات أدناه.`
+                      : `لا يوجد سجل راتب لهذا المساعد في ${formatMonthYearAr(workMonth)} — سجّل حركة أجر أولاً.`}
                   </p>
+                  {entries.length === 0 && (
                   <Button
                     type="button"
                     disabled={generatingPayroll || boardLocked || !clinicId}
@@ -2498,6 +2543,7 @@ export default function SalaryPage() {
                   >
                     {generatingPayroll ? "جاري التوليد..." : "توليد رواتب الشهر"}
                   </Button>
+                  )}
                 </div>
               )}
             </>
@@ -2614,6 +2660,11 @@ export default function SalaryPage() {
               const typeLabel =
                 entryTypeLabels.find((t) => t.value === e.entry_type)?.label ??
                 e.entry_type;
+              const canConfirmDailyAssistantEntry =
+                isAssistantSelected &&
+                isDailyAssistantSelected &&
+                e.entry_type === "daily_wage" &&
+                !e.payroll_confirmed;
               return (
                 <li
                   key={e.id}
@@ -2621,6 +2672,11 @@ export default function SalaryPage() {
                 >
                   <span className="min-w-0 flex-1">
                     {typeLabel} — {e.entry_date}
+                    {e.payroll_confirmed ? (
+                      <span className="ms-2 text-xs text-emerald-700">
+                        مُؤكَّد ✓
+                      </span>
+                    ) : null}
                     {e.notes_ar ? (
                       <span className="block text-xs text-slate-muted">
                         {isSalaryReasonRequired(e.entry_type)
@@ -2637,14 +2693,28 @@ export default function SalaryPage() {
                       {formatCurrency(e.amount)}
                     </span>
                     {!boardLocked && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setEditingEntry(e)}
-                      >
-                        تعديل
-                      </Button>
+                      <>
+                        {canConfirmDailyAssistantEntry && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={Boolean(confirmingEntryId)}
+                            onClick={() => markAssistantEntryPaid(e.id)}
+                          >
+                            {confirmingEntryId === e.id
+                              ? "جاري التأكيد..."
+                              : "تأكيد صرف"}
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditingEntry(e)}
+                        >
+                          تعديل
+                        </Button>
+                      </>
                     )}
                   </div>
                 </li>

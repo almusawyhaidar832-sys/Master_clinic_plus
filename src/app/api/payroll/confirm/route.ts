@@ -4,11 +4,14 @@ import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { isMonthClosed } from "@/lib/services/salary-payroll";
 import {
+  isAssistantDailyEntryConfirmed,
+  recordAssistantDailyEntryPaidTransaction,
   recordAssistantPayrollPaidTransaction,
   recordDoctorSalarySlipPaidTransaction,
   recordStaffSlipPaidTransaction,
 } from "@/lib/services/payroll-financial";
 import {
+  ensureAssistantPayrollRecordDraft,
   recomputeAssistantPayrollRecord,
   syncStaffSalarySlipDraft,
 } from "@/lib/services/salary-entries-server";
@@ -47,18 +50,219 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const kind = body.kind as "slip" | "assistant";
+    const kind = body.kind as "slip" | "assistant" | "assistant_entry";
     const id = String(body.id ?? "");
 
-    if (!id || !["slip", "assistant"].includes(kind)) {
+    if (!id || !["slip", "assistant", "assistant_entry"].includes(kind)) {
       return NextResponse.json(
-        { error: "kind (slip|assistant) و id مطلوبان" },
+        { error: "kind (slip|assistant|assistant_entry) و id مطلوبان" },
         { status: 400 }
       );
     }
 
     const admin = getAdminClient();
     const paidAt = new Date().toISOString();
+
+    if (kind === "assistant_entry") {
+      const { data: entry, error: entryErr } = await admin
+        .from("salary_entries")
+        .select("*")
+        .eq("id", id)
+        .eq("clinic_id", clinicId)
+        .maybeSingle();
+
+      if (entryErr || !entry) {
+        return NextResponse.json({ error: "حركة الراتب غير موجودة" }, { status: 404 });
+      }
+
+      const assistantId = String(entry.assistant_id ?? "").trim();
+      if (!assistantId) {
+        return NextResponse.json(
+          { error: "هذه الحركة ليست لمساعد طبيب" },
+          { status: 400 }
+        );
+      }
+
+      if (entry.entry_type !== "daily_wage") {
+        return NextResponse.json(
+          { error: "تأكيد الحركة الفردية متاح لأجر يومي فقط" },
+          { status: 400 }
+        );
+      }
+
+      const entryMonth = String(entry.entry_date ?? "").slice(0, 7);
+      if (!entryMonth) {
+        return NextResponse.json({ error: "تاريخ الحركة غير صالح" }, { status: 400 });
+      }
+
+      if (await isMonthClosed(admin, clinicId, entryMonth)) {
+        return NextResponse.json(
+          { error: "الشهر مُغلق — لا يمكن تأكيد الصرف" },
+          { status: 400 }
+        );
+      }
+
+      if (await isAssistantDailyEntryConfirmed(admin, clinicId, id)) {
+        return NextResponse.json({ success: true, already_paid: true });
+      }
+
+      const ensured = await ensureAssistantPayrollRecordDraft(
+        admin,
+        clinicId,
+        assistantId,
+        entryMonth
+      );
+      if (ensured.error && !ensured.record) {
+        return NextResponse.json({ error: ensured.error }, { status: 400 });
+      }
+
+      const { record: freshRecord, error: recomputeErr, dailyWage } =
+        await recomputeAssistantPayrollRecord(
+          admin,
+          clinicId,
+          assistantId,
+          entryMonth
+        );
+
+      if (recomputeErr && !freshRecord) {
+        return NextResponse.json({ error: recomputeErr }, { status: 400 });
+      }
+
+      if (!freshRecord) {
+        return NextResponse.json(
+          { error: "لا يوجد سجل راتب للمساعد في هذا الشهر" },
+          { status: 404 }
+        );
+      }
+
+      const activeRecord = freshRecord as PayrollRecord;
+      const { data: assistantRow } = await admin
+        .from("assistants")
+        .select("doctor_share_percentage, full_name_ar")
+        .eq("id", assistantId)
+        .eq("clinic_id", clinicId)
+        .maybeSingle();
+
+      const doctorSharePct = Number(
+        assistantRow?.doctor_share_percentage ??
+          activeRecord.doctor_share_percentage ??
+          0
+      );
+
+      const tx = await recordAssistantDailyEntryPaidTransaction(
+        admin,
+        clinicId,
+        activeRecord,
+        id,
+        Number(entry.amount ?? 0),
+        doctorSharePct,
+        String(assistantRow?.full_name_ar ?? activeRecord.assistant_name_ar ?? "مساعد"),
+        entryMonth
+      );
+
+      if (!tx.ok) {
+        return NextResponse.json(
+          { error: `تعذر خصم حصة الطبيب/العيادة: ${tx.error}` },
+          { status: 500 }
+        );
+      }
+
+      const newPaidDoctor = roundMoney(
+        Number(activeRecord.paid_doctor_share_amount ?? 0) + (tx.doctorAmount ?? 0)
+      );
+      const newPaidClinic = roundMoney(
+        Number(activeRecord.paid_clinic_share_amount ?? 0) + (tx.clinicAmount ?? 0)
+      );
+      const newPaidTotal = roundMoney(
+        Number(activeRecord.paid_total_salary ?? 0) +
+          (tx.doctorAmount ?? 0) +
+          (tx.clinicAmount ?? 0)
+      );
+
+      const { error: paidUpdateErr } = await admin
+        .from("payroll_records")
+        .update({
+          paid_doctor_share_amount: newPaidDoctor,
+          paid_clinic_share_amount: newPaidClinic,
+          paid_total_salary: newPaidTotal,
+          paid_at: paidAt,
+        })
+        .eq("id", activeRecord.id);
+
+      if (paidUpdateErr) {
+        return NextResponse.json({ error: paidUpdateErr.message }, { status: 500 });
+      }
+
+      const resolvedRecord = {
+        ...activeRecord,
+        paid_doctor_share_amount: newPaidDoctor,
+        paid_clinic_share_amount: newPaidClinic,
+        paid_total_salary: newPaidTotal,
+      } as PayrollRecord;
+      const pendingMode = {
+        dailyWage: dailyWage ?? true,
+        doctorSharePercentage: doctorSharePct,
+      };
+      const fullyPaid = assistantIsFullyPaid(resolvedRecord, pendingMode);
+
+      const { error: statusErr } = await admin
+        .from("payroll_records")
+        .update({ status: fullyPaid ? "paid" : "generated" })
+        .eq("id", activeRecord.id);
+
+      if (statusErr) {
+        return NextResponse.json({ error: statusErr.message }, { status: 500 });
+      }
+
+      await writeAuditLog(admin, {
+        clinicId,
+        entityType: "payroll",
+        entityId: activeRecord.id,
+        action: "update",
+        changedBy: caller.id,
+        actorName: caller.full_name ?? null,
+        financialAmount: -Math.abs(tx.clinicAmount ?? 0),
+        after: {
+          kind: "assistant_entry",
+          entry_id: id,
+          status: fullyPaid ? "paid" : "generated",
+          doctor_id: activeRecord.doctor_id ?? null,
+          month_year: entryMonth,
+          confirmed_doctor: tx.doctorAmount ?? 0,
+          confirmed_clinic: tx.clinicAmount ?? 0,
+        },
+        note: "تأكيد صرف أجر يومي لمساعد",
+      });
+
+      const doctorId = activeRecord.doctor_id?.trim();
+      if (doctorId) {
+        void import("@/lib/notifications/server")
+          .then(({ notifyDoctorAssistantPayrollConfirmed }) =>
+            notifyDoctorAssistantPayrollConfirmed({
+              clinicId,
+              doctorId,
+              assistantName: String(
+                assistantRow?.full_name_ar ?? activeRecord.assistant_name_ar ?? "مساعد"
+              ),
+              monthYear: entryMonth,
+              doctorDeducted: tx.doctorAmount ?? 0,
+              clinicDeducted: tx.clinicAmount ?? 0,
+            })
+          )
+          .catch((err) => {
+            console.error("[payroll-confirm] doctor notify failed:", err);
+          });
+      }
+
+      return NextResponse.json({
+        success: true,
+        kind: "assistant_entry",
+        doctor_id: activeRecord.doctor_id ?? null,
+        doctor_deducted: tx.doctorAmount ?? 0,
+        clinic_deducted: tx.clinicAmount ?? 0,
+        profit_updated: true,
+      });
+    }
 
     if (kind === "slip") {
       const { data: slip, error: fetchErr } = await admin
@@ -297,9 +501,8 @@ export async function POST(req: NextRequest) {
     );
     const newPaidTotal = roundMoney(
       Number(activeRecord.paid_total_salary ?? 0) +
-        (dailyWageResolved
-          ? Number(activeRecord.total_salary ?? 0)
-          : (tx.doctorAmount ?? 0) + (tx.clinicAmount ?? 0))
+        (tx.doctorAmount ?? 0) +
+        (tx.clinicAmount ?? 0)
     );
 
     const { error: paidUpdateErr } = await admin

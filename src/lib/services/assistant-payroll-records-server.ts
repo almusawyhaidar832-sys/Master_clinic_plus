@@ -4,6 +4,7 @@ import {
   type GenerateMonthlyPayrollResult,
 } from "@/lib/services/assistant-payroll-records";
 import { ensureAccountantStaffRows } from "@/lib/services/accountant-payroll-sync";
+import { syncPayrollMonthPaidStatus } from "@/lib/services/payroll-paid-sync";
 import type { PayrollRecord, SalarySlip } from "@/types";
 
 /** توليد رواتب الشهر لجميع العاملين — عبر service_role */
@@ -38,8 +39,8 @@ export async function fetchPayrollMonthAdmin(
       .order("created_at", { ascending: false }),
   ]);
 
-  return {
-    records: (recordsRes.data as PayrollRecord[]) ?? [],
-    slips: (slipsRes.data as SalarySlip[]) ?? [],
-  };
+  const records = (recordsRes.data as PayrollRecord[]) ?? [];
+  const slips = (slipsRes.data as SalarySlip[]) ?? [];
+
+  return syncPayrollMonthPaidStatus(admin, clinicId, monthYear, records, slips);
 }

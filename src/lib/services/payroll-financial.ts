@@ -4,6 +4,10 @@ import {
   recordFinancialTransaction,
 } from "@/lib/services/clinic-profit";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
+import {
+  assistantPaidClinicShare,
+  assistantPaidDoctorShare,
+} from "@/lib/services/payroll-paid-portions";
 import { todayISO } from "@/lib/utils";
 import type { PayrollRecord, SalarySlip } from "@/types";
 
@@ -239,6 +243,123 @@ export async function recordAssistantPayrollPaidTransaction(
       transactionDate: todayISO(),
       referenceType: "payroll_record_clinic_paid",
       referenceId: batchReferenceId,
+    });
+    if (!clinicTx.ok) {
+      return { ok: false, error: clinicTx.error };
+    }
+  }
+
+  return {
+    ok: true,
+    doctorAmount: deltaDoctor,
+    clinicAmount: deltaClinic,
+  };
+}
+
+export const ASSISTANT_ENTRY_DOCTOR_REF = "salary_entry_assistant_doctor";
+export const ASSISTANT_ENTRY_CLINIC_REF = "salary_entry_assistant_clinic";
+
+export async function isAssistantDailyEntryConfirmed(
+  admin: SupabaseClient,
+  clinicId: string,
+  entryId: string
+): Promise<boolean> {
+  const { rows } = await listPayrollConfirmTransactions(
+    admin,
+    clinicId,
+    ASSISTANT_ENTRY_CLINIC_REF,
+    entryId
+  );
+  return rows.length > 0;
+}
+
+export async function listConfirmedAssistantDailyEntryIds(
+  admin: SupabaseClient,
+  clinicId: string,
+  entryIds: string[]
+): Promise<Set<string>> {
+  if (entryIds.length === 0) return new Set();
+  const { data, error } = await admin
+    .from("transactions")
+    .select("reference_id")
+    .eq("clinic_id", clinicId)
+    .eq("reference_type", ASSISTANT_ENTRY_CLINIC_REF)
+    .in("reference_id", entryIds);
+
+  if (error) {
+    return new Set();
+  }
+
+  return new Set((data ?? []).map((row) => String(row.reference_id)));
+}
+
+/** تأكيد صرف أجر يومي واحد لمساعد — مرجع الحركة = معرّف الحركة */
+export async function recordAssistantDailyEntryPaidTransaction(
+  admin: SupabaseClient,
+  clinicId: string,
+  record: PayrollRecord,
+  entryId: string,
+  entryAmount: number,
+  doctorSharePct: number,
+  assistantNameAr: string,
+  monthYear: string
+): Promise<{
+  ok: boolean;
+  error?: string;
+  doctorAmount?: number;
+  clinicAmount?: number;
+}> {
+  const entryBreakdown = breakdownAssistantSalary({
+    total_salary: entryAmount,
+    doctor_share_percentage: doctorSharePct,
+  });
+  const paidDoctor = assistantPaidDoctorShare(record);
+  const paidClinic = assistantPaidClinicShare(record);
+  let deltaDoctor = entryBreakdown.doctorShare;
+  let deltaClinic = entryBreakdown.clinicShare;
+
+  const accrued = breakdownAssistantSalary({
+    total_salary: Number(record.total_salary ?? 0),
+    doctor_share_percentage: doctorSharePct,
+  });
+  const maxDoctor = roundMoney(Math.max(0, accrued.doctorShare - paidDoctor));
+  const maxClinic = roundMoney(Math.max(0, accrued.clinicShare - paidClinic));
+  if (deltaDoctor > maxDoctor + 0.01) {
+    deltaDoctor = maxDoctor;
+  }
+  if (deltaClinic > maxClinic + 0.01) {
+    deltaClinic = maxClinic;
+  }
+
+  if (deltaDoctor <= 0 && deltaClinic <= 0) {
+    return { ok: true, doctorAmount: 0, clinicAmount: 0 };
+  }
+
+  if (deltaDoctor > 0) {
+    const doctorTx = await recordFinancialTransaction(admin, {
+      clinicId,
+      amount: -deltaDoctor,
+      type: "assistant_payroll_doctor",
+      descriptionAr: `صرف أجر يومي — مساعد ${assistantNameAr} — ${monthYear}`,
+      transactionDate: todayISO(),
+      doctorId: record.doctor_id,
+      referenceType: ASSISTANT_ENTRY_DOCTOR_REF,
+      referenceId: entryId,
+    });
+    if (!doctorTx.ok) {
+      return { ok: false, error: doctorTx.error };
+    }
+  }
+
+  if (deltaClinic > 0) {
+    const clinicTx = await recordFinancialTransaction(admin, {
+      clinicId,
+      amount: -deltaClinic,
+      type: "assistant_payroll_clinic",
+      descriptionAr: `حصة عيادة — أجر يومي مساعد ${assistantNameAr} — ${monthYear}`,
+      transactionDate: todayISO(),
+      referenceType: ASSISTANT_ENTRY_CLINIC_REF,
+      referenceId: entryId,
     });
     if (!clinicTx.ok) {
       return { ok: false, error: clinicTx.error };

@@ -225,6 +225,8 @@ export interface SalaryEntry {
   amount: number;
   entry_date: string;
   notes_ar: string | null;
+  /** أجر يومي لمساعد — هل أُكِّد صرفه من بطاقة المساعد */
+  payroll_confirmed?: boolean;
 }
 
 export interface SalarySlip {

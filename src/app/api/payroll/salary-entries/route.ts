@@ -9,6 +9,9 @@ import {
   isSalaryEntryType,
   listSalaryEntriesForPersonMonth,
 } from "@/lib/services/salary-entries-server";
+import {
+  listConfirmedAssistantDailyEntryIds,
+} from "@/lib/services/payroll-financial";
 import { validateSalaryEntryReason } from "@/lib/services/salary-entry-reason";
 
 /** GET /api/payroll/salary-entries?staff_id=|assistant_id=&month_year= */
@@ -50,7 +53,25 @@ export async function GET(req: NextRequest) {
     if (error) {
       return NextResponse.json({ error }, { status: 400 });
     }
-    return NextResponse.json({ clinic_id: clinicId, entries });
+
+    let enrichedEntries = entries;
+    if (assistantId && entries.length > 0) {
+      const dailyIds = entries
+        .filter((e) => e.entry_type === "daily_wage")
+        .map((e) => e.id);
+      const confirmedIds = await listConfirmedAssistantDailyEntryIds(
+        admin,
+        clinicId,
+        dailyIds
+      );
+      enrichedEntries = entries.map((e) => ({
+        ...e,
+        payroll_confirmed:
+          e.entry_type === "daily_wage" ? confirmedIds.has(e.id) : undefined,
+      }));
+    }
+
+    return NextResponse.json({ clinic_id: clinicId, entries: enrichedEntries });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "خطأ غير متوقع";
     return NextResponse.json({ error: msg }, { status: 500 });

@@ -663,7 +663,7 @@ export async function generateMonthlyPayrollViaApi(
 /** جلب سجلات الشهر عبر API */
 /** تأكيد صرف راتب عبر API — حركة مالية + تحديث الربح */
 export async function confirmPayrollViaApi(
-  kind: "slip" | "assistant",
+  kind: "slip" | "assistant" | "assistant_entry",
   id: string
 ): Promise<{
   ok: boolean;
