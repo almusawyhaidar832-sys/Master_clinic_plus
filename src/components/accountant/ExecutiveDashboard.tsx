@@ -31,6 +31,7 @@ import {
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { OutstandingDebtPanel } from "@/components/accountant/OutstandingDebtPanel";
 import { BalanceTopUpButton } from "@/components/finance/BalanceTopUpModal";
+import { ClearClinicTopUpsButton } from "@/components/finance/ClearClinicTopUpsButton";
 import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Alert } from "@/components/ui/Alert";
@@ -556,6 +557,10 @@ export function ExecutiveDashboard() {
           <BalanceTopUpButton
             portal="accountant"
             onSuccess={handleBalanceTopUpSuccess}
+          />
+          <ClearClinicTopUpsButton
+            portal="accountant"
+            onCleared={() => void fetchData({ silent: true })}
           />
           <div className="flex gap-1 rounded-xl border border-slate-border bg-surface-card p-1 shadow-card">
           {PERIODS.map((p) => (

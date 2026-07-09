@@ -8,7 +8,10 @@ import {
 import { writeAuditLog } from "@/lib/audit/write-audit-log";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { clearClinicBalanceTopups } from "@/lib/services/balance-topup-cleanup";
-import { defaultClinicProfitPeriod } from "@/lib/services/clinic-profit-loader";
+import {
+  defaultClinicProfitPeriod,
+} from "@/lib/services/clinic-profit-loader";
+import { fetchClinicProfitStatsForPeriod } from "@/lib/services/clinic-stats";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +66,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const profitStats = await fetchClinicProfitStatsForPeriod(
+      admin,
+      clinicId,
+      period.from,
+      period.to
+    );
+
     if (result.deletedTransactions > 0 || result.deletedAuditLogs > 0) {
       await writeAuditLog(admin, {
         clinicId,
@@ -85,6 +95,9 @@ export async function POST(req: NextRequest) {
         ok: true,
         deletedTransactions: result.deletedTransactions,
         deletedAuditLogs: result.deletedAuditLogs,
+        netProfit: profitStats.netProfit,
+        balanceTopupsTotal: profitStats.balanceTopupsTotal,
+        period,
         message:
           result.deletedTransactions > 0
             ? `تم حذف ${result.deletedTransactions} شحن — صافي الربح رجع للأساس (بدون شحن)`

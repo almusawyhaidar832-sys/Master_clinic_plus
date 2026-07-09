@@ -14,6 +14,8 @@ export type ClinicProfitBroadcast = {
   netProfit: number;
   balanceTopupsTotal: number;
   updatedAt: string;
+  /** بعد حذف الشحنات — لا ترفع الربح من الذاكرة */
+  reset?: boolean;
 };
 
 function roundMoney(n: number): number {
@@ -36,21 +38,31 @@ function readBroadcast(): ClinicProfitBroadcast | null {
 
 /** يُبث بين التبويبات (محاسب ↔ إدارة) — يعمل عبر localStorage */
 export function publishClinicProfitBroadcast(
-  snap: Omit<ClinicProfitBroadcast, "updatedAt">
+  snap: Omit<ClinicProfitBroadcast, "updatedAt" | "reset"> & { reset?: boolean }
 ): void {
   if (typeof window === "undefined") return;
   try {
     const payload: ClinicProfitBroadcast = {
-      ...snap,
+      clinicId: snap.clinicId,
+      periodFrom: snap.periodFrom,
+      periodTo: snap.periodTo,
       netProfit: roundMoney(snap.netProfit),
       balanceTopupsTotal: roundMoney(snap.balanceTopupsTotal),
       updatedAt: new Date().toISOString(),
+      reset: snap.reset === true,
     };
     localStorage.setItem(BROADCAST_KEY, JSON.stringify(payload));
     window.dispatchEvent(new CustomEvent(BROADCAST_EVENT));
   } catch {
     /* ignore */
   }
+}
+
+/** بعد حذف الشحنات — يُصفّر الذاكرة عند كل التبويبات */
+export function publishClinicProfitReset(
+  snap: Omit<ClinicProfitBroadcast, "updatedAt" | "reset">
+): void {
+  publishClinicProfitBroadcast({ ...snap, reset: true });
 }
 
 export function clearClinicProfitBroadcast(): void {
@@ -88,6 +100,11 @@ export function applyClinicProfitBroadcast(
   const snap = readBroadcast();
   if (!snap || snap.clinicId !== clinicId) return stats;
   if (snap.periodFrom !== period.from || snap.periodTo !== period.to) return stats;
+
+  if (snap.reset) {
+    clearClinicProfitBroadcast();
+    return stats;
+  }
 
   const serverNet = roundMoney(stats.netProfit);
   const serverTopups = roundMoney(stats.balanceTopupsTotal);

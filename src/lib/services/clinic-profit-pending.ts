@@ -60,6 +60,7 @@ function hydratePending(): void {
   if (typeof window === "undefined") return;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
+    pendingByClinic.clear();
     if (!raw) return;
     const parsed = JSON.parse(raw) as Record<
       string,
@@ -70,7 +71,35 @@ function hydratePending(): void {
       if (normalized) pendingByClinic.set(clinicId, normalized);
     }
   } catch {
+    pendingByClinic.clear();
     localStorage.removeItem(STORAGE_KEY);
+  }
+}
+
+/** يُستدعى بعد حذف الشحنات — يصفّر الذاكرة في كل التبويبات */
+export function resetClinicProfitClientCache(clinicId?: string): void {
+  if (typeof window === "undefined") return;
+  if (clinicId) {
+    pendingByClinic.delete(clinicId);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        delete parsed[clinicId];
+        if (Object.keys(parsed).length === 0) {
+          localStorage.removeItem(STORAGE_KEY);
+        } else {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        }
+      } catch {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+    persistPending();
+  } else {
+    pendingByClinic.clear();
+    localStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new CustomEvent(STORAGE_EVENT));
   }
 }
 

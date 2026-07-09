@@ -9,9 +9,13 @@ import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { notifyClinicSync } from "@/lib/sync/clinic-events";
 import {
   clearAllPendingClinicTopUps,
-  clearPendingClinicTopUp,
+  resetClinicProfitClientCache,
 } from "@/lib/services/clinic-profit-pending";
-import { clearClinicProfitBroadcast } from "@/lib/services/clinic-profit-broadcast";
+import {
+  clearClinicProfitBroadcast,
+  publishClinicProfitReset,
+} from "@/lib/services/clinic-profit-broadcast";
+import { defaultClinicProfitPeriod } from "@/lib/services/clinic-profit-loader";
 
 interface ClearClinicTopUpsButtonProps {
   portal?: AuthPortalId;
@@ -23,7 +27,7 @@ interface ClearClinicTopUpsButtonProps {
 
 export function ClearClinicTopUpsButton({
   portal = "admin",
-  scope = "month",
+  scope = "all",
   size = "sm",
   variant = "outline",
   onCleared,
@@ -38,7 +42,7 @@ export function ClearClinicTopUpsButton({
     const ok = window.confirm(
       scope === "all"
         ? "حذف كل شحنات رصيد العيادة (كل الفترات) وإرجاع الربح للأساس؟\nلا يمكن التراجع."
-        : "حذف كل شحنات رصيد العيادة لهذا الشهر وإرجاع الربح إلى 1,080,000؟\nسيتم حذفها من موجز العمليات أيضاً."
+        : "حذف كل شحنات رصيد العيادة وإرجاع الربح إلى 1,080,000؟\nسيتم حذفها من موجز العمليات أيضاً."
     );
     if (!ok) return;
 
@@ -61,6 +65,9 @@ export function ClearClinicTopUpsButton({
         error?: string;
         message?: string;
         deletedTransactions?: number;
+        netProfit?: number;
+        balanceTopupsTotal?: number;
+        period?: { from: string; to: string };
       };
 
       if (!res.ok) {
@@ -68,9 +75,20 @@ export function ClearClinicTopUpsButton({
         return;
       }
 
-      clearPendingClinicTopUp(clinicId);
+      resetClinicProfitClientCache(clinicId);
       clearAllPendingClinicTopUps();
       clearClinicProfitBroadcast();
+
+      const period = json.period ?? defaultClinicProfitPeriod();
+      if (typeof json.netProfit === "number") {
+        publishClinicProfitReset({
+          clinicId,
+          periodFrom: period.from,
+          periodTo: period.to,
+          netProfit: json.netProfit,
+          balanceTopupsTotal: json.balanceTopupsTotal ?? 0,
+        });
+      }
 
       notifyClinicSync({
         topic: ["profit", "financial", "audit"],
