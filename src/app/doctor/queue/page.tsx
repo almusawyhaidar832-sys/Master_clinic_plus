@@ -36,6 +36,7 @@ import {
   getCachedPortalQueue,
   isBrowserOffline,
 } from "@/lib/offline-cache";
+import { prefetchTodayQueuePatientProfiles } from "@/lib/offline/patient-profile-prefetch";
 import {
   Clock, UserCheck, RefreshCw, LogIn, Send, Users, RotateCcw,
   UserX, ArrowRightLeft, X,
@@ -188,6 +189,12 @@ function DoctorQueuePageContent() {
       setClinicDoctors(doctors);
       setQueue(rows);
       cachePortalQueue("doctor", did, rows);
+      void prefetchTodayQueuePatientProfiles({
+        portal: "doctor",
+        clinicId,
+        doctorId: did,
+        patientIds: rows.map((e) => e.patient_id),
+      });
 
       setClinicalEntryId((prev) =>
         prev && !rows.some((e) => e.id === prev) ? null : prev

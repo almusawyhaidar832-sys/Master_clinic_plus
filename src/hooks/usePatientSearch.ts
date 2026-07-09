@@ -9,6 +9,12 @@ import {
   type PatientSearchResult,
   type PatientSearchScope,
 } from "@/lib/services/patient-search";
+import { isBrowserOffline } from "@/lib/offline/network";
+import {
+  mergeRecentPatients,
+  searchRecentPatients,
+} from "@/lib/offline/recent-patients-index";
+import type { PatientProfilePortal } from "@/lib/offline/patient-profile-cache";
 
 export function usePatientSearch(
   query: string,
@@ -20,6 +26,8 @@ export function usePatientSearch(
     minLength?: number;
     scope?: PatientSearchScope;
     doctorId?: string | null;
+    clinicId?: string | null;
+    offlinePortal?: PatientProfilePortal;
   }
 ) {
   const {
@@ -30,6 +38,8 @@ export function usePatientSearch(
     minLength = PATIENT_SEARCH_MIN_LENGTH,
     scope,
     doctorId,
+    clinicId,
+    offlinePortal,
   } = opts;
 
   const [results, setResults] = useState<PatientSearchResult[]>([]);
@@ -59,6 +69,37 @@ export function usePatientSearch(
       setLoading(true);
       setError(null);
 
+      const offlinePortalResolved =
+        offlinePortal ?? (portal === "doctor" ? "doctor" : portal === "accountant" || portal === "admin" ? "accountant" : null);
+
+      if (isBrowserOffline()) {
+        if (!clinicId || !offlinePortalResolved) {
+          setResults([]);
+          setError("لا يوجد اتصال — افتح ملفات المرضى مرة مع النت أولاً.");
+          setLoading(false);
+          return;
+        }
+
+        const recent = searchRecentPatients(
+          offlinePortalResolved,
+          clinicId,
+          trimmed,
+          limit
+        );
+        const patients: PatientSearchResult[] = recent.map((p) => ({
+          id: p.id,
+          clinic_id: clinicId,
+          full_name_ar: p.full_name_ar,
+          phone: p.phone ?? null,
+          notes: null,
+        }));
+        if (id !== requestId.current) return;
+        setResults(patients);
+        setError(patients.length === 0 ? "لا توجد نتائج محفوظة لهذا البحث." : null);
+        setLoading(false);
+        return;
+      }
+
       const { patients, error: searchError } = await searchPatientsViaApi(
         trimmed,
         {
@@ -74,6 +115,17 @@ export function usePatientSearch(
       if (id !== requestId.current) return;
 
       setResults(patients);
+      if (clinicId && offlinePortalResolved && patients.length > 0) {
+        mergeRecentPatients(
+          offlinePortalResolved,
+          clinicId,
+          patients.map((p) => ({
+            id: p.id,
+            full_name_ar: p.full_name_ar,
+            phone: p.phone ?? p.phone_number ?? null,
+          }))
+        );
+      }
       setError(searchError ?? null);
       setLoading(false);
     }, debounceMs);
@@ -82,7 +134,7 @@ export function usePatientSearch(
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, portal, enabled, limit, debounceMs, minLength, scope, doctorId]);
+  }, [query, portal, enabled, limit, debounceMs, minLength, scope, doctorId, clinicId, offlinePortal]);
 
   return { results, loading, error };
 }

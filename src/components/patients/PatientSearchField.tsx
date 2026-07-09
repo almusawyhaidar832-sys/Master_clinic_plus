@@ -31,6 +31,7 @@ interface PatientSearchFieldProps {
   searchScope?: PatientSearchScope;
   /** فلترة مراجعي طبيب معيّن (للمحاسب عند اختيار الطبيب) */
   doctorId?: string | null;
+  clinicId?: string | null;
 }
 
 export function PatientSearchField({
@@ -48,6 +49,7 @@ export function PatientSearchField({
   selectedPatientId = null,
   searchScope,
   doctorId = null,
+  clinicId = null,
 }: PatientSearchFieldProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -58,6 +60,7 @@ export function PatientSearchField({
     enabled,
     scope: searchScope,
     doctorId,
+    clinicId,
   });
 
   useEffect(() => {

@@ -263,6 +263,7 @@ function DentalChartContent() {
               setPatientName(p.full_name_ar);
             }}
             portal="doctor"
+            clinicId={clinicId}
             selectedPatientId={patientId || null}
             placeholder={t("docStatementSearchPlaceholder")}
             inputClassName="h-10"

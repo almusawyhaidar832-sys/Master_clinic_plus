@@ -7,6 +7,7 @@ import {
   registerAccountantWebPush,
 } from "@/lib/push/client";
 import { warmAccountantShellCache } from "@/lib/pwa/accountant-shell-cache";
+import { prefetchForCurrentAccountantPortal } from "@/lib/offline/patient-profile-prefetch";
 import { ensureNotificationPermission } from "@/lib/queue/realtime-client";
 import {
   hasPersistedAudioConsent,
@@ -43,9 +44,11 @@ export function AccountantPwaBootstrap() {
 
   useEffect(() => {
     void warmAccountantShellCache();
+    void prefetchForCurrentAccountantPortal();
 
     const onOnline = () => {
       void warmAccountantShellCache();
+      void prefetchForCurrentAccountantPortal();
     };
 
     window.addEventListener("online", onOnline);

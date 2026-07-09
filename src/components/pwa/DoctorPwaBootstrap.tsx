@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { refreshDoctorWebPushIfGranted, listenForPushResubscribe } from "@/lib/push/client";
 import { warmDoctorShellCache } from "@/lib/pwa/doctor-shell-cache";
+import { prefetchForCurrentDoctorPortal } from "@/lib/offline/patient-profile-prefetch";
 
 /**
  * عند دخول بوابة الطبيب: كاش offline + إعادة تسجيل Push خارج التطبيق.
@@ -10,9 +11,11 @@ import { warmDoctorShellCache } from "@/lib/pwa/doctor-shell-cache";
 export function DoctorPwaBootstrap() {
   useEffect(() => {
     void warmDoctorShellCache();
+    void prefetchForCurrentDoctorPortal();
 
     const onOnline = () => {
       void warmDoctorShellCache();
+      void prefetchForCurrentDoctorPortal();
     };
 
     window.addEventListener("online", onOnline);

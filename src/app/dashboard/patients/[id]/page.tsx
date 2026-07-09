@@ -48,6 +48,10 @@ import {
   readPatientProfileCacheForPatient,
   writePatientProfileCache,
 } from "@/lib/offline/patient-profile-cache";
+import {
+  cacheXraysForClinicalData,
+  hydrateClinicalWithCachedXrays,
+} from "@/lib/offline/clinical-xray-cache";
 import { ArrowRight, Plus, X } from "lucide-react";
 
 export default function PatientProfilePage() {
@@ -172,13 +176,17 @@ export default function PatientProfilePage() {
       setOfflineMiss(false);
       setRefreshing(false);
 
-      const applyBundle = (
+      const applyBundle = async (
         bundle: NonNullable<ReturnType<typeof readPatientProfileCacheForPatient>>
       ) => {
+        const hydratedClinical = await hydrateClinicalWithCachedXrays(
+          id,
+          bundle.clinicalByOp
+        );
         setPatient(bundle.patient);
         setOperations(bundle.operations);
         setTreatmentCases(bundle.treatmentCases);
-        setClinicalByOp(bundle.clinicalByOp);
+        setClinicalByOp(hydratedClinical);
         setMedicalLogs(bundle.medicalLogs);
         setCachedAt(bundle.cachedAt);
         setAccessDenied(false);
@@ -186,7 +194,7 @@ export default function PatientProfilePage() {
 
       const cached = readPatientProfileCacheForPatient("accountant", id);
       if (cached) {
-        applyBundle(cached);
+        await applyBundle(cached);
         if (isBrowserOffline()) {
           setOfflineView(true);
           return;
@@ -252,6 +260,7 @@ export default function PatientProfilePage() {
         clinicalByOp: clinical,
         medicalLogs: nextLogs,
       });
+      void cacheXraysForClinicalData(id, clinical);
 
       setOfflineView(false);
       setCachedAt(Date.now());

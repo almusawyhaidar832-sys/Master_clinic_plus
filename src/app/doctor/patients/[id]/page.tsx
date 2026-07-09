@@ -36,10 +36,13 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { OfflineViewBanner } from "@/components/offline/OfflineViewBanner";
 import { isBrowserOffline } from "@/lib/offline/network";
 import {
-  readPatientProfileCache,
   readPatientProfileCacheForPatient,
   writePatientProfileCache,
 } from "@/lib/offline/patient-profile-cache";
+import {
+  cacheXraysForClinicalData,
+  hydrateClinicalWithCachedXrays,
+} from "@/lib/offline/clinical-xray-cache";
 import {
   doctorPatientLogDraftKey,
   hasDoctorPatientLogDraftContent,
@@ -142,13 +145,17 @@ export default function DoctorPatientDetailPage() {
       const doc = await getDoctorForCurrentUser(supabase);
       setDoctor(doc);
 
-      const applyBundle = (
-        bundle: NonNullable<ReturnType<typeof readPatientProfileCache>>
+      const applyBundle = async (
+        bundle: NonNullable<ReturnType<typeof readPatientProfileCacheForPatient>>
       ) => {
+        const hydratedClinical = await hydrateClinicalWithCachedXrays(
+          id,
+          bundle.clinicalByOp
+        );
         setPatient(bundle.patient);
         setOperations(bundle.operations);
         setTreatmentCases(bundle.treatmentCases);
-        setClinicalByOp(bundle.clinicalByOp);
+        setClinicalByOp(hydratedClinical);
         setLogs(bundle.medicalLogs);
         setTreatments(bundle.treatments ?? []);
         setCachedAt(bundle.cachedAt);
@@ -157,7 +164,7 @@ export default function DoctorPatientDetailPage() {
       const cached = readPatientProfileCacheForPatient("doctor", id, doc?.id);
 
       if (cached && (!doc?.id || !cached.doctorId || cached.doctorId === doc.id)) {
-        applyBundle(cached);
+        await applyBundle(cached);
         setAccessDenied(false);
         if (isBrowserOffline()) {
           setOfflineView(true);
@@ -231,6 +238,7 @@ export default function DoctorPatientDetailPage() {
           medicalLogs: nextLogs,
           treatments: nextTreatments,
         });
+        void cacheXraysForClinicalData(id, clinical);
       }
 
       setOfflineView(false);
