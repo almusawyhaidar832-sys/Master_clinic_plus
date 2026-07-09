@@ -20,7 +20,7 @@ import {
   salaryReasonPlaceholder,
   validateSalaryEntryReason,
 } from "@/lib/services/salary-entry-reason";
-import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
+import { notifyClinicProfitRefresh, notifyPayrollConfirmRefresh } from "@/lib/services/clinic-profit";
 import {
   currentMonthYear,
   formatCurrency,
@@ -275,7 +275,10 @@ export function DoctorSalaryAdjustmentsPanel({
       });
       return;
     }
-    notifyClinicProfitRefresh(clinicId ?? undefined);
+    notifyPayrollConfirmRefresh({
+      clinicId: clinicId ?? undefined,
+      doctorId: slip.doctor_id,
+    });
     setFeedback({
       ok: true,
       text: "تم تأكيد صرف الراتب — خُصم من خزينة العيادة",

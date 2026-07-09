@@ -645,25 +645,18 @@ export async function fetchPaidSalariesInPeriod(
   return bundle.profitDeduction;
 }
 
-/** خصم الرواتب للتقارير — نفس منطق اللوحة التنفيذية */
+/** خصم الرواتب للتقارير — صرف مؤكَّد فقط (تأكيد الدفع يخصم فوراً من الربح) */
 export async function fetchResolvedSalaryDeductionForPeriod(
   supabase: SupabaseClient,
   clinicId: string,
   from: string,
   to: string
 ): Promise<number> {
-  const { fetchRegisteredAssistantPayrollClinicDeduction } = await import(
-    "@/lib/ledger/daily-assistant-payroll"
-  );
-  const [payrollAccruals, bundle, registeredAssistantClinic] = await Promise.all([
+  const [payrollAccruals, bundle] = await Promise.all([
     fetchConfirmedPayrollProfitDeduction(supabase, clinicId, from, to),
     fetchPaidSalariesBundle(supabase, clinicId, from, to),
-    fetchRegisteredAssistantPayrollClinicDeduction(supabase, clinicId, from, to),
   ]);
-  return roundMoney(
-    resolveExecutiveSalaryDeduction(payrollAccruals, bundle.profitDeduction) +
-      registeredAssistantClinic
-  );
+  return resolveExecutiveSalaryDeduction(payrollAccruals, bundle.profitDeduction);
 }
 
 /** كشفيات المراجع في الفترة — مدفوعة فقط، مع استنتاج السجلات القديمة */

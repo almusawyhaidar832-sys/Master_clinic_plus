@@ -43,6 +43,23 @@ export function notifyClinicProfitRefresh(clinicId?: string): void {
   }
 }
 
+/** بعد «تأكيد صرف» أجور — يحدّث ربح العيادة ومحفظة الطبيب فوراً */
+export function notifyPayrollConfirmRefresh(options: {
+  clinicId?: string;
+  doctorId?: string | null;
+}): void {
+  notifyClinicProfitRefresh(options.clinicId);
+  if (options.doctorId && options.clinicId) {
+    notifyClinicSync({
+      topic: ["financial", "profit"],
+      clinicId: options.clinicId,
+      doctorId: options.doctorId,
+      source: "mutation",
+      force: true,
+    });
+  }
+}
+
 /** إشعار فوري بعد شحن رصيد — يحدّث محفظة الطبيب والكشف المالي */
 export function notifyBalanceTopUpRefresh(options: {
   clinicId?: string;

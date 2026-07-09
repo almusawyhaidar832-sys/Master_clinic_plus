@@ -36,7 +36,7 @@ import {
   unconfirmPayrollViaApi,
 } from "@/lib/services/assistant-payroll-records";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
-import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
+import { notifyClinicProfitRefresh, notifyPayrollConfirmRefresh } from "@/lib/services/clinic-profit";
 import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
 import {
   fetchActivePayrollPersonsViaApi,
@@ -1333,13 +1333,10 @@ export default function SalaryPage() {
         showMessage(`تعذر تأكيد صرف المساعد: ${result.error}`, false);
         return;
       }
-      notifyClinicProfitRefresh(clinicId ?? undefined);
-      if (result.doctor_id) {
-        notifyFinancialMutation({
-          clinicId: clinicId ?? "",
-          doctorId: result.doctor_id,
-        });
-      }
+      notifyPayrollConfirmRefresh({
+        clinicId: clinicId ?? undefined,
+        doctorId: result.doctor_id,
+      });
       const deducted = result.doctor_deducted ?? 0;
       const clinicPart = result.clinic_deducted ?? 0;
       showMessage(

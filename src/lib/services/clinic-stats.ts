@@ -169,16 +169,11 @@ export async function fetchClinicProfitStatsForPeriod(
     "@/lib/ledger/daily-collections"
   );
 
-  const { fetchRegisteredAssistantPayrollClinicDeduction } = await import(
-    "@/lib/ledger/daily-assistant-payroll"
-  );
-
   const [
     ops,
     collectionFinancials,
     expensesRes,
     totalSalariesPaid,
-    registeredAssistantClinic,
     totalRefunds,
     clinicExpenseShareRes,
     visitorDebt,
@@ -193,7 +188,6 @@ export async function fetchClinicProfitStatsForPeriod(
       .gte("expense_date", from)
       .lte("expense_date", to),
     fetchResolvedSalaryDeductionForPeriod(supabase, clinicId, from, to),
-    fetchRegisteredAssistantPayrollClinicDeduction(supabase, clinicId, from, to),
     fetchTotalRefundsAmount(supabase, { clinicId, from, to }),
     supabase
       .from("transactions")
@@ -206,10 +200,6 @@ export async function fetchClinicProfitStatsForPeriod(
     fetchPeriodVisitorDebt(supabase, clinicId, from, to),
     fetchClinicBalanceTopupsForPeriod(supabase, clinicId, from, to),
   ]);
-
-  const confirmedSalariesPaid = roundProfitMoney(
-    totalSalariesPaid - registeredAssistantClinic
-  );
 
   const cashInflow = roundProfitMoney(collectionFinancials.collected);
   const clinicShareTotal = roundProfitMoney(collectionFinancials.clinicShareTotal);
@@ -228,7 +218,6 @@ export async function fetchClinicProfitStatsForPeriod(
   const totalExpenses = roundProfitMoney(generalExpenses + clinicExpenseShare);
   const outstandingDebts = roundProfitMoney(visitorDebt.debt);
   const refundsRounded = roundProfitMoney(totalRefunds);
-  const registeredAssistantClinicRounded = roundProfitMoney(registeredAssistantClinic);
   const totalSalariesPaidRounded = roundProfitMoney(totalSalariesPaid);
   const balanceTopupsRounded = roundProfitMoney(balanceTopups);
   const { loadClinicDefaultReviewFee, sumReviewFeesInOperations } =
@@ -271,15 +260,7 @@ export async function fetchClinicProfitStatsForPeriod(
         label: "حصة العيادة من صرفيات الأطباء",
         amount: -clinicExpenseShare,
       },
-      { label: "رواتب مؤكَّد صرفها", amount: -confirmedSalariesPaid },
-      ...(registeredAssistantClinicRounded > 0
-        ? [
-            {
-              label: "أجور مساعدين — مسجّلة (حصة العيادة)",
-              amount: -registeredAssistantClinicRounded,
-            },
-          ]
-        : []),
+      { label: "رواتب مؤكَّد صرفها", amount: -totalSalariesPaidRounded },
       { label: "أرباح الأطباء (محافظ — منفصلة)", amount: doctorShareTotal },
       { label: "صافي ربح العيادة", amount: netProfit },
     ],

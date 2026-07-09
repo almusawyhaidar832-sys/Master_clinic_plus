@@ -27,7 +27,8 @@ function roundMoney(n: number): number {
 
 /**
  * POST /api/payroll/confirm
- * تأكيد صرف — يخصم من الربح **المبلغ المتبقي فقط** (جزئياً لأجر يومي)
+ * تأكيد صرف — يخصم فوراً من ربح العيادة (assistant_payroll_clinic)
+ * ومن محفظة الطبيب (assistant_payroll_doctor) — المبلغ المتبقي فقط
  */
 export async function POST(req: NextRequest) {
   try {

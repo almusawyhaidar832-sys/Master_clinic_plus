@@ -5,7 +5,7 @@ import {
   normalizeAssistantCompensationMode,
 } from "@/lib/services/assistant-compensation";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
-import { assistantPendingDoctorShare, assistantPendingClinicShare } from "@/lib/services/payroll-paid-portions";
+import { assistantPendingClinicShare } from "@/lib/services/payroll-paid-portions";
 import { todayISO } from "@/lib/utils";
 import type { PayrollRecord } from "@/types";
 
@@ -478,25 +478,9 @@ type PayrollRecordPendingRow = Pick<
     | null;
 };
 
-function pendingMonthlyDoctorShareFromPayrollRow(
-  row: PayrollRecordPendingRow
-): number {
-  const assistantRaw = row.assistant;
-  const assistant = Array.isArray(assistantRaw) ? assistantRaw[0] : assistantRaw;
-  const doctorSharePct = Number(
-    (assistant as { doctor_share_percentage?: number } | null)
-      ?.doctor_share_percentage ?? row.doctor_share_percentage ?? 0
-  );
-  return assistantPendingDoctorShare(row, {
-    dailyWage: false,
-    doctorSharePercentage: doctorSharePct,
-  });
-}
-
 /**
- * خصم أجور مساعدين من محفظة الطبيب — مصدر واحد (نفس الكشف المالي):
- * - أجر يومي: سطور مسجّلة + مؤكّدة فقط (بدون payroll_records حتى لا يتكرر الخصم)
- * - مساعد شهري: سطور مؤكّدة + المتبقي من payroll_records
+ * خصم أجور مساعدين من محفظة الطبيب — صرف مؤكَّد فقط (بعد «تأكيد الدفع»).
+ * التسجيل وحده لا يخصم؛ يخصم عند إنشاء حركة assistant_payroll_doctor.
  */
 export async function fetchDoctorAssistantPayrollDeductionByDoctor(
   supabase: SupabaseClient,
@@ -528,7 +512,10 @@ export async function fetchDoctorAssistantPayrollDeductionByDoctor(
       dateFrom: range.from,
       dateTo: range.to,
     });
-    const byDoctor = sumAssistantPayrollByDoctor(lines);
+    const confirmed = lines.filter(
+      (line) => line.statusLabel === "صرف مؤكّد"
+    );
+    const byDoctor = sumAssistantPayrollByDoctor(confirmed);
     for (const [doctorId, totals] of byDoctor) {
       if (!clinicDoctorIds.has(doctorId)) continue;
       if (totals.doctorDeduction <= FINANCIAL_EPSILON) continue;
@@ -536,52 +523,6 @@ export async function fetchDoctorAssistantPayrollDeductionByDoctor(
         doctorId,
         roundMoney((map.get(doctorId) ?? 0) + totals.doctorDeduction)
       );
-    }
-  }
-
-  const { data: records, error } = await supabase
-    .from("payroll_records")
-    .select(
-      `
-      doctor_id,
-      assistant_id,
-      doctor_share_percentage,
-      doctor_share_amount,
-      paid_doctor_share_amount,
-      clinic_share_amount,
-      paid_clinic_share_amount,
-      total_salary,
-      paid_total_salary,
-      status,
-      assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
-    `
-    )
-    .in("doctor_id", doctorIds)
-    .neq("status", "paid");
-
-  if (!error && records?.length) {
-    for (const row of records) {
-      const doctorId = String(row.doctor_id ?? "");
-      if (!doctorId) continue;
-
-      const assistantRaw = row.assistant;
-      const assistant = Array.isArray(assistantRaw)
-        ? assistantRaw[0]
-        : assistantRaw;
-      const dailyWage = isDailyWageAssistant(
-        normalizeAssistantCompensationMode(
-          (assistant as { compensation_mode?: string } | null)
-            ?.compensation_mode
-        )
-      );
-      // الأجر اليومي يُحسب من salary_entries فقط — payroll_records يجمّع الشهر ويسبب خصم مزدوج
-      if (dailyWage) continue;
-
-      const pending = pendingMonthlyDoctorShareFromPayrollRow(
-        row as PayrollRecordPendingRow
-      );
-      if (pending <= FINANCIAL_EPSILON) continue;
-      map.set(doctorId, roundMoney((map.get(doctorId) ?? 0) + pending));
     }
   }
 

@@ -1,11 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchDailyAssistantPayrollLines } from "@/lib/ledger/daily-assistant-payroll";
 import {
   CONFIRMED_PAYROLL_TYPE_LABELS,
   fetchConfirmedPayrollPayoutLines,
 } from "@/lib/services/payroll-paid-portions";
 import { BALANCE_TOPUP_CLINIC_TYPE } from "@/lib/services/balance-topup";
-import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { formatCurrency } from "@/lib/utils";
 
 export type ProfitLedgerCategory =
@@ -224,59 +222,6 @@ async function appendAssistantPayrollBatchedLines(
       clinicShare: entry.clinicShare,
       doctorSharePct: pct,
       actorLookupKey: parentId || txId,
-    });
-  }
-}
-
-/** أجور مساعدين مسجّلة — حصة العيادة قبل تأكيد الصرف */
-async function appendRegisteredAssistantPayrollLines(
-  supabase: SupabaseClient,
-  clinicId: string,
-  from: string,
-  to: string,
-  getGroup: (cat: ProfitLedgerCategory) => ProfitLedgerGroup
-): Promise<void> {
-  const lines = await fetchDailyAssistantPayrollLines(supabase, clinicId, {
-    dateFrom: from,
-    dateTo: to,
-  });
-  const registered = lines.filter(
-    (line) =>
-      line.statusLabel === "أجر مسجّل" && line.clinicShare > FINANCIAL_EPSILON
-  );
-  if (!registered.length) return;
-
-  const doctorIds = [...new Set(registered.map((line) => line.doctorId))];
-  const { data: doctors } = await supabase
-    .from("doctors")
-    .select("id, full_name_ar")
-    .eq("clinic_id", clinicId)
-    .in("id", doctorIds);
-
-  const doctorNameById = new Map(
-    (doctors ?? []).map((doctor) => [
-      String(doctor.id),
-      String(doctor.full_name_ar ?? "طبيب"),
-    ])
-  );
-
-  for (const line of registered) {
-    const doctorName = doctorNameById.get(line.doctorId) ?? "طبيب";
-    pushLine(getGroup("assistant_payroll"), {
-      id: line.id,
-      category: "assistant_payroll",
-      date: line.lineDate,
-      amount: -line.clinicShare,
-      title: `أجر مساعد — ${line.assistantName}`,
-      subtitle: appendSubtitle(
-        `الطبيب: ${doctorName}`,
-        `أجر مسجّل — نسبة الطبيب ${line.doctorSharePct}%`
-      ),
-      totalAmount: line.totalSalary,
-      doctorShare: line.doctorDeduction,
-      clinicShare: line.clinicShare,
-      doctorSharePct: line.doctorSharePct,
-      actorLookupKey: line.assistantId ?? line.id,
     });
   }
 }
@@ -749,14 +694,6 @@ export async function fetchProfitDeductionLedger(
     to,
     getGroup,
     payrollParentIds
-  );
-
-  await appendRegisteredAssistantPayrollLines(
-    supabase,
-    clinicId,
-    from,
-    to,
-    getGroup
   );
 
   await appendLegacyPayrollLines(

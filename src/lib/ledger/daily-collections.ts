@@ -1196,7 +1196,10 @@ export async function fetchDailyCollections(
     { dateFrom: effectiveFrom, dateTo: effectiveTo },
     input.doctorId
   );
-  const assistantByDoctor = sumAssistantPayrollByDoctor(assistantPayrollLines);
+  const confirmedAssistantLines = assistantPayrollLines.filter(
+    (line) => line.statusLabel === "صرف مؤكّد"
+  );
+  const assistantByDoctor = sumAssistantPayrollByDoctor(confirmedAssistantLines);
   const assistantLinesByDoctor = new Map<string, DailyAssistantPayrollLine[]>();
   for (const line of assistantPayrollLines) {
     const list = assistantLinesByDoctor.get(line.doctorId) ?? [];
