@@ -13,6 +13,7 @@ import {
 } from "@/lib/auth/portal-access";
 import { createServerAuthClient } from "@/lib/supabase/create-auth-client";
 import { signInWithPassword, signOutUser } from "@/lib/supabase/auth-helpers";
+import { ensureDoctorProfileLinked } from "@/lib/notifications/server";
 
 async function loginFailureMessage(
   supabase: SupabaseClient,
@@ -136,6 +137,20 @@ export async function performPortalLogin(
         ? "هذا الحساب لا يناسب هذه البوابة — استخدم البوابة الصحيحة لدورك"
         : "تعذر تحميل صلاحيات الحساب — تواصل مع الإدارة",
     };
+  }
+
+  if (role === "doctor") {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("clinic_id")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    if (profile?.clinic_id) {
+      await ensureDoctorProfileLinked(data.user.id, profile.clinic_id).catch((err) => {
+        console.warn("[portal-login] doctor profile link failed:", err);
+      });
+    }
   }
 
   return {

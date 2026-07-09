@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { isWebPushConfigured } from "@/lib/push/server";
+import { ensureDoctorProfileLinked } from "@/lib/notifications/server";
 
 interface PushSubscriptionJson {
   endpoint?: string;
@@ -77,6 +78,12 @@ export async function POST(req: NextRequest) {
         );
       }
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (isApiDoctorRole(role) && profile.clinic_id) {
+      await ensureDoctorProfileLinked(profile.id, profile.clinic_id).catch((err) => {
+        console.warn("[push/subscribe] doctor profile link failed:", err);
+      });
     }
 
     const { data: linkedDoctor } = await admin

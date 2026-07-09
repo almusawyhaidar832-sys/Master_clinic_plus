@@ -11,7 +11,6 @@ import {
 } from "@/lib/services/appointment-updates";
 import {
   enqueueApprovedAppointment,
-  notifyDoctorForApprovedAppointment,
   syncQueueFromAppointmentStatus,
 } from "@/lib/services/appointment-queue-sync";
 import type { Appointment } from "@/types";
@@ -144,7 +143,6 @@ export async function approvePendingAppointment(
       patient_id: data.patient_id as string | null,
       appointment_date: data.appointment_date as string,
     });
-    await notifyDoctorForApprovedAppointment(queueId);
   }
 
   const doctorName = await fetchDoctorName(admin, data.doctor_id as string);

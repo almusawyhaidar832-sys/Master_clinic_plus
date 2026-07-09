@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v24-push-dedupe";
+const CACHE_NAME = "mcp-app-v25-doctor-push-always";
 
 const NOTIFICATION_ICON = "/icons/icon-192.png";
 
@@ -56,24 +56,36 @@ function buildCustomNotification(title, payload) {
   const tag = data.tag || "mcp-doctor";
   const icon = absoluteIconUrl();
   const isDoctorQueue = data.kind === "doctor_queue";
+  const audioUrl =
+    typeof data.audioUrl === "string" && data.audioUrl.trim()
+      ? data.audioUrl.trim()
+      : null;
+
+  const options = {
+    body: data.body || "",
+    icon,
+    badge: icon,
+    tag,
+    renotify: data.renotify !== false,
+    requireInteraction: data.requireInteraction ?? isDoctorQueue,
+    silent: data.silent === true,
+    vibrate: data.vibrate || [200, 100, 200, 100, 400, 200, 400],
+    data: {
+      url,
+      kind: data.kind || "custom",
+      patientName: data.patientName || null,
+      entryId: data.entryId || null,
+      audioUrl,
+    },
+  };
+
+  if (audioUrl) {
+    options.sound = audioUrl;
+  }
 
   return {
     title: title || "Master Clinic Plus",
-    options: {
-      body: data.body || "",
-      icon,
-      badge: icon,
-      tag,
-      renotify: data.renotify !== false,
-      requireInteraction: data.requireInteraction ?? isDoctorQueue,
-      silent: data.silent === true,
-      vibrate: data.vibrate || [200, 100, 200, 100, 400],
-      data: {
-        url,
-        kind: data.kind || "custom",
-        patientName: data.patientName || null,
-      },
-    },
+    options,
   };
 }
 
@@ -232,23 +244,27 @@ self.addEventListener("push", (event) => {
     renotify: true,
   };
 
+  const isDoctorQueue = payload.kind === "doctor_queue";
+
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((clientList) => {
-        const hasVisibleClient = clientList.some(
-          (client) => client.visibilityState === "visible"
-        );
-
-        if (hasVisibleClient) {
-          return undefined;
-        }
-
         for (const client of clientList) {
           if (!client.url.startsWith(self.location.origin)) continue;
           client.postMessage({ type: "QUEUE_PUSH_ALERT", payload });
         }
-        return showCustomNotification(payload.title, payload);
+
+        const hasVisibleClient = clientList.some(
+          (client) => client.visibilityState === "visible"
+        );
+
+        // إشعار الطبيب: دائماً على شاشة القفل/الخلفية/التطبيق مغلق — حتى لو التطبيق مفتوح
+        if (isDoctorQueue || !hasVisibleClient) {
+          return showCustomNotification(payload.title, payload);
+        }
+
+        return undefined;
       })
   );
 });

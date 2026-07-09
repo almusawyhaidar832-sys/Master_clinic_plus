@@ -81,10 +81,17 @@ export async function sendWebPushToProfile(
     entryId: payload.entryId,
   });
 
-  const pushOptions = {
+  const pushOptions: webpush.RequestOptions = {
     TTL: 86400,
-    urgency: "high" as const,
+    urgency: "high",
   };
+
+  const topic = (payload.tag ?? payload.kind ?? "doctor-queue")
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .slice(0, 32);
+  if (topic) {
+    pushOptions.topic = topic;
+  }
 
   let sent = 0;
 

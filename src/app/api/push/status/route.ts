@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth/api-session";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { isWebPushConfigured } from "@/lib/push/server";
+import { ensureDoctorProfileLinked } from "@/lib/notifications/server";
 
 /** GET — هل اشتراك Push محفوظ على السيرفر؟ (للتحقق من التنبيهات خارج التطبيق) */
 export async function GET(req: NextRequest) {
@@ -28,6 +29,12 @@ export async function GET(req: NextRequest) {
         configured: false,
         subscriptionCount: 0,
         profileId: profile.id,
+      });
+    }
+
+    if (isApiDoctorRole(profile.role) && profile.clinic_id) {
+      await ensureDoctorProfileLinked(profile.id, profile.clinic_id).catch((err) => {
+        console.warn("[push/status] doctor profile link failed:", err);
       });
     }
 

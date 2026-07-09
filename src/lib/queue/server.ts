@@ -24,6 +24,8 @@ import {
 import { normalizeOptionalPatientPhone, patientPhoneColumns } from "@/lib/phone";
 import { ensurePatientProfileForBooking } from "@/lib/services/resolve-patient-id";
 import { buildQueueAnnounceAudioUrl, warmQueueAnnounceAudio } from "@/lib/queue/queue-announce-audio-url";
+import { buildDoctorCallAudioUrl } from "@/lib/queue/doctor-call-audio-url";
+import { warmDoctorCallAudioUrl } from "@/lib/queue/warm-doctor-call-audio";
 
 export type QueueStatus =
   | "waiting"
@@ -321,11 +323,23 @@ export async function notifyDoctorNewQueuePatient(
 
   if (error || !entry) throw new Error("queue entry not found");
 
-  const profileId = await resolveDoctorProfileId(
+  let profileId = await resolveDoctorProfileId(
     admin,
     entry.doctor_id,
     entry.clinic_id
   );
+
+  if (!profileId) {
+    const { data: doctorRow } = await admin
+      .from("doctors")
+      .select("profile_id")
+      .eq("id", entry.doctor_id)
+      .maybeSingle();
+    profileId = (doctorRow?.profile_id as string | null) ?? null;
+  }
+
+  const doctorCallAudioUrl = buildDoctorCallAudioUrl(entry.id as string);
+  warmDoctorCallAudioUrl(doctorCallAudioUrl);
 
   const patientRow = entry.patient as {
     full_name_ar?: string;
@@ -378,7 +392,7 @@ export async function notifyDoctorNewQueuePatient(
   }
 
   if (profileId) {
-    await sendWebPushToProfile(profileId, {
+    const pushResult = await sendWebPushToProfile(profileId, {
       title: recall ? "تذكير — مراجع 🔔" : "مراجع جديد 🔔",
       body: bodyAr,
       url: "/doctor/queue",
@@ -387,9 +401,23 @@ export async function notifyDoctorNewQueuePatient(
         : `doctor-queue-${entry.id}`,
       patientName: speechName,
       kind: "doctor_queue",
+      entryId: entry.id as string,
+      audioUrl: doctorCallAudioUrl,
     }).catch((err) => {
       console.error("[queue] doctor web push failed:", err);
+      return { attempted: 0, sent: 0, configured: true };
     });
+
+    if (pushResult && pushResult.configured && pushResult.sent === 0) {
+      console.warn(
+        "[queue] doctor push not delivered — profile:",
+        profileId,
+        "subscriptions:",
+        pushResult.attempted,
+        "queue:",
+        queueEntryId
+      );
+    }
   }
 
   await pushQueueBroadcasts([

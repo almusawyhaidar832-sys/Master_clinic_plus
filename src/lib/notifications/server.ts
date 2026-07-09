@@ -25,6 +25,93 @@ async function linkDoctorProfileId(
   return profileId;
 }
 
+/** ربط doctors.profile_id عند دخول الطبيب أو تسجيل Push — يضمن وصول الإشعارات */
+export async function ensureDoctorProfileLinked(
+  profileId: string,
+  clinicId: string
+): Promise<void> {
+  const admin = adminClient();
+
+  const { data: alreadyLinked } = await admin
+    .from("doctors")
+    .select("id")
+    .eq("profile_id", profileId)
+    .eq("clinic_id", clinicId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (alreadyLinked?.id) return;
+
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("full_name, phone")
+    .eq("id", profileId)
+    .maybeSingle();
+
+  if (!profile) return;
+
+  const profileName = profile.full_name?.trim() ?? "";
+  const normalizedProfileName = profileName
+    ? normalizePersonName(profileName)
+    : "";
+
+  if (normalizedProfileName) {
+    const { data: doctors } = await admin
+      .from("doctors")
+      .select("id, full_name_ar")
+      .eq("clinic_id", clinicId)
+      .eq("is_active", true)
+      .is("profile_id", null);
+
+    const exact = doctors?.find((d) => d.full_name_ar?.trim() === profileName);
+    if (exact?.id) {
+      await linkDoctorProfileId(admin, exact.id, profileId);
+      return;
+    }
+
+    const fuzzy = doctors?.find(
+      (d) => normalizePersonName(d.full_name_ar ?? "") === normalizedProfileName
+    );
+    if (fuzzy?.id) {
+      await linkDoctorProfileId(admin, fuzzy.id, profileId);
+      return;
+    }
+  }
+
+  const profilePhone = String(profile.phone ?? "").replace(/\D/g, "");
+  if (profilePhone.length >= 8) {
+    const { data: doctors } = await admin
+      .from("doctors")
+      .select("id, phone")
+      .eq("clinic_id", clinicId)
+      .eq("is_active", true)
+      .is("profile_id", null);
+
+    const byPhone = doctors?.find((d) => {
+      const doctorPhone = String(d.phone ?? "").replace(/\D/g, "");
+      return (
+        doctorPhone.length >= 8 &&
+        doctorPhone.endsWith(profilePhone.slice(-10))
+      );
+    });
+    if (byPhone?.id) {
+      await linkDoctorProfileId(admin, byPhone.id, profileId);
+      return;
+    }
+  }
+
+  const { data: unlinkedDoctors } = await admin
+    .from("doctors")
+    .select("id")
+    .eq("clinic_id", clinicId)
+    .is("profile_id", null)
+    .eq("is_active", true);
+
+  if (unlinkedDoctors?.length === 1) {
+    await linkDoctorProfileId(admin, unlinkedDoctors[0]!.id, profileId);
+  }
+}
+
 /** Resolve doctor login profile even if doctors.profile_id is missing */
 export async function resolveDoctorProfileId(
   admin: ReturnType<typeof adminClient>,

@@ -67,6 +67,7 @@ function alertDoctorNewPatient(
     linkPath: "/doctor/queue",
     patientName: name,
     patientGender: gender,
+    entryId: row.id,
   });
 }
 
@@ -243,6 +244,7 @@ function alertDoctorFromBroadcast(
     }),
     linkPath: "/doctor/queue",
     patientName: name,
+    entryId: entryId ?? undefined,
   });
 }
 

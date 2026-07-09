@@ -3,7 +3,6 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   enqueueAppointmentToQueue,
-  notifyDoctorForApprovedAppointment,
 } from "@/lib/services/appointment-queue-sync";
 import {
   sendQueueEntryToDoctor,
@@ -50,7 +49,7 @@ export async function checkInAppointmentToQueue(
     throw new Error("تسجيل الدخول متاح في يوم الموعد فقط");
   }
 
-  const queueEntryId = await enqueueAppointmentToQueue(admin, {
+  const { queueEntryId, created } = await enqueueAppointmentToQueue(admin, {
     id: appt.id as string,
     clinic_id: appt.clinic_id as string,
     doctor_id: appt.doctor_id as string,
@@ -62,7 +61,10 @@ export async function checkInAppointmentToQueue(
   });
 
   await updateQueueStatus(queueEntryId, "waiting", { clinicId });
-  await sendQueueEntryToDoctor(queueEntryId, true);
+
+  if (!created) {
+    await sendQueueEntryToDoctor(queueEntryId, true);
+  }
 
   const { error: apptErr } = await admin
     .from("appointments")
@@ -81,8 +83,6 @@ export async function checkInAppointmentToQueue(
     }
     throw new Error(apptErr.message);
   }
-
-  await notifyDoctorForApprovedAppointment(queueEntryId);
 
   return { queueEntryId, status: "waiting" };
 }

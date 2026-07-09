@@ -39,7 +39,7 @@ export async function enqueueAppointmentToQueue(
     appointment_date?: string | null;
     source?: "walk_in" | "appointment" | "online";
   }
-): Promise<string> {
+): Promise<{ queueEntryId: string; created: boolean }> {
   const queueDate = appointmentDateOnly(appointment.appointment_date) || todayIsoDate();
 
   const { data: existing } = await admin
@@ -50,7 +50,9 @@ export async function enqueueAppointmentToQueue(
     .neq("status", "cancelled")
     .maybeSingle();
 
-  if (existing?.id) return existing.id as string;
+  if (existing?.id) {
+    return { queueEntryId: existing.id as string, created: false };
+  }
 
   const queueId = await insertQueueEntry({
     clinic_id: appointment.clinic_id,
@@ -64,7 +66,7 @@ export async function enqueueAppointmentToQueue(
     queue_date: queueDate,
   });
 
-  return queueId;
+  return { queueEntryId: queueId, created: true };
 }
 
 /** بعد الموافقة على طلب الباركود — waiting + إدراج في غرفة الانتظار (اليوم فقط) */
@@ -80,10 +82,11 @@ export async function enqueueApprovedAppointment(
     appointment_date?: string | null;
   }
 ): Promise<string> {
-  return enqueueAppointmentToQueue(admin, {
+  const { queueEntryId } = await enqueueAppointmentToQueue(admin, {
     ...appointment,
     source: "online",
   });
+  return queueEntryId;
 }
 
 /** مزامنة حالة الموعد عند تغيّر دور الانتظار */
