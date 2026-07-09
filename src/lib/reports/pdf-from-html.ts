@@ -13,8 +13,8 @@ export type PdfRenderOptions = {
 };
 
 const DEFAULT_RENDER: Required<PdfRenderOptions> = {
-  scale: 2,
-  jpegQuality: 0.88,
+  scale: 1.5,
+  jpegQuality: 0.82,
 };
 
 export function isPdfBase64TooLarge(
@@ -130,9 +130,9 @@ export async function generateElementPdfBase64(
 ): Promise<string> {
   const maxBytes = opts?.maxBytes;
   const attempts: PdfRenderOptions[] = [
-    { scale: 2, jpegQuality: 0.88 },
-    { scale: 2, jpegQuality: 0.72 },
-    { scale: 1.5, jpegQuality: 0.8 },
+    { scale: 1.5, jpegQuality: 0.82 },
+    { scale: 1.5, jpegQuality: 0.68 },
+    { scale: 1.25, jpegQuality: 0.75 },
   ];
 
   let lastBase64 = "";

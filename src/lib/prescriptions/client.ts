@@ -32,53 +32,63 @@ export async function fetchPrescriptionByQueueEntry(
   return json.prescription ?? null;
 }
 
-/** جلب وصفة الجلسة — بالطابور أولاً ثم جلسة الكشف، مع إعادة المحاولة */
+/** جلب وصفة الجلسة — بالطابور أولاً ثم جلسة الكشف، مع إعادة محاولة خفيفة */
 export async function resolvePrescriptionForSession(
   input: { queueEntryId?: string | null; operationId?: string | null },
   portal: AuthPortalId = "accountant",
   options?: { retries?: number; retryDelayMs?: number }
 ): Promise<PatientPrescription | null> {
-  const retries = options?.retries ?? 3;
-  const retryDelayMs = options?.retryDelayMs ?? 2000;
+  const retries = options?.retries ?? 1;
+  const retryDelayMs = options?.retryDelayMs ?? 500;
   const queueEntryId = String(input.queueEntryId ?? "").trim() || null;
   const operationIdHint = String(input.operationId ?? "").trim() || null;
 
   for (let attempt = 0; attempt < retries; attempt++) {
-    if (queueEntryId) {
-      const byQueue = await fetchPrescriptionByQueueEntry(queueEntryId, portal).catch(
-        () => null
-      );
-      if (byQueue && prescriptionHasContent(byQueue)) return byQueue;
-    }
+    const byQueuePromise = queueEntryId
+      ? fetchPrescriptionByQueueEntry(queueEntryId, portal).catch(() => null)
+      : Promise.resolve(null);
 
-    const operationId =
-      operationIdHint ??
-      (queueEntryId
-        ? (await fetchVisitSessionByQueue(queueEntryId, portal).catch(() => null))
-            ?.operationId
-        : null);
+    const operationIdPromise = operationIdHint
+      ? Promise.resolve(operationIdHint)
+      : queueEntryId
+        ? fetchVisitSessionByQueue(queueEntryId, portal)
+            .then((session) => session?.operationId ?? null)
+            .catch(() => null)
+        : Promise.resolve(null);
+
+    const [byQueue, operationId] = await Promise.all([
+      byQueuePromise,
+      operationIdPromise,
+    ]);
+
+    if (byQueue && prescriptionHasContent(byQueue)) return byQueue;
+
+    const operationLookups: Promise<PatientPrescription | null>[] = [];
 
     if (operationIdHint && !queueEntryId) {
-      const byLinkedOp = await fetchPrescriptionByOperationLinked(
-        operationIdHint,
-        portal
-      ).catch(() => null);
-      if (byLinkedOp && prescriptionHasContent(byLinkedOp)) return byLinkedOp;
+      operationLookups.push(
+        fetchPrescriptionByOperationLinked(operationIdHint, portal).catch(
+          () => null
+        )
+      );
     }
 
     if (operationId) {
-      const byOperation = await fetchPrescriptionByOperation(
-        operationId,
-        portal,
-        queueEntryId
-      ).catch(() => null);
-      if (byOperation && prescriptionHasContent(byOperation)) return byOperation;
+      operationLookups.push(
+        fetchPrescriptionByOperation(operationId, portal, queueEntryId).catch(
+          () => null
+        ),
+        fetchPrescriptionByOperationLinked(operationId, portal).catch(
+          () => null
+        )
+      );
+    }
 
-      const byLinked = await fetchPrescriptionByOperationLinked(
-        operationId,
-        portal
-      ).catch(() => null);
-      if (byLinked && prescriptionHasContent(byLinked)) return byLinked;
+    if (operationLookups.length > 0) {
+      const results = await Promise.all(operationLookups);
+      for (const rx of results) {
+        if (rx && prescriptionHasContent(rx)) return rx;
+      }
     }
 
     if (attempt < retries - 1) {

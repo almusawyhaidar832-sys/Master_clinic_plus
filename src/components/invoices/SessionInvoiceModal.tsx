@@ -168,7 +168,7 @@ export function SessionInvoiceModal({
     void resolvePrescriptionForSession(
       { queueEntryId, operationId: data.operationId },
       "accountant",
-      { retries: archivedHistory ? 2 : 3, retryDelayMs: 1500 }
+      archivedHistory ? { retries: 2, retryDelayMs: 800 } : undefined
     )
       .then((rx) => {
         if (cancelled || !rx) return;
@@ -242,18 +242,14 @@ export function SessionInvoiceModal({
 
     let rxId = resolvedPrescriptionId;
     if (!rxId && queueEntryId) {
-      const rx = await resolvePrescriptionForSession({ queueEntryId }, "accountant", {
-        retries: 2,
-        retryDelayMs: 1000,
-      });
+      const rx = await resolvePrescriptionForSession({ queueEntryId }, "accountant");
       rxId = rx?.id ?? null;
       if (rxId) setResolvedPrescriptionId(rxId);
     }
     if (!rxId && data.operationId) {
       const rx = await resolvePrescriptionForSession(
         { operationId: data.operationId },
-        "accountant",
-        { retries: 2, retryDelayMs: 1000 }
+        "accountant"
       );
       rxId = rx?.id ?? null;
       if (rxId) setResolvedPrescriptionId(rxId);

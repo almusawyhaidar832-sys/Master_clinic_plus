@@ -278,27 +278,20 @@ export function QuickEntryForm({
   }, []);
 
   const openPrescriptionModalIfAny = useCallback(
-    async (
-      queueEntryId: string | null | undefined,
-      openImmediately = true
-    ) => {
+    (queueEntryId: string | null | undefined, openImmediately = true) => {
       if (!queueEntryId) return;
 
-      try {
-        const rx = await resolvePrescriptionForSession(
-          { queueEntryId },
-          "accountant",
-          { retries: 3, retryDelayMs: 2000 }
-        );
-        if (rx) {
+      void resolvePrescriptionForSession({ queueEntryId }, "accountant")
+        .then((rx) => {
+          if (!rx) return;
           setPendingPrescriptionId(rx.id);
           if (openImmediately) {
             setPrescriptionModalId(rx.id);
           }
-        }
-      } catch {
-        /* لا وصفة — طبيعي */
-      }
+        })
+        .catch(() => {
+          /* لا وصفة — طبيعي */
+        });
     },
     []
   );
@@ -1762,20 +1755,7 @@ export function QuickEntryForm({
 
     if (entryAmountLive > 0) {
       setPendingSuccessOp(savedOp);
-      let rxIdForInvoice: string | null = null;
-      if (visitQueueEntryId) {
-        try {
-          const rx = await resolvePrescriptionForSession(
-            { queueEntryId: visitQueueEntryId },
-            "accountant",
-            { retries: 3, retryDelayMs: 1500 }
-          );
-          rxIdForInvoice = rx?.id ?? null;
-        } catch {
-          rxIdForInvoice = null;
-        }
-      }
-      setPendingPrescriptionId(rxIdForInvoice);
+      setPendingPrescriptionId(null);
       setInvoiceData(
         buildSessionInvoiceData({
           operation: savedOp,
