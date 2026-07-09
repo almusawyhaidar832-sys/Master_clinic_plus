@@ -1,3 +1,5 @@
+import "server-only";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isDailyWageAssistant } from "@/lib/services/assistant-compensation";
 import {
@@ -45,43 +47,6 @@ function sumAssistantPaidFromTransactions(
     doctor: roundMoney(doctor),
     clinic: roundMoney(clinic),
   };
-}
-
-/** تسمية حالة مساعد في جدول رواتب الشهر */
-export function assistantPayrollStatusLabel(
-  record: PayrollRecord,
-  dailyWage: boolean
-): string {
-  if (record.status === "paid") return "مُؤكَّد بالكامل";
-
-  const paidDoctor = assistantPaidDoctorShare(record);
-  const paidClinic = assistantPaidClinicShare(record);
-  const paidTotal = assistantPaidTotalSalary(record);
-
-  if (paidDoctor > 0 || paidClinic > 0 || paidTotal > 0) {
-    const fullyPaid = assistantIsFullyPaid(record, { dailyWage });
-    if (fullyPaid) return "مُؤكَّد بالكامل";
-    return "مُؤكَّد جزئياً";
-  }
-
-  if (Number(record.total_salary ?? 0) > 0) {
-    return "مُسجَّل — بانتظار التأكيد";
-  }
-
-  return "مُولَّد";
-}
-
-/** تسمية حالة قسيمة موظف في جدول رواتب الشهر */
-export function staffSlipPayrollStatusLabel(
-  slip: SalarySlip,
-  dailyWage = false
-): string {
-  if (slip.status === "paid") return "مدفوع";
-  const paid = slipPaidNet(slip);
-  if (paid > 0) {
-    return slipIsFullyPaid(slip, { dailyWage }) ? "مدفوع" : "مُؤكَّد جزئياً";
-  }
-  return "مسودة";
 }
 
 async function syncAssistantPayrollRecordPaid(

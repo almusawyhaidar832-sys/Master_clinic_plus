@@ -70,10 +70,12 @@ import {
   assistantPendingClinicShare,
   assistantPendingDoctorShare,
   assistantPendingTotalSalary,
+  assistantPayrollStatusLabel,
   dailyWagePendingFromAccrued,
   slipIsFullyPaid,
   slipPaidNet,
   slipPendingNet,
+  staffSlipPayrollStatusLabel,
 } from "@/lib/services/payroll-paid-portions";
 import {
   DAILY_ASSISTANT_PAYROLL_ENTRY_TYPES,
@@ -82,10 +84,6 @@ import {
   payrollEntryFormSubtitle,
 } from "@/lib/services/salary-entry-display";
 import { ChevronDown } from "lucide-react";
-import {
-  assistantPayrollStatusLabel,
-  staffSlipPayrollStatusLabel,
-} from "@/lib/services/payroll-paid-sync";
 
 interface DoctorOption {
   id: string;
