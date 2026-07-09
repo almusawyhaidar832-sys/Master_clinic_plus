@@ -424,6 +424,31 @@ function sumAssistantClinicPaidInPeriod(
   }, 0);
 }
 
+/** حصة عيادة مساعدين من حركات تأكيد فقط — أدق من paid_clinic_share المخزّن */
+async function sumAssistantClinicPayrollTransactions(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("amount")
+    .eq("clinic_id", clinicId)
+    .eq("type", "assistant_payroll_clinic")
+    .gte("transaction_date", from)
+    .lte("transaction_date", to);
+
+  if (error || !data?.length) return 0;
+
+  return roundMoney(
+    data.reduce(
+      (sum, row) => sum + Math.abs(Number(row.amount ?? 0)),
+      0
+    )
+  );
+}
+
 async function fetchPayrollRecordsForProfitLegacy(
   supabase: SupabaseClient,
   clinicId: string
@@ -456,14 +481,15 @@ export async function fetchPaidSalariesBundle(
   from: string,
   to: string
 ): Promise<PaidSalariesBundle> {
-  const [slipRows, recordRows, closedMonths] = await Promise.all([
+  const [slipRows, recordRows, closedMonths, assistantTxPaid] = await Promise.all([
     fetchSalarySlipsForProfitLegacy(supabase, clinicId),
     fetchPayrollRecordsForProfitLegacy(supabase, clinicId),
     fetchClosedPayrollMonths(supabase, clinicId),
+    sumAssistantClinicPayrollTransactions(supabase, clinicId, from, to),
   ]);
 
   if (!slipRows.length && !recordRows.length) {
-    return { display: 0, profitDeduction: 0 };
+    return { display: 0, profitDeduction: 0, assistantClinicLegacy: 0 };
   }
 
   const staffDisplay = sumPaidSlipsInPeriod(
@@ -490,7 +516,7 @@ export async function fetchPaidSalariesBundle(
     false,
     "cash_date"
   );
-  const assistantProfit = sumAssistantClinicPaidInPeriod(
+  const assistantLegacyPaid = sumAssistantClinicPaidInPeriod(
     recordRows,
     from,
     to,
@@ -498,6 +524,8 @@ export async function fetchPaidSalariesBundle(
     false,
     "cash_date"
   );
+  const assistantProfit =
+    assistantTxPaid > 0.01 ? assistantTxPaid : assistantLegacyPaid;
 
   return {
     display: roundMoney(staffDisplay + assistantDisplay),
@@ -628,7 +656,7 @@ export async function fetchExecutiveDashboardSupplement(
 
   return {
     salariesDisplay: salaries.display,
-    salariesPaidLegacy: salaries.profitDeduction,
+    salariesPaidLegacy: bundleLegacyProfitDeduction(salaries),
     payrollAccruals,
     visitorDebt,
     totalDebt,

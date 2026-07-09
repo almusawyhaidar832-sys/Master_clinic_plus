@@ -15,20 +15,11 @@ WHERE status = 'paid'
   AND COALESCE(paid_total_salary, 0) = 0
   AND COALESCE(total_salary, 0) > 0;
 
--- 2) paid_clinic_share مُعبَّأ لكن status ما زال generated
+-- 2) paid_clinic_share مُعبَّأ لكن status ما زال generated — لا ترفع paid_* فوق القيم المخزّنة
 UPDATE public.payroll_records
 SET
   status = 'paid',
-  paid_at = COALESCE(paid_at, NOW()),
-  paid_doctor_share_amount = GREATEST(
-    COALESCE(paid_doctor_share_amount, 0),
-    doctor_share_amount
-  ),
-  paid_total_salary = GREATEST(
-    COALESCE(paid_total_salary, 0),
-    COALESCE(paid_doctor_share_amount, 0) + COALESCE(paid_clinic_share_amount, 0),
-    total_salary
-  )
+  paid_at = COALESCE(paid_at, NOW())
 WHERE COALESCE(paid_clinic_share_amount, 0) > 0
   AND COALESCE(clinic_share_amount, 0) > 0
   AND paid_clinic_share_amount >= clinic_share_amount - 0.01

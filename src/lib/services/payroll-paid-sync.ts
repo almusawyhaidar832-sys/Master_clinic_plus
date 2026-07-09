@@ -116,18 +116,6 @@ async function syncAssistantPayrollRecordPaid(
   const accruedClinic = roundMoney(Number(record.clinic_share_amount ?? 0));
   const accruedTotal = roundMoney(Number(record.total_salary ?? 0));
 
-  if (
-    paidClinic > 0 &&
-    accruedClinic > 0 &&
-    paidClinic >= accruedClinic - 0.01 &&
-    paidDoctor >= accruedDoctor - 0.01 &&
-    !dailyWage
-  ) {
-    paidDoctor = Math.max(paidDoctor, accruedDoctor);
-    paidClinic = Math.max(paidClinic, accruedClinic);
-    paidTotal = Math.max(paidTotal, accruedTotal, paidDoctor + paidClinic);
-  }
-
   const resolvedForStatus = {
     ...record,
     paid_doctor_share_amount: paidDoctor,
@@ -136,6 +124,7 @@ async function syncAssistantPayrollRecordPaid(
   } as PayrollRecord;
 
   const amountsFullyMatch =
+    !dailyWage &&
     accruedClinic > 0 &&
     paidClinic >= accruedClinic - 0.01 &&
     paidDoctor >= accruedDoctor - 0.01;

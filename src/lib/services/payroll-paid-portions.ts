@@ -110,16 +110,12 @@ export function assistantPendingDoctorShare(
   mode?: PayrollPendingMode
 ): number {
   if (!record) return 0;
+  /** أجر يومي: doctor_share_amount = المتبقي فقط (لا نطرح paid مرة ثانية) */
+  if (mode?.dailyWage) {
+    return roundMoney(Math.max(0, Number(record.doctor_share_amount ?? 0)));
+  }
   if (mode?.doctorSharePercentage != null) {
     return assistantPendingShares(record, mode.doctorSharePercentage).doctor;
-  }
-  if (mode?.dailyWage) {
-    return roundMoney(
-      Math.max(
-        0,
-        Number(record.doctor_share_amount ?? 0) - assistantPaidDoctorShare(record)
-      )
-    );
   }
   return roundMoney(
     Math.max(
@@ -134,16 +130,11 @@ export function assistantPendingClinicShare(
   mode?: PayrollPendingMode
 ): number {
   if (!record) return 0;
+  if (mode?.dailyWage) {
+    return roundMoney(Math.max(0, Number(record.clinic_share_amount ?? 0)));
+  }
   if (mode?.doctorSharePercentage != null) {
     return assistantPendingShares(record, mode.doctorSharePercentage).clinic;
-  }
-  if (mode?.dailyWage) {
-    return roundMoney(
-      Math.max(
-        0,
-        Number(record.clinic_share_amount ?? 0) - assistantPaidClinicShare(record)
-      )
-    );
   }
   return roundMoney(
     Math.max(
@@ -158,13 +149,9 @@ export function assistantPendingTotalSalary(
   mode?: PayrollPendingMode
 ): number {
   if (!record) return 0;
+  /** أجر يومي: total_salary = المتبقي فقط بعد recomputeAssistantPayrollRecord */
   if (mode?.dailyWage) {
-    return roundMoney(
-      Math.max(
-        0,
-        Number(record.total_salary ?? 0) - assistantPaidTotalSalary(record)
-      )
-    );
+    return roundMoney(Math.max(0, Number(record.total_salary ?? 0)));
   }
   return roundMoney(
     Math.max(
@@ -190,7 +177,7 @@ export function assistantIsFullyPaid(
   if (!record) return false;
   if (mode?.dailyWage) {
     return (
-      assistantPendingTotalSalary(record, mode) <= 0 &&
+      roundMoney(Number(record.total_salary ?? 0)) <= 0 &&
       assistantPaidTotalSalary(record) > 0
     );
   }

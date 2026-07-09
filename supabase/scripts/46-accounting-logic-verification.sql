@@ -646,6 +646,17 @@ legacy_assistant_records AS (
     )
   GROUP BY pr.clinic_id
 ),
+assistant_tx_clinic AS (
+  SELECT
+    t.clinic_id,
+    ROUND(COALESCE(SUM(ABS(t.amount)), 0)::numeric, 2) AS tx_clinic_paid
+  FROM public.transactions t
+  JOIN _acct_clinic c ON c.id = t.clinic_id
+  CROSS JOIN cfg
+  WHERE t.type = 'assistant_payroll_clinic'
+    AND t.transaction_date BETWEEN cfg.period_from AND cfg.period_to
+  GROUP BY t.clinic_id
+),
 registered_assistant AS (
   SELECT
     se.clinic_id,
@@ -689,6 +700,7 @@ SELECT
   COALESCE(cp.confirmed_salaries, 0) AS confirmed_salaries,
   COALESCE(ls.staff_legacy, 0) AS legacy_staff_slips,
   COALESCE(la.assistant_legacy, 0) AS legacy_assistant_records,
+  COALESCE(atx.tx_clinic_paid, 0) AS assistant_tx_clinic,
   COALESCE(ra.registered_clinic_share, 0) AS registered_assistant_not_in_profit,
   COALESCE(tp.balance_topups, 0) AS balance_topups,
   ROUND(
@@ -716,5 +728,6 @@ LEFT JOIN expenses e ON e.clinic_id = c.id
 LEFT JOIN confirmed_payroll cp ON cp.clinic_id = c.id
 LEFT JOIN legacy_staff_slips ls ON ls.clinic_id = c.id
 LEFT JOIN legacy_assistant_records la ON la.clinic_id = c.id
+LEFT JOIN assistant_tx_clinic atx ON atx.clinic_id = c.id
 LEFT JOIN registered_assistant ra ON ra.clinic_id = c.id
 LEFT JOIN topups tp ON tp.clinic_id = c.id;
