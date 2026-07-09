@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
 
       const tx = await recordAssistantDailyEntryPaidTransaction(
         admin,
-        clinicId,
+        clinicId || activeRecord.clinic_id,
         activeRecord,
         id,
         Number(entry.amount ?? 0),
@@ -312,16 +312,18 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, already_paid: true });
       }
 
+      const resolvedSlipClinicId =
+        clinicId || (activeSlip as unknown as { clinic_id?: string }).clinic_id || "";
       const tx = activeSlip.doctor_id
         ? await recordDoctorSalarySlipPaidTransaction(
             admin,
-            clinicId,
+            resolvedSlipClinicId,
             activeSlip,
             pending
           )
         : await recordStaffSlipPaidTransaction(
             admin,
-            clinicId,
+            resolvedSlipClinicId,
             activeSlip,
             pending,
             isDailyStaff
@@ -480,7 +482,7 @@ export async function POST(req: NextRequest) {
 
     const tx = await recordAssistantPayrollPaidTransaction(
       admin,
-      clinicId,
+      clinicId || activeRecord.clinic_id,
       activeRecord,
       { doctor: pendingDoctor, clinic: pendingClinic }
     );

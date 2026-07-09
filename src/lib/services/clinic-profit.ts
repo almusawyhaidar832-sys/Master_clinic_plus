@@ -105,6 +105,14 @@ export async function recordFinancialTransaction(
   admin: SupabaseClient,
   input: RecordTransactionInput
 ): Promise<{ ok: boolean; error?: string; skipped?: boolean }> {
+  if (!input.clinicId) {
+    // clinic_id عمود NOT NULL — رسالة واضحة بدل خطأ Postgres مبهم، وتمنع أي
+    // إدراج فاسد يعيد نفس مشكلة الحركات المفقودة من كشف العيادة سابقاً.
+    return {
+      ok: false,
+      error: `clinic_id مفقود عند تسجيل حركة ${input.type} — تعذّر تحديد العيادة`,
+    };
+  }
   if (input.referenceType && input.referenceId) {
     const { data: existing } = await admin
       .from("transactions")
