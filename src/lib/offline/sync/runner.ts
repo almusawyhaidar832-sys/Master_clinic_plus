@@ -13,6 +13,8 @@ import {
 import type { OfflineQueueRecord } from "@/lib/offline/types";
 
 let syncInFlight = false;
+const lastFailedAttemptAt = new Map<string, number>();
+const FAILED_RETRY_DELAY_MS = 30_000;
 
 type SyncPortal = AuthPortalId;
 
@@ -47,9 +49,13 @@ export async function runOfflineSync(): Promise<{
 
   try {
     const queue = await listOfflineQueue();
-    const pending = queue.filter(
-      (item) => item.status === "pending" || item.status === "failed"
-    );
+    const now = Date.now();
+    const pending = queue.filter((item) => {
+      if (item.status === "pending") return true;
+      if (item.status !== "failed") return false;
+      const last = lastFailedAttemptAt.get(item.id) ?? 0;
+      return now - last >= FAILED_RETRY_DELAY_MS;
+    });
 
     for (const item of pending) {
       const ok = await syncOneItem(item);
@@ -117,6 +123,7 @@ async function syncOneItem(item: OfflineQueueRecord): Promise<boolean> {
     const data = (await res.json()) as { ok?: boolean; error?: string };
 
     if (!res.ok || !data.ok) {
+      lastFailedAttemptAt.set(item.id, Date.now());
       await updateOfflineQueueStatus(
         item.id,
         "failed",
@@ -130,8 +137,10 @@ async function syncOneItem(item: OfflineQueueRecord): Promise<boolean> {
     }
 
     await removeOfflineQueueItem(item.id);
+    lastFailedAttemptAt.delete(item.id);
     return true;
   } catch (err) {
+    lastFailedAttemptAt.set(item.id, Date.now());
     await updateOfflineQueueStatus(
       item.id,
       "failed",

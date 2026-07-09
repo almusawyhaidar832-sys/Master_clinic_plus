@@ -18,6 +18,8 @@ import {
   readMasterReportCache,
   writeMasterReportCache,
 } from "@/lib/offline/master-report-cache";
+import { downloadClinicReportPdf } from "@/lib/reports/pdf-export";
+import { prewarmPdfEngine } from "@/lib/reports/pdf-prewarm";
 import { FileText, Loader2 } from "lucide-react";
 
 export default function AdminMasterReportPage() {
@@ -27,8 +29,13 @@ export default function AdminMasterReportPage() {
   const [error, setError] = useState<string | null>(null);
   const [offlineView, setOfflineView] = useState(false);
   const [cachedAt, setCachedAt] = useState<number | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const periodOptions = getReportPeriodOptions();
+
+  useEffect(() => {
+    if (!isBrowserOffline()) void prewarmPdfEngine();
+  }, []);
 
   useEffect(() => {
     const cached = readMasterReportCache("admin", monthYear);
@@ -67,6 +74,7 @@ export default function AdminMasterReportPage() {
       writeMasterReportCache("admin", monthYear, data);
       setOfflineView(false);
       setCachedAt(Date.now());
+      void prewarmPdfEngine();
     } catch {
       const cached = readMasterReportCache("admin", monthYear);
       if (cached) {
@@ -136,6 +144,21 @@ export default function AdminMasterReportPage() {
         <div className="space-y-4">
           <ReportActions
             shareTitle={`التقرير المالي — ${report.clinicName} — ${report.periodLabel}`}
+            pdfLoading={pdfLoading}
+            onExportPdf={async () => {
+              setPdfLoading(true);
+              try {
+                await prewarmPdfEngine();
+                await downloadClinicReportPdf({
+                  clinicName: report.clinicName,
+                  periodLabel: report.periodLabel,
+                  generatedAt: new Date().toLocaleString("ar-IQ"),
+                  elementId: "master-clinic-report-print",
+                });
+              } finally {
+                setPdfLoading(false);
+              }
+            }}
           />
           <MasterReportDocument
             report={report}

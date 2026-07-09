@@ -4,22 +4,21 @@ import { useEffect } from "react";
 import { refreshDoctorWebPushIfGranted, listenForPushResubscribe } from "@/lib/push/client";
 import { warmDoctorShellCache } from "@/lib/pwa/doctor-shell-cache";
 import { prefetchForCurrentDoctorPortal } from "@/lib/offline/patient-profile-prefetch";
+import { onOfflineReconnect } from "@/lib/offline/reconnect-coordinator";
 
 /**
  * عند دخول بوابة الطبيب: كاش offline + إعادة تسجيل Push خارج التطبيق.
  */
 export function DoctorPwaBootstrap() {
   useEffect(() => {
-    void warmDoctorShellCache();
-    void prefetchForCurrentDoctorPortal();
-
-    const onOnline = () => {
+    const warm = () => {
       void warmDoctorShellCache();
       void prefetchForCurrentDoctorPortal();
     };
 
-    window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
+    warm();
+    const unsubReconnect = onOfflineReconnect(warm);
+    return unsubReconnect;
   }, []);
 
   useEffect(() => {

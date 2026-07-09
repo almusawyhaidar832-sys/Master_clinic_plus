@@ -50,8 +50,11 @@ function txStore(
   );
 }
 
-export async function idbGet<T>(key: string): Promise<T | null> {
-  const { store } = await txStore(OFFLINE_QUEUE_STORE, "readonly");
+export async function idbGet<T>(
+  key: string,
+  storeName = OFFLINE_QUEUE_STORE
+): Promise<T | null> {
+  const { store } = await txStore(storeName, "readonly");
   return new Promise((resolve, reject) => {
     const req = store.get(key);
     req.onsuccess = () => resolve((req.result as T | undefined) ?? null);

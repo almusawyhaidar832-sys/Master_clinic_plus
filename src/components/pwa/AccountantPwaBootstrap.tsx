@@ -8,6 +8,8 @@ import {
 } from "@/lib/push/client";
 import { warmAccountantShellCache } from "@/lib/pwa/accountant-shell-cache";
 import { prefetchForCurrentAccountantPortal } from "@/lib/offline/patient-profile-prefetch";
+import { onOfflineReconnect } from "@/lib/offline/reconnect-coordinator";
+import { prewarmPdfEngine } from "@/lib/reports/pdf-prewarm";
 import { ensureNotificationPermission } from "@/lib/queue/realtime-client";
 import {
   hasPersistedAudioConsent,
@@ -43,16 +45,15 @@ export function AccountantPwaBootstrap() {
   }, []);
 
   useEffect(() => {
-    void warmAccountantShellCache();
-    void prefetchForCurrentAccountantPortal();
-
-    const onOnline = () => {
+    const warm = () => {
       void warmAccountantShellCache();
       void prefetchForCurrentAccountantPortal();
+      void prewarmPdfEngine();
     };
 
-    window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
+    warm();
+    const unsubReconnect = onOfflineReconnect(warm);
+    return unsubReconnect;
   }, []);
 
   useEffect(() => {

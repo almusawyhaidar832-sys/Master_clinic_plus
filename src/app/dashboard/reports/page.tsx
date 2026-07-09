@@ -13,6 +13,7 @@ import {
   downloadClinicReportPdf,
   downloadSettlementPdf,
 } from "@/lib/reports/pdf-export";
+import { prewarmPdfEngine } from "@/lib/reports/pdf-prewarm";
 import { createClient } from "@/lib/supabase/client";
 import {
   fetchAccountantClinicReport,
@@ -27,6 +28,10 @@ import {
   readMasterReportCache,
   writeMasterReportCache,
 } from "@/lib/offline/master-report-cache";
+import {
+  readSettlementReportCache,
+  writeSettlementReportCache,
+} from "@/lib/offline/settlement-report-cache";
 import { FileText, Loader2, ClipboardList, Scale } from "lucide-react";
 
 export default function AccountantReportsPage() {
@@ -42,20 +47,38 @@ export default function AccountantReportsPage() {
   const [settlementPdfLoading, setSettlementPdfLoading] = useState(false);
   const [offlineView, setOfflineView] = useState(false);
   const [cachedAt, setCachedAt] = useState<number | null>(null);
+  const [settlementOfflineView, setSettlementOfflineView] = useState(false);
+  const [settlementCachedAt, setSettlementCachedAt] = useState<number | null>(
+    null
+  );
 
   const periodOptions = getReportPeriodOptions();
 
   useEffect(() => {
-    const cached = readMasterReportCache("accountant", monthYear);
-    if (cached) {
-      setReport(cached.report);
-      setCachedAt(cached.cachedAt);
+    if (!isBrowserOffline()) void prewarmPdfEngine();
+  }, []);
+
+  useEffect(() => {
+    const cachedReport = readMasterReportCache("accountant", monthYear);
+    const cachedSettlement = readSettlementReportCache("accountant", monthYear);
+
+    if (cachedReport) {
+      setReport(cachedReport.report);
+      setCachedAt(cachedReport.cachedAt);
       setOfflineView(isBrowserOffline());
-      return;
-    }
-    if (isBrowserOffline()) {
+    } else {
       setReport(null);
-      setOfflineView(true);
+      setOfflineView(isBrowserOffline());
+    }
+
+    if (cachedSettlement) {
+      setSettlement(cachedSettlement.report);
+      setSettlementCachedAt(cachedSettlement.cachedAt);
+      setSettlementOfflineView(isBrowserOffline());
+    } else {
+      setSettlement(null);
+      setSettlementOfflineView(false);
+      setSettlementCachedAt(null);
     }
   }, [monthYear]);
 
@@ -75,7 +98,6 @@ export default function AccountantReportsPage() {
 
     setLoading(true);
     setError(null);
-    setSettlement(null);
     try {
       const supabase = createClient();
       const data = await fetchAccountantClinicReport(supabase, monthYear);
@@ -83,6 +105,7 @@ export default function AccountantReportsPage() {
       writeMasterReportCache("accountant", monthYear, data);
       setOfflineView(false);
       setCachedAt(Date.now());
+      void prewarmPdfEngine();
     } catch {
       const cached = readMasterReportCache("accountant", monthYear);
       if (cached) {
@@ -98,14 +121,39 @@ export default function AccountantReportsPage() {
   }
 
   async function generateSettlement() {
+    if (isBrowserOffline()) {
+      const cached = readSettlementReportCache("accountant", monthYear);
+      if (cached) {
+        setSettlement(cached.report);
+        setSettlementCachedAt(cached.cachedAt);
+        setSettlementOfflineView(true);
+        setError(null);
+        return;
+      }
+      setError("لا يوجد اتصال — أنشئ كشف التسوية مرة مع النت أولاً");
+      return;
+    }
+
     setSettlementLoading(true);
     setError(null);
     try {
       const supabase = createClient();
       const data = await fetchMonthlySettlementReport(supabase, monthYear);
       setSettlement(data);
+      writeSettlementReportCache("accountant", monthYear, data);
+      setSettlementOfflineView(false);
+      setSettlementCachedAt(Date.now());
+      void prewarmPdfEngine();
     } catch {
-      setError("تعذر تجميع كشف التسوية. تحقق من الاتصال وقاعدة البيانات.");
+      const cached = readSettlementReportCache("accountant", monthYear);
+      if (cached) {
+        setSettlement(cached.report);
+        setSettlementCachedAt(cached.cachedAt);
+        setSettlementOfflineView(true);
+        setError("تعذر التحديث — عرض نسخة محفوظة من كشف التسوية");
+      } else {
+        setError("تعذر تجميع كشف التسوية. تحقق من الاتصال وقاعدة البيانات.");
+      }
     }
     setSettlementLoading(false);
   }
@@ -122,10 +170,18 @@ export default function AccountantReportsPage() {
 
       <OfflineViewBanner
         refreshing={false}
-        offline={offlineView}
+        offline={offlineView && !!report}
         cachedAt={cachedAt}
         refreshingLabel="عرض سريع من الذاكرة — جاري التحديث من السيرفر…"
-        offlineLabel="بدون اتصال — آخر تحديث: {time}"
+        offlineLabel="بدون اتصال — آخر تحديث للتقرير: {time}"
+      />
+
+      <OfflineViewBanner
+        refreshing={false}
+        offline={settlementOfflineView && !!settlement}
+        cachedAt={settlementCachedAt}
+        refreshingLabel="عرض سريع من الذاكرة — جاري التحديث من السيرفر…"
+        offlineLabel="بدون اتصال — آخر تحديث لكشف التسوية: {time}"
       />
 
       <Card className="border-primary/20 bg-primary/5">
@@ -150,9 +206,6 @@ export default function AccountantReportsPage() {
             value={monthYear}
             onChange={(e) => {
               setMonthYear(e.target.value);
-              setReport(null);
-              setSettlement(null);
-              setOfflineView(false);
               setError(null);
             }}
             options={periodOptions}
@@ -172,7 +225,9 @@ export default function AccountantReportsPage() {
             ) : (
               <>
                 <FileText className="h-5 w-5" />
-                إنشاء تقرير العيادة الكامل
+                {offlineView && report
+                  ? "عرض التقرير المحفوظ"
+                  : "إنشاء تقرير العيادة الكامل"}
               </>
             )}
           </Button>
@@ -208,7 +263,9 @@ export default function AccountantReportsPage() {
           ) : (
             <>
               <Scale className="h-5 w-5" />
-              إصدار كشف حساب شهري (تسوية)
+              {settlementOfflineView && settlement
+                ? "عرض كشف التسوية المحفوظ"
+                : "إصدار كشف حساب شهري (تسوية)"}
             </>
           )}
         </Button>
@@ -233,7 +290,7 @@ export default function AccountantReportsPage() {
       {settlement && (
         <div className="space-y-4">
           <Alert variant="success">
-            تم إنشاء كشف التسوية — جاهز للتصدير PDF
+            تم إنشاء كشف التسوية — جاهز للطباعة أو تصدير PDF
           </Alert>
           <ReportActions
             shareTitle={`تسوية شهرية — ${settlement.clinicName} — ${settlement.periodLabel}`}
@@ -241,6 +298,7 @@ export default function AccountantReportsPage() {
             onExportPdf={async () => {
               setSettlementPdfLoading(true);
               try {
+                await prewarmPdfEngine();
                 await downloadSettlementPdf({
                   periodLabel: settlement.periodLabel,
                   elementId: "monthly-settlement-print",
@@ -265,6 +323,7 @@ export default function AccountantReportsPage() {
             onExportPdf={async () => {
               setPdfLoading(true);
               try {
+                await prewarmPdfEngine();
                 await downloadClinicReportPdf({
                   clinicName: report.clinicName,
                   periodLabel: report.periodLabel,

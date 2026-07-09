@@ -1,8 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useOfflineReferenceBootstrap } from "@/lib/offline/hooks/useOfflineReferenceBootstrap";
 import { OfflineSyncBanner } from "@/components/offline/OfflineSyncBanner";
+import { installReconnectCoordinator } from "@/lib/offline/reconnect-coordinator";
 
 /**
  * المرحلة 1 من العمل بدون نت:
@@ -11,6 +12,8 @@ import { OfflineSyncBanner } from "@/components/offline/OfflineSyncBanner";
  */
 export function OfflineSyncProvider({ children }: { children: ReactNode }) {
   useOfflineReferenceBootstrap();
+
+  useEffect(() => installReconnectCoordinator(), []);
 
   return (
     <>

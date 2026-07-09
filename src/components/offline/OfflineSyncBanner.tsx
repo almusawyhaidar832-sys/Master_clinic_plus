@@ -6,6 +6,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { countPendingOfflineQueue } from "@/lib/offline/queue-store";
 import { OFFLINE_QUEUE_CHANGED_EVENT } from "@/lib/offline/types";
 import { isBrowserOffline } from "@/lib/offline/network";
+import { scheduleReconnectWork } from "@/lib/offline/reconnect-coordinator";
 import { runOfflineSync } from "@/lib/offline/sync/runner";
 
 export function OfflineSyncBanner() {
@@ -46,12 +47,12 @@ export function OfflineSyncBanner() {
     if (typeof window === "undefined") return;
 
     const onOnline = () => {
-      void syncNow();
+      scheduleReconnectWork();
     };
 
     const onVisible = () => {
       if (document.visibilityState === "visible" && !isBrowserOffline()) {
-        void syncNow();
+        scheduleReconnectWork();
       }
     };
 
