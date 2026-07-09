@@ -76,6 +76,7 @@ type OperationEarningRow = {
   materials_cost?: number | string | null;
   review_fee_amount?: number | string | null;
   is_review_statement?: boolean | null;
+  session_kind?: string | null;
   patient_treatment_cases?:
     | {
         doctor_share_total?: number;
@@ -240,13 +241,21 @@ export function calcOperationEarned(
 ): number {
   if (salaryDoctor) return 0;
 
+  // المصدر الوحيد للحقيقة: القيمة المجمّدة وقت الدفع بواسطة trigger
+  // calculate_operation_shares — تشمل الإرجاعات (سالبة) والكشفية (صفر عمداً).
+  // لا نعيد الحساب بنسبة الطبيب الحالية: هذا كان يخلق فرقاً بين الموبايل
+  // وقاعدة البيانات كل ما تغيّرت نسبة الطبيب لاحقاً أو انحرفت حصة مخزّنة قديمة.
+  if (row.doctor_share_amount !== null && row.doctor_share_amount !== undefined) {
+    return roundMoney(Number(row.doctor_share_amount));
+  }
+
   const paid = Number(row.paid_amount ?? 0);
   if (paid <= 0) return 0;
 
+  // احتياطي فقط لسجلات قديمة جداً لم يحسبها أي trigger أصلاً (نادر)
   const treatmentPaid = treatmentPaidForDoctorShare(row, clinicDefaultReviewFee);
   if (treatmentPaid <= FINANCIAL_EPSILON) return 0;
 
-  // نسبة الطبيب من ملفه أولاً — لا نعتمد حصة مخزّنة 50/50 خاطئة
   if (doctor) {
     return computeLiveDoctorShare(
       treatmentPaid,
@@ -277,9 +286,9 @@ export function calcClinicOperationEarned(
   doctorPct: number,
   salaryDoctor = false
 ): number {
-  const direct = Number(row.clinic_share_amount ?? 0);
-  if (direct !== 0) {
-    return Math.round(direct * 100) / 100;
+  // نفس منطق calcOperationEarned — القيمة المجمّدة هي المصدر الوحيد للحقيقة
+  if (row.clinic_share_amount !== null && row.clinic_share_amount !== undefined) {
+    return roundMoney(Number(row.clinic_share_amount));
   }
 
   const paid = Number(row.paid_amount ?? 0);
@@ -568,10 +577,10 @@ export function applyDoctorTopUpToWalletStats(
 }
 
 const OPERATION_EARNINGS_SELECT =
-  "doctor_share_amount, clinic_share_amount, paid_amount, materials_cost, review_fee_amount, is_review_statement, treatment_case_id, operation_date, patient_treatment_cases(doctor_share_total, clinic_share_total, final_price)";
+  "doctor_share_amount, clinic_share_amount, paid_amount, materials_cost, review_fee_amount, is_review_statement, session_kind, treatment_case_id, operation_date, patient_treatment_cases(doctor_share_total, clinic_share_total, final_price)";
 
 const OPERATION_EARNINGS_BATCH_SELECT =
-  "doctor_id, doctor_share_amount, clinic_share_amount, paid_amount, materials_cost, review_fee_amount, is_review_statement, treatment_case_id, operation_date, patient_treatment_cases(doctor_share_total, clinic_share_total, final_price)";
+  "doctor_id, doctor_share_amount, clinic_share_amount, paid_amount, materials_cost, review_fee_amount, is_review_statement, session_kind, treatment_case_id, operation_date, patient_treatment_cases(doctor_share_total, clinic_share_total, final_price)";
 
 type OperationEarningBatchRow = OperationEarningRow & { doctor_id: string };
 

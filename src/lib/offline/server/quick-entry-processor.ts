@@ -192,11 +192,9 @@ export async function processQuickEntryOfflinePayload(
   const optionalCols: Record<string, unknown> = {};
   if (payload.notes) optionalCols.notes = payload.notes;
   if (payload.labNotes) optionalCols.lab_notes = payload.labNotes;
-  if (payload.isReviewStatement) {
+  if (payload.isReviewStatement && payload.reviewFeeLive > 0) {
     optionalCols.is_review_statement = true;
-    if (payload.reviewFeeLive > 0) {
-      optionalCols.review_fee_amount = payload.reviewFeeLive;
-    }
+    optionalCols.review_fee_amount = payload.reviewFeeLive;
   }
 
   let linkedCaseId: string | null = payload.treatmentCaseId;

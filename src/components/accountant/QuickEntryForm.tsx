@@ -1244,9 +1244,9 @@ export function QuickEntryForm({
     const optionalCols: Record<string, unknown> = {};
     if (notes.trim()) optionalCols.notes = notes.trim();
     if (labNotes.trim()) optionalCols.lab_notes = labNotes.trim();
-    if (isReviewStatement && billingMode !== "examination") {
+    if (isReviewStatement && billingMode !== "examination" && reviewFeeLive > 0) {
       optionalCols.is_review_statement = true;
-      if (reviewFeeLive > 0) optionalCols.review_fee_amount = reviewFeeLive;
+      optionalCols.review_fee_amount = reviewFeeLive;
     }
     if (!isNewCase) {
       const persistedCaseId = resolvePersistedCaseId(
