@@ -2821,6 +2821,7 @@ export default function SalaryPage() {
       {editingEntry && (
         <EditSalaryEntryModal
           entry={editingEntry}
+          personName={selectedPerson?.full_name_ar ?? undefined}
           typeLabel={
             entryTypeLabels.find((t) => t.value === editingEntry.entry_type)
               ?.label ?? editingEntry.entry_type

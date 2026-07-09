@@ -24,6 +24,7 @@ function parsePositiveAmount(raw: string): number | null {
 
 type EditSalaryEntryModalProps = {
   entry: SalaryEntry;
+  personName?: string;
   typeLabel: string;
   monthFrom: string;
   monthTo: string;
@@ -42,6 +43,7 @@ type EditSalaryEntryModalProps = {
 
 export function EditSalaryEntryModal({
   entry,
+  personName,
   typeLabel,
   monthFrom,
   monthTo,
@@ -150,7 +152,7 @@ export function EditSalaryEntryModal({
     }
 
     const ok = window.confirm(
-      `حذف ${typeLabel} بمبلغ ${formatCurrency(Number(entry.amount))}؟\n\nسُعاد حساب الراتب تلقائياً.`
+      `حذف ${typeLabel} بمبلغ ${formatCurrency(Number(entry.amount))}${personName ? ` — ${personName}` : ""}؟\n\nسُعاد حساب الراتب تلقائياً.`
     );
     if (!ok) return;
 
@@ -204,7 +206,9 @@ export function EditSalaryEntryModal({
             >
               تعديل الحركة
             </h3>
-            <p className="mt-1 text-sm text-slate-muted">{typeLabel}</p>
+            <p className="mt-1 text-sm text-slate-muted">
+              {personName ? `${personName} — ${typeLabel}` : typeLabel}
+            </p>
           </div>
           <button
             type="button"
