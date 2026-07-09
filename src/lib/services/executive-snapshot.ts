@@ -1142,12 +1142,15 @@ export interface ExecutiveSnapshotCore {
   [key: string]: unknown;
 }
 
-/** خصم الرواتب من الربح — المُؤكَّد صرفه (حركات + قسائم) */
+/** خصم الرواتب من الربح — حركات مؤكَّدة أولاً، أرشيف القسائم فقط عند غياب الحركات */
 export function resolveExecutiveSalaryDeduction(
   payrollAccruals: number,
   salariesPaidLegacy: number
 ): number {
-  return roundMoney(Math.max(payrollAccruals, salariesPaidLegacy));
+  if (payrollAccruals > 0.01) {
+    return roundMoney(payrollAccruals);
+  }
+  return roundMoney(salariesPaidLegacy);
 }
 
 /** دمج رواتب + كشفيات في اللوحة التنفيذية */
