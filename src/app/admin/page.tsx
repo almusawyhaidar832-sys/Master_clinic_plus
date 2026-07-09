@@ -34,6 +34,7 @@ import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationM
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { subscribePendingClinicTopUpChanges } from "@/lib/services/clinic-profit-pending";
+import { subscribeClinicProfitBroadcast } from "@/lib/services/clinic-profit-broadcast";
 
 export default function AdminHomePage() {
   const { clinicId: activeClinicId } = useActiveClinicId();
@@ -93,13 +94,24 @@ export default function AdminHomePage() {
     function onFocus() {
       setRefreshKey((k) => k + 1);
     }
+    function onVisible() {
+      if (document.visibilityState === "visible") {
+        setRefreshKey((k) => k + 1);
+      }
+    }
     window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
     const unsubPending = subscribePendingClinicTopUpChanges(() => {
+      setRefreshKey((k) => k + 1);
+    });
+    const unsubBroadcast = subscribeClinicProfitBroadcast(() => {
       setRefreshKey((k) => k + 1);
     });
     return () => {
       window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
       unsubPending();
+      unsubBroadcast();
     };
   }, []);
 

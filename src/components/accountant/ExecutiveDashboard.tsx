@@ -21,6 +21,7 @@ import {
   fetchAlignedClinicProfitStats,
 } from "@/lib/services/clinic-profit-loader";
 import { subscribePendingClinicTopUpChanges } from "@/lib/services/clinic-profit-pending";
+import { subscribeClinicProfitBroadcast } from "@/lib/services/clinic-profit-broadcast";
 import type { BalanceTopUpSuccessDetail } from "@/lib/services/balance-topup";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import {
@@ -529,6 +530,12 @@ export function ExecutiveDashboard() {
 
   useEffect(() => {
     return subscribePendingClinicTopUpChanges(() => {
+      void fetchData({ silent: true });
+    });
+  }, [fetchData]);
+
+  useEffect(() => {
+    return subscribeClinicProfitBroadcast(() => {
       void fetchData({ silent: true });
     });
   }, [fetchData]);

@@ -11,6 +11,7 @@ import {
   clearAllPendingClinicTopUps,
   clearPendingClinicTopUp,
 } from "@/lib/services/clinic-profit-pending";
+import { clearClinicProfitBroadcast } from "@/lib/services/clinic-profit-broadcast";
 
 interface ClearClinicTopUpsButtonProps {
   portal?: AuthPortalId;
@@ -69,6 +70,7 @@ export function ClearClinicTopUpsButton({
 
       clearPendingClinicTopUp(clinicId);
       clearAllPendingClinicTopUps();
+      clearClinicProfitBroadcast();
 
       notifyClinicSync({
         topic: ["profit", "financial", "audit"],

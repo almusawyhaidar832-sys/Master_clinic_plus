@@ -10,9 +10,14 @@ import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { notifyBalanceTopUpRefresh } from "@/lib/services/clinic-profit";
-import { registerPendingClinicTopUp, clearPendingClinicTopUp } from "@/lib/services/clinic-profit-pending";
+import { registerPendingClinicTopUp } from "@/lib/services/clinic-profit-pending";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
 import { defaultClinicProfitPeriod } from "@/lib/services/clinic-profit-loader";
+import {
+  buildExpectedProfitAfterTopUp,
+  publishClinicProfitBroadcast,
+} from "@/lib/services/clinic-profit-broadcast";
+import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 import {
   registerPendingDoctorTopUpDelta,
   registerPendingDoctorWallet,
@@ -117,6 +122,17 @@ export function BalanceTopUpModal({
     setError("");
     submitLockRef.current = true;
 
+    let preTopUpBaseline: ClinicProfitStats | null = null;
+    if (target === "clinic" && clinicId) {
+      const period = defaultClinicProfitPeriod();
+      preTopUpBaseline = await fetchClinicProfitStatsForPeriodViaApi(
+        period.from,
+        period.to,
+        portal,
+        clinicId
+      ).catch(() => null);
+    }
+
     try {
       const res = await fetch("/api/balance-topup", {
         method: "POST",
@@ -158,23 +174,24 @@ export function BalanceTopUpModal({
 
       if (target === "clinic" && clinicId && toppedAmount > 0) {
         const period = defaultClinicProfitPeriod();
-        const baseline = await fetchClinicProfitStatsForPeriodViaApi(
-          period.from,
-          period.to,
-          portal,
-          clinicId
-        ).catch(() => null);
+        registerPendingClinicTopUp(
+          clinicId,
+          toppedAmount,
+          transactionDate,
+          preTopUpBaseline ?? undefined
+        );
 
-        if (baseline && baseline.balanceTopupsTotal + 0.01 >= toppedAmount) {
-          clearPendingClinicTopUp(clinicId);
-        } else {
-          registerPendingClinicTopUp(
-            clinicId,
-            toppedAmount,
-            transactionDate,
-            baseline ?? undefined
-          );
-        }
+        const expected = buildExpectedProfitAfterTopUp(
+          preTopUpBaseline,
+          toppedAmount
+        );
+        publishClinicProfitBroadcast({
+          clinicId,
+          periodFrom: period.from,
+          periodTo: period.to,
+          netProfit: expected.netProfit,
+          balanceTopupsTotal: expected.balanceTopupsTotal,
+        });
       }
 
       notifyBalanceTopUpRefresh({

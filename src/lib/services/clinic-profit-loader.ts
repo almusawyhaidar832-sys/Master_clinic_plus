@@ -2,6 +2,7 @@ import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
 import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 import { applyOptimisticClinicTopUp } from "@/lib/services/clinic-profit-pending";
+import { applyClinicProfitBroadcast } from "@/lib/services/clinic-profit-broadcast";
 import { currentMonthYear, monthDateRange } from "@/lib/utils";
 
 /** نفس فترة اللوحة التنفيذية — من أول الشهر حتى آخر يوم فيه */
@@ -55,5 +56,6 @@ export async function fetchAlignedClinicProfitStats(
   period: { from: string; to: string } = defaultClinicProfitPeriod()
 ): Promise<ClinicProfitStats> {
   const stats = await fetchProfitStatsFromServer(period.from, period.to, clinicId);
-  return applyOptimisticClinicTopUp(clinicId, stats, period);
+  const withBroadcast = applyClinicProfitBroadcast(clinicId, period, stats);
+  return applyOptimisticClinicTopUp(clinicId, withBroadcast, period);
 }
