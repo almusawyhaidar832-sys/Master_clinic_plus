@@ -10,6 +10,7 @@
     "start:lan": "next start -H 0.0.0.0 -p 3000",
     "lint": "next lint",
     "prepare:deploy": "node scripts/prepare-vercel-deploy.mjs",
+    "deploy:zg29": "vercel deploy --prod --yes --project master-clinic-plus-zg29",
     "verify:dental-chart": "node scripts/verify-dental-chart-logic.mjs",
     "db:types": "supabase gen types typescript --local > src/types/database.ts"
   },
