@@ -10,6 +10,12 @@ import {
   resolveReviewFeeOnOperation,
 } from "@/lib/services/doctor-wallet";
 import {
+  computeCasePaidFromOps,
+  collectOperationsForTreatmentCase,
+  debtRegistrationAmountFromOperation,
+  isDebtRegistrationOperation,
+} from "@/lib/services/patient-treatment-cases";
+import {
   normalizePatientNameForMatch,
 } from "@/lib/services/resolve-patient-id";
 import { CLINICAL_SESSION_LABEL } from "@/lib/clinical/constants";
@@ -250,6 +256,10 @@ export function ledgerDisplayRemaining(
   if (caseId && caseRemainingById.has(caseId)) {
     return Math.max(0, caseRemainingById.get(caseId)!);
   }
+  if (isDebtRegistrationOperation(op)) {
+    const debtAmt = debtRegistrationAmountFromOperation(op);
+    if (debtAmt > FINANCIAL_EPSILON) return debtAmt;
+  }
   if (op.session_kind === "payment" && op.total_amount <= 0) {
     return 0;
   }
@@ -407,6 +417,43 @@ export async function fetchLedgerOperationsForDate(
       const info = buildCaseInfoFromRow(row as Record<string, unknown>);
       caseInfoById.set(info.id, info);
       caseRemainingById.set(info.id, info.remaining);
+    }
+
+    if (patientIds.length > 0) {
+      const { data: balanceOps } = await supabase
+        .from("patient_operations")
+        .select(
+          "id, patient_id, treatment_case_id, paid_amount, total_amount, operation_name_ar, operation_type, notes, remaining_debt, created_at, operation_date"
+        )
+        .eq("clinic_id", clinicId)
+        .in("patient_id", patientIds);
+
+      for (const caseId of allCaseIds) {
+        const info = caseInfoById.get(caseId);
+        if (!info) continue;
+        const caseOps = collectOperationsForTreatmentCase(
+          (balanceOps ?? []) as PatientOperation[],
+          { id: caseId, treatment_name_ar: info.name }
+        );
+        const paidMeta = computeCasePaidFromOps(caseOps, info.finalPrice);
+        const effectiveFinal =
+          info.finalPrice > FINANCIAL_EPSILON
+            ? info.finalPrice
+            : paidMeta.casePriceFromOps;
+        const totalPaid = paidMeta.totalPaid;
+        const remaining =
+          effectiveFinal > FINANCIAL_EPSILON
+            ? Math.max(0, effectiveFinal - totalPaid)
+            : paidMeta.lastRemaining;
+        const updated: TodayCaseInfo = {
+          ...info,
+          finalPrice: effectiveFinal,
+          totalPaid,
+          remaining,
+        };
+        caseInfoById.set(caseId, updated);
+        caseRemainingById.set(caseId, remaining);
+      }
     }
   }
 

@@ -16,6 +16,10 @@ import {
   type DebtorCaseDetail,
 } from "@/lib/ledger/outstanding-debt";
 import {
+  debtRegistrationAmountFromOperation,
+  isDebtRegistrationOperation,
+} from "@/lib/services/patient-treatment-cases";
+import {
   resolveReviewFeeOnOperation,
   treatmentPaidForDoctorShare,
   isReviewFeeOnlyPayment,
@@ -204,8 +208,9 @@ function sessionLabelFromOp(
   op: TodayOperationRow,
   clinicReviewFee = 0
 ): string {
-  if (num(op.remaining_debt) > 0 && num(op.paid_amount) <= 0) {
-    return `${opName(op)} — تسجيل دين`;
+  if (isDebtRegistrationOperation(op)) {
+    const base = opName(op).replace(/\s*—\s*تسجيل دين/i, "").trim() || "علاج";
+    return `${base} — تسجيل دين`;
   }
   const paid = ledgerPaidToday(op, clinicReviewFee);
   const reviewFee = resolveReviewFeeOnOperation(
@@ -1425,13 +1430,20 @@ export async function fetchDailyCollections(
       requiredToday,
       clinicReviewFee
     );
-    const caseDebtTotal = debtForCollectionStatus({
+    let caseDebtTotal = debtForCollectionStatus({
       remaining,
       patientDebtTotal,
       reviewFeeSettled,
       visitPaidToday: Math.max(visitPaidToday, paidToday),
       requiredToday,
     });
+    if (isDebtRegistrationOperation(op)) {
+      const debtAmt = debtRegistrationAmountFromOperation(op);
+      if (debtAmt > caseDebtTotal) {
+        caseDebtTotal = debtAmt;
+        remaining = Math.max(remaining, debtAmt);
+      }
+    }
     const debtCases: DebtorCaseDetail[] =
       patientDebt?.cases.map((c) => ({
         caseId: "",

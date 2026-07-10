@@ -8,7 +8,12 @@ import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { formatCurrency, cn } from "@/lib/utils";
-import { computeOutstandingDebtFromOperations } from "@/lib/services/patient-treatment-cases";
+import {
+  computeOutstandingDebtFromOperations,
+  computeOutstandingDebtFromTreatmentCases,
+  type PatientTreatmentCase,
+} from "@/lib/services/patient-treatment-cases";
+import { buildPlanFromCaseRow, computedCaseRemaining } from "@/lib/services/patient-financial-plan";
 import { searchPatientsViaApi } from "@/lib/services/patient-search";
 import { isBrowserOffline } from "@/lib/offline/network";
 import {
@@ -95,12 +100,53 @@ export default function PatientsSearchPage() {
       let opQuery = supabase
         .from("patient_operations")
         .select(
-          "id, patient_id, total_amount, paid_amount, remaining_debt, operation_name_ar, operation_type, treatment_case_id, created_at, operation_date"
+          "id, patient_id, total_amount, paid_amount, remaining_debt, operation_name_ar, operation_type, treatment_case_id, notes, created_at, operation_date"
         )
         .in("patient_id", ids)
         .order("created_at", { ascending: true });
       if (clinicId) opQuery = opQuery.eq("clinic_id", clinicId);
-      const { data: opData, error: opErr } = await opQuery;
+      let caseQuery = supabase
+        .from("patient_treatment_cases")
+        .select(
+          "id, patient_id, case_price, discount_total, final_price, total_paid, treatment_name_ar, doctor_share_total, clinic_share_total, status"
+        )
+        .in("patient_id", ids);
+      if (clinicId) caseQuery = caseQuery.eq("clinic_id", clinicId);
+
+      const [{ data: opData, error: opErr }, { data: caseData }] =
+        await Promise.all([opQuery, caseQuery]);
+
+      const casesByPatient = new Map<string, PatientTreatmentCase[]>();
+      for (const row of caseData ?? []) {
+        const pid = String((row as { patient_id?: string }).patient_id ?? "");
+        if (!pid) continue;
+        const r = row as Record<string, unknown>;
+        const casePrice = Number(r.case_price ?? 0);
+        const discount = Number(r.discount_total ?? 0);
+        const finalPrice =
+          Number(r.final_price ?? 0) || Math.max(0, casePrice - discount);
+        const plan = buildPlanFromCaseRow({
+          case_price: casePrice,
+          discount_total: discount,
+          final_price: finalPrice,
+          doctor_share_total: Number(r.doctor_share_total ?? 0),
+          clinic_share_total: Number(r.clinic_share_total ?? 0),
+          total_paid: Number(r.total_paid ?? 0),
+        });
+        const mapped: PatientTreatmentCase = {
+          ...plan,
+          id: String(r.id),
+          treatment_name_ar: String(r.treatment_name_ar ?? "علاج"),
+          remaining_balance: computedCaseRemaining(plan),
+          treatment_status:
+            String(r.status ?? "active") === "completed"
+              ? "completed"
+              : "active",
+        };
+        const list = casesByPatient.get(pid) ?? [];
+        list.push(mapped);
+        casesByPatient.set(pid, list);
+      }
 
       if (!opErr && opData) {
         const byPatient = new Map<string, PatientOperation[]>();
@@ -111,7 +157,15 @@ export default function PatientsSearchPage() {
         }
         for (const pid of ids) {
           const ops = byPatient.get(pid) ?? [];
-          debtMap[pid] = computeOutstandingDebtFromOperations(ops, pid);
+          const cases = casesByPatient.get(pid) ?? [];
+          const caseDebt = computeOutstandingDebtFromTreatmentCases(cases);
+          const opDebt = computeOutstandingDebtFromOperations(ops, pid);
+          debtMap[pid] = Math.max(caseDebt, opDebt);
+        }
+      } else {
+        for (const pid of ids) {
+          const cases = casesByPatient.get(pid) ?? [];
+          debtMap[pid] = computeOutstandingDebtFromTreatmentCases(cases);
         }
       }
     }

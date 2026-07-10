@@ -52,6 +52,7 @@ import {
   resolvePersistedCaseId,
   syncTreatmentCaseAfterSessionViaApi,
   registerTreatmentCaseDebtViaApi,
+  debtAmountNote,
   completeTreatmentCaseViaApi,
   type PatientTreatmentCase,
 } from "@/lib/services/patient-treatment-cases";
@@ -1465,6 +1466,12 @@ export function QuickEntryForm({
           // remaining_debt عمود محسوب تلقائياً في قاعدة البيانات (GENERATED)
           // — لا يمكن إدخال قيمة له مباشرة، يُحسب من total_amount - paid_amount.
           // الدين نفسه سُجّل أعلاه على الحالة عبر registerTreatmentCaseDebtViaApi.
+          const debtNote = debtAmountNote(entryAmount);
+          if (!optionalCols.notes) {
+            optionalCols.notes = debtNote;
+          } else if (!String(optionalCols.notes).includes("__debt_amount:")) {
+            optionalCols.notes = `${optionalCols.notes}\n${debtNote}`;
+          }
           const res = await insertSession(
             "payment",
             {

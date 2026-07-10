@@ -32,6 +32,76 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** بادئة مخفية في notes لحفظ مبلغ الدين — remaining_debt عمود محسوب ولا يُكتب يدوياً */
+export const DEBT_AMOUNT_NOTE_PREFIX = "__debt_amount:";
+
+/** جلسة تسجيل دين — من الاسم أو notes أو remaining_debt القديم */
+export function isDebtRegistrationOperation(
+  op: Pick<
+    PatientOperation,
+    | "operation_name_ar"
+    | "operation_type"
+    | "paid_amount"
+    | "remaining_debt"
+    | "notes"
+  >
+): boolean {
+  const label = op.operation_type || op.operation_name_ar || "";
+  if (label.includes("تسجيل دين")) return true;
+  if (String(op.notes ?? "").includes(DEBT_AMOUNT_NOTE_PREFIX)) return true;
+  return (
+    Number(op.remaining_debt) > FINANCIAL_EPSILON &&
+    Number(op.paid_amount) <= FINANCIAL_EPSILON
+  );
+}
+
+/** مبلغ الدين المسجّل في جلسة — من notes أو الأعمدة القديمة */
+export function debtRegistrationAmountFromOperation(
+  op: Pick<
+    PatientOperation,
+    | "notes"
+    | "remaining_debt"
+    | "total_amount"
+    | "paid_amount"
+    | "operation_name_ar"
+    | "operation_type"
+  >
+): number {
+  const notes = String(op.notes ?? "");
+  const match = notes.match(/__debt_amount:([\d.]+)/);
+  if (match) {
+    const parsed = Number(match[1]);
+    if (Number.isFinite(parsed) && parsed > FINANCIAL_EPSILON) {
+      return parsed;
+    }
+  }
+  if (!isDebtRegistrationOperation(op)) return 0;
+  const remaining = num(op.remaining_debt);
+  if (remaining > FINANCIAL_EPSILON) return remaining;
+  const total = num(op.total_amount);
+  const paid = num(op.paid_amount);
+  if (total > paid + FINANCIAL_EPSILON) return total - paid;
+  return 0;
+}
+
+export function debtAmountNote(amount: number): string {
+  return `${DEBT_AMOUNT_NOTE_PREFIX}${amount}`;
+}
+
+/** ذمة حالة من صف DB — final_price − total_paid */
+export function remainingFromCaseRow(row: {
+  case_price?: number | null;
+  discount_total?: number | null;
+  final_price?: number | null;
+  total_paid?: number | null;
+}): number {
+  const casePrice = num(row.case_price);
+  const discount = num(row.discount_total);
+  const finalPrice =
+    num(row.final_price) || Math.max(0, casePrice - discount);
+  return Math.max(0, finalPrice - num(row.total_paid));
+}
+
 export function treatmentNameKey(name: string): string {
   return name.trim().toLowerCase() || "علاج";
 }
@@ -274,25 +344,32 @@ export function computeCasePaidFromOps(
   const sorted = sortOpsByDate(ops);
   let casePriceFromOps = 0;
   let sumPaid = 0;
+  let debtRegistered = 0;
 
   for (const op of sorted) {
     const total = num(op.total_amount);
     if (total > 0) casePriceFromOps = Math.max(casePriceFromOps, total);
     sumPaid += num(op.paid_amount);
+    debtRegistered += debtRegistrationAmountFromOperation(op);
   }
 
-  const cappedPaid =
+  const effectiveFinal =
     finalPrice > FINANCIAL_EPSILON
-      ? Math.min(sumPaid, finalPrice)
+      ? finalPrice
+      : Math.max(casePriceFromOps, sumPaid + debtRegistered);
+
+  const cappedPaid =
+    effectiveFinal > FINANCIAL_EPSILON
+      ? Math.min(sumPaid, effectiveFinal)
       : sumPaid;
   const remaining =
-    finalPrice > FINANCIAL_EPSILON
-      ? Math.max(0, finalPrice - cappedPaid)
-      : 0;
+    effectiveFinal > FINANCIAL_EPSILON
+      ? Math.max(0, effectiveFinal - cappedPaid)
+      : Math.max(0, debtRegistered);
 
   return {
     totalPaid: cappedPaid,
-    casePriceFromOps,
+    casePriceFromOps: Math.max(casePriceFromOps, effectiveFinal),
     lastRemaining: remaining,
   };
 }
@@ -1254,6 +1331,7 @@ export async function registerTreatmentCaseDebt(
     .update({
       final_price: newFinal,
       case_price: Math.max(newFinal, 0),
+      total_paid: totalPaid,
       status: "active",
       updated_at: new Date().toISOString(),
     })

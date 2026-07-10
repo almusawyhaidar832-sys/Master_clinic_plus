@@ -12,7 +12,11 @@ import {
   type PatientCaseGroup,
 } from "@/lib/services/patient-case-groups";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
-import { isPersistedTreatmentCaseId } from "@/lib/services/patient-treatment-cases";
+import {
+  debtRegistrationAmountFromOperation,
+  isDebtRegistrationOperation,
+  isPersistedTreatmentCaseId,
+} from "@/lib/services/patient-treatment-cases";
 import { VisualMedicalRecord } from "@/components/clinical/VisualMedicalRecord";
 import { SessionPrescriptionPanel } from "@/components/prescriptions/SessionPrescriptionPanel";
 import { useClinicModules } from "@/contexts/ClinicModulesContext";
@@ -113,7 +117,7 @@ function sessionKindLabel(op: PatientOperation, clinicalView: boolean): string {
     return "متابعة";
   }
   if (op.session_kind === "discount") return "خصم إضافي";
-  if (Number(op.remaining_debt) > 0 && Number(op.paid_amount) <= 0) {
+  if (isDebtRegistrationOperation(op)) {
     return "تسجيل دين";
   }
   if (op.is_review_statement || Number((op as { review_fee_amount?: number }).review_fee_amount ?? 0) > 0) {
@@ -167,6 +171,7 @@ function SessionRow({
   const isPlan = op.session_kind === "plan" || Number(op.total_amount) > 0;
   const hasClinical = hasClinicalData(clinical);
   const sessionPaid = item.amountPaid;
+  const sessionDebt = debtRegistrationAmountFromOperation(op);
   const canRefund =
     !!allowEdit && op.session_kind !== "refund" && sessionPaid > 0;
   const linkedCaseId =
@@ -212,6 +217,14 @@ function SessionRow({
             <p className="text-xs text-slate-muted">مدفوع هذه الجلسة</p>
             <p className="text-sm font-bold text-primary">
               {formatCurrency(sessionPaid)}
+            </p>
+          </div>
+        )}
+        {sessionDebt > 0 && sessionPaid <= FINANCIAL_EPSILON && (
+          <div className="shrink-0 text-left tabular-nums" dir="ltr">
+            <p className="text-xs text-slate-muted">دين مسجّل</p>
+            <p className="text-sm font-bold text-debt-text">
+              {formatCurrency(sessionDebt)}
             </p>
           </div>
         )}
