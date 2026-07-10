@@ -370,6 +370,13 @@ function DoctorQueuePageContent() {
 
   const waiting = queue.filter((e) => e.status === "waiting");
   const active = queue.filter((e) => e.status === "called" || e.status === "in_progress");
+  const displayedEntries = [...waiting, ...active].sort(
+    (a, b) => a.ticket_number - b.ticket_number
+  );
+  const firstWaitingTicket =
+    waiting.length > 0
+      ? Math.min(...waiting.map((e) => e.ticket_number))
+      : null;
   const clinicalEntry =
     clinicalEntryId != null
       ? queue.find((e) => e.id === clinicalEntryId) ??
@@ -416,6 +423,9 @@ function DoctorQueuePageContent() {
                     {clinicalEntry.patient?.full_name_ar ??
                       clinicalEntry.patient_name ??
                       `${t("docTicketNumber")} ${clinicalEntry.ticket_number}`}
+                    <span className="ms-2 text-sm font-semibold text-blue-100">
+                      · {t("ticketNumber")} {clinicalEntry.ticket_number}
+                    </span>
                   </p>
                   <p className="mt-1 text-xs text-blue-100">{t("docExamChartHint")}</p>
                 </div>
@@ -465,13 +475,17 @@ function DoctorQueuePageContent() {
           </div>
         ) : (
           <div className="space-y-3">
-            {[...waiting, ...active].map((entry) => {
+            {displayedEntries.map((entry) => {
               const style = STATUS_STYLE[entry.status];
               const statusLabel = doctorQueueStatusLabel(t, entry.status);
               const cfg = { ...style, label: statusLabel };
               const name =
                 entry.patient?.full_name_ar ?? entry.patient_name ?? `${t("docTicketNumber")} ${entry.ticket_number}`;
               const isClinicalOpen = clinicalEntryId === entry.id;
+              const isFirstWaiting =
+                entry.status === "waiting" &&
+                firstWaitingTicket != null &&
+                entry.ticket_number === firstWaitingTicket;
 
               return (
                 <div
@@ -484,16 +498,26 @@ function DoctorQueuePageContent() {
                   <div className="flex items-start gap-3">
                     <div
                       className={cn(
-                        "flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl text-lg font-black",
+                        "flex h-14 w-14 flex-shrink-0 flex-col items-center justify-center rounded-xl",
                         cfg.bg,
                         cfg.color
                       )}
                     >
-                      {entry.ticket_number}
+                      <span className="text-[10px] font-bold leading-none opacity-80">
+                        {t("ticketNumber")}
+                      </span>
+                      <span className="mt-0.5 text-2xl font-black leading-none tabular-nums">
+                        {entry.ticket_number}
+                      </span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-slate-800">{name}</p>
                       <p className={cn("text-xs font-medium", cfg.color)}>{cfg.label}</p>
+                      {isFirstWaiting && (
+                        <p className="mt-0.5 text-[10px] font-bold text-amber-700">
+                          {bi("الأول بالانتظار", "First in line")}
+                        </p>
+                      )}
                       {!entry.sent_to_doctor_at && entry.status === "waiting" && (
                         <p className="mt-0.5 text-[10px] text-amber-700">{t("docQueueNewEntry")}</p>
                       )}

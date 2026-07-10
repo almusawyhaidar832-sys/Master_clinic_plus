@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchClinicQueue } from "@/lib/queue/server";
 import { resolveActiveClinicByRef } from "@/lib/queue/clinic-ref";
+import { getAdminClient } from "@/lib/supabase/admin";
 
 /**
  * GET /api/queue/screen?clinic=<uuid|booking_code>
@@ -30,11 +31,19 @@ export async function GET(req: NextRequest) {
     ]);
     const active = queue.filter((e) => !hiddenOnScreen.has(e.status));
 
+    const admin = getAdminClient();
+    const { data: doctors } = await admin
+      .from("doctors")
+      .select("id, full_name_ar")
+      .eq("clinic_id", clinic.id)
+      .eq("is_active", true);
+
     return NextResponse.json({
       clinicId: clinic.id,
       clinicRef: clinic.bookingCode ?? clinic.id,
       clinicName: clinic.name,
       queue: active,
+      doctors: doctors ?? [],
     });
   } catch (err) {
     console.error("[api/queue/screen]", err);

@@ -180,7 +180,14 @@ function CalledCard({
               {isInProgress ? "عند الطبيب" : "الطبيب المعالج"}
             </span>
             <br />
-            <span className="text-slate-text">{doctor}</span>
+            <span
+              className={cn(
+                "font-bold",
+                isInProgress ? "text-success-text" : "text-primary-700"
+              )}
+            >
+              {doctor}
+            </span>
           </p>
         </div>
 
@@ -374,6 +381,7 @@ export function QueueScreenDisplay({
               ) : (
                 waiting.slice(0, 10).map((entry, idx) => {
                   const name = resolvePatientName(entry);
+                  const doctor = resolveDoctorName(entry);
                   const isNext = idx === 0;
                   return (
                     <div
@@ -404,8 +412,9 @@ export function QueueScreenDisplay({
                         >
                           {name}
                         </p>
-                        <p className="mt-1 text-base font-medium text-slate-muted">
-                          {entry.doctor?.full_name_ar}
+                        <p className="mt-1 text-base font-medium text-primary-700">
+                          <span className="text-slate-muted">الطبيب: </span>
+                          {doctor}
                         </p>
                       </div>
                       {isNext && (

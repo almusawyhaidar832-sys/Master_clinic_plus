@@ -27,8 +27,9 @@ import {
   unlockSpeechAudioDiagnostics,
 } from "@/lib/queue/web-speech";
 import {
-  resolveDoctorSpeechName,
   resolvePatientSpeechName,
+  resolveDoctorSpeechName,
+  resolveQueueDoctorName,
 } from "@/lib/queue/utils";
 import {
   resolvePatientGender,
@@ -57,17 +58,30 @@ interface QueueEntry {
   ticket_number: number;
   status: "waiting" | "called" | "in_progress" | "done" | "cancelled";
   patient_name: string | null;
+  doctor_id?: string;
   doctor: { full_name_ar: string } | null;
   patient: { full_name_ar: string; speech_name_ar?: string | null; gender?: string | null } | null;
   called_at: string | null;
 }
 
+type ClinicDoctorLookup = { id: string; full_name_ar: string };
+
 function resolvePatientName(entry: QueueEntry): string {
   return resolvePatientSpeechName(entry);
 }
 
-function resolveDoctorName(entry: QueueEntry): string {
-  return resolveDoctorSpeechName(entry.doctor);
+function enrichScreenEntry(
+  entry: QueueEntry,
+  doctorNames: Map<string, string>,
+  doctors?: ClinicDoctorLookup[]
+): QueueEntry {
+  const doctorId = String(entry.doctor_id ?? "");
+  const doctor = resolveQueueDoctorName(entry, doctorNames, doctors);
+  return {
+    ...entry,
+    doctor_id: doctorId || entry.doctor_id,
+    doctor: doctor ?? entry.doctor,
+  };
 }
 
 const SCREEN_HIDDEN_STATUSES = new Set([
@@ -82,9 +96,16 @@ function shouldShowOnQueueScreen(row: Record<string, unknown>): boolean {
   return !SCREEN_HIDDEN_STATUSES.has(String(row.status ?? ""));
 }
 
-function rememberDoctorNames(rows: QueueEntry[], into: Map<string, string>) {
+function rememberDoctorNames(
+  rows: QueueEntry[],
+  into: Map<string, string>,
+  doctors?: ClinicDoctorLookup[]
+) {
+  for (const d of doctors ?? []) {
+    if (d.id && d.full_name_ar) into.set(d.id, d.full_name_ar);
+  }
   for (const row of rows) {
-    const doctorId = (row as QueueEntry & { doctor_id?: string }).doctor_id;
+    const doctorId = row.doctor_id;
     const name = row.doctor?.full_name_ar;
     if (doctorId && name) into.set(doctorId, name);
   }
@@ -93,20 +114,30 @@ function rememberDoctorNames(rows: QueueEntry[], into: Map<string, string>) {
 function rowToScreenEntry(
   row: Record<string, unknown>,
   existing: QueueEntry | undefined,
-  doctorNames: Map<string, string>
+  doctorNames: Map<string, string>,
+  doctors?: ClinicDoctorLookup[]
 ): QueueEntry {
-  const merged = mergeRealtimeQueueRow(existing, row);
-  const doctorId = String(row.doctor_id ?? "");
-  const doctorName = merged.doctor?.full_name_ar ?? doctorNames.get(doctorId) ?? null;
-  return {
-    id: merged.id,
-    ticket_number: merged.ticket_number,
-    status: merged.status as QueueEntry["status"],
-    patient_name: merged.patient_name ?? null,
-    doctor: doctorName ? { full_name_ar: doctorName } : merged.doctor,
-    patient: merged.patient,
-    called_at: merged.called_at ?? null,
-  };
+  const merged = mergeRealtimeQueueRow(existing, row, doctors);
+  const doctorId = String(
+    merged.doctor_id ?? row.doctor_id ?? existing?.doctor_id ?? ""
+  );
+  const doctor =
+    resolveQueueDoctorName(merged, doctorNames, doctors) ??
+    resolveQueueDoctorName(existing, doctorNames, doctors);
+  return enrichScreenEntry(
+    {
+      id: merged.id,
+      ticket_number: merged.ticket_number,
+      status: merged.status as QueueEntry["status"],
+      patient_name: merged.patient_name ?? null,
+      doctor_id: doctorId || undefined,
+      doctor,
+      patient: merged.patient,
+      called_at: merged.called_at ?? null,
+    },
+    doctorNames,
+    doctors
+  );
 }
 
 function splitQueueScreenRows(rows: QueueEntry[]) {
@@ -283,6 +314,7 @@ function QueueScreenContent() {
   const announcedCallsRef = useRef<Map<string, number>>(new Map());
   const queueReadyRef = useRef(false);
   const doctorNamesRef = useRef<Map<string, string>>(new Map());
+  const clinicDoctorsRef = useRef<ClinicDoctorLookup[]>([]);
   const calledRef = useRef<QueueEntry[]>([]);
   const waitingRef = useRef<QueueEntry[]>([]);
 
@@ -404,11 +436,23 @@ function QueueScreenContent() {
     [clinicRef]
   );
 
+  const resolveDoctorName = useCallback((entry: QueueEntry) => {
+    const doctor = resolveQueueDoctorName(
+      entry,
+      doctorNamesRef.current,
+      clinicDoctorsRef.current
+    );
+    return resolveDoctorSpeechName(doctor);
+  }, []);
+
   const applyQueueScreenRows = useCallback(
     (rows: QueueEntry[]) => {
-      rememberDoctorNames(rows, doctorNamesRef.current);
+      const enriched = rows.map((row) =>
+        enrichScreenEntry(row, doctorNamesRef.current, clinicDoctorsRef.current)
+      );
+      rememberDoctorNames(enriched, doctorNamesRef.current, clinicDoctorsRef.current);
 
-      const { calledRows, waitingRows } = splitQueueScreenRows(rows);
+      const { calledRows, waitingRows } = splitQueueScreenRows(enriched);
       const newlyWaiting = waitingRows.filter(
         (r) => !prevWaitingRef.current.has(r.id)
       );
@@ -453,8 +497,15 @@ function QueueScreenContent() {
       const existing =
         calledRef.current.find((entry) => entry.id === entryId) ??
         waitingRef.current.find((entry) => entry.id === entryId);
-      const entry = rowToScreenEntry(row, existing, doctorNamesRef.current);
-      const doctorId = String(row.doctor_id ?? "");
+      const entry = rowToScreenEntry(
+        row,
+        existing,
+        doctorNamesRef.current,
+        clinicDoctorsRef.current
+      );
+      const doctorId = String(
+        entry.doctor_id ?? row.doctor_id ?? existing?.doctor_id ?? ""
+      );
       if (entry.doctor?.full_name_ar && doctorId) {
         doctorNamesRef.current.set(doctorId, entry.doctor.full_name_ar);
       }
@@ -538,6 +589,7 @@ function QueueScreenContent() {
         clinicRef?: string;
         clinicName: string;
         queue: QueueEntry[];
+        doctors?: ClinicDoctorLookup[];
       };
 
       if (data.clinicId) setResolvedClinicId(data.clinicId);
@@ -549,6 +601,11 @@ function QueueScreenContent() {
         setScreenUrl(
           `${window.location.origin}/queue-screen?clinic=${encodeURIComponent(data.clinicRef)}`
         );
+      }
+
+      if (data.doctors?.length) {
+        clinicDoctorsRef.current = data.doctors;
+        rememberDoctorNames([], doctorNamesRef.current, data.doctors);
       }
 
       setClinicName(data.clinicName || "العيادة");

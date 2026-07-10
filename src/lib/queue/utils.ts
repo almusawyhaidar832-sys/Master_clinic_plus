@@ -35,3 +35,42 @@ export function resolveDoctorSpeechName(
   if (!name) return fallback;
   return formatNameForSpeech(name);
 }
+
+/** يوحّد حقل الطبيب من join أو مصفوفة Supabase */
+export function normalizeQueueDoctorJoin(
+  doctor: unknown
+): { full_name_ar: string; speech_name_ar?: string | null } | null {
+  if (!doctor) return null;
+  const row = Array.isArray(doctor) ? doctor[0] : doctor;
+  if (!row || typeof row !== "object") return null;
+  const name = (row as { full_name_ar?: string }).full_name_ar?.trim();
+  if (!name) return null;
+  return {
+    full_name_ar: name,
+    speech_name_ar: (row as { speech_name_ar?: string | null }).speech_name_ar ?? null,
+  };
+}
+
+/** يحلّ اسم الطبيب من join أو doctor_id أو قائمة العيادة */
+export function resolveQueueDoctorName(
+  entry: {
+    doctor?: unknown;
+    doctor_id?: string | null;
+  },
+  doctorNames?: Map<string, string>,
+  doctors?: { id: string; full_name_ar: string }[]
+): { full_name_ar: string; speech_name_ar?: string | null } | null {
+  const direct = normalizeQueueDoctorJoin(entry.doctor);
+  if (direct) return direct;
+
+  const doctorId = entry.doctor_id?.trim();
+  if (!doctorId) return null;
+
+  const cached = doctorNames?.get(doctorId);
+  if (cached) return { full_name_ar: cached };
+
+  const found = doctors?.find((d) => d.id === doctorId);
+  if (found?.full_name_ar) return { full_name_ar: found.full_name_ar };
+
+  return null;
+}

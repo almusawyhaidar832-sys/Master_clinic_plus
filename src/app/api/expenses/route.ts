@@ -72,11 +72,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (!txResult.ok) {
+      // تراجع عن المصروف كي لا يبقى مصروف بلا حركة مالية مقابلة —
+      // فشل واحد موحّد أوضح للمستخدم من حالة "نُصف محفوظ" مربكة.
+      await admin.from("expenses").delete().eq("id", expense.id);
       return NextResponse.json(
-        {
-          error: `تم حفظ المصروف لكن فشل تسجيل الحركة المالية: ${txResult.error}`,
-          expense_id: expense.id,
-        },
+        { error: `تعذر حفظ المصروف: ${txResult.error}` },
         { status: 500 }
       );
     }

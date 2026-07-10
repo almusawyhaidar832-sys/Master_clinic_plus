@@ -1,4 +1,5 @@
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { normalizeQueueDoctorJoin } from "@/lib/queue/utils";
 
 export type QueueRealtimePayload = RealtimePostgresChangesPayload<
   Record<string, unknown>
@@ -26,6 +27,12 @@ function resolveDoctorFromLookup(
   if (!doctorId || !doctors?.length) return existing ?? null;
   const match = doctors.find((d) => d.id === doctorId);
   return match ? { full_name_ar: match.full_name_ar } : existing ?? null;
+}
+
+function rowDoctorFromPayload(
+  row: Record<string, unknown>
+): { full_name_ar: string } | null {
+  return normalizeQueueDoctorJoin(row.doctor);
 }
 
 /** Merge a flat realtime row into an existing queue entry (preserves joins). */
@@ -120,7 +127,10 @@ export function mergeRealtimeQueueRow<T extends { id: string }>(
     doctor: resolveDoctorFromLookup(
       doctorId,
       doctors,
-      (existing as { doctor?: { full_name_ar: string } | null })?.doctor
+      rowDoctorFromPayload(row) ??
+        normalizeQueueDoctorJoin(
+          (existing as { doctor?: unknown } | undefined)?.doctor
+        )
     ),
     patient:
       (existing as { patient?: { full_name_ar: string } | null })?.patient ??
