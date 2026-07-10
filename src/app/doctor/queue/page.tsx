@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -30,7 +30,7 @@ import { getQueueStatusLabel, type QueueStatusKey } from "@/i18n/localized-label
 import type { Language, TranslationKey } from "@/i18n/translations";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
-import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
+import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel.lazy";
 import {
   cachePortalQueue,
   getCachedPortalQueue,
@@ -158,6 +158,35 @@ function DoctorQueuePageContent() {
   const [clinicDoctors, setClinicDoctors] = useState<ClinicDoctor[]>([]);
   const [transferEntry, setTransferEntry] = useState<QueueEntry | null>(null);
   const [transferTargetId, setTransferTargetId] = useState("");
+
+  const waiting = useMemo(
+    () => queue.filter((e) => e.status === "waiting"),
+    [queue]
+  );
+  const active = useMemo(
+    () => queue.filter((e) => e.status === "called" || e.status === "in_progress"),
+    [queue]
+  );
+  const displayedEntries = useMemo(
+    () =>
+      [...waiting, ...active].sort((a, b) => a.ticket_number - b.ticket_number),
+    [waiting, active]
+  );
+  const firstWaitingTicket = useMemo(
+    () =>
+      waiting.length > 0
+        ? Math.min(...waiting.map((e) => e.ticket_number))
+        : null,
+    [waiting]
+  );
+  const clinicalEntry = useMemo(
+    () =>
+      clinicalEntryId != null
+        ? queue.find((e) => e.id === clinicalEntryId) ??
+          ([...waiting, ...active].find((e) => e.id === clinicalEntryId) ?? null)
+        : queue.find((e) => e.status === "in_progress") ?? null,
+    [queue, waiting, active, clinicalEntryId]
+  );
 
   const fetchQueue = useCallback(async () => {
     if (!clinicId) return;
@@ -367,21 +396,6 @@ function DoctorQueuePageContent() {
       </div>
     );
   }
-
-  const waiting = queue.filter((e) => e.status === "waiting");
-  const active = queue.filter((e) => e.status === "called" || e.status === "in_progress");
-  const displayedEntries = [...waiting, ...active].sort(
-    (a, b) => a.ticket_number - b.ticket_number
-  );
-  const firstWaitingTicket =
-    waiting.length > 0
-      ? Math.min(...waiting.map((e) => e.ticket_number))
-      : null;
-  const clinicalEntry =
-    clinicalEntryId != null
-      ? queue.find((e) => e.id === clinicalEntryId) ??
-        ([...waiting, ...active].find((e) => e.id === clinicalEntryId) ?? null)
-      : queue.find((e) => e.status === "in_progress") ?? null;
 
   return (
     <>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { translateDbError } from "@/lib/db-errors";
@@ -752,13 +752,26 @@ export default function QueuePage() {
     }
   };
 
-  const filtered = filterDoctor === "all"
-    ? queue
-    : queue.filter((e) => e.doctor_id === filterDoctor);
+  const filtered = useMemo(
+    () =>
+      filterDoctor === "all"
+        ? queue
+        : queue.filter((e) => e.doctor_id === filterDoctor),
+    [queue, filterDoctor]
+  );
 
-  const activeEntries = filtered.filter((e) => e.status !== "done");
-  const doneEntries   = filtered.filter((e) => e.status === "done");
-  const inProgressEntries = filtered.filter((e) => e.status === "in_progress");
+  const activeEntries = useMemo(
+    () => filtered.filter((e) => e.status !== "done"),
+    [filtered]
+  );
+  const doneEntries = useMemo(
+    () => filtered.filter((e) => e.status === "done"),
+    [filtered]
+  );
+  const inProgressEntries = useMemo(
+    () => filtered.filter((e) => e.status === "in_progress"),
+    [filtered]
+  );
 
   if (loading) {
     return (

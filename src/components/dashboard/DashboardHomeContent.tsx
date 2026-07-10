@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/Card";
-import { ExecutiveDashboard } from "@/components/accountant/ExecutiveDashboard";
+import { ExecutiveDashboard } from "@/components/accountant/ExecutiveDashboard.lazy";
 import { AccountantAppointmentsPanel } from "@/components/appointments/AccountantAppointmentsPanel";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {

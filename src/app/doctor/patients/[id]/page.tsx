@@ -15,7 +15,7 @@ import {
 import { formatDate } from "@/lib/utils";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import type { Doctor, Patient, MedicalLog, Treatment, PatientOperation } from "@/types";
-import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
+import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel.lazy";
 import { fetchPatientClinicalRecords } from "@/lib/clinical/fetch-patient-clinical";
 import type { ClinicalByOperationId } from "@/lib/clinical/types";
 import { getPatientDisplayPhone } from "@/lib/phone";

@@ -26,7 +26,7 @@ import {
   CLINICAL_EXAM_ANCHOR,
   scrollToClinicalExamView,
 } from "@/lib/queue/navigation";
-import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
+import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel.lazy";
 import {
   cachePortalQueue,
   getCachedPortalQueue,

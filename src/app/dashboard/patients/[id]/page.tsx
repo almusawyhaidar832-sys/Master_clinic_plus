@@ -11,7 +11,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
-import { QuickEntryForm } from "@/components/accountant/QuickEntryForm";
+import { QuickEntryForm } from "@/components/accountant/QuickEntryForm.lazy";
 import {
   computedCaseRemaining,
   FINANCIAL_EPSILON,

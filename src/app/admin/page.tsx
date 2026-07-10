@@ -146,11 +146,14 @@ export default function AdminHomePage() {
   useEffect(() => {
     if (!clinicId) return;
 
+    // شبكة أمان فقط — التحديث الفعلي يأتي من useClinicSync (realtime) وأحداث
+    // focus/visibility أدناه. فترة طويلة نسبياً لتفادي إعادة تحميل كل بيانات
+    // اللوحة كل 5 ثوانٍ حتى لو لا يوجد تغيير فعلي.
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
         setRefreshKey((k) => k + 1);
       }
-    }, 5_000);
+    }, 60_000);
 
     return () => clearInterval(interval);
   }, [clinicId]);

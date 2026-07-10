@@ -13,7 +13,7 @@ import { getCachedOfflineReference } from "@/lib/offline/reference-cache";
 
 export type { ActiveClinicResult } from "@/lib/clinic-types";
 
-export async function getAuthProfile(
+async function fetchAuthProfileUncached(
   supabase: SupabaseClient
 ): Promise<Profile | null> {
   const user = await getCurrentUser(supabase);
@@ -42,7 +42,31 @@ export async function getAuthProfile(
   }
 }
 
-export async function getDoctorForCurrentUser(
+// Doctor/admin/accountant shells commonly call getAuthProfile from several
+// independent components on the same navigation (shell, sync bridge, page).
+// Coalesce those into a single request for a very short window — same result,
+// fewer round-trips. After the window elapses, a fresh fetch happens as before.
+const AUTH_PROFILE_DEDUPE_MS = 2_000;
+const authProfileCache = new WeakMap<
+  SupabaseClient,
+  { promise: Promise<Profile | null>; at: number }
+>();
+
+export async function getAuthProfile(
+  supabase: SupabaseClient
+): Promise<Profile | null> {
+  const now = Date.now();
+  const cached = authProfileCache.get(supabase);
+  if (cached && now - cached.at < AUTH_PROFILE_DEDUPE_MS) {
+    return cached.promise;
+  }
+
+  const promise = fetchAuthProfileUncached(supabase);
+  authProfileCache.set(supabase, { promise, at: now });
+  return promise;
+}
+
+async function fetchDoctorForCurrentUserUncached(
   supabase: SupabaseClient
 ): Promise<Doctor | null> {
   const user = await getCurrentUser(supabase);
@@ -63,6 +87,29 @@ export async function getDoctorForCurrentUser(
   const { data } = await query.maybeSingle();
 
   return data as Doctor | null;
+}
+
+// Doctor shell, queue realtime bridge, and individual pages all resolve the
+// current doctor independently on the same navigation. Coalesce into a
+// single request for a very short window — same result, fewer round-trips.
+const DOCTOR_DEDUPE_MS = 2_000;
+const doctorForCurrentUserCache = new WeakMap<
+  SupabaseClient,
+  { promise: Promise<Doctor | null>; at: number }
+>();
+
+export async function getDoctorForCurrentUser(
+  supabase: SupabaseClient
+): Promise<Doctor | null> {
+  const now = Date.now();
+  const cached = doctorForCurrentUserCache.get(supabase);
+  if (cached && now - cached.at < DOCTOR_DEDUPE_MS) {
+    return cached.promise;
+  }
+
+  const promise = fetchDoctorForCurrentUserUncached(supabase);
+  doctorForCurrentUserCache.set(supabase, { promise, at: now });
+  return promise;
 }
 
 export async function getAssistantForCurrentUser(

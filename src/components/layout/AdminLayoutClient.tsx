@@ -30,6 +30,9 @@ export function AdminLayoutClient({
 
   useEffect(() => {
     void loadNotifications();
+    // ملاحظة: موضوع "notifications" ليس مغطى بـ Supabase Realtime — لذلك هذا
+    // الاستطلاع هو المسار الوحيد لتحديث عداد الإشعارات بين المستخدمين.
+    // أعيدت المدة إلى 30 ثانية كما كانت.
     const interval = setInterval(() => void loadNotifications(), 30_000);
     return () => clearInterval(interval);
   }, [loadNotifications]);

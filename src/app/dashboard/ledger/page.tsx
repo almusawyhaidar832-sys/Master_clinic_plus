@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { QuickEntryForm } from "@/components/accountant/QuickEntryForm";
+import { QuickEntryForm } from "@/components/accountant/QuickEntryForm.lazy";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Alert } from "@/components/ui/Alert";
 import { formatCurrency, formatDate } from "@/lib/utils";

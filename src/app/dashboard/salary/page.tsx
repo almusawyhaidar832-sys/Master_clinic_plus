@@ -1474,15 +1474,21 @@ export default function SalaryPage() {
     await Promise.all([loadPayrollMonth(), loadPayrollPersons()]);
   }
 
-  const payrollClinicTotal =
-    payrollRecords.reduce(
-      (s, r) => s + Number(r.clinic_share_amount ?? 0),
-      0
-    ) +
-    slips.reduce((s, sl) => s + Number(sl.net_payout ?? 0), 0);
-  const payrollDoctorTotal = payrollRecords.reduce(
-    (s, r) => s + Number(r.doctor_share_amount ?? 0),
-    0
+  const payrollClinicTotal = useMemo(
+    () =>
+      payrollRecords.reduce(
+        (s, r) => s + Number(r.clinic_share_amount ?? 0),
+        0
+      ) + slips.reduce((s, sl) => s + Number(sl.net_payout ?? 0), 0),
+    [payrollRecords, slips]
+  );
+  const payrollDoctorTotal = useMemo(
+    () =>
+      payrollRecords.reduce(
+        (s, r) => s + Number(r.doctor_share_amount ?? 0),
+        0
+      ),
+    [payrollRecords]
   );
   const hasGeneratedPayroll = payrollRecords.length > 0 || slips.length > 0;
 

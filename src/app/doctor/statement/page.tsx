@@ -20,7 +20,7 @@ import {
   type PatientTreatmentCase,
 } from "@/lib/services/patient-treatment-cases";
 import type { Patient, PatientOperation, MedicalLog } from "@/types";
-import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel";
+import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel.lazy";
 import { Alert } from "@/components/ui/Alert";
 import { FileText } from "lucide-react";
 

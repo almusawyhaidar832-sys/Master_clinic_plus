@@ -17,11 +17,7 @@ async function getSessionUser(supabase: SupabaseClient): Promise<AuthUser | null
   return data.session?.user ?? null;
 }
 
-/**
- * Prefer validated user when online; fall back to local session when offline
- * or when the network/Supabase validation request fails (PWA offline UX).
- */
-export async function getCurrentUser(
+async function fetchCurrentUserUncached(
   supabase: SupabaseClient
 ): Promise<AuthUser | null> {
   const auth = supabase.auth as AuthApi;
@@ -43,6 +39,34 @@ export async function getCurrentUser(
       return null;
     }
   }
+}
+
+// Several components/hooks call getCurrentUser independently within the same
+// render burst (e.g. on portal navigation). Coalesce those into a single
+// network round-trip for a very short window instead of changing any result —
+// after the window elapses, a fresh request is made exactly like before.
+const CURRENT_USER_DEDUPE_MS = 2_000;
+const currentUserCache = new WeakMap<
+  SupabaseClient,
+  { promise: Promise<AuthUser | null>; at: number }
+>();
+
+/**
+ * Prefer validated user when online; fall back to local session when offline
+ * or when the network/Supabase validation request fails (PWA offline UX).
+ */
+export async function getCurrentUser(
+  supabase: SupabaseClient
+): Promise<AuthUser | null> {
+  const now = Date.now();
+  const cached = currentUserCache.get(supabase);
+  if (cached && now - cached.at < CURRENT_USER_DEDUPE_MS) {
+    return cached.promise;
+  }
+
+  const promise = fetchCurrentUserUncached(supabase);
+  currentUserCache.set(supabase, { promise, at: now });
+  return promise;
 }
 
 type SignOutScope = "local" | "global" | "others";

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import { Select } from "@/components/ui/Select";
@@ -1570,31 +1571,19 @@ export function QuickEntryForm({
         ? activeCaseId
         : null);
 
-    if (
+    // ملاحظة أداء: تحديث "ذمة الحالة" (total_paid/remaining) يُنقل إلى الخلفية
+    // بعد إظهار الفاتورة — العملية المالية نفسها (patient_operations) محفوظة
+    // فعلياً بهذه المرحلة. processCasePayment يعيد حساب الذمة من كل عمليات
+    // المريض في قاعدة البيانات (وليس تراكمياً)، فهي تصحّح نفسها تلقائياً في
+    // أي مزامنة لاحقة حتى لو فشلت هذه المرة — لذلك لا خطر على صحة الأرقام،
+    // فقط قد تتأخر شاشة "الذمة" ثوانٍ قليلة عن آخر دفعة. أي فشل يُعرض كتحذير
+    // غير معطّل بعد ظهور الفاتورة (نفس أسلوب تحذير واتساب/المرفقات أدناه).
+    const needsCaseBalanceSync =
       !error &&
       (billingMode === "session" ||
         billingMode === "complete" ||
         billingMode === "examination") &&
-      (entryAmount > 0 || additionalDiscount > 0)
-    ) {
-      const sync = await syncTreatmentCaseAfterSessionViaApi({
-        patientId: patientId!,
-        treatmentName: pickedCase?.treatment_name_ar ?? operationLabel,
-        plan: activePlan,
-        paidDelta: sessionPaidTotal,
-        additionalDiscount,
-        caseId: syncCaseId,
-      });
-      if (!sync.ok) {
-        setMessage({
-          type: "error",
-          text:
-            `تم حفظ الجلسة لكن فشل تحديث ذمة الحالة: ${sync.error ?? "خطأ غير معروف"}. ` +
-            "راجع ملف المريض وتأكد من تطابق الرصيد قبل إغلاق الحساب.",
-        });
-        return;
-      }
-    }
+      (entryAmount > 0 || additionalDiscount > 0);
 
     if (error) {
       const msg = error.message ?? "";
@@ -1809,8 +1798,24 @@ export function QuickEntryForm({
     void (async () => {
       let whatsappNote = "";
       let clinicalWarning = "";
+      let caseSyncWarning = "";
 
       try {
+        if (needsCaseBalanceSync) {
+          const sync = await syncTreatmentCaseAfterSessionViaApi({
+            patientId: patientId!,
+            treatmentName: pickedCase?.treatment_name_ar ?? operationLabel,
+            plan: activePlan,
+            paidDelta: sessionPaidTotal,
+            additionalDiscount,
+            caseId: syncCaseId,
+          });
+          if (!sync.ok) {
+            caseSyncWarning =
+              ` — تحذير: فشل تحديث ذمة الحالة (${sync.error ?? "خطأ غير معروف"}) — افتح ملف المريض للتأكد من تطابق الرصيد.`;
+          }
+        }
+
         if (postSaveBackfillCaseId && shareSplit) {
           await backfillTreatmentCaseSharesIfMissing(
             supabase,
@@ -1950,10 +1955,13 @@ export function QuickEntryForm({
           setFinancialPlan(caseToFinancialPlan(refreshedCase));
         }
 
-        if (whatsappNote || clinicalWarning) {
+        if (whatsappNote || clinicalWarning || caseSyncWarning) {
           setMessage((prev) =>
             prev?.type === "success"
-              ? { ...prev, text: prev.text + whatsappNote + clinicalWarning }
+              ? {
+                  ...prev,
+                  text: prev.text + caseSyncWarning + whatsappNote + clinicalWarning,
+                }
               : prev
           );
         }
@@ -2443,9 +2451,9 @@ export function QuickEntryForm({
                 {applyExaminationFee && !reviewFeeEnabled && (
                   <p className="text-xs text-amber-800">
                     فعّل الكشفية من{" "}
-                    <a href="/dashboard/settings" className="underline font-medium">
+                    <Link href="/dashboard/settings" className="underline font-medium">
                       إعدادات العيادة
-                    </a>
+                    </Link>
                   </p>
                 )}
                 {!applyExaminationFee && (
@@ -2591,9 +2599,9 @@ export function QuickEntryForm({
           {!reviewFeeEnabled && (
             <p className="text-xs text-amber-800">
               فعّل الكشفية من{" "}
-              <a href="/dashboard/settings" className="underline font-medium">
+              <Link href="/dashboard/settings" className="underline font-medium">
                 إعدادات العيادة
-              </a>
+              </Link>
             </p>
           )}
           {isReviewStatement && reviewFeeLive > 0 && (

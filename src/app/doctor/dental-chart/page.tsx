@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Alert } from "@/components/ui/Alert";
 import { PatientSearchField } from "@/components/patients/PatientSearchField";
-import { InteractiveDentalChart } from "@/components/clinical/InteractiveDentalChart";
+import { InteractiveDentalChart } from "@/components/clinical/InteractiveDentalChart.lazy";
 import { ModuleGuard } from "@/components/layout/ModuleGuard";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {

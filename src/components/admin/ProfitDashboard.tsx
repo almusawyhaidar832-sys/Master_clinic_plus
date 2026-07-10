@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import {
@@ -222,9 +223,9 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
           <CardTitle>تفصيل الحساب</CardTitle>
               <p className="mt-1 text-xs text-slate-muted">
                 اضغط «توضيح الربح» أو افتح{" "}
-                <a href="/admin/financial-history" className="text-primary underline">
+                <Link href="/admin/financial-history" className="text-primary underline">
                   سجل الصرفيات
-                </a>{" "}
+                </Link>{" "}
                 لكل العمليات السابقة
               </p>
             </div>

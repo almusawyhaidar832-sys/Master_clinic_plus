@@ -63,6 +63,10 @@ export function DashboardLayoutClient({
 
   useEffect(() => {
     void loadNotifications();
+    // ملاحظة: مواضيع "queue"/"notifications" ليست مغطاة بـ Supabase Realtime
+    // (لا يوجد جدول patient_queue/notifications ضمن ClinicDataSyncBridge) — لذلك
+    // هذا الاستطلاع هو المسار الوحيد الذي يوصل إشعار الطبيب للمحاسب بين المستخدمين.
+    // أعيدت المدة إلى 30 ثانية كما كانت (تجربة سابقة بـ 120 ثانية أخّرت الإشعارات).
     const interval = setInterval(() => void loadNotifications(), 30_000);
     return () => clearInterval(interval);
   }, [loadNotifications]);

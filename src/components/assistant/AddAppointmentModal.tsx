@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { X, RefreshCw } from "lucide-react";
 import { todayISO, addMinutesToTime, DEFAULT_APPOINTMENT_SLOT_MINUTES } from "@/lib/utils";
 import { createAssistantAppointmentViaApi } from "@/lib/services/assistant-appointments-client";
@@ -162,9 +163,9 @@ export function AddAppointmentModal({
             {whatsappNotice.includes("لم تصل") && (
               <>
                 {" "}
-                <a href="/dashboard/whatsapp" className="font-semibold underline">
+                <Link href="/dashboard/whatsapp" className="font-semibold underline">
                   إعدادات واتساب
-                </a>
+                </Link>
               </>
             )}
           </p>
