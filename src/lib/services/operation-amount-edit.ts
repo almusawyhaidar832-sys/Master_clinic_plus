@@ -336,12 +336,13 @@ export async function syncFinancialsAfterOperationEdit(
     String(after.clinic_id)
   );
 
+  // remaining_debt عمود محسوب تلقائياً في قاعدة البيانات (GENERATED) من
+  // total_amount - paid_amount لهذا السطر — لا يمكن تحديثه مباشرة.
   const { error: shareErr } = await admin
     .from("patient_operations")
     .update({
       doctor_share_amount: shares.doctorShare,
       clinic_share_amount: shares.clinicShare,
-      remaining_debt: shares.remainingDebt,
     })
     .eq("id", String(after.id));
 
@@ -571,10 +572,10 @@ export async function repairDoctorOperationShares(
     const beforeDoc = num(op.doctor_share_amount);
     const beforeReview = num(op.review_fee_amount);
     const beforePaid = num(op.paid_amount);
+    // remaining_debt عمود محسوب تلقائياً في قاعدة البيانات (GENERATED) — لا يُكتب مباشرة.
     const patch: Record<string, unknown> = {
       doctor_share_amount: shares.doctorShare,
       clinic_share_amount: shares.clinicShare,
-      remaining_debt: shares.remainingDebt,
     };
     if (num(bumped.paid_amount) !== beforePaid) {
       patch.paid_amount = num(bumped.paid_amount);

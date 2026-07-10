@@ -1462,12 +1462,14 @@ export function QuickEntryForm({
         if (!debtRes.ok) {
           error = { message: debtRes.error ?? "تعذر تسجيل الدين" };
         } else {
+          // remaining_debt عمود محسوب تلقائياً في قاعدة البيانات (GENERATED)
+          // — لا يمكن إدخال قيمة له مباشرة، يُحسب من total_amount - paid_amount.
+          // الدين نفسه سُجّل أعلاه على الحالة عبر registerTreatmentCaseDebtViaApi.
           const res = await insertSession(
             "payment",
             {
               total_amount: 0,
               paid_amount: 0,
-              remaining_debt: entryAmount,
               doctor_share_amount: 0,
               clinic_share_amount: 0,
             },
