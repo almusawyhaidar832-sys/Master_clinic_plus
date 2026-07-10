@@ -65,6 +65,26 @@ export function amountFieldLabel(mode: SessionBillingMode): string {
   }
 }
 
+export function cashCollectedForBillingMode(
+  mode: SessionBillingMode,
+  amount: number,
+  examinationFee = 0
+): number {
+  if (mode === "debt") return 0;
+  if (mode === "examination") return Math.max(0, examinationFee);
+  return Math.max(0, amount);
+}
+
+/** مبلغ يُحسب للحصص والأرباح — الدين لا يُعامل كدفعة */
+export function paidAmountForShareCalculation(
+  mode: SessionBillingMode,
+  entryAmount: number,
+  reviewAddon = 0
+): number {
+  if (mode === "debt") return 0;
+  return Math.max(0, entryAmount + reviewAddon);
+}
+
 export function validateBillingAmount(
   mode: SessionBillingMode,
   amount: number

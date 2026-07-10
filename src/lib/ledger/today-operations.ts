@@ -205,6 +205,8 @@ export function ledgerPaidToday(
   op: TodayOperationRow | PatientOperation,
   clinicDefaultReviewFee = 0
 ): number {
+  if (isDebtRegistrationOperation(op)) return 0;
+
   const fromPaid = Math.max(0, resolveSessionPaidAmount(op));
   const row = op as PatientOperation & {
     review_fee_amount?: number;

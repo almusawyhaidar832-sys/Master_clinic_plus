@@ -1916,6 +1916,7 @@ export async function fetchPeriodCollectionFinancialTotals(
   let doctorShareTotal = 0;
 
   for (const op of operations) {
+    if (isDebtRegistrationOperation(op)) continue;
     const paid = ledgerPaidToday(op, clinicReviewFee);
     if (paid <= FINANCIAL_EPSILON) continue;
 

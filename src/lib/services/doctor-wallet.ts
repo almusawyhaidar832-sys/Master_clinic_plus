@@ -4,6 +4,7 @@ import {
   computeLiveDoctorShare,
   doctorPaymentPct,
 } from "@/lib/services/patient-financial-plan";
+import { isDebtRegistrationOperation } from "@/lib/services/patient-treatment-cases";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import {
   fetchDoctorMonthSalaryBreakdown,
@@ -240,6 +241,7 @@ export function calcOperationEarned(
   clinicDefaultReviewFee = 0
 ): number {
   if (salaryDoctor) return 0;
+  if (isDebtRegistrationOperation(row)) return 0;
 
   // المصدر الوحيد للحقيقة: القيمة المجمّدة وقت الدفع بواسطة trigger
   // calculate_operation_shares — تشمل الإرجاعات (سالبة) والكشفية (صفر عمداً).
@@ -287,6 +289,7 @@ export function calcClinicOperationEarned(
   salaryDoctor = false
 ): number {
   // نفس منطق calcOperationEarned — القيمة المجمّدة هي المصدر الوحيد للحقيقة
+  if (isDebtRegistrationOperation(row)) return 0;
   if (row.clinic_share_amount !== null && row.clinic_share_amount !== undefined) {
     return roundMoney(Number(row.clinic_share_amount));
   }

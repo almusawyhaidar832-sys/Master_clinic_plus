@@ -98,7 +98,9 @@ import { computeLabCostSplit } from "@/lib/invoices/lab-session-details";
 import { resolveExistingPatientId } from "@/lib/services/resolve-patient-id";
 import {
   amountFieldLabel,
+  cashCollectedForBillingMode,
   examinationFeeAmount,
+  paidAmountForShareCalculation,
   previewSessionBillingTotals,
   resolveSessionPaymentShares,
   SESSION_BILLING_MODE_OPTIONS,
@@ -585,20 +587,31 @@ export function QuickEntryForm({
   const remaining = billingPreview.registeredDebt;
   const reviewAddon =
     isReviewStatement && billingMode !== "examination" ? reviewFeeLive : 0;
-  const sessionPaidTotal = entryAmountLive + reviewAddon;
+  const sessionPaidTotal = paidAmountForShareCalculation(
+    billingMode,
+    entryAmountLive,
+    reviewAddon
+  );
+  const cashCollectedToday = cashCollectedForBillingMode(
+    billingMode,
+    entryAmountLive,
+    examinationFeeLive
+  );
 
   const sessionPaymentShares =
-    billingMode === "examination" && examinationFeeLive > 0
-      ? { doctorShare: 0, clinicShare: examinationFeeLive }
-      : resolveSessionPaymentShares({
-          paidAmount: sessionPaidTotal,
-          reviewFee: reviewAddon,
-          isReviewStatement:
-            isReviewStatement && billingMode !== "examination",
-          materialsCost: materials,
-          doctor: selectedDoctor,
-          plan,
-        });
+    billingMode === "debt"
+      ? { doctorShare: 0, clinicShare: 0 }
+      : billingMode === "examination" && examinationFeeLive > 0
+        ? { doctorShare: 0, clinicShare: examinationFeeLive }
+        : resolveSessionPaymentShares({
+            paidAmount: sessionPaidTotal,
+            reviewFee: reviewAddon,
+            isReviewStatement:
+              isReviewStatement && billingMode !== "examination",
+            materialsCost: materials,
+            doctor: selectedDoctor,
+            plan,
+          });
 
   const paymentPreviewSplit = useMemo(() => {
     if (!selectedDoctor) return null;
@@ -1626,10 +1639,14 @@ export function QuickEntryForm({
 
     snap = {
       ...snap,
-      doctor_share_total:
-        activePlan.doctor_share_total + sessionPaymentShares.doctorShare,
-      clinic_share_total:
-        activePlan.clinic_share_total + sessionPaymentShares.clinicShare,
+      ...(billingMode === "debt"
+        ? {}
+        : {
+            doctor_share_total:
+              activePlan.doctor_share_total + sessionPaymentShares.doctorShare,
+            clinic_share_total:
+              activePlan.clinic_share_total + sessionPaymentShares.clinicShare,
+          }),
     };
 
     const planFinalForWa = snap.final_price;
@@ -1684,9 +1701,12 @@ export function QuickEntryForm({
             Number(selectedDoctor.materials_share ?? 50)
           )
         : null;
-    const shareSplit = resolveCaseFinancialSplit(snap, selectedDoctor, {
-      materialsCost: materials,
-    });
+    const shareSplit =
+      billingMode === "debt"
+        ? null
+        : resolveCaseFinancialSplit(snap, selectedDoctor, {
+            materialsCost: materials,
+          });
 
     setSelectedPatientId(patientId!);
     setFinancialPlan(snap);
@@ -1747,11 +1767,11 @@ export function QuickEntryForm({
       doctorId,
       patientId: patientId ?? undefined,
     });
-    if (entryAmountLive > 0) {
+    if (cashCollectedToday > 0) {
       notifyClinicProfitRefresh(activeClinic.clinicId);
     }
 
-    if (entryAmountLive > 0) {
+    if (cashCollectedToday > 0) {
       setPendingSuccessOp(savedOp);
       setPendingPrescriptionId(null);
       setInvoiceData(
@@ -1825,7 +1845,7 @@ export function QuickEntryForm({
           }
         }
 
-        if (postSaveBackfillCaseId && shareSplit) {
+        if (postSaveBackfillCaseId && shareSplit && billingMode !== "debt") {
           await backfillTreatmentCaseSharesIfMissing(
             supabase,
             postSaveBackfillCaseId,
