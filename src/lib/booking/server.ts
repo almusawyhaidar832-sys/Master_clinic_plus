@@ -125,6 +125,8 @@ export interface CreatePublicBookingInput {
   startTime: string;
   endTime: string;
   notes?: string | null;
+  /** online (افتراضي — بوابة الحجز العامة) | whatsapp_bot (حجز عبر N8N) */
+  source?: string | null;
 }
 
 export interface CreatePublicBookingResult {
@@ -229,8 +231,9 @@ export async function createPublicBooking(
       end_time: input.endTime,
       status: "pending",
       notes: input.notes?.trim() || null,
+      source: input.source?.trim() || "online",
     })
-    .select("id, clinic_id, patient_name_ar, patient_phone, appointment_date, start_time, end_time")
+    .select("id, clinic_id, patient_name_ar, patient_phone, appointment_date, start_time, end_time, source")
     .single();
 
   // قيد appointments_no_doctor_overlap بقاعدة البيانات هو خط الدفاع
@@ -247,6 +250,8 @@ export async function createPublicBooking(
     startTime: inserted.start_time as string,
     endTime: inserted.end_time as string,
     action: "submitted",
+    resultingStatus: "pending",
+    source: (inserted.source as string | null) ?? null,
   });
 
   await notifyStaffBarcodeBooking({

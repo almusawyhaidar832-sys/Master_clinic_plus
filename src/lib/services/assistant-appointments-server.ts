@@ -163,6 +163,8 @@ export async function createAssistantAppointment(
     startTime: data.start_time as string,
     endTime: data.end_time as string,
     action: "created",
+    resultingStatus: data.status as string,
+    source: (data.source as string | null) ?? null,
   });
 
   return { appointment: data as Appointment, whatsapp };
@@ -262,6 +264,8 @@ export async function updateAssistantAppointment(
     endTime: data.end_time as string,
     action: "modified",
     reasonForChange: reason,
+    resultingStatus: data.status as string,
+    source: (data.source as string | null) ?? null,
   });
 
   return data as Appointment;
@@ -370,6 +374,9 @@ export async function cancelAssistantAppointment(
     endTime: data.end_time as string,
     action: "rejected",
     reasonForChange: "تم إلغاء الحجز من العيادة",
+    resultingStatus: "cancelled",
+    eventOverride: "appointment.cancelled",
+    source: (data.source as string | null) ?? null,
   });
 
   return data as Appointment;

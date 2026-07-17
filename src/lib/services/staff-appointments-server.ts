@@ -156,6 +156,8 @@ export async function approvePendingAppointment(
     startTime: data.start_time as string,
     endTime: data.end_time as string,
     action: "accepted",
+    resultingStatus: data.status as string,
+    source: (data.source as string | null) ?? null,
   });
 
   return data as Appointment;
@@ -217,6 +219,8 @@ export async function rejectPendingAppointment(
     endTime: data.end_time as string,
     action: "rejected",
     reasonForChange: reason,
+    resultingStatus: data.status as string,
+    source: (data.source as string | null) ?? null,
   });
 
   return data as Appointment;
@@ -321,6 +325,8 @@ export async function updateStaffAppointment(
     endTime: data.end_time as string,
     action: "modified",
     reasonForChange: reason,
+    resultingStatus: data.status as string,
+    source: (data.source as string | null) ?? null,
   });
 
   return data as Appointment;
@@ -401,6 +407,9 @@ export async function cancelStaffAppointment(
     endTime: data.end_time as string,
     action: "rejected",
     reasonForChange: "تم إلغاء الحجز من العيادة",
+    resultingStatus: "cancelled",
+    eventOverride: "appointment.cancelled",
+    source: (data.source as string | null) ?? null,
   });
 
   return data as Appointment;
@@ -496,6 +505,8 @@ export async function createStaffAppointment(
     startTime: data.start_time as string,
     endTime: data.end_time as string,
     action: "created",
+    resultingStatus: data.status as string,
+    source: (data.source as string | null) ?? null,
   });
 
   return { appointment: data as Appointment, whatsapp };
@@ -583,6 +594,8 @@ export async function createDoctorAppointment(
     startTime: data.start_time as string,
     endTime: data.end_time as string,
     action: "created",
+    resultingStatus: data.status as string,
+    source: (data.source as string | null) ?? null,
   });
 
   return { appointment: data as Appointment, whatsapp };
