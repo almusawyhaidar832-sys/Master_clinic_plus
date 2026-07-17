@@ -11,6 +11,7 @@ import {
   Stethoscope,
 } from "lucide-react";
 import { ClinicStaffPanel } from "@/components/developer/ClinicStaffPanel";
+import { ClinicBotIntegrationPanel } from "@/components/developer/ClinicBotIntegrationPanel";
 
 type ClinicDetail = {
   id: string;
@@ -184,6 +185,12 @@ export default function DeveloperClinicDetailPage() {
           {entering ? "..." : "دخول نيابةً للوحة العيادة"}
         </button>
       </div>
+
+      <ClinicBotIntegrationPanel
+        clinicId={id}
+        clinicName={clinic.name_ar || clinic.name}
+        onMessage={onPanelMessage}
+      />
 
       <ClinicStaffPanel clinicId={id} onMessage={onPanelMessage} />
     </div>
