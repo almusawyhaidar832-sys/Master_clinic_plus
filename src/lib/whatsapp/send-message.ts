@@ -10,6 +10,10 @@ import {
   sendEvolutionText,
 } from "@/lib/whatsapp/evolution-client";
 import { resolveWhatsAppInstanceForClinic } from "@/lib/whatsapp/resolve-instance";
+import { getAdminClient } from "@/lib/supabase/admin";
+import { getClinicIntegration, isN8nBotProvider } from "@/lib/integration/resolve-provider";
+import { dispatchClinicWebhook } from "@/lib/integration/webhook-dispatch";
+import { uploadBotOutboundDocument } from "@/lib/integration/bot-document-upload";
 
 export type WhatsAppDeliveryStatus = "sent" | "pending" | "failed";
 
@@ -80,6 +84,33 @@ export async function deliverWhatsAppMessage(
       status: "failed",
       providerError: err,
       configured: Boolean(process.env.WHATSAPP_API_URL),
+    };
+  }
+
+  // مسار N8N Bot — فقط للعيادات المفعّلة بوضوح (provider = n8n_bot). أي عيادة أخرى
+  // تكمل عبر Evolution كما كانت بدون أي تغيير.
+  const botAdmin = getAdminClient();
+  const integration = await getClinicIntegration(botAdmin, params.clinicId);
+  if (isN8nBotProvider(integration)) {
+    const dispatch = await dispatchClinicWebhook(botAdmin, integration, "message.text", {
+      phone: normalizedPhone,
+      message: params.messageBody,
+      message_type: params.messageType,
+    });
+
+    await logWhatsAppRow(supabase, {
+      ...params,
+      recipient_phone: normalizedPhone,
+      status: dispatch.ok ? "sent" : "failed",
+      error_message: dispatch.ok ? undefined : dispatch.error ?? "n8n_webhook_failed",
+    });
+
+    return {
+      ok: dispatch.ok,
+      normalizedPhone,
+      status: dispatch.ok ? "sent" : "failed",
+      configured: true,
+      providerError: dispatch.ok ? undefined : dispatch.error ?? "n8n_webhook_failed",
     };
   }
 
@@ -248,6 +279,60 @@ export async function deliverWhatsAppDocument(
       status: "failed",
       providerError: err,
       configured: Boolean(process.env.WHATSAPP_API_URL),
+    };
+  }
+
+  // مسار N8N Bot — يرفع PDF لمخزن مؤقت ويرسل رابطاً موقّعاً بدل Base64 داخل الـ webhook.
+  const botAdmin = getAdminClient();
+  const integration = await getClinicIntegration(botAdmin, params.clinicId);
+  if (isN8nBotProvider(integration)) {
+    const uploaded = await uploadBotOutboundDocument(botAdmin, {
+      clinicId: params.clinicId,
+      pdfBase64: params.pdfBase64,
+      fileName: params.fileName,
+    });
+
+    if (!uploaded) {
+      await logWhatsAppRow(supabase, {
+        clinicId: params.clinicId,
+        messageType: params.messageType,
+        messageBody: params.caption,
+        recipient_phone: normalizedPhone,
+        status: "failed",
+        error_message: "document_upload_failed",
+      });
+      return {
+        ok: false,
+        normalizedPhone,
+        status: "failed",
+        providerError: "document_upload_failed",
+        configured: true,
+      };
+    }
+
+    const dispatch = await dispatchClinicWebhook(botAdmin, integration, "message.document", {
+      phone: normalizedPhone,
+      caption: params.caption,
+      file_name: safeWhatsAppFileName(params.fileName, "document"),
+      message_type: params.messageType,
+      document_url: uploaded.signedUrl,
+    });
+
+    await logWhatsAppRow(supabase, {
+      clinicId: params.clinicId,
+      messageType: params.messageType,
+      messageBody: params.caption,
+      recipient_phone: normalizedPhone,
+      status: dispatch.ok ? "sent" : "failed",
+      error_message: dispatch.ok ? undefined : dispatch.error ?? "n8n_webhook_failed",
+    });
+
+    return {
+      ok: dispatch.ok,
+      normalizedPhone,
+      status: dispatch.ok ? "sent" : "failed",
+      configured: true,
+      providerError: dispatch.ok ? undefined : dispatch.error ?? "n8n_webhook_failed",
     };
   }
 

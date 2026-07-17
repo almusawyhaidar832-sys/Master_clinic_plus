@@ -245,6 +245,48 @@ if (expected !== headers["x-mc-signature"]) {
 | `appointment.modified` | تعديل تاريخ/وقت/بيانات موعد |
 | `appointment.cancelled` | إلغاء موعد مؤكَّد (من الموظف أو من `PATCH .../cancel`) |
 | `appointment.created` | حجز يدوي مباشر من الموظف (بدون مرحلة pending) |
+| `message.text` | أي رسالة نصية أخرى يريد النظام إرسالها للمراجع (إيصال دفع، ملخص جلسة...) |
+| `message.document` | فاتورة PDF أو وصفة PDF جاهزة للإرسال — تصل كرابط موقّع، ليس Base64 |
+
+### صيغة `message.text`
+
+```json
+{
+  "event": "message.text",
+  "clinic_id": "c1d2e3f4-...",
+  "idempotency_key": "evt_...",
+  "timestamp": "2026-07-20T09:15:00.000Z",
+  "data": {
+    "phone": "+9647801234567",
+    "message": "شكراً لك، تم استلام دفعتك بقيمة 25000 د.ع...",
+    "message_type": "payment_receipt"
+  }
+}
+```
+
+### صيغة `message.document`
+
+```json
+{
+  "event": "message.document",
+  "clinic_id": "c1d2e3f4-...",
+  "idempotency_key": "evt_...",
+  "timestamp": "2026-07-20T09:15:00.000Z",
+  "data": {
+    "phone": "+9647801234567",
+    "caption": "📎 إيصال الدفع — PDF",
+    "file_name": "invoice-123.pdf",
+    "message_type": "session_invoice_pdf",
+    "document_url": "https://.../bot-outbound-documents/....pdf?token=..."
+  }
+}
+```
+
+- `document_url` رابط موقّع (Signed URL) صالح لمدة **24 ساعة فقط** — نزّلوه
+  وأرسلوه فوراً عبر واتساب، لا تخزّنوه للأمد الطويل.
+- `message_type` قيم شائعة: `session_invoice_pdf` (فاتورة)، `prescription_pdf`
+  (وصفة)، `payment_receipt` (إيصال دفع نصي)، `session_invoice` (ملخص جلسة نصي).
+  عاملوا أي قيمة غير معروفة كرسالة/مرفق عام وأرسلوه كما هو دون رفضه.
 
 ### مهم — تجنّب الرسائل المكررة
 
@@ -266,10 +308,9 @@ if (expected !== headers["x-mc-signature"]) {
 
 ## 9) ما هو مؤجَّل لمرحلة قادمة (غير مُفعَّل اليوم)
 
-- إرسال الفواتير (`session.saved`) والوصفات (`prescription.sent`) والأشعة
-  (`xray.uploaded`) عبر webhook — لا يزال هذا يمر بمسار Evolution الداخلي حتى
-  اليوم (حتى للعيادات المفعّلة على n8n_bot). سنضيفه في مرحلة قادمة مع رابط PDF
-  موقَّت (Signed URL) بدل base64 خام.
+- إرسال الأشعة (`xray.uploaded`) عبر webhook — لا يزال هذا يمر بمسار Evolution
+  الداخلي حتى اليوم. الفواتير والوصفات (`message.document`) **مُفعَّلة الآن**
+  (انظر القسم 8).
 - صفحة إعدادات داخل لوحة التحكم لعرض/تدوير المفتاح ذاتياً (اليوم يتم عبر سكربت
   من طرفنا فقط).
 
