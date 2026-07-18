@@ -311,12 +311,16 @@ if (expected !== headers["x-mc-signature"]) {
 - إرسال الأشعة (`xray.uploaded`) عبر webhook — لا يزال هذا يمر بمسار Evolution
   الداخلي حتى اليوم. الفواتير والوصفات (`message.document`) **مُفعَّلة الآن**
   (انظر القسم 8).
-- صفحة إعدادات داخل لوحة التحكم لعرض/تدوير المفتاح ذاتياً (اليوم يتم عبر سكربت
-  من طرفنا فقط).
 
 ---
 
-## 10) كيف نفعّل عيادة عندنا (لمعلوماتك فقط)
+## 10) كيف نفعّل/نعدّل عيادة عندنا
+
+عبر لوحة المطور (الطريقة المعتمدة): صفحة العيادة → قسم "ربط N8N" → توليد/تدوير
+مفتاح API، تحديد `webhook_url` وأرقام واتساب، ثم نسخ "بلوك الربط" الجاهز
+لإرساله لكم مباشرة (يحتوي Clinic ID + Bot API Key + Webhook Secret).
+
+بديل عبر الطرفية (سكربت داخلي — نادراً نحتاجه بعد إضافة لوحة المطور):
 
 ```bash
 node scripts/manage-bot-integration.mjs --clinic-id=UUID --enable \
@@ -325,3 +329,64 @@ node scripts/manage-bot-integration.mjs --clinic-id=UUID --enable \
 ```
 
 يُطبع المفتاح الكامل و `webhook_secret` مرة واحدة — نرسلها لكم بقناة آمنة.
+
+---
+
+## 11) ملاحظات توافق مع نسخة الوركفلو "إدارة واتس اب العيادات v3"
+
+راجعنا ملف الوركفلو الذي أرسلتوه. هذه ملاحظات دقيقة لكل عقدة (node) تحتاج
+تعديلاً بسيطاً، وأخرى **أصبحت متوافقة تلقائياً بدون أي تعديل** بعد تحديثنا:
+
+### ✅ متوافق تلقائياً بدون أي تعديل من طرفكم
+
+- **عقدة "Verify HMAC Signature"**: تتحقق من `x-signature` أو `x-signature-256`
+  بصيغة `sha256=<hex>`. أصبحنا نُرسل هذه الترويسة (`X-Signature-256`) بالإضافة
+  إلى `X-MC-Signature` القديمة — فقط ضعوا `APPOINTMENT_WEBHOOK_SECRET` = نفس
+  `webhook_secret` من بلوك الربط.
+- **عقدة "Self-Origin Event?"**: تتحقق من `$json.body.source === "whatsapp_bot"`.
+  أصبحنا نكرّر `source` على مستوى جذر الـ JSON (وليس فقط داخل `data`) — يعمل
+  بدون تعديل.
+- **عقدة "Create Appointment via Bot API"**: ترويسة `X-API-Key` تُقبل الآن
+  كمرادف لـ `X-Bot-Api-Key`. وحقول الجسم `name` / `phone` / `date` (بصيغة ISO
+  كاملة `2026-10-25T16:00:00+03:00`) تُقبل كمرادفات لـ `patientName` /
+  `patientPhone` / `appointmentDate`+`startTime`. الحقول الزائدة
+  (`idempotency_key`, `source`, `clinic_id`, `age`) تُتجاهَل بأمان.
+
+### ✏️ يحتاج تعديل نصّي بسيط (Placeholder فقط)
+
+- **عقدة "Create Appointment via Bot API" → URL**: غيّروا
+  `https://YOUR-BOT-API-DOMAIN/clinics/{id}/appointments` إلى:
+
+  ```
+  https://master-clinic-plus-zg29.vercel.app/api/bot/appointments
+  ```
+
+  (لا حاجة لـ `clinic_id` في المسار — مفتاح API يحدد العيادة تلقائياً.)
+
+- **متغيرات Notion الخاصة بكم** (`TODO_REPLACE_WITH_CLINICS_REGISTRY_DB_ID`,
+  `TODO_REPLACE_WITH_PROCESSED_EVENTS_DB_ID`): هذه قواعد Notion خاصة بنظامكم
+  فقط، لا علاقة لنا بها — عبّوها بمعرّفات قواعدكم الحقيقية.
+- **سجلّ العيادات في Notion** ("Lookup Clinic Registry (WA)" /
+  "(Webhook)"): لكل عيادة تفعّلونها، خزّنوا فيه ثلاث قيم من "بلوك الربط" الذي
+  ننسخه من لوحة المطور: `Clinic ID`، `Bot API Key`، بالإضافة إلى
+  `WhatsApp Phone Number ID` الخاص برقم واتساب تلك العيادة (من طرفكم).
+
+### ⚠️ توصية مهمة — منع الحجز المكرر (سبب المشروع الأصلي)
+
+عقدة **"Intake & Booking"** تتحقق من التعارض حالياً فقط عبر أداة
+`Get many database pages in Notion` (قاعدتكم الخاصة). هذه القاعدة **لا تعرف**
+بالحجوزات التي يسويها المحاسب مباشرة داخل Master Clinic (حجز حضوري، أو حجز
+إلكتروني من الموقع). لتفادي التعارض الحقيقي، نوصي بإضافة استدعاء (كأداة AI
+Tool أو خطوة قبل التثبيت) إلى:
+
+```
+GET /api/bot/availability?doctorId=...&date=YYYY-MM-DD
+X-Bot-Api-Key: <المفتاح>
+```
+
+هذا يعكس **كل** حجوزات العيادة الحقيقية (بوت + محاسب + حجز إلكتروني) لحظياً.
+كذلك — بما أن الحجز الحالي لا يحدد `doctorId` أبداً، والعيادة قد تحتوي أكثر
+من طبيب: استدعوا `GET /api/bot/clinic` أول مرة بالمحادثة لعرض قائمة الأطباء
+وسؤال المريض عن تفضيله، ثم أرسلوا `doctorId` المختار مع الحجز. إذا لم يُرسَل
+`doctorId` والعيادة تحتوي طبيباً واحداً فقط نشطاً، نختاره تلقائياً؛ إذا كانت
+تحتوي أكثر من طبيب سيرجع الطلب خطأ `400` مع قائمة الأطباء ليعاد المحاولة.

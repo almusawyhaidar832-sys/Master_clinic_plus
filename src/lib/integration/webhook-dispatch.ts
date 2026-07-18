@@ -59,17 +59,27 @@ export async function dispatchClinicWebhook(
     clinic_id: integration.clinic_id,
     idempotency_key: `evt_${crypto.randomUUID()}`,
     timestamp: new Date().toISOString(),
+    // مكرّر أيضاً على مستوى الجذر (وليس فقط داخل data) — بعض تدفقات N8N (مثل فحص
+    // "Self-Origin Event") تقرأ body.source مباشرة لتجنّب الرد على حدث بدأته هي نفسها
+    source: (data.source as string | undefined) ?? null,
     data,
   };
 
   const rawBody = JSON.stringify(envelope);
+  const signature = integration.webhook_secret?.trim()
+    ? signWebhookPayload(rawBody, integration.webhook_secret.trim())
+    : null;
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "X-MC-Clinic-Id": integration.clinic_id,
     "X-MC-Event": event,
   };
-  if (integration.webhook_secret?.trim()) {
-    headers["X-MC-Signature"] = signWebhookPayload(rawBody, integration.webhook_secret.trim());
+  if (signature) {
+    headers["X-MC-Signature"] = signature;
+    // نفس التوقيع بصيغة/اسم متوافقين مع تدفقات N8N التي تتحقق من x-signature-256
+    // بصيغة "sha256=<hex>" (مثل GitHub webhooks) — إضافي بالكامل، لا يغيّر التحقق الحالي
+    headers["X-Signature-256"] = `sha256=${signature}`;
   }
 
   try {

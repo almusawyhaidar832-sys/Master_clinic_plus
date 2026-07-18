@@ -12,6 +12,7 @@ import {
   ExternalLink,
   MessageCircle,
   UserCog,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
@@ -232,6 +233,16 @@ export function DeveloperClinicsTable({
           >
             <UserCog className="h-4 w-4" />
             المستخدمون والصلاحيات
+          </Link>
+        </li>
+        <li>
+          <Link
+            href={`/developer/clinics/${c.id}#bot-integration`}
+            className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-sm text-emerald-300 hover:bg-slate-700"
+            onClick={closeMenus}
+          >
+            <KeyRound className="h-4 w-4" />
+            ربط N8N (واتساب صديقك)
           </Link>
         </li>
         <li>

@@ -7,6 +7,8 @@ import { getAdminClient } from "@/lib/supabase/admin";
 import type { ClinicIntegrationRow } from "@/lib/integration/types";
 
 export const BOT_API_KEY_HEADER = "x-bot-api-key";
+/** بعض تدفقات N8N الجاهزة تستخدم هذا الاسم — نقبله كمرادف لتقليل التعديلات المطلوبة عندهم */
+const BOT_API_KEY_HEADER_ALIAS = "x-api-key";
 const KEY_PREFIX = "mcp_bot_";
 
 function sha256Hex(value: string): string {
@@ -53,7 +55,9 @@ export async function resolveBotClinic(
   req: NextRequest,
   admin?: SupabaseClient
 ): Promise<ResolvedBotClinic | null> {
-  const key = req.headers.get(BOT_API_KEY_HEADER)?.trim();
+  const key =
+    req.headers.get(BOT_API_KEY_HEADER)?.trim() ||
+    req.headers.get(BOT_API_KEY_HEADER_ALIAS)?.trim();
   if (!key) return null;
 
   const client = admin ?? getAdminClient();

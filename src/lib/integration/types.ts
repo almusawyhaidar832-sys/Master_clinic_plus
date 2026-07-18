@@ -28,6 +28,8 @@ export interface WebhookEnvelope<T = Record<string, unknown>> {
   clinic_id: string;
   idempotency_key: string;
   timestamp: string;
+  /** مكرّر من data.source عند توفره — لتفحّص Self-Origin بدون الحاجة لقراءة data */
+  source?: string | null;
   data: T;
 }
 

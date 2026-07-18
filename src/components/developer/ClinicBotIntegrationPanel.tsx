@@ -119,7 +119,7 @@ export function ClinicBotIntegrationPanel({ clinicId, clinicName, onMessage }: P
   const isEnabled = integration?.provider === "n8n_bot" && integration.is_active;
 
   return (
-    <div className="mt-6 rounded-xl border border-slate-700 p-4">
+    <div id="bot-integration" className="mt-6 rounded-xl border border-slate-700 p-4">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-sm font-bold text-amber-400">
           <KeyRound className="h-4 w-4" />
