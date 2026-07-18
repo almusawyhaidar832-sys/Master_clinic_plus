@@ -9,6 +9,7 @@
     "start": "next start",
     "start:lan": "next start -H 0.0.0.0 -p 3000",
     "lint": "next lint",
+    "test": "vitest run",
     "prepare:deploy": "node scripts/prepare-vercel-deploy.mjs",
     "deploy:zg29": "vercel deploy --prod --yes --project master-clinic-plus-zg29",
     "verify:dental-chart": "node scripts/verify-dental-chart-logic.mjs",
@@ -18,10 +19,10 @@
   "dependencies": {
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.1",
-    "edge-tts-universal": "^1.4.0",
     "arabic-persian-reshaper": "^1.0.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "edge-tts-universal": "^1.4.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
@@ -48,6 +49,7 @@
     "eslint-config-next": "^15.2.4",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "4.1.10"
   }
 }
