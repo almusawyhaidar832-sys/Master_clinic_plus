@@ -108,11 +108,33 @@ export function ClinicBotIntegrationPanel({ clinicId, clinicName, onMessage }: P
 
   function handoffText(g: GeneratedResult) {
     return [
-      `عيادة: ${g.clinic_name}`,
+      `=== ربط N8N — ${g.clinic_name} ===`,
+      ``,
       `Base URL: ${baseUrl}`,
       `clinic_id: ${g.clinic_id}`,
+      ``,
+      `--- Master Clinic Bot API ---`,
       `X-Bot-Api-Key: ${g.api_key}`,
-      `webhook_secret: ${g.webhook_secret}`,
+      ``,
+      `--- متغيرات n8n (Settings → Variables) ---`,
+      `MCP_BOT_API_KEY=${g.api_key}`,
+      `APPOINTMENT_WEBHOOK_SECRET=${g.webhook_secret}`,
+      ``,
+      `--- Webhook URL (من n8n → Appointment Events Webhook → Production URL) ---`,
+      `ضع الرابط بلوحة المطور → رابط Webhook`,
+      g.webhook_url ? `webhook_url الحالي: ${g.webhook_url}` : `webhook_url: (بانتظار الرابط من n8n)`,
+      ``,
+      `--- استيراد الوركفلو ---`,
+      `استورد الملف: n8n_عيادة_الامل_جاهز.json`,
+      `فعّل الوركفلو (Active = ON)`,
+    ].join("\n");
+  }
+
+  function n8nEnvBlock() {
+    if (!integration?.webhook_secret) return null;
+    return [
+      `MCP_BOT_API_KEY=<انسخ من X-Bot-Api-Key بعد توليد مفتاح جديد>`,
+      `APPOINTMENT_WEBHOOK_SECRET=${integration.webhook_secret}`,
     ].join("\n");
   }
 
@@ -243,10 +265,24 @@ export function ClinicBotIntegrationPanel({ clinicId, clinicName, onMessage }: P
       )}
 
       {integration?.webhook_secret && !generated && (
-        <div className="mt-3 flex items-center justify-between gap-2 rounded-md bg-slate-900 px-2 py-1.5 text-xs" dir="ltr">
-          <span className="text-slate-400">webhook_secret الحالي:</span>
-          <span className="truncate font-mono">{integration.webhook_secret}</span>
-          <CopyButton value={integration.webhook_secret} />
+        <div className="mt-3 space-y-2 rounded-md bg-slate-900 px-2 py-2 text-xs" dir="ltr">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-slate-400">webhook_secret الحالي:</span>
+            <span className="truncate font-mono">{integration.webhook_secret}</span>
+            <CopyButton value={integration.webhook_secret} />
+          </div>
+          {n8nEnvBlock() && (
+            <button
+              type="button"
+              onClick={async () => {
+                await navigator.clipboard.writeText(n8nEnvBlock() ?? "");
+                onMessage({ ok: true, text: "تم نسخ متغيرات n8n (أضف MCP_BOT_API_KEY بعد توليد المفتاح)" });
+              }}
+              className="w-full rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+            >
+              📋 نسخ متغيرات n8n (APPOINTMENT_WEBHOOK_SECRET جاهز)
+            </button>
+          )}
         </div>
       )}
     </div>

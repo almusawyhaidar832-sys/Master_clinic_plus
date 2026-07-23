@@ -14,6 +14,7 @@
     "deploy:zg29": "vercel deploy --prod --yes --project master-clinic-plus-zg29",
     "verify:dental-chart": "node scripts/verify-dental-chart-logic.mjs",
     "bot:manage": "node scripts/manage-bot-integration.mjs",
+    "bot:patch-n8n-amal": "node scripts/patch-n8n-workflow-amal.mjs",
     "db:types": "supabase gen types typescript --local > src/types/database.ts"
   },
   "dependencies": {
