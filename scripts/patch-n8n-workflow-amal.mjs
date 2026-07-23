@@ -21,6 +21,17 @@ const outputPath =
     "n8n_عيادة_الامل_جاهز.json"
   );
 
+const extraArgs = Object.fromEntries(
+  process.argv.slice(4).map((a) => {
+    const [k, v] = a.replace(/^--/, "").split(/=(.*)/s);
+    return [k, v ?? true];
+  })
+);
+const embedApiKey = extraArgs["embed-api-key"] ? String(extraArgs["embed-api-key"]) : null;
+const embedWebhookSecret = extraArgs["embed-webhook-secret"]
+  ? String(extraArgs["embed-webhook-secret"])
+  : null;
+
 if (!inputPath || !fs.existsSync(inputPath)) {
   console.error("Usage: node scripts/patch-n8n-workflow-amal.mjs <input.json> [output.json]");
   process.exit(1);
@@ -28,10 +39,38 @@ if (!inputPath || !fs.existsSync(inputPath)) {
 
 const wf = JSON.parse(fs.readFileSync(inputPath, "utf8"));
 
+const WASENDER = '$node["WasenderAPI Trigger"]';
+const WA_MSG = `${WASENDER}.json["data"]["messages"]`;
+
+// ── 0) إزالة WhatsApp Trigger القديم (Meta) إن وُجد — نعتمد WasenderAPI فقط ──
+wf.nodes = wf.nodes.filter((n) => n.type !== "n8n-nodes-base.whatsAppTrigger");
+delete wf.connections["WhatsApp Trigger"];
+
+// استبدال أي مراجع متبقية لـ WhatsApp Trigger بمسارات WasenderAPI
+const wfRaw = JSON.stringify(wf)
+  .replaceAll('WhatsApp Trigger', "WasenderAPI Trigger")
+  .replaceAll(
+    '$node["WasenderAPI Trigger"].json["messages"]["0"]["text"]["body"]',
+    `${WA_MSG}["messageBody"]`
+  )
+  .replaceAll(
+    '$node["WasenderAPI Trigger"].json["messages"][0]["id"]',
+    `${WA_MSG}["key"]["id"]`
+  );
+Object.assign(wf, JSON.parse(wfRaw));
+
 function findNode(name) {
   const n = wf.nodes.find((x) => x.name === name);
   if (!n) throw new Error(`Node not found: ${name}`);
   return n;
+}
+
+function findNodeOr(...names) {
+  for (const name of names) {
+    const n = wf.nodes.find((x) => x.name === name);
+    if (n) return n;
+  }
+  throw new Error(`Node not found: ${names.join(" | ")}`);
 }
 
 function setNodeType(node, type, typeVersion) {
@@ -40,7 +79,10 @@ function setNodeType(node, type, typeVersion) {
 }
 
 // ── 1) استبدال Notion Lookup (WA) بإعدادات ثابتة لعيادة الامل ──
-const clinicWa = findNode("Lookup Clinic Registry (WA)");
+const clinicWa = findNodeOr(
+  "Lookup Clinic Registry (WA)",
+  "Clinic Config (عيادة الامل)"
+);
 clinicWa.name = "Clinic Config (عيادة الامل)";
 setNodeType(clinicWa, "n8n-nodes-base.set", 3.4);
 clinicWa.parameters = {
@@ -55,7 +97,7 @@ clinicWa.parameters = {
       {
         id: "amal-bot-key",
         name: "Bot API Key",
-        value: "={{ $env.MCP_BOT_API_KEY }}",
+        value: embedApiKey || "={{ $env.MCP_BOT_API_KEY }}",
         type: "string",
       },
       {
@@ -71,11 +113,24 @@ clinicWa.parameters = {
 delete clinicWa.credentials;
 
 // ── 2) استبدال Notion Lookup (Webhook) ──
-const clinicWebhook = findNode("Lookup Clinic Registry (Webhook)");
+const clinicWebhook = findNodeOr(
+  "Lookup Clinic Registry (Webhook)",
+  "Webhook Clinic Config"
+);
 clinicWebhook.name = "Webhook Clinic Config";
 setNodeType(clinicWebhook, "n8n-nodes-base.code", 2);
 clinicWebhook.parameters = {
-  jsCode: `// إعدادات عيادة الامل لمسار webhook الوارد — بدون Notion
+  jsCode: embedApiKey
+    ? `// إعدادات عيادة الامل — مفتاح API مدمج
+const body = $('Verify HMAC Signature').item.json.body || {};
+return [{
+  json: {
+    'Clinic ID': body.clinic_id || '${AMAL_CLINIC_ID}',
+    'Bot API Key': ${JSON.stringify(embedApiKey)},
+    body,
+  },
+}];`
+    : `// إعدادات عيادة الامل لمسار webhook الوارد — بدون Notion
 const body = $('Verify HMAC Signature').item.json.body || {};
 return [{
   json: {
@@ -87,12 +142,41 @@ return [{
 };
 delete clinicWebhook.credentials;
 
-// ── 3) إصلاح Edit Fields1 — WasenderAPI بدل WhatsApp Trigger ──
+// ── 2b) Verify HMAC — secret مدمج إن وُجد ──
+if (embedWebhookSecret) {
+  const verifyHmac = findNode("Verify HMAC Signature");
+  verifyHmac.parameters.jsCode = `const crypto = require('crypto');
+const secret = ${JSON.stringify(embedWebhookSecret)};
+const item = $input.item;
+const headers = item.json.headers || {};
+const signatureHeader = headers['x-signature'] || headers['x-signature-256'] || '';
+const rawBody = item.binary && item.binary.data
+  ? Buffer.from(item.binary.data.data, 'base64').toString('utf8')
+  : JSON.stringify(item.json.body || {});
+const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+const provided = signatureHeader.replace('sha256=', '').trim();
+let valid = false;
+try {
+  valid = provided.length === expected.length && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+} catch (e) {
+  valid = false;
+}
+return [{ json: { valid, body: item.json.body } }];`;
+}
+
+// ── 3) Edit Fields — قراءة مباشرة من WasenderAPI Trigger (لا WhatsApp Trigger) ──
+const editFields = findNode("Edit Fields");
+editFields.parameters.assignments.assignments[0].value =
+  `={{ ${WA_MSG}["key"]["remoteJid"] }}`;
+editFields.parameters.assignments.assignments[1].value =
+  `={{ ${WA_MSG}["verifiedBizName"] }}`;
+editFields.parameters.assignments.assignments[2].value =
+  `={{ ${WA_MSG}["messageBody"] }}`;
+
+// ── 4) Edit Fields1 — WasenderAPI ──
 const editFields1 = findNode("Edit Fields1");
 editFields1.parameters.assignments.assignments[0].value =
-  '={{ $node["WasenderAPI Trigger"].json["data"]["messages"]["messageBody"] }}';
-
-// ── 4) إصلاح Create Appointment — ترويسة API + idempotency من Wasender ──
+  `={{ ${WA_MSG}["messageBody"] }}`;
 const createAppt = findNode("Create Appointment via Bot API");
 createAppt.parameters.url = `${MCP_BASE}/api/bot/appointments`;
 createAppt.parameters.specifyHeaders = "keypair";
@@ -109,9 +193,9 @@ createAppt.parameters.headerParameters = {
   ],
 };
 createAppt.parameters.jsonBody = `={{ JSON.stringify({
-  idempotency_key: $node["WasenderAPI Trigger"].json["data"]["messages"]["key"]["id"]
-    || $node["WasenderAPI Trigger"].json["data"]["messages"]["key"]["remoteJid"]
-    + "_" + ($node["WasenderAPI Trigger"].json["data"]["messages"]["messageTimestamp"] || Date.now()),
+  idempotency_key: ${WA_MSG}["key"]["id"]
+    || ${WA_MSG}["key"]["remoteJid"]
+    + "_" + (${WA_MSG}["messageTimestamp"] || Date.now()),
   source: "whatsapp_bot",
   name: $json["output"]["final_data"]["name"],
   phone: $json["output"]["final_data"]["phone"],
@@ -120,7 +204,7 @@ createAppt.parameters.jsonBody = `={{ JSON.stringify({
 }) }}`;
 
 // ── 5) تحديث مراجع Lookup Clinic Registry (WA) → Clinic Config ──
-const oldRef = 'Lookup Clinic Registry (WA)';
+const oldRef = "Lookup Clinic Registry (WA)";
 const newRef = "Clinic Config (عيادة الامل)";
 const oldWebhookRef = "Lookup Clinic Registry (Webhook)";
 const newWebhookRef = "Webhook Clinic Config";
@@ -154,18 +238,15 @@ for (const node of wf.nodes) {
 
 // ── 6) إصلاح عقد إرسال Wasender — إضافة نص الرسالة ──
 const sendBookingConfirm = findNode("Send text message");
-sendBookingConfirm.parameters.to =
-  '={{ $node["WasenderAPI Trigger"].json["data"]["messages"]["key"]["remoteJid"] }}';
+sendBookingConfirm.parameters.to = `={{ ${WA_MSG}["key"]["remoteJid"] }}`;
 sendBookingConfirm.parameters.text = `={{ "تم تثبيت حجزك بنجاح يا " + $node["Intake & Booking"].json["output"]["final_data"]["name"] + " 🌿\\nننتظرك بالعيادة بموعدك. نورتنا!" }}`;
 
 const sendBookingReply = findNode("Send text message1");
-sendBookingReply.parameters.to =
-  '={{ $node["WasenderAPI Trigger"].json["data"]["messages"]["key"]["remoteJid"] }}';
+sendBookingReply.parameters.to = `={{ ${WA_MSG}["key"]["remoteJid"] }}`;
 sendBookingReply.parameters.text = '={{ $json["output"]["reply_to_user"] }}';
 
 const sendInquiry = findNode("Send text message2");
-sendInquiry.parameters.to =
-  '={{ $node["WasenderAPI Trigger"].json["data"]["messages"]["key"]["remoteJid"] }}';
+sendInquiry.parameters.to = `={{ ${WA_MSG}["key"]["remoteJid"] }}`;
 sendInquiry.parameters.text = '={{ $json["output"] }}';
 
 // ── 7) تحديث Inquiry Assistant — عيادة الامل بدل روكان (نص ثابت مؤقت) ──
@@ -175,13 +256,16 @@ if (inquiry.parameters.options?.systemMessage?.includes("عيادة روكان")
     inquiry.parameters.options.systemMessage.replace(/عيادة روكان/g, "عيادة الامل");
 }
 
-// ── 8) ربط التدفق: Trigger → Clinic Config → Edit Fields ──
+// ── 8) ربط التدفق: WasenderAPI Trigger → Edit Fields (رئيسي) + Clinic Config (متوازي) ──
 wf.connections["WasenderAPI Trigger"] = {
-  main: [[{ node: "Clinic Config (عيادة الامل)", type: "main", index: 0 }]],
+  main: [
+    [
+      { node: "Edit Fields", type: "main", index: 0 },
+      { node: "Clinic Config (عيادة الامل)", type: "main", index: 0 },
+    ],
+  ],
 };
-wf.connections["Clinic Config (عيادة الامل)"] = {
-  main: [[{ node: "Edit Fields", type: "main", index: 0 }]],
-};
+delete wf.connections["Clinic Config (عيادة الامل)"];
 
 // webhook path
 wf.connections["Self-Origin Event?"] = {

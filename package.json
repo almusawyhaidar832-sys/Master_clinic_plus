@@ -15,6 +15,7 @@
     "verify:dental-chart": "node scripts/verify-dental-chart-logic.mjs",
     "bot:manage": "node scripts/manage-bot-integration.mjs",
     "bot:patch-n8n-amal": "node scripts/patch-n8n-workflow-amal.mjs",
+    "bot:setup-amal": "node scripts/setup-amal-n8n-full.mjs",
     "db:types": "supabase gen types typescript --local > src/types/database.ts"
   },
   "dependencies": {
