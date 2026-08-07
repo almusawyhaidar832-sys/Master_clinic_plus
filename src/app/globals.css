@@ -279,7 +279,7 @@
   }
 
   .mc-entry-remaining--settled {
-    @apply border-emerald-200 bg-gradient-to-b from-emerald-50/80 to-white;
+    @apply border-emerald-200 bg-gradient-to-b from-emerald-50 to-white;
   }
 
   .mc-entry-submit-bar {
