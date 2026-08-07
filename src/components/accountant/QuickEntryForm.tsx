@@ -107,7 +107,21 @@ import {
   validateBillingAmount,
   type SessionBillingMode,
 } from "@/lib/services/session-billing-mode";
-import { Scan, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardList,
+  CreditCard,
+  FlaskConical,
+  Phone,
+  RefreshCw,
+  Scan,
+  StickyNote,
+  Stethoscope,
+  User,
+  Wallet,
+  X,
+} from "lucide-react";
 
 /** Common dental procedure suggestions — user can also type freely */
 const DENTAL_SUGGESTIONS = [
@@ -2040,33 +2054,38 @@ export function QuickEntryForm({
       }
     >
       {!embedded && (
-        <CardHeader>
-          <CardTitle className="!text-lg !font-bold text-primary-800">
-            {loadingPlan && selectedPatientId
-              ? "جاري تحميل ملف المريض..."
-              : showCasePicker
-                ? "اختر حالة العلاج"
-                : isFollowUpSession
-                  ? `متابعة: ${selectedCase?.treatment_name_ar ?? "حالة"}`
-                  : "حالة علاج جديدة"}
-          </CardTitle>
-          {isFollowUpSession && !loadingPlan && (
-            <p className="mt-0.5 text-sm text-slate-600">
-              اختر نوع التسجيل ثم المبلغ — بدون سعر كلي للحالة
-            </p>
-          )}
-          {!isFollowUpSession && !showCasePicker && !loadingPlan && (
-            <p className="mt-0.5 text-sm text-slate-600">
-              نوع الإجراء ← نوع التسجيل (جلسة / دين / مكتمل) ← المبلغ
-            </p>
-          )}
+        <CardHeader className="mb-5 flex-row items-center gap-3 border-b border-slate-100 pb-4">
+          <span className="mc-icon-badge-primary !rounded-2xl !bg-gradient-to-br !from-primary-600 !to-primary-500 !p-3 text-white shadow-md shadow-primary/20">
+            <Wallet className="h-5 w-5" />
+          </span>
+          <div>
+            <CardTitle className="!text-lg !font-extrabold !ps-0 text-primary-800">
+              {loadingPlan && selectedPatientId
+                ? "جاري تحميل ملف المريض..."
+                : showCasePicker
+                  ? "اختر حالة العلاج"
+                  : isFollowUpSession
+                    ? `متابعة: ${selectedCase?.treatment_name_ar ?? "حالة"}`
+                    : "حالة علاج جديدة"}
+            </CardTitle>
+            {isFollowUpSession && !loadingPlan && (
+              <p className="mt-0.5 text-sm font-medium text-slate-500">
+                اختر نوع التسجيل ثم المبلغ — بدون سعر كلي للحالة
+              </p>
+            )}
+            {!isFollowUpSession && !showCasePicker && !loadingPlan && (
+              <p className="mt-0.5 text-sm font-medium text-slate-500">
+                نوع الإجراء ← نوع التسجيل (جلسة / دين / مكتمل) ← المبلغ
+              </p>
+            )}
+          </div>
         </CardHeader>
       )}
 
       <form
         noValidate
         onSubmit={handleSubmit}
-        className={`mc-quick-entry-form grid gap-4 sm:grid-cols-2 ${embedded ? "px-0" : ""}`}
+        className={`mc-quick-entry-form grid gap-5 sm:grid-cols-2 ${embedded ? "px-0" : ""}`}
       >
 
         {isCaseClosed && (
@@ -2133,120 +2152,138 @@ export function QuickEntryForm({
           </div>
         )}
 
-        {formSchema.showPatientSearch && (
-        <div className="sm:col-span-2">
-          <label className="mc-entry-field-label">
-            المريض{" "}
+        {(formSchema.showPatientSearch || selectedPatientId) && (
+        <div className="mc-entry-section mc-entry-section--patient">
+          <div className="mc-entry-section-header">
+            <span className="mc-entry-section-icon">
+              <User className="h-4 w-4" />
+            </span>
+            بيانات المراجع
             {selectedPatientId && (
-              <span className="text-sm font-semibold text-primary">← مريض محدد</span>
+              <span className="mr-auto inline-flex items-center gap-1 rounded-full bg-blue-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
+                <CheckCircle2 className="h-3 w-3" /> مريض محدد
+              </span>
             )}
-          </label>
-          <div className="flex gap-2">
-            <PatientSearchField
-              portal="accountant"
-              value={patientQuery}
-              selectedPatientId={selectedPatientId}
-              disabled={!!defaultPatientId}
-              required
-              showIcon={false}
-              placeholder={
-                isFollowUpSession
-                  ? "ابحث عن اسم المريض..."
-                  : "اسم المريض — جديد أو موجود"
-              }
-              className="min-w-0 flex-1"
-              onChange={(v) => {
-                setPatientQuery(v);
-                setSelectedPatientId(null);
-                setPatientPhone("");
-              }}
-              onSelect={(p) => {
-                setSelectedPatientId(p.id);
-                setPatientQuery(p.full_name_ar);
-                setPatientPhone(getPatientDisplayPhone(p) ?? "");
-              }}
-            />
-            {selectedPatientId && !defaultPatientId && (
-              <button
-                type="button"
-                onClick={() => {
+          </div>
+
+          {formSchema.showPatientSearch && (
+          <div>
+            <label className="mc-entry-field-label">المريض</label>
+            <div className="flex gap-2">
+              <PatientSearchField
+                portal="accountant"
+                value={patientQuery}
+                selectedPatientId={selectedPatientId}
+                disabled={!!defaultPatientId}
+                required
+                showIcon={false}
+                placeholder={
+                  isFollowUpSession
+                    ? "ابحث عن اسم المريض..."
+                    : "اسم المريض — جديد أو موجود"
+                }
+                className="min-w-0 flex-1"
+                onChange={(v) => {
+                  setPatientQuery(v);
                   setSelectedPatientId(null);
-                  setPatientQuery("");
                   setPatientPhone("");
                 }}
-                className="text-xs text-slate-muted hover:text-debt-text px-2"
-              >
-                ✕
-              </button>
-            )}
+                onSelect={(p) => {
+                  setSelectedPatientId(p.id);
+                  setPatientQuery(p.full_name_ar);
+                  setPatientPhone(getPatientDisplayPhone(p) ?? "");
+                }}
+              />
+              {selectedPatientId && !defaultPatientId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPatientId(null);
+                    setPatientQuery("");
+                    setPatientPhone("");
+                  }}
+                  className="rounded-lg px-2 text-xs text-slate-muted hover:bg-red-50 hover:text-debt-text"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-        )}
+          )}
 
-        {formSchema.showPatientSearch && !selectedPatientId && (
-          <div className="sm:col-span-2">
-            <label className="mc-entry-field-label">
-              رقم هاتف المراجع <span className="text-debt-text">*</span>
-            </label>
-            <input
-              type="tel"
-              dir="ltr"
-              required
-              className="mc-entry-input"
-              value={patientPhone}
-              onChange={(e) => setPatientPhone(e.target.value)}
-              placeholder="07XX XXX XXXX أو +9647XXXXXXXXX"
-            />
-            <p className="mt-1 text-xs text-slate-muted">
-              يُحفظ بصيغة +964 — يُستخدم لإشعارات الواتساب لاحقاً
-            </p>
-          </div>
-        )}
+          {formSchema.showPatientSearch && !selectedPatientId && (
+            <div>
+              <label className="mc-entry-field-label flex items-center gap-1.5">
+                <Phone className="h-3.5 w-3.5 text-blue-600" />
+                رقم هاتف المراجع <span className="text-debt-text">*</span>
+              </label>
+              <input
+                type="tel"
+                dir="ltr"
+                required
+                className="mc-entry-input"
+                value={patientPhone}
+                onChange={(e) => setPatientPhone(e.target.value)}
+                placeholder="07XX XXX XXXX أو +9647XXXXXXXXX"
+              />
+              <p className="mc-entry-section-hint mt-1">
+                يُحفظ بصيغة +964 — يُستخدم لإشعارات الواتساب لاحقاً
+              </p>
+            </div>
+          )}
 
-        {selectedPatientId && (
-          <div className="sm:col-span-2">
-            <label className="mc-entry-field-label">
-              رقم واتساب المراجع{" "}
-              <span className="text-debt-text">*</span>
-              <span className="text-sm font-medium text-slate-500">
-                {" "}
-                (لإرسال الفاتورة بعد الجلسة)
+          {selectedPatientId && (
+            <div>
+              <label className="mc-entry-field-label flex items-center gap-1.5">
+                <Phone className="h-3.5 w-3.5 text-blue-600" />
+                رقم واتساب المراجع{" "}
+                <span className="text-debt-text">*</span>
+                <span className="text-sm font-medium text-slate-500">
+                  {" "}
+                  (لإرسال الفاتورة بعد الجلسة)
+                </span>
+              </label>
+              <input
+                type="tel"
+                dir="ltr"
+                required={phoneInputRequired}
+                className="mc-entry-input"
+                value={patientPhone}
+                onChange={(e) => setPatientPhone(e.target.value)}
+                placeholder="07XX XXX XXXX"
+              />
+              {defaultPatientPhone?.trim() && embedded && (
+                <p className="mc-entry-section-hint mt-1" dir="ltr">
+                  الرقم المحفوظ: {defaultPatientPhone}
+                </p>
+              )}
+              {!patientPhone.trim() && !defaultPatientPhone?.trim() && isFollowUpSession && (
+                <p className="mt-1 text-xs font-medium text-amber-700">
+                  بدون رقم لن تُرسل رسالة واتساب — اختبار الإرسال يستخدم رقمك أنت
+                  فقط.
+                </p>
+              )}
+            </div>
+          )}
+
+          {formSchema.showAssignedDoctor && assignedDoctor && (
+            <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-white/80 px-4 py-3 shadow-sm">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+                <Stethoscope className="h-4 w-4" />
               </span>
-            </label>
-            <input
-              type="tel"
-              dir="ltr"
-              required={phoneInputRequired}
-              className="mc-entry-input"
-              value={patientPhone}
-              onChange={(e) => setPatientPhone(e.target.value)}
-              placeholder="07XX XXX XXXX"
-            />
-            {defaultPatientPhone?.trim() && embedded && (
-              <p className="mt-1 text-xs text-slate-muted" dir="ltr">
-                الرقم المحفوظ: {defaultPatientPhone}
-              </p>
-            )}
-            {!patientPhone.trim() && !defaultPatientPhone?.trim() && isFollowUpSession && (
-              <p className="mt-1 text-xs text-amber-700">
-                بدون رقم لن تُرسل رسالة واتساب — اختبار الإرسال يستخدم رقمك أنت
-                فقط.
-              </p>
-            )}
-          </div>
-        )}
-
-        {formSchema.showAssignedDoctor && assignedDoctor && (
-          <div className="sm:col-span-2 rounded-xl border border-slate-border bg-surface/80 px-4 py-3">
-            <p className="text-xs text-slate-muted">الطبيب المعالج لهذه الحالة</p>
-            <p className="text-base font-semibold text-slate-text">
-              {assignedDoctor.full_name_ar}
-            </p>
-            <p className="mt-0.5 text-[11px] text-slate-muted">
-              الجلسة الجديدة لهذه الحالة فقط تُحسب للطبيب أعلاه — حالات أخرى
-              للمراجع لها أطباؤها. لتغيير طبيب هذه الحالة استخدم «تحويل طبيب».
-            </p>
-          </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-500">الطبيب المعالج لهذه الحالة</p>
+                <p className="text-base font-bold text-slate-800">
+                  {assignedDoctor.full_name_ar}
+                </p>
+                <p className="mt-0.5 text-[11px] text-slate-muted">
+                  الجلسة الجديدة لهذه الحالة فقط تُحسب للطبيب أعلاه — حالات أخرى
+                  للمراجع لها أطباؤها. لتغيير طبيب هذه الحالة استخدم «تحويل طبيب».
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
         )}
 
         {selectedPatientId &&
@@ -2296,16 +2333,21 @@ export function QuickEntryForm({
           </p>
         )}
         {isFollowUpSession && selectedCase && !embedded && (
-          <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 mc-section-box">
-            <div>
-              <p className="text-xs text-slate-muted">الحالة المختارة</p>
-              <p className="font-semibold text-slate-text">
-                {selectedCase.treatment_name_ar}
-              </p>
+          <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-teal-200 bg-teal-50/70 px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-white">
+                <ClipboardList className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-xs font-semibold text-teal-700">الحالة المختارة</p>
+                <p className="font-bold text-slate-800">
+                  {selectedCase.treatment_name_ar}
+                </p>
+              </div>
             </div>
             <button
               type="button"
-              className="text-sm text-primary hover:underline"
+              className="rounded-lg px-2.5 py-1.5 text-sm font-semibold text-teal-700 hover:bg-teal-100"
               onClick={() => {
                 setSelectedCaseId(null);
                 setFinancialPlan(EMPTY_FINANCIAL_PLAN);
@@ -2318,11 +2360,17 @@ export function QuickEntryForm({
         )}
 
         {formSchema.showDoctor && (
-        <>
+        <div className="mc-entry-section mc-entry-section--doctor">
+          <div className="mc-entry-section-header">
+            <span className="mc-entry-section-icon">
+              <Stethoscope className="h-4 w-4" />
+            </span>
+            الطبيب المعالج
+          </div>
         {lockDoctorId ? (
-          <div className="sm:col-span-2 mc-section-box">
-            <p className="text-xs text-slate-muted">طبيب الموعد / الجلسة</p>
-            <p className="text-base font-semibold text-slate-text">
+          <div className="rounded-xl border border-indigo-200 bg-white/80 px-4 py-3 shadow-sm">
+            <p className="text-xs font-semibold text-slate-500">طبيب الموعد / الجلسة</p>
+            <p className="text-base font-bold text-slate-800">
               {selectedDoctor?.full_name_ar ??
                 assignedDoctor?.full_name_ar ??
                 lockDoctorName ??
@@ -2332,7 +2380,8 @@ export function QuickEntryForm({
         ) : (
           <>
             {selectedDoctor && (
-              <div className="sm:col-span-2 mc-section-box--warning px-4 py-2 text-sm">
+              <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
                 تأكد من <strong>الطبيب</strong> قبل الحفظ — الرصيد يُحسب لهذا الطبيب فقط
               </div>
             )}
@@ -2344,34 +2393,36 @@ export function QuickEntryForm({
               options={doctors.map((d) => ({ value: d.id, label: d.full_name_ar }))}
               placeholder="اختر الطبيب"
               required
-              className="!h-10 !rounded-lg !border-2 !text-sm !font-semibold"
+              className="!h-11 !rounded-lg !border-2 !border-indigo-200 !bg-white !text-sm !font-semibold focus:!border-indigo-500"
             />
           </>
         )}
-        </>
+        </div>
         )}
 
         {(formSchema.showPlanSummary || plan.total_paid > 0) && !showCasePicker && (
-          <div className="sm:col-span-2 rounded-lg border border-primary/20 bg-primary/[0.05] px-3 py-2.5 space-y-1 text-sm">
-            <p className="text-sm font-bold text-primary-800">ملخص الحالة</p>
-            <p className="text-xs tabular-nums text-slate-muted">
+          <div className="sm:col-span-2 space-y-1.5 rounded-xl border border-primary/25 bg-gradient-to-b from-primary-50/70 to-white px-4 py-3 text-sm shadow-sm">
+            <p className="flex items-center gap-1.5 text-sm font-extrabold text-primary-800">
+              <ClipboardList className="h-4 w-4" /> ملخص الحالة
+            </p>
+            <p className="text-xs tabular-nums text-slate-600">
               مجموع المدفوع:{" "}
-              <span className="font-semibold text-primary">
+              <span className="font-bold text-primary">
                 {formatCurrency(plan.total_paid)}
               </span>
             </p>
             {plan.final_price > FINANCIAL_EPSILON && (
-              <p className="text-xs tabular-nums text-slate-muted">
+              <p className="text-xs tabular-nums text-slate-600">
                 دين مسجّل / متبقٍ:{" "}
-                <span className="font-semibold text-debt-text">
+                <span className="font-bold text-debt-text">
                   {formatCurrency(plan.remaining_balance)}
                 </span>
               </p>
             )}
             {(paid > 0 || billingMode === "debt") && (
-              <p className="text-xs tabular-nums mt-2 text-primary font-medium">
+              <p className="mt-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-xs font-medium tabular-nums text-primary-800">
                 بعد هذا الإدخال — مجموع المدفوع:{" "}
-                {formatCurrency(billingPreview.totalPaidAfter)}
+                <strong>{formatCurrency(billingPreview.totalPaidAfter)}</strong>
                 {remaining > FINANCIAL_EPSILON && (
                   <>
                     {" · "}الدين:{" "}
@@ -2386,14 +2437,17 @@ export function QuickEntryForm({
         )}
 
         {formSchema.showOperation && billingMode !== "examination" && (
-        <div className={isFollowUpSession ? "sm:col-span-2" : ""}>
-          <label className="mc-entry-field-label">
-            نوع الإجراء *
-          </label>
+        <div className="mc-entry-section mc-entry-section--treatment">
+          <div className="mc-entry-section-header">
+            <span className="mc-entry-section-icon">
+              <ClipboardList className="h-4 w-4" />
+            </span>
+            نوع الإجراء
+          </div>
           <input
             list={listId}
             type="text"
-            className="mc-entry-input"
+            className="mc-entry-input !border-teal-200 focus:!border-teal-500 focus:!ring-teal-500/15"
             value={operationName}
             onChange={(e) => setOperationName(e.target.value)}
             placeholder="حشوة ضوئية / تاج زيركون / ..."
@@ -2411,12 +2465,17 @@ export function QuickEntryForm({
           formSchema.showPaidAmount ||
           formSchema.showAdditionalDiscount) && (
           <div className="sm:col-span-2 mc-entry-finance space-y-3">
-            <div>
-              <h4 className="mc-entry-finance__title">التسجيل المالي</h4>
-              <p className="mc-entry-finance__subtitle">
-                {SESSION_BILLING_MODE_OPTIONS.find((o) => o.value === billingMode)
-                  ?.hint ?? "اختر نوع التسجيل ثم المبلغ"}
-              </p>
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
+                <Wallet className="h-4 w-4" />
+              </span>
+              <div>
+                <h4 className="mc-entry-finance__title">التسجيل المالي</h4>
+                <p className="mc-entry-finance__subtitle">
+                  {SESSION_BILLING_MODE_OPTIONS.find((o) => o.value === billingMode)
+                    ?.hint ?? "اختر نوع التسجيل ثم المبلغ"}
+                </p>
+              </div>
             </div>
 
             {formSchema.showBillingMode && (
@@ -2568,8 +2627,13 @@ export function QuickEntryForm({
         )}
 
         {formSchema.showMaterials && (
-          <div className="sm:col-span-2 space-y-2 rounded-lg border border-amber-200/80 bg-amber-50/40 p-3">
-            <p className="text-sm font-bold text-amber-900">المختبر (اختياري)</p>
+          <div className="mc-entry-section mc-entry-section--lab">
+            <div className="mc-entry-section-header">
+              <span className="mc-entry-section-icon">
+                <FlaskConical className="h-4 w-4" />
+              </span>
+              المختبر (اختياري)
+            </div>
             <CurrencyInput
               label="تكلفة عمل المختبر"
               value={materialsCost}
@@ -2609,8 +2673,8 @@ export function QuickEntryForm({
         )}
 
         {formSchema.showReviewCheckbox && billingMode !== "examination" && (
-        <div className="sm:col-span-2 space-y-1">
-          <label className="flex items-center gap-2 text-sm text-slate-text">
+        <div className="sm:col-span-2 space-y-1.5 rounded-xl border border-sky-200 bg-sky-50/60 px-4 py-3">
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
             <input
               type="checkbox"
               checked={isReviewStatement}
@@ -2620,7 +2684,7 @@ export function QuickEntryForm({
             />
             كشفية مراجع
             {reviewFeeEnabled && clinicReviewFeeAmount > 0 && (
-              <span className="font-semibold text-primary tabular-nums">
+              <span className="font-bold text-primary tabular-nums">
                 +{formatCurrency(clinicReviewFeeAmount)}
               </span>
             )}
@@ -2634,7 +2698,7 @@ export function QuickEntryForm({
             </p>
           )}
           {isReviewStatement && reviewFeeLive > 0 && (
-            <p className="text-xs text-slate-muted tabular-nums">
+            <p className="text-xs text-slate-600 tabular-nums">
               الكشفية تُضاف للذمة وتذهب <strong>كاملة للعيادة</strong> — لا تدخل محفظة
               الطبيب. الإجمالي: {formatCurrency(finalPriceLive)}
             </p>
@@ -2643,38 +2707,52 @@ export function QuickEntryForm({
         )}
 
         {visitQueueEntryId && (selectedPatientId || defaultPatientId) && (
-          <div className="sm:col-span-2 space-y-3">
+          <div className="mc-entry-section mc-entry-section--clinical">
             {!showVisualRecordReview ? (
-              <div className="rounded-lg border border-slate-border bg-surface/80 p-4">
-                <p className="text-sm font-semibold text-slate-text">
-                  مراجعة السجل البصري
-                </p>
-                <p className="mt-1 text-xs text-slate-muted">
-                  ما سجّله الطبيب أثناء الكشف — اضغط الزر للعرض دون إطالة صفحة
-                  إدخال الجلسة
-                </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="mc-entry-section-icon">
+                    <Scan className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-extrabold text-cyan-900">
+                      مراجعة السجل البصري
+                    </p>
+                    <p className="mc-entry-section-hint">
+                      ما سجّله الطبيب أثناء الكشف — اضغط الزر للعرض دون إطالة صفحة
+                      إدخال الجلسة
+                    </p>
+                  </div>
+                </div>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="mt-3"
+                  className="!border-cyan-300 !text-cyan-800 hover:!bg-cyan-100"
                   onClick={() => setShowVisualRecordReview(true)}
                 >
                   <Scan className="h-4 w-4" />
-                  مراجعة السجل البصري
+                  مراجعة السجل
                 </Button>
               </div>
             ) : (
               <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowVisualRecordReview(false)}
-                >
-                  <X className="h-4 w-4" />
-                  إغلاق السجل البصري — العودة لإدخال الجلسة
-                </Button>
+                <div className="mc-entry-section-header">
+                  <span className="mc-entry-section-icon">
+                    <Scan className="h-4 w-4" />
+                  </span>
+                  السجل البصري
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mr-auto"
+                    onClick={() => setShowVisualRecordReview(false)}
+                  >
+                    <X className="h-4 w-4" />
+                    إغلاق — العودة لإدخال الجلسة
+                  </Button>
+                </div>
                 <VisitSessionClinicalPanel
                   patientId={selectedPatientId ?? defaultPatientId ?? null}
                   queueEntryId={visitQueueEntryId}
@@ -2701,10 +2779,13 @@ export function QuickEntryForm({
         )}
 
         {formSchema.showNotes && (
-        <div className="sm:col-span-2">
-          <label className="mc-entry-field-label">
+        <div className="mc-entry-section mc-entry-section--notes">
+          <div className="mc-entry-section-header">
+            <span className="mc-entry-section-icon">
+              <StickyNote className="h-4 w-4" />
+            </span>
             ملاحظات
-          </label>
+          </div>
           <textarea
             className="mc-entry-input min-h-[4.5rem] resize-none"
             rows={3}
@@ -2732,55 +2813,82 @@ export function QuickEntryForm({
           remaining > FINANCIAL_EPSILON ||
           (plan.final_price > FINANCIAL_EPSILON &&
             (isFollowUpSession || billingMode === "complete"))) && (
-        <div className="sm:col-span-2 mc-entry-remaining">
-          <p className="text-sm font-bold text-slate-text">
-            {isFollowUpSession || billingMode === "debt"
-              ? "الذمة المتبقية"
-              : "المتبقي (ذمة)"}
-          </p>
-          {isFollowUpSession && plan.final_price > FINANCIAL_EPSILON && (
-            <p className="mt-0.5 text-xs text-slate-muted tabular-nums">
-              السعر النهائي: {formatCurrency(finalPriceLive)}
-            </p>
-          )}
-          <p
-            className={`mt-1 text-2xl font-bold tabular-nums ${
-              remaining > 0 ? "text-debt-text" : "text-success-text"
+        <div
+          className={`sm:col-span-2 mc-entry-remaining flex items-center gap-3 ${
+            remaining > 0
+              ? "mc-entry-remaining--debt"
+              : "mc-entry-remaining--settled"
+          }`}
+        >
+          <span
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-sm ${
+              remaining > 0 ? "bg-red-600" : "bg-emerald-600"
             }`}
           >
-            {formatCurrency(remaining)}
-          </p>
-          {isCaseFullySettled(plan, {
-            additionalDiscount: additionalDiscountNum,
-            newPayment: paid,
-          }) &&
-            finalPriceLive > 0 && (
-            <p className="text-xs font-semibold text-success-text mt-1">
-              ✓ بعد الحفظ: تم إكمال العلاج — لا ذمة متبقية على هذه الحالة
+            {remaining > 0 ? (
+              <AlertTriangle className="h-5 w-5" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5" />
+            )}
+          </span>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-slate-700">
+              {isFollowUpSession || billingMode === "debt"
+                ? "الذمة المتبقية"
+                : "المتبقي (ذمة)"}
             </p>
-          )}
+            {isFollowUpSession && plan.final_price > FINANCIAL_EPSILON && (
+              <p className="mt-0.5 text-xs text-slate-muted tabular-nums">
+                السعر النهائي: {formatCurrency(finalPriceLive)}
+              </p>
+            )}
+            <p
+              className={`mt-0.5 text-2xl font-black tabular-nums ${
+                remaining > 0 ? "text-debt-text" : "text-success-text"
+              }`}
+            >
+              {formatCurrency(remaining)}
+            </p>
+            {isCaseFullySettled(plan, {
+              additionalDiscount: additionalDiscountNum,
+              newPayment: paid,
+            }) &&
+              finalPriceLive > 0 && (
+              <p className="text-xs font-semibold text-success-text mt-1">
+                ✓ بعد الحفظ: تم إكمال العلاج — لا ذمة متبقية على هذه الحالة
+              </p>
+            )}
+          </div>
         </div>
         )}
 
-        <div className="sm:col-span-2">
-          <Button
+        <div className="mc-entry-submit-bar">
+          <button
             type="submit"
-            className="w-full sm:w-auto"
+            className="mc-entry-submit-btn"
             disabled={
               loading || isCaseClosed || (loadingPlan && !selectedCaseId)
             }
           >
-            {loading
-              ? "جاري الحفظ..."
-              : isFollowUpSession
-                ? isCaseFullySettled(plan, {
-                    additionalDiscount: additionalDiscountNum,
-                    newPayment: paid,
-                  })
-                  ? "تسجيل الدفعة — إكمال العلاج"
-                  : "تسجيل الدفعة"
-                : "حفظ أول جلسة"}
-          </Button>
+            {loading ? (
+              <>
+                <RefreshCw className="h-5 w-5 animate-spin" />
+                جاري الحفظ...
+              </>
+            ) : (
+              <>
+                <CreditCard className="h-5 w-5" />
+                {isFollowUpSession
+                  ? isCaseFullySettled(plan, {
+                      additionalDiscount: additionalDiscountNum,
+                      newPayment: paid,
+                    })
+                    ? "تسجيل الدفعة — إكمال العلاج"
+                    : "تسجيل الدفعة"
+                  : "حفظ أول جلسة"}
+              </>
+            )}
+          </button>
         </div>
 
         </>

@@ -29,7 +29,7 @@ import { fetchPatientTreatmentCases } from "@/lib/services/patient-treatment-cas
 import { getPatientDisplayPhone } from "@/lib/phone";
 import { opName, type PatientOperation } from "@/types";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
-import { RefreshCw, NotebookPen } from "lucide-react";
+import { RefreshCw, NotebookPen, CheckCircle2 } from "lucide-react";
 import { VisualMedicalRecord } from "@/components/clinical/VisualMedicalRecord";
 
 type RowWithJoins = ConsolidatedTodayOperationRow;
@@ -431,20 +431,24 @@ function LedgerPageContent() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-text">
-          <span className="mc-icon-badge-primary">
-            <NotebookPen className="h-5 w-5" />
+      <div className="mc-gradient-header flex flex-wrap items-center justify-between gap-3 rounded-2xl px-5 py-5 text-white">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 shadow-inner">
+            <NotebookPen className="h-6 w-6" />
           </span>
-          إدخال جلسة
-        </h2>
-        <p className="mc-page-subtitle">
-          إدخال سريع وعمليات اليوم — {formatDate(new Date())}
-        </p>
+          <div>
+            <h2 className="text-xl font-extrabold tracking-tight sm:text-2xl">
+              إدخال جلسة
+            </h2>
+            <p className="mt-0.5 text-sm font-medium text-white/85">
+              إدخال سريع وعمليات اليوم — {formatDate(new Date())}
+            </p>
+          </div>
+        </div>
       </div>
 
       {contextLoading && (
-        <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-primary">
+        <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-medium text-primary">
           <RefreshCw className="h-4 w-4 animate-spin" />
           جاري تحميل بيانات المريض والحالات السابقة...
         </div>
@@ -455,18 +459,23 @@ function LedgerPageContent() {
       )}
 
       {patientContext && !contextLoading && (
-        <Alert variant="info">
-          تم تحميل ملف <strong>{patientContext.patientName}</strong>
-          {patientContext.doctorName && (
-            <>
-              {" "}
-              — الطبيب: <strong>{patientContext.doctorName}</strong>
-            </>
-          )}
-          {patientContext.treatmentCases.length > 0
-            ? ` — ${patientContext.treatmentCases.length} حالة علاج سابقة`
-            : " — مريض جديد بدون حالات سابقة"}
-        </Alert>
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-blue-200 bg-gradient-to-l from-blue-50 to-white px-4 py-3 shadow-sm">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
+            <CheckCircle2 className="h-4 w-4" />
+          </span>
+          <p className="text-sm text-slate-700">
+            تم تحميل ملف <strong className="text-blue-900">{patientContext.patientName}</strong>
+            {patientContext.doctorName && (
+              <>
+                {" "}
+                — الطبيب: <strong className="text-blue-900">{patientContext.doctorName}</strong>
+              </>
+            )}
+            {patientContext.treatmentCases.length > 0
+              ? ` — ${patientContext.treatmentCases.length} حالة علاج سابقة`
+              : " — مريض جديد بدون حالات سابقة"}
+          </p>
+        </div>
       )}
 
       {!contextLoading && (

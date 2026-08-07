@@ -1118,14 +1118,14 @@ export default function QueuePage() {
                     <button
                       onClick={() => openPayment(entry)}
                       disabled={updating === entry.id}
-                      className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                      className="flex items-center gap-1.5 rounded-xl bg-gradient-to-l from-violet-600 to-violet-500 px-4 py-2.5 text-sm font-extrabold text-white shadow-md shadow-violet-600/25 ring-2 ring-violet-200 transition-transform hover:scale-[1.03] hover:shadow-lg disabled:opacity-60 disabled:hover:scale-100"
                     >
                       {updating === entry.id ? (
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        <RefreshCw className="h-4 w-4 animate-spin" />
                       ) : (
-                        <Receipt className="h-3.5 w-3.5" />
+                        <Receipt className="h-4 w-4" />
                       )}
-                      <span className="hidden sm:inline">{t("apptPay")}</span>
+                      {t("apptPay")}
                     </button>
                   )}
                   {nextAction && !transferPending && !cancellationPending && (

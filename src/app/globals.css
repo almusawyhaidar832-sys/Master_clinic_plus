@@ -197,6 +197,99 @@
     @apply rounded-xl border-2 border-slate-200 bg-white p-3.5 shadow-sm;
   }
 
+  /* ── إدخال جلسة — أقسام ملوّنة بحدود وأيقونات لتمييز كل مرحلة بوضوح ── */
+  .mc-entry-section {
+    @apply sm:col-span-2 space-y-3 rounded-2xl border-2 p-4 shadow-sm transition-shadow;
+  }
+
+  .mc-entry-section-header {
+    @apply flex items-center gap-2.5 text-sm font-extrabold;
+  }
+
+  .mc-entry-section-icon {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-xl shadow-sm;
+  }
+
+  .mc-entry-section-hint {
+    @apply text-xs font-medium text-slate-500;
+  }
+
+  .mc-entry-section--patient {
+    @apply border-blue-200 bg-gradient-to-b from-blue-50/70 to-white;
+  }
+  .mc-entry-section--patient .mc-entry-section-header {
+    @apply text-blue-900;
+  }
+  .mc-entry-section--patient .mc-entry-section-icon {
+    @apply bg-blue-600 text-white;
+  }
+
+  .mc-entry-section--doctor {
+    @apply border-indigo-200 bg-gradient-to-b from-indigo-50/70 to-white;
+  }
+  .mc-entry-section--doctor .mc-entry-section-header {
+    @apply text-indigo-900;
+  }
+  .mc-entry-section--doctor .mc-entry-section-icon {
+    @apply bg-indigo-600 text-white;
+  }
+
+  .mc-entry-section--treatment {
+    @apply border-teal-200 bg-gradient-to-b from-teal-50/70 to-white;
+  }
+  .mc-entry-section--treatment .mc-entry-section-header {
+    @apply text-teal-900;
+  }
+  .mc-entry-section--treatment .mc-entry-section-icon {
+    @apply bg-teal-600 text-white;
+  }
+
+  .mc-entry-section--lab {
+    @apply border-amber-200 bg-gradient-to-b from-amber-50/70 to-white;
+  }
+  .mc-entry-section--lab .mc-entry-section-header {
+    @apply text-amber-900;
+  }
+  .mc-entry-section--lab .mc-entry-section-icon {
+    @apply bg-amber-500 text-white;
+  }
+
+  .mc-entry-section--notes {
+    @apply border-slate-200 bg-gradient-to-b from-slate-50 to-white;
+  }
+  .mc-entry-section--notes .mc-entry-section-header {
+    @apply text-slate-800;
+  }
+  .mc-entry-section--notes .mc-entry-section-icon {
+    @apply bg-slate-600 text-white;
+  }
+
+  .mc-entry-section--clinical {
+    @apply border-cyan-200 bg-gradient-to-b from-cyan-50/70 to-white;
+  }
+  .mc-entry-section--clinical .mc-entry-section-header {
+    @apply text-cyan-900;
+  }
+  .mc-entry-section--clinical .mc-entry-section-icon {
+    @apply bg-cyan-600 text-white;
+  }
+
+  .mc-entry-remaining--debt {
+    @apply border-red-200 bg-gradient-to-b from-red-50/80 to-white;
+  }
+
+  .mc-entry-remaining--settled {
+    @apply border-emerald-200 bg-gradient-to-b from-emerald-50/80 to-white;
+  }
+
+  .mc-entry-submit-bar {
+    @apply sticky bottom-0 z-10 -mx-4 -mb-4 border-t-2 border-primary/10 bg-white/95 px-4 py-3.5 backdrop-blur sm:col-span-2 sm:rounded-b-xl;
+  }
+
+  .mc-entry-submit-btn {
+    @apply flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-l from-primary-700 via-primary to-primary-500 px-6 py-4 text-base font-extrabold text-white shadow-lg shadow-primary/25 transition-all hover:brightness-110 active:scale-[0.99] disabled:opacity-50 disabled:hover:brightness-100 sm:w-auto sm:min-w-[17rem];
+  }
+
   /* ── Tab bar (صرفيات، تقارير، …) ── */
   .mc-tab-group {
     @apply flex flex-wrap gap-1 rounded-xl border border-primary/15 bg-primary-50/60 p-1 shadow-sm;
