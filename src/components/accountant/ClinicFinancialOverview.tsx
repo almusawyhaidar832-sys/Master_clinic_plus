@@ -5,9 +5,9 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { useClinicSync } from "@/hooks/useClinicSync";
-import { fetchAlignedClinicProfitStats } from "@/lib/services/clinic-profit-loader";
+import { fetchAlignedClinicProfitStats, defaultClinicProfitPeriod } from "@/lib/services/clinic-profit-loader";
 import { fetchTodaySummary, type ClinicProfitStats } from "@/lib/services/clinic-stats";
-import { formatCurrency, todayISO } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { TrendingUp, Wallet, Receipt, AlertCircle } from "lucide-react";
 
 export function ClinicFinancialOverview() {
@@ -27,7 +27,7 @@ export function ClinicFinancialOverview() {
     }
 
     const supabase = createClient();
-    const period = { from: "2000-01-01", to: todayISO() };
+    const period = defaultClinicProfitPeriod();
     const [t, p] = await Promise.all([
       fetchTodaySummary(supabase),
       fetchAlignedClinicProfitStats(clinicId, "accountant", period).catch(

@@ -1,4 +1,4 @@
-export type ExecutiveDashboardPeriod = "today" | "week" | "month";
+export type ExecutiveDashboardPeriod = "today" | "week" | "month" | "all";
 
 export type ExecutiveDashboardCacheQuery = {
   clinicId: string;

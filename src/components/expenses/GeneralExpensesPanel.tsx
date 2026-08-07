@@ -121,7 +121,7 @@ export function GeneralExpensesPanel({
     notifyFinancialMutation({ clinicId });
     setMessage({
       type: "success",
-      text: "تم تسجيل المصروف — يظهر في السجل التاريخي",
+      text: "تم تسجيل المصروف — يُخصم من صافي ربح العيادة",
     });
     setDescription("");
     setAmount("");

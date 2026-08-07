@@ -164,9 +164,20 @@ export function monthDateRange(monthYear: string): { from: string; to: string } 
   };
 }
 
-export type ProfitPeriodPreset = "today" | "week" | "month";
+/** بداية حساب صافي ربح العيادة التراكمي */
+export const CLINIC_PROFIT_ALL_TIME_FROM = "2000-01-01";
 
-/** نطاق الفترة لتوضيح الربح — يطابق لوحة المحاسب (الأسبوع = آخر 7 أيام) */
+export type ProfitPeriodPreset = "today" | "week" | "month" | "all";
+
+/** ترتيب عرض الفترات: من الأوسع (الافتراضي) إلى الأضيق */
+export const PROFIT_PERIOD_TAB_ORDER: ProfitPeriodPreset[] = [
+  "all",
+  "month",
+  "week",
+  "today",
+];
+
+/** نطاق الفترة لصافي الربح واللوحة التنفيذية (الأسبوع = آخر 7 أيام) */
 export function profitPeriodDateRange(
   preset: ProfitPeriodPreset
 ): { from: string; to: string } {
@@ -180,8 +191,10 @@ export function profitPeriodDateRange(
       return { from: localDateISO(w), to: todayStr };
     }
     case "month":
-    default:
       return monthDateRange(currentMonthYear());
+    case "all":
+    default:
+      return { from: CLINIC_PROFIT_ALL_TIME_FROM, to: todayStr };
   }
 }
 
@@ -193,6 +206,8 @@ export function profitPeriodLabelAr(preset: ProfitPeriodPreset): string {
       return "الأسبوع";
     case "month":
       return "الشهر";
+    case "all":
+      return "الكلي";
   }
 }
 
@@ -201,11 +216,14 @@ export function inferProfitPeriodFromRange(
   from: string,
   to: string
 ): ProfitPeriodPreset {
+  if (from === CLINIC_PROFIT_ALL_TIME_FROM) return "all";
   const today = profitPeriodDateRange("today");
   const week = profitPeriodDateRange("week");
+  const month = profitPeriodDateRange("month");
   if (from === today.from && to === today.to) return "today";
   if (from === week.from && to === week.to) return "week";
-  return "month";
+  if (from === month.from && to === month.to) return "month";
+  return "all";
 }
 
 /** Last N months including current (YYYY-MM) */

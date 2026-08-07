@@ -131,6 +131,7 @@ const translations = {
     today:              "اليوم",
     thisWeek:           "الأسبوع",
     thisMonth:          "هذا الشهر",
+    allTimeCumulative:  "الكلي (تراكمي)",
 
     // ── Finance ──
     amount:             "المبلغ",
@@ -194,6 +195,7 @@ const translations = {
     navAssistants:          "إدارة المساعدين",
     navGeneralExpenses:     "صرفيات عامة",
     navPatientFiles:        "ملفات المرضى",
+    navInvoiceHistory:      "السجل التاريخي",
     navClinicReports:       "تقارير العيادة",
     navRefunds:             "إدارة المرتجعات",
     navAuditLog:            "سجل المراقبة",
@@ -924,6 +926,7 @@ const translations = {
     today:              "Today",
     thisWeek:           "This Week",
     thisMonth:          "This Month",
+    allTimeCumulative:  "All time",
 
     // ── Finance ──
     amount:             "Amount",
@@ -987,6 +990,7 @@ const translations = {
     navAssistants:          "Assistants",
     navGeneralExpenses:     "General Expenses",
     navPatientFiles:        "Patient Files",
+    navInvoiceHistory:      "Invoice history",
     navClinicReports:       "Clinic Reports",
     navRefunds:             "Refunds",
     navAuditLog:            "Audit Log",

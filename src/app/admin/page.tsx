@@ -199,7 +199,7 @@ export default function AdminHomePage() {
     []
   );
 
-  const monthRange = defaultClinicProfitPeriod();
+  const profitRange = defaultClinicProfitPeriod();
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -239,7 +239,7 @@ export default function AdminHomePage() {
           <div className="pointer-events-none absolute -start-8 bottom-[-3rem] h-40 w-40 rounded-full bg-premium-400/10 blur-2xl" />
           <div className="relative flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs text-white/70">صافي ربح العيادة (هذا الشهر)</p>
+              <p className="text-xs text-white/70">صافي ربح العيادة (الكلي — تراكمي)</p>
               <p className="mt-1 text-3xl font-extrabold tracking-tight tabular-nums">
                 {formatCurrency(stats.netProfit)}
               </p>
@@ -254,8 +254,8 @@ export default function AdminHomePage() {
               </p>
             </div>
             <ProfitExplanationButton
-              from={monthRange.from}
-              to={monthRange.to}
+              from={profitRange.from}
+              to={profitRange.to}
               portal="admin"
               netProfit={stats.netProfit}
               size="sm"

@@ -4,7 +4,7 @@ import {
   fetchClinicBalanceTopupsForPeriod,
   fetchClinicBalanceTopupsForProfit,
 } from "@/lib/services/balance-topup";
-import { formatCurrency, todayISO } from "@/lib/utils";
+import { CLINIC_PROFIT_ALL_TIME_FROM, formatCurrency, todayISO } from "@/lib/utils";
 
 export interface TodaySummary {
   operationsCount: number;
@@ -403,7 +403,7 @@ export async function fetchClinicProfitStats(
   return fetchClinicProfitStatsForPeriod(
     supabase,
     clinicId,
-    "2000-01-01",
+    CLINIC_PROFIT_ALL_TIME_FROM,
     todayISO()
   );
 }

@@ -118,54 +118,35 @@ export default function PatientsSearchPage() {
 
       const casesByPatient = new Map<string, PatientTreatmentCase[]>();
       for (const row of caseData ?? []) {
-        const pid = String((row as { patient_id?: string }).patient_id ?? "");
-        if (!pid) continue;
-        const r = row as Record<string, unknown>;
-        const casePrice = Number(r.case_price ?? 0);
-        const discount = Number(r.discount_total ?? 0);
-        const finalPrice =
-          Number(r.final_price ?? 0) || Math.max(0, casePrice - discount);
-        const plan = buildPlanFromCaseRow({
-          case_price: casePrice,
-          discount_total: discount,
-          final_price: finalPrice,
-          doctor_share_total: Number(r.doctor_share_total ?? 0),
-          clinic_share_total: Number(r.clinic_share_total ?? 0),
-          total_paid: Number(r.total_paid ?? 0),
-        });
-        const mapped: PatientTreatmentCase = {
-          ...plan,
-          id: String(r.id),
-          treatment_name_ar: String(r.treatment_name_ar ?? "علاج"),
-          remaining_balance: computedCaseRemaining(plan),
-          treatment_status:
-            String(r.status ?? "active") === "completed"
-              ? "completed"
-              : "active",
-        };
+        const pid = String(row.patient_id);
         const list = casesByPatient.get(pid) ?? [];
-        list.push(mapped);
+        list.push(row as PatientTreatmentCase);
         casesByPatient.set(pid, list);
       }
 
-      if (!opErr && opData) {
-        const byPatient = new Map<string, PatientOperation[]>();
-        for (const op of opData as PatientOperation[]) {
-          const list = byPatient.get(op.patient_id) ?? [];
-          list.push(op);
-          byPatient.set(op.patient_id, list);
-        }
-        for (const pid of ids) {
-          const ops = byPatient.get(pid) ?? [];
-          const cases = casesByPatient.get(pid) ?? [];
-          const caseDebt = computeOutstandingDebtFromTreatmentCases(cases);
-          const opDebt = computeOutstandingDebtFromOperations(ops, pid);
-          debtMap[pid] = Math.max(caseDebt, opDebt);
-        }
-      } else {
+      if (opErr) {
         for (const pid of ids) {
           const cases = casesByPatient.get(pid) ?? [];
           debtMap[pid] = computeOutstandingDebtFromTreatmentCases(cases);
+        }
+      } else {
+        const opsByPatient = new Map<string, PatientOperation[]>();
+        for (const row of opData ?? []) {
+          const pid = String(row.patient_id);
+          const list = opsByPatient.get(pid) ?? [];
+          list.push(row as PatientOperation);
+          opsByPatient.set(pid, list);
+        }
+
+        for (const pid of ids) {
+          const cases = casesByPatient.get(pid) ?? [];
+          const ops = opsByPatient.get(pid) ?? [];
+          const caseDebt = computeOutstandingDebtFromTreatmentCases(cases);
+          const opDebt = computeOutstandingDebtFromOperations(
+            ops,
+            cases.map((c) => buildPlanFromCaseRow(c))
+          );
+          debtMap[pid] = Math.max(caseDebt, opDebt);
         }
       }
     }

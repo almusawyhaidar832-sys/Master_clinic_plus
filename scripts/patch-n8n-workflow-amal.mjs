@@ -290,12 +290,37 @@ checkEvent.parameters.headerParameters.parameters[0].value =
 wf.name = "إدارة واتس اب العيادات — عيادة الامل (Master Clinic Plus)";
 wf.active = false;
 
-fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-fs.writeFileSync(outputPath, JSON.stringify(wf, null, 2), "utf8");
+// تأكد من حقول n8n الإلزامية للاستيراد
+if (!wf.settings) {
+  wf.settings = { executionOrder: "v1" };
+}
+if (!wf.pinData) wf.pinData = {};
+if (!wf.connections || typeof wf.connections !== "object") {
+  throw new Error("connections missing after patch — aborting export");
+}
+if (!Array.isArray(wf.nodes) || wf.nodes.length === 0) {
+  throw new Error("nodes missing after patch — aborting export");
+}
+
+function writeWorkflow(filePath) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(wf, null, 2), "utf8");
+  const check = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  if (!check.nodes?.length || !check.connections) {
+    throw new Error(`Invalid export written: ${filePath}`);
+  }
+}
+
+writeWorkflow(outputPath);
+
+// نسخة باسم إنجليزي — WhatsApp أحياناً يفسد أسماء الملفات العربية
+const asciiCopy = path.join(
+  path.dirname(outputPath),
+  "amal-clinic-n8n-ready.json"
+);
+writeWorkflow(asciiCopy);
+
 console.log("تم — الوركفلو الجاهز:", outputPath);
+console.log("نسخة للإرسال (ASCII):", asciiCopy);
+console.log("nodes:", wf.nodes.length, "| connections:", Object.keys(wf.connections).length);
 console.log("Clinic ID:", AMAL_CLINIC_ID);
-console.log("\nفي n8n عند صديقك:");
-console.log("  1) Variables → MCP_BOT_API_KEY = (من لوحة المطور)");
-console.log("  2) Variables → APPOINTMENT_WEBHOOK_SECRET = (webhook_secret من لوحة المطور)");
-console.log("  3) استورد الملف وفعّل الوركفلو");
-console.log("  4) انسخ Production URL من Appointment Events Webhook → ضعه بلوحة المطور");

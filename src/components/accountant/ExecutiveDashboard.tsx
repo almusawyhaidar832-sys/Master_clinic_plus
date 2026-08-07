@@ -46,7 +46,7 @@ import {
   type CachedTopPerformers,
   type ExecutiveDashboardPeriod,
 } from "@/lib/offline/executive-dashboard-cache";
-import { cn, localDateISO, monthDateRange, todayISO, currentMonthYear } from "@/lib/utils";
+import { cn, localDateISO, profitPeriodDateRange, todayISO } from "@/lib/utils";
 import {
   TrendingUp, TrendingDown, Minus,
   DollarSign, Wallet, Receipt, Users,
@@ -99,7 +99,7 @@ interface TopPerformers {
   inactive_doctors?: Array<{ full_name_ar: string; doctor_id?: string }>;
 }
 
-type Period = "today" | "week" | "month" | "custom";
+type Period = "today" | "week" | "month" | "all";
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -329,7 +329,7 @@ export function ExecutiveDashboard() {
   const supabase = createClient();
   const { clinicId, loading: clinicLoading } = useActiveClinicId();
   const { t, formatMoney } = useLanguage();
-  const [period, setPeriod] = useState<Period>("month");
+  const [period, setPeriod] = useState<Period>("all");
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [top, setTop]   = useState<TopPerformers | null>(null);
   const [loading, setLoading] = useState(true);
@@ -353,9 +353,10 @@ export function ExecutiveDashboard() {
         return { from: localDateISO(w), to: todayStr };
       }
       case "month":
-      default: {
-        return monthDateRange(currentMonthYear());
-      }
+        return profitPeriodDateRange("month");
+      case "all":
+      default:
+        return profitPeriodDateRange("all");
     }
   }, [period]);
 
@@ -363,8 +364,7 @@ export function ExecutiveDashboard() {
     if (!clinicId) return;
     const fetchGeneration = ++fetchGenerationRef.current;
     const { from, to } = getRange();
-    const cachePeriod: ExecutiveDashboardPeriod =
-      period === "custom" ? "month" : period;
+    const cachePeriod: ExecutiveDashboardPeriod = period;
     const cacheQuery = { clinicId, period: cachePeriod, from, to };
     const cached = readExecutiveDashboardCache(cacheQuery);
 
@@ -597,9 +597,10 @@ export function ExecutiveDashboard() {
   }, [fetchData]);
 
   const PERIODS = [
-    { key: "today" as Period, label: t("today") },
-    { key: "week"  as Period, label: t("thisWeek") },
+    { key: "all" as Period, label: t("allTimeCumulative") },
     { key: "month" as Period, label: t("thisMonth") },
+    { key: "week" as Period, label: t("thisWeek") },
+    { key: "today" as Period, label: t("today") },
   ];
 
   return (
@@ -665,9 +666,11 @@ export function ExecutiveDashboard() {
               label={t("netProfit")}
               value={formatMoney(snap.net_profit)}
               sub={
-                Number(snap.balance_topups ?? 0) > 0
-                  ? `${t("execClinicBalanceTopUp")}: +${fmt(Number(snap.balance_topups ?? 0))}`
-                  : undefined
+                period === "all"
+                  ? t("allTimeCumulative")
+                  : Number(snap.balance_topups ?? 0) > 0
+                    ? `${t("execClinicBalanceTopUp")}: +${fmt(Number(snap.balance_topups ?? 0))}`
+                    : undefined
               }
               icon={TrendingUp}
               color={snap.net_profit >= 0 ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-600"}

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { CLINIC_PROFIT_ALL_TIME_FROM, todayISO } from "@/lib/utils";
 
 export const BALANCE_TOPUP_CLINIC_TYPE = "balance_topup_clinic";
 export const BALANCE_TOPUP_DOCTOR_TYPE = "balance_topup_doctor";
@@ -189,6 +190,59 @@ export async function fetchClinicBalanceTopupsForPeriod(
 
   const total = [...maxByDay.values()].reduce((sum, amount) => sum + amount, 0);
   return Math.round(total * 100) / 100;
+}
+
+export interface BalanceTopUpListItem {
+  id: string;
+  amount: number;
+  transactionDate: string;
+  label: string;
+  target: BalanceTopUpTarget;
+  doctorId?: string | null;
+  doctorName?: string | null;
+}
+
+/** كل شحنات رصيد العيادة (لاختيار الحذف) */
+export async function fetchClinicBalanceTopUpList(
+  supabase: SupabaseClient,
+  clinicId: string
+): Promise<BalanceTopUpListItem[]> {
+  const lines = await fetchClinicBalanceTopUpLines(supabase, clinicId, {
+    dateFrom: CLINIC_PROFIT_ALL_TIME_FROM,
+    dateTo: todayISO(),
+  });
+  return lines.map((line) => ({
+    id: line.id,
+    amount: line.amount,
+    transactionDate: line.effectiveDate,
+    label: line.label,
+    target: "clinic" as const,
+  }));
+}
+
+/** شحنات رصيد طبيب واحد (لاختيار الحذف) */
+export async function fetchDoctorBalanceTopUpList(
+  supabase: SupabaseClient,
+  clinicId: string,
+  doctorId: string
+): Promise<BalanceTopUpListItem[]> {
+  const { fetchDailyDoctorBalanceTopUpLines } = await import(
+    "@/lib/ledger/daily-doctor-balance-topups"
+  );
+  const lines = await fetchDailyDoctorBalanceTopUpLines(supabase, clinicId, {
+    dateFrom: CLINIC_PROFIT_ALL_TIME_FROM,
+    dateTo: todayISO(),
+    doctorId,
+  });
+  return lines.map((line) => ({
+    id: line.id,
+    amount: line.amount,
+    transactionDate: line.effectiveDate,
+    label: line.label,
+    target: "doctor" as const,
+    doctorId: line.doctorId,
+    doctorName: line.doctorName,
+  }));
 }
 
 /** سطور شحن رصيد العيادة ضمن فترة الكشف */

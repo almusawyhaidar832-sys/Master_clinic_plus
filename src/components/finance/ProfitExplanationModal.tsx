@@ -32,6 +32,7 @@ import {
   formatCurrency,
   formatDate,
   inferProfitPeriodFromRange,
+  PROFIT_PERIOD_TAB_ORDER,
   profitPeriodDateRange,
   profitPeriodLabelAr,
   type ProfitPeriodPreset,
@@ -59,10 +60,13 @@ const CATEGORY_COLORS: Record<ProfitLedgerCategory, string> = {
   balance_topup: "bg-emerald-100 text-emerald-700",
 };
 
-const PROFIT_PERIOD_TABS: ProfitPeriodPreset[] = ["today", "week", "month"];
+const PROFIT_PERIOD_TABS = PROFIT_PERIOD_TAB_ORDER;
 
 function formatPeriodLabel(from: string, to: string): string {
   if (from === to) return formatDate(from);
+  if (from === profitPeriodDateRange("all").from) {
+    return `تراكمي — حتى ${formatDate(to)}`;
+  }
   return `${formatDate(from)} — ${formatDate(to)}`;
 }
 
@@ -125,7 +129,7 @@ export function ProfitExplanationModal({
   netProfit: initialNetProfit,
 }: ProfitExplanationModalProps) {
   const { clinicId } = useActiveClinicId();
-  const [period, setPeriod] = useState<ProfitPeriodPreset>("month");
+  const [period, setPeriod] = useState<ProfitPeriodPreset>("all");
   const [ledger, setLedger] = useState<ProfitDeductionLedger | null>(null);
   const [netProfit, setNetProfit] = useState<number | undefined>(initialNetProfit);
   const [loading, setLoading] = useState(false);

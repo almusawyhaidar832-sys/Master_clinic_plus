@@ -18,6 +18,7 @@ export const accountantModuleNav: ModuleNavItem[] = [
   { href: "/dashboard/assistants",   labelKey: "navAssistants",       icon: "userRound" },
   { href: "/dashboard/doctor-expenses", labelKey: "navGeneralExpenses", icon: "expenses" },
   { href: "/dashboard/patients",     labelKey: "navPatientFiles",     icon: "patients",    requiredModule: "patients" },
+  { href: "/dashboard/patients/history", labelKey: "navInvoiceHistory", icon: "scrollText", requiredModule: "patients" },
   { href: "/dashboard/reports",      labelKey: "navClinicReports",    icon: "profits",     requiredModule: "reports" },
   { href: "/dashboard/refunds",      labelKey: "navRefunds",          icon: "refunds",     requiredModule: "billing" },
   { href: "/dashboard/activity",     labelKey: "navAuditLog",         icon: "activity" },

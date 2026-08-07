@@ -10,7 +10,7 @@ import {
 } from "@/lib/services/clinic-profit-loader";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, profitPeriodLabelAr } from "@/lib/utils";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { TrendingDown, TrendingUp, Wallet, AlertCircle } from "lucide-react";
 import { ProfitExplanationButton } from "@/components/finance/ProfitExplanationModal";
@@ -153,6 +153,7 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
   }
 
   const { from, to } = defaultClinicProfitPeriod();
+  const periodLabel = profitPeriodLabelAr("all");
 
   const cards = [
     {
@@ -270,7 +271,7 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
       >
         <Card hoverable>
           <CardHeader>
-            <p className="text-sm text-slate-muted">حصة العيادة (الشهر)</p>
+            <p className="text-sm text-slate-muted">حصة العيادة ({periodLabel})</p>
             <p className="text-xl font-bold tabular-nums text-slate-text">
               {formatCurrency(stats.clinicShareTotal)}
             </p>
@@ -294,7 +295,7 @@ export function ProfitDashboard({ mobile }: ProfitDashboardProps) {
           <p className="text-sm text-slate-muted leading-relaxed">
             صافي الربح = حصة العيادة (علاج + كشفيات) − مصروفات العيادة −
             رواتب مؤكَّد صرفها (نفس الكشف المالي). التدفق النقدي = مجموع
-            المبالغ المحصّلة في الشهر (يشمل حصة الأطباء).
+            المبالغ المحصّلة في الفترة ({periodLabel}) (يشمل حصة الأطباء).
           </p>
         </Card>
       )}

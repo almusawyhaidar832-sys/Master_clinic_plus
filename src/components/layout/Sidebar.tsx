@@ -46,6 +46,24 @@ const SIDEBAR_GROUP_LABELS: Record<SidebarGroup, string> = {
   administration: "الإدارة",
 };
 
+function isNavItemActive(
+  pathname: string,
+  href: string,
+  allHrefs: string[]
+): boolean {
+  if (pathname === href) return true;
+  if (href === "/dashboard") return false;
+  if (!pathname.startsWith(`${href}/`)) return false;
+  const hasMoreSpecific = allHrefs.some(
+    (other) =>
+      other !== href &&
+      other.length > href.length &&
+      other.startsWith(`${href}/`) &&
+      (pathname === other || pathname.startsWith(`${other}/`))
+  );
+  return !hasMoreSpecific;
+}
+
 function sidebarGroupForHref(href: string): SidebarGroup {
   if (
     href === "/dashboard" ||
@@ -137,9 +155,8 @@ export function Sidebar({
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {items.map((item, index) => {
           const Icon = iconMap[item.icon] ?? LayoutDashboard;
-          const active =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
+          const allHrefs = items.map((i) => i.href);
+          const active = isNavItemActive(pathname, item.href, allHrefs);
           const group = sidebarGroupForHref(item.href);
           const prevGroup =
             index > 0 ? sidebarGroupForHref(items[index - 1].href) : null;

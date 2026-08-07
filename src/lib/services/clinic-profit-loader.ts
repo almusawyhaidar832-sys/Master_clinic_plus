@@ -1,7 +1,6 @@
 import type { AuthPortalId } from "@/lib/auth/portal-access";
 import { createClient } from "@/lib/supabase/client";
 import { fetchClinicProfitStatsForPeriodViaApi } from "@/lib/services/clinic-stats-api";
-import type { ClinicProfitStats } from "@/lib/services/clinic-stats";
 import {
   applyClinicTopUpToProfitStats,
   type ClinicProfitStats,
@@ -9,11 +8,11 @@ import {
 import { fetchClinicBalanceTopupsForProfit } from "@/lib/services/balance-topup";
 import { applyOptimisticClinicTopUp } from "@/lib/services/clinic-profit-pending";
 import { applyClinicProfitBroadcast } from "@/lib/services/clinic-profit-broadcast";
-import { currentMonthYear, monthDateRange } from "@/lib/utils";
+import { profitPeriodDateRange } from "@/lib/utils";
 
-/** نفس فترة اللوحة التنفيذية — من أول الشهر حتى آخر يوم فيه */
+/** الفترة الافتراضية لصافي الربح — تراكمي من بداية السجل حتى اليوم */
 export function defaultClinicProfitPeriod(): { from: string; to: string } {
-  return monthDateRange(currentMonthYear());
+  return profitPeriodDateRange("all");
 }
 
 /** يدمج شحن الرصيد من transactions فقط — لا نثق بلقطة RPC (قد تضيف شبحاً) */

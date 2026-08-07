@@ -33,6 +33,8 @@ const webhookUrl =
 
 const numbers = "07731002610,+9647731002610";
 const outputWorkflow = path.join(uploads, "n8n_عيادة_الامل_جاهز.json");
+const asciiWorkflow = path.join(uploads, "amal-clinic-n8n-ready.json");
+const zipPath = path.join(uploads, "amal-clinic-n8n-ready.zip");
 const friendMsg = path.join(uploads, "صديقي_استورد_فقط.txt");
 const userMsg = path.join(uploads, "لك_الويبهوك_والإعداد.txt");
 
@@ -89,9 +91,14 @@ fs.writeFileSync(
   friendMsg,
   `مرحباً — كل الربط جاهز داخل الملف. ما تحتاج تدخل مفاتيح يدوياً.
 
-1) Workflows → Import from File → n8n_عيادة_الامل_جاهز.json
-2) تأكد credentials WasenderAPI + Gemini → فعّل Active = ON
-3) افتح عقدة "Appointment Events Webhook" → انسخ Production URL → أرسله لي
+⚠️ مهم — استخدم الملف:
+   amal-clinic-n8n-ready.json
+   (أو amal-clinic-n8n-ready.zip)
+   لا تستخدم الملف العربي — WhatsApp أحياناً يفسده.
+
+1) Workflows → ⋮ (ثلاث نقاط) → Import from File
+2) اختر amal-clinic-n8n-ready.json
+3) تأكد credentials WasenderAPI + Gemini → فعّل Active = ON
 
 ⚠️ لا تحذف عقدة Inquiry Assistant
 ⚠️ لا تحتاج Settings → Variables — المفاتيح مدمجة بالملف
@@ -102,13 +109,33 @@ WhatsApp: 07731002610
   "utf8"
 );
 
+// 5) ZIP للإرسال الآمن (بدون تلف WhatsApp)
+try {
+  if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+  const zipRes = spawnSync(
+    "powershell",
+    [
+      "-NoProfile",
+      "-Command",
+      `Compress-Archive -Path '${asciiWorkflow.replace(/'/g, "''")}' -DestinationPath '${zipPath.replace(/'/g, "''")}' -Force`,
+    ],
+    { cwd: root, encoding: "utf8" }
+  );
+  if (zipRes.status !== 0) {
+    console.warn("تعذّر إنشاء ZIP:", zipRes.stderr || zipRes.stdout);
+  }
+} catch (e) {
+  console.warn("ZIP skipped:", e.message);
+}
+
 // 4) ملخص للمستخدم
 const userLines = [
   "=== تم الإعداد التلقائي — عيادة الامل ===",
   "",
   "✅ قاعدة البيانات: n8n_bot مفعّل",
   "✅ رقم واتساب: 07731002610 (+9647731002610)",
-  "✅ ملف n8n جاهز: uploads/n8n_عيادة_الامل_جاهز.json",
+  "✅ ملف n8n (ASCII): uploads/amal-clinic-n8n-ready.json",
+  "✅ ZIP للإرسال: uploads/amal-clinic-n8n-ready.zip",
   "✅ رسالة للصديق: uploads/صديقي_استورد_فقط.txt",
   "",
   "--- رابط Webhook (للوحة المطور) ---",
@@ -131,4 +158,4 @@ userLines.push("", "--- webhook_secret (مدمج بالملف) ---", webhookSecr
 fs.writeFileSync(userMsg, userLines.join("\n"), "utf8");
 
 console.log(userLines.join("\n"));
-console.log("\n→ أرسل لصديقك: n8n_عيادة_الامل_جاهز.json + صديقي_استورد_فقط.txt");
+console.log("\n→ أرسل لصديقك: amal-clinic-n8n-ready.zip (أو .json) + صديقي_استورد_فقط.txt");

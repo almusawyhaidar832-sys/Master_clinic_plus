@@ -7,7 +7,6 @@ import { getActiveClinicId } from "@/lib/clinic-context";
 import { Button } from "@/components/ui/Button";
 import { AddDoctorExpenseModal } from "@/components/doctor-expenses/AddDoctorExpenseModal";
 import { DoctorExpenseInvoiceViewer } from "@/components/doctor-expenses/DoctorExpenseInvoiceViewer";
-import { InvoiceHistoryPanel } from "@/components/doctor-expenses/InvoiceHistoryPanel";
 import { DoctorSalaryAdjustmentsPanel } from "@/components/expenses/DoctorSalaryAdjustmentsPanel";
 import { DoctorSalaryPayoutPanel } from "@/components/expenses/DoctorSalaryPayoutPanel";
 import { GeneralExpensesPanel } from "@/components/expenses/GeneralExpensesPanel";
@@ -24,13 +23,11 @@ import {
   Stethoscope,
   Trash2,
   Zap,
-  History,
   Banknote,
   Wallet,
 } from "lucide-react";
 
 const VALID_TABS = [
-  "invoice_history",
   "clinic_expenses",
   "doctor_salary",
   "general_expenses",
@@ -42,7 +39,7 @@ function parseTab(value: string | null): ExpensesTab {
   if (value && (VALID_TABS as readonly string[]).includes(value)) {
     return value as ExpensesTab;
   }
-  return "invoice_history";
+  return "clinic_expenses";
 }
 
 interface DoctorOption {
@@ -77,15 +74,9 @@ function normalizeExpenseDoctor(row: RawDoctorExpenseRow): DoctorExpenseRow {
 const TAB_ITEMS: {
   id: ExpensesTab;
   label: string;
-  icon: typeof History;
+  icon: typeof Receipt;
   accent: string;
 }[] = [
-  {
-    id: "invoice_history",
-    label: "السجل التاريخي",
-    icon: History,
-    accent: "mc-tab-accent-history",
-  },
   {
     id: "clinic_expenses",
     label: "فواتير وصرفيات الأطباء",
@@ -122,7 +113,8 @@ export default function DoctorExpensesPage() {
   const [activeTab, setActiveTab] = useState<ExpensesTab>(() =>
     parseTab(searchParams.get("tab"))
   );
-  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+  const patientsHistoryHref = "/dashboard/patients/history";
 
   const selectTab = useCallback(
     (tab: ExpensesTab) => {
@@ -137,23 +129,17 @@ export default function DoctorExpensesPage() {
     setActiveTab(tab);
   }, [searchParams]);
 
-  function refreshHistory() {
-    setHistoryRefreshKey((k) => k + 1);
-  }
-
   function handleExpenseSaved() {
     void load();
-    selectTab("invoice_history");
-    refreshHistory();
+    router.push(patientsHistoryHref);
   }
 
   function handleSalaryPayout() {
-    refreshHistory();
-    selectTab("invoice_history");
+    router.push(patientsHistoryHref);
   }
 
   function handleGeneralExpense() {
-    refreshHistory();
+    /* صرفيات العيادة — لا تُؤرشَف في السجل التاريخي */
   }
 
   const load = useCallback(async () => {
@@ -280,7 +266,6 @@ export default function DoctorExpensesPage() {
     clinicId,
     onRefresh: () => {
       void load();
-      setHistoryRefreshKey((k) => k + 1);
     },
     enabled: !!clinicId,
   });
@@ -302,7 +287,15 @@ export default function DoctorExpensesPage() {
             صرفيات عامة
           </h1>
           <p className="mc-page-subtitle">
-            السجل التاريخي · فواتير وصرفيات الأطباء · رواتب الأطباء · صرفيات العيادة
+            فواتير وصرفيات الأطباء · رواتب الأطباء · صرفيات العيادة — السجل
+            التاريخي في{" "}
+            <button
+              type="button"
+              className="font-semibold text-primary underline"
+              onClick={() => router.push(patientsHistoryHref)}
+            >
+              ملفات المرضى
+            </button>
           </p>
         </div>
         {activeTab === "clinic_expenses" && (
@@ -334,20 +327,9 @@ export default function DoctorExpensesPage() {
         ))}
       </div>
 
-      {activeTab === "invoice_history" && (
-        <InvoiceHistoryPanel
-          clinicId={clinicId}
-          doctors={doctors}
-          refreshKey={historyRefreshKey}
-        />
-      )}
-
       {activeTab === "doctor_salary" && (
         <div className="space-y-6">
-          <DoctorSalaryAdjustmentsPanel
-            clinicId={clinicId}
-            onUpdated={refreshHistory}
-          />
+          <DoctorSalaryAdjustmentsPanel clinicId={clinicId} />
           <DoctorSalaryPayoutPanel
             clinicId={clinicId}
             onPayoutRecorded={handleSalaryPayout}
@@ -399,8 +381,8 @@ export default function DoctorExpensesPage() {
             </div>
           ) : expenses.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-border p-10 text-center text-sm text-slate-muted">
-              لا توجد صرفيات نشطة — الصرفيات الجديدة تنتقل تلقائياً إلى السجل
-              التاريخي
+              لا توجد صرفيات نشطة — بعد الاعتماد تنتقل الفاتورة إلى السجل
+              التاريخي في ملفات المرضى
             </div>
           ) : (
             <div className="space-y-2">
