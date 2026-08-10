@@ -27,6 +27,7 @@ import {
   Crown,
   Calendar,
   History,
+  UserCog,
 } from "lucide-react";
 import { ActivityFeed } from "@/components/admin/ActivityFeed";
 import { AdminDoctorPerformance } from "@/components/admin/AdminDoctorPerformance";
@@ -326,6 +327,15 @@ export default function AdminHomePage() {
             </div>
             <p className="text-xs font-semibold text-slate-text">التقرير الشامل</p>
             <p className="text-[10px] text-premium-600">طباعة / مشاركة</p>
+          </Card>
+        </Link>
+        <Link href="/admin/team">
+          <Card hoverable className="p-3 active:scale-[0.98]">
+            <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-100">
+              <UserCog className="h-5 w-5 text-teal-700" />
+            </div>
+            <p className="text-xs font-semibold text-slate-text">فريق العمل</p>
+            <p className="text-[10px] text-slate-muted">إضافة محاسبين وإدارة الحسابات</p>
           </Card>
         </Link>
       </div>

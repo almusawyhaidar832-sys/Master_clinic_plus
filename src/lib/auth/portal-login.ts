@@ -239,6 +239,23 @@ export async function performUnifiedLogin(
     return result;
   }
 
+  // المالك يستخدم بوابتين: /admin و /dashboard (إعدادات العيادة، المستخدمون…).
+  // كل بوابة لها كوكي جلسة مستقل، فبدون هذه الجلسة الثانية تفتح صفحات
+  // /dashboard فارغة عنده لأن عميل المتصفح لا يجد جلسة تحت مفتاح المحاسب.
+  if (role === "super_admin") {
+    try {
+      const dashboardClient = createServerAuthClient(cookieStore, "accountant");
+      await performPortalLogin(dashboardClient, {
+        username,
+        password,
+        portal: "accountant",
+        destination: "/dashboard",
+      });
+    } catch (err) {
+      console.warn("[portal-login] owner dashboard session failed:", err);
+    }
+  }
+
   return {
     ...result,
     portalId,

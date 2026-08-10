@@ -20,16 +20,17 @@ interface TeamMember {
   id: string;
   full_name: string;
   username: string | null;
-  role: "accountant" | "doctor" | "super_admin";
+  role: "accountant" | "doctor" | "super_admin" | "assistant";
   phone: string | null;
   is_active: boolean;
   created_at: string;
 }
 
 const ROLE_LABELS: Record<string, { label: string; color: string }> = {
-  accountant:  { label: "محاسب", color: "bg-violet-100 text-violet-700" },
-  doctor:      { label: "طبيب",  color: "bg-blue-100 text-blue-700"    },
-  super_admin: { label: "مالك",  color: "bg-primary/10 text-primary"   },
+  accountant:  { label: "محاسب",      color: "bg-violet-100 text-violet-700" },
+  doctor:      { label: "طبيب",       color: "bg-blue-100 text-blue-700"    },
+  assistant:   { label: "مساعد طبيب", color: "bg-teal-100 text-teal-700"    },
+  super_admin: { label: "مالك",       color: "bg-primary/10 text-primary"   },
 };
 
 export default function AdminTeamPage() {
@@ -84,7 +85,7 @@ export default function AdminTeamPage() {
     // Only users belonging to THIS clinic — never show other clinics' accounts
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, role, phone, is_active, created_at")
+      .select("id, full_name, username, role, phone, is_active, created_at")
       .eq("clinic_id", myProfile.clinic_id)
       .order("role")
       .order("created_at", { ascending: false });

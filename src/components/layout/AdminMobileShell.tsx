@@ -23,6 +23,7 @@ import {
   Languages,
   Calendar,
   Crown,
+  Users,
 } from "lucide-react";
 
 const adminNav: Array<{
@@ -37,7 +38,8 @@ const adminNav: Array<{
   { href: "/admin/withdrawals",         labelKey: "adminNavWithdraw",    icon: Wallet      },
   { href: "/admin/report",              labelKey: "adminNavReport",      icon: FileText    },
   { href: "/admin/activity",            labelKey: "adminNavMonitor",     icon: Activity    },
-  { href: "/admin/profile",             labelKey: "adminNavAccount",     icon: UserCog     },
+  // الملف الشخصي متاح من أيقونة الرأس — مكانه هنا للفريق (إضافة المحاسبين)
+  { href: "/admin/team",                labelKey: "adminNavTeam",        icon: Users       },
 ];
 
 interface AdminMobileShellProps {
