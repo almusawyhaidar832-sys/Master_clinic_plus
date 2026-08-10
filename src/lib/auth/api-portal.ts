@@ -47,3 +47,15 @@ export function authPortalHeaders(
 ): Record<string, string> {
   return { "x-auth-portal": portal };
 }
+
+/**
+ * بوابة الصفحة الحالية في المتصفح — للمكوّنات المشتركة بين أكثر من بوابة
+ * (مثل كشف الحساب اليومي وطلبات السحب). تثبيت بوابة واحدة فيها يكسرها عند
+ * البوابة الأخرى لأن كل بوابة لها كوكي جلسة مستقل.
+ */
+export function currentAuthPortal(
+  fallback: AuthPortalId = "accountant"
+): AuthPortalId {
+  if (typeof window === "undefined") return fallback;
+  return portalIdFromPath(window.location.pathname) ?? fallback;
+}

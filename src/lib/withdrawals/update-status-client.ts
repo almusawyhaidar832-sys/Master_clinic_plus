@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { authPortalHeaders } from "@/lib/auth/api-portal";
+import { authPortalHeaders, currentAuthPortal } from "@/lib/auth/api-portal";
 import { getAuthProfile } from "@/lib/clinic-context";
 
 /** Owner (super_admin) or accountant — also accepts legacy alias "admin" */
@@ -29,7 +29,7 @@ export async function updateWithdrawalStatusClient(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...authPortalHeaders("accountant"),
+      ...authPortalHeaders(currentAuthPortal()),
     },
     credentials: "include",
     body: JSON.stringify({ id, status }),

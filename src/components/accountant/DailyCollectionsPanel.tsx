@@ -857,7 +857,7 @@ export function DailyCollectionsPanel() {
           />
           <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-1">
             <BalanceTopUpButton
-              portal="accountant"
+              portal={staffPortalForCollections()}
               onSuccess={handleTopUpSuccess}
               size="sm"
               variant="outline"
