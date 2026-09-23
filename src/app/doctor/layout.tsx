@@ -4,8 +4,8 @@ import { AppProviders } from "@/components/providers/AppProviders";
 import { DoctorPwaBootstrap } from "@/components/pwa/DoctorPwaBootstrap";
 
 export const metadata: Metadata = {
-  title: "Doctor App | Master Clinic Plus",
-  applicationName: "Master Clinic Doctor",
+  title: "Doctor App | Pearl Clinic",
+  applicationName: "Pearl Clinic Doctor",
   manifest: "/manifest-doctor.json",
   icons: {
     icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
@@ -14,12 +14,12 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Master Clinic Doctor",
+    title: "Pearl Clinic Doctor",
   },
   other: {
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-capable": "yes",
-    "apple-mobile-web-app-title": "Master Clinic Doctor",
+    "apple-mobile-web-app-title": "Pearl Clinic Doctor",
   },
 };
 

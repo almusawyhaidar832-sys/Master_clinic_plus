@@ -75,7 +75,7 @@ type OpRow = {
 };
 
 const OP_SELECT_FULL =
-  "id, clinic_id, patient_id, doctor_id, paid_amount, remaining_debt, total_amount, session_kind, created_at, operation_date, operation_name_ar, operation_type, treatment_case_id";
+  "id, clinic_id, patient_id, doctor_id, paid_amount, remaining_debt, total_amount, session_kind, created_at, operation_date, operation_name_ar, treatment_case_id";
 
 async function fetchOperationForAutomation(
   client: SupabaseClient,

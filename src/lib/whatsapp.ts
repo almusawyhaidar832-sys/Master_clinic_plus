@@ -108,6 +108,6 @@ ${actionIntro[params.action]} في ${clinicName} مع ${doctor}:
 export function testNotificationMessage(clinicName: string): string {
   return `🔔 رسالة تجريبية من ${clinicName}
 
-هذه رسالة اختبار من نظام Master Clinic Plus.
+هذه رسالة اختبار من نظام Pearl Clinic.
 إذا وصلتك، فربط الواتساب يعمل بشكل صحيح.`;
 }

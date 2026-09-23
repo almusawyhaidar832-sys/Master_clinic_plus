@@ -46,7 +46,7 @@ export async function fetchClinicDebtors(
   let query = supabase
     .from("patient_treatment_cases")
     .select(
-      "id, patient_id, treatment_name_ar, case_price, discount_total, final_price, total_paid, status, primary_doctor_id, patient:patients!patient_id(id, full_name_ar, phone, phone_e164)"
+      "id, patient_id, treatment_name_ar, case_price, discount_total, final_price, total_paid, status, primary_doctor_id, patient:patients!patient_id(id, full_name_ar, phone, phone_number)"
     )
     .eq("clinic_id", clinicId)
     .neq("status", "completed")

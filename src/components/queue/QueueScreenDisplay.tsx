@@ -464,7 +464,7 @@ export function QueueScreenDisplay({
       <footer className="qs-tv-footer qs-glass relative z-10 shrink-0 border-t border-primary/10 px-4 py-2 text-center">
         <p className="text-xl font-bold text-primary-800">{clinicName}</p>
         <p className="mt-1 text-sm text-slate-muted">
-          Master Clinic Plus
+          Pearl Clinic
           {installedApp ? " · مثبّتة على هذا الجهاز" : ""}
         </p>
         {!installedApp && (

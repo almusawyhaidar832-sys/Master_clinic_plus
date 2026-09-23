@@ -113,7 +113,7 @@ export function ClinicBotIntegrationPanel({ clinicId, clinicName, onMessage }: P
       `Base URL: ${baseUrl}`,
       `clinic_id: ${g.clinic_id}`,
       ``,
-      `--- Master Clinic Bot API ---`,
+      `--- Pearl Clinic Bot API ---`,
       `X-Bot-Api-Key: ${g.api_key}`,
       ``,
       `--- عندك في n8n (Settings → Variables → Add Variable) ---`,

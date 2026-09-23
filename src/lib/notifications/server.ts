@@ -496,7 +496,7 @@ export async function notifyDoctorNewOperation(operationId: string) {
 
   const { data: op, error } = await admin
     .from("patient_operations")
-    .select("id, clinic_id, doctor_id, total_amount, paid_amount, operation_name_ar, operation_type, patient_id")
+    .select("id, clinic_id, doctor_id, total_amount, paid_amount, operation_name_ar, patient_id")
     .eq("id", operationId)
     .maybeSingle();
 
@@ -520,8 +520,7 @@ export async function notifyDoctorNewOperation(operationId: string) {
     (await resolveDoctorProfileId(admin, op.doctor_id, op.clinic_id));
   if (!profileId) return;
 
-  const opName =
-    op.operation_name_ar ?? op.operation_type ?? "جلسة";
+  const opName = op.operation_name_ar ?? "جلسة";
 
   const patientName = patient?.full_name_ar ?? "مريض";
   const total = Number(op.total_amount ?? 0);

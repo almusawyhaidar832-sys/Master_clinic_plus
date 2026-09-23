@@ -14,7 +14,7 @@ export interface ClinicIntegrationRow {
   is_active: boolean;
 }
 
-/** أحداث المواعيد المرسلة من Master Clinic إلى N8N (webhook صادر) */
+/** أحداث المواعيد المرسلة من Pearl Clinic إلى N8N (webhook صادر) */
 export type AppointmentWebhookEvent =
   | "appointment.submitted"
   | "appointment.accepted"

@@ -217,15 +217,17 @@ async function findTodayClinicalOperation(
 ) {
   const { data: rows } = await admin
     .from("patient_operations")
-    .select("id, operation_name_ar, operation_type, total_amount")
+    .select("id, operation_name_ar, total_amount, paid_amount")
     .eq("clinic_id", input.clinicId)
     .eq("patient_id", input.patientId)
     .eq("doctor_id", input.doctorId)
     .eq("operation_date", todayISO())
     .order("created_at", { ascending: false });
 
+  // دفعات المتابعة total_amount = 0 أيضاً — لا نعيد استخدام جلسة عليها مبلغ
   for (const row of rows ?? []) {
-    const label = String(row.operation_name_ar ?? row.operation_type ?? "");
+    if (Number(row.paid_amount ?? 0) !== 0) continue;
+    const label = String(row.operation_name_ar ?? "");
     if (label === CLINICAL_SESSION_LABEL) return row;
     if (Number(row.total_amount ?? 0) === 0) return row;
   }

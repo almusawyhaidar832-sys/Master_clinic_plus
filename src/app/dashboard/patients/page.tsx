@@ -13,7 +13,7 @@ import {
   computeOutstandingDebtFromTreatmentCases,
   type PatientTreatmentCase,
 } from "@/lib/services/patient-treatment-cases";
-import { buildPlanFromCaseRow, computedCaseRemaining } from "@/lib/services/patient-financial-plan";
+import { computedCaseRemaining } from "@/lib/services/patient-financial-plan";
 import { searchPatientsViaApi } from "@/lib/services/patient-search";
 import { isBrowserOffline } from "@/lib/offline/network";
 import {
@@ -142,10 +142,7 @@ export default function PatientsSearchPage() {
           const cases = casesByPatient.get(pid) ?? [];
           const ops = opsByPatient.get(pid) ?? [];
           const caseDebt = computeOutstandingDebtFromTreatmentCases(cases);
-          const opDebt = computeOutstandingDebtFromOperations(
-            ops,
-            cases.map((c) => buildPlanFromCaseRow(c))
-          );
+          const opDebt = computeOutstandingDebtFromOperations(ops, pid);
           debtMap[pid] = Math.max(caseDebt, opDebt);
         }
       }

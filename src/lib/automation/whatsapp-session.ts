@@ -36,9 +36,7 @@ async function fetchCaseRecordForWhatsApp(
 } | null> {
   const { data: row, error } = await admin
     .from("patient_treatment_cases")
-    .select(
-      "treatment_name_ar, final_price, case_price, discount_total, total_paid, remaining_balance"
-    )
+    .select("treatment_name_ar, final_price, case_price, discount_total, total_paid")
     .eq("id", caseId)
     .maybeSingle();
 
@@ -49,10 +47,7 @@ async function fetchCaseRecordForWhatsApp(
     num(r.final_price) ||
     Math.max(0, num(r.case_price) - num(r.discount_total));
   const caseTotalPaid = num(r.total_paid);
-  const remainingBalance =
-    caseFinalPrice > 0
-      ? Math.max(0, caseFinalPrice - caseTotalPaid)
-      : Math.max(0, num(r.remaining_balance));
+  const remainingBalance = Math.max(0, caseFinalPrice - caseTotalPaid);
 
   return {
     procedureLabel: String(r.treatment_name_ar ?? "علاج").trim() || "علاج",

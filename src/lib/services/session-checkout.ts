@@ -59,7 +59,7 @@ async function resolveCheckoutContext(
     const { data: entry } = await admin
       .from("patient_queue")
       .select(
-        "id, clinic_id, doctor_id, patient_id, patient_name, patient_phone, appointment_id, doctor:doctors(full_name_ar)"
+        "id, clinic_id, doctor_id, patient_id, patient_name, patient_phone, appointment_id, doctor:doctors!doctor_id(full_name_ar)"
       )
       .eq("id", input.queueEntryId)
       .eq("clinic_id", clinicId)
@@ -148,7 +148,7 @@ export async function fetchSessionCheckoutSummary(
   const { data: operations } = await admin
     .from("patient_operations")
     .select(
-      "id, operation_name_ar, operation_type, total_amount, paid_amount, remaining_debt, session_kind, treatment_case_id"
+      "id, operation_name_ar, total_amount, paid_amount, remaining_debt, session_kind, treatment_case_id"
     )
     .eq("clinic_id", clinicId)
     .eq("patient_id", ctx.patientId)
