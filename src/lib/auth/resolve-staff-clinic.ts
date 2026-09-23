@@ -13,11 +13,7 @@ function headerActingClinicId(req: NextRequest): string | null {
   return req.headers.get(DEVELOPER_CLINIC_HEADER)?.trim() || null;
 }
 
-function clientHeaderClinicId(req: NextRequest): string | null {
-  return req.headers.get("x-clinic-id")?.trim() || null;
-}
-
-/** يتحقق أن الموظف يصل للعيادة المطلوبة */
+/** يتحقق أن الموظف يصل للعيادة المطلوبة — عيادة حسابه أو عيادة الدخول نيابة (مطوّر) فقط */
 export async function verifyStaffClinicAccess(
   req: NextRequest,
   caller: CallerProfile,
@@ -29,20 +25,14 @@ export async function verifyStaffClinicAccess(
     (await resolveDeveloperActingClinicId(req)) ?? headerActingClinicId(req);
   const sessionClinicId = await getApiActiveClinicId(req);
   const profileClinicId = caller.clinic_id ?? null;
-  const uiClinicId = clientHeaderClinicId(req);
 
   const allowed = new Set(
-    [sessionClinicId, profileClinicId, actingClinicId, uiClinicId].filter(
+    [sessionClinicId, profileClinicId, actingClinicId].filter(
       (id): id is string => Boolean(id)
     )
   );
 
-  if (allowed.has(clinicId)) return true;
-
-  // الواجهة أرسلت العيادة النشطة — نقبلها للموظفين
-  if (uiClinicId && uiClinicId === clinicId) return true;
-
-  return false;
+  return allowed.has(clinicId);
 }
 
 /** يحدّد العيادة من الطلب — يطابق العيادة النشطة في الواجهة */

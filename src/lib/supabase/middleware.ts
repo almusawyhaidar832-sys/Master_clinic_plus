@@ -80,6 +80,7 @@ export async function updateSession(request: NextRequest) {
     }
 
     const headers = new Headers(request.headers);
+    headers.delete(DEVELOPER_CLINIC_HEADER);
     if (devSession.actingClinicId) {
       headers.set(DEVELOPER_CLINIC_HEADER, devSession.actingClinicId);
     }
@@ -90,6 +91,8 @@ export async function updateSession(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(MCP_AUTH_PORTAL_HEADER, portalId);
+  // Only the middleware may set the acting-clinic header (from a verified developer token).
+  requestHeaders.delete(DEVELOPER_CLINIC_HEADER);
   if (devSession?.actingClinicId) {
     requestHeaders.set(DEVELOPER_CLINIC_HEADER, devSession.actingClinicId);
   }

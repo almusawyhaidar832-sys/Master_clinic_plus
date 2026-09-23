@@ -3,7 +3,7 @@ import {
   getApiCallerProfile,
   isApiStaffRole,
 } from "@/lib/auth/api-session";
-import { verifyStaffClinicAccess, resolveStaffApiClinicId } from "@/lib/auth/resolve-staff-clinic";
+import { resolveStaffApiClinicId } from "@/lib/auth/resolve-staff-clinic";
 import { getAdminClient } from "@/lib/supabase/admin";
 import {
   ensureBalanceTopupsInProfitStats,
@@ -27,17 +27,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "صلاحيات غير كافية" }, { status: 403 });
     }
 
-    const fromQuery = req.nextUrl.searchParams.get("clinic_id")?.trim() || null;
-    let clinicId: string | null = null;
-
-    // الموظف يرسل العيادة النشطة من الواجهة — نثق بها مباشرة
-    if (fromQuery && isApiStaffRole(caller.role)) {
-      clinicId = fromQuery;
-    } else if (fromQuery && (await verifyStaffClinicAccess(req, caller, fromQuery))) {
-      clinicId = fromQuery;
-    } else {
-      clinicId = await resolveStaffApiClinicId(req, caller);
-    }
+    // clinic_id من الرابط يُقبل فقط إذا طابق عيادة الحساب (أو الدخول نيابة)
+    const clinicId = await resolveStaffApiClinicId(req, caller);
 
     if (!clinicId) {
       return NextResponse.json(
