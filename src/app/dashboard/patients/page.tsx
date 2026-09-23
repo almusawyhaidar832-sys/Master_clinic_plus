@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ import {
   searchRecentPatients,
 } from "@/lib/offline/recent-patients-index";
 import type { Patient, PatientOperation } from "@/types";
-import { Search, FileText, CalendarDays } from "lucide-react";
+import { Search, FileText, CalendarDays, Users, NotebookPen } from "lucide-react";
 import { AddPatientForm } from "@/components/patients/AddPatientForm";
 import { PatientDailyVisitsPanel } from "@/components/patients/PatientDailyVisitsPanel";
 import { getPatientDisplayPhone } from "@/lib/phone";
@@ -35,6 +35,7 @@ type PageTab = "visits" | "search";
 
 export default function PatientsSearchPage() {
   const { clinicId } = useActiveClinicId();
+  const { bi } = useLanguage();
   const [activeTab, setActiveTab] = useState<PageTab>("visits");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PatientWithStats[]>([]);
@@ -188,14 +189,16 @@ export default function PatientsSearchPage() {
         activeTab === "visits" ? "max-w-6xl" : "max-w-2xl"
       )}
     >
-      <div>
-        <h2 className="text-2xl font-bold text-slate-text">ملفات المرضى</h2>
-        <p className="text-slate-muted">
-          {activeTab === "visits"
+      <PageHeader
+        title="ملفات المرضى"
+        eyebrow={bi("لوحة الإدارة", "Clinic dashboard")}
+        icon={Users}
+        subtitle={
+          activeTab === "visits"
             ? "كل من دخل العيادة — الاسم، الهاتف، الطبيب، والمدفوعات"
-            : "ابحث بالاسم لفتح ملف مراجع محدد"}
-        </p>
-      </div>
+            : "ابحث بالاسم لفتح ملف مراجع محدد"
+        }
+      />
 
       <div className="mc-tab-group">
         <button
@@ -220,26 +223,36 @@ export default function PatientsSearchPage() {
         <PatientDailyVisitsPanel />
       ) : (
         <>
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-muted" />
-            <input
-              ref={inputRef}
-              type="text"
-              className="w-full rounded-xl border border-slate-border bg-surface-card py-3 pr-10 pl-4 text-sm text-slate-text shadow-card outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="اكتب اسم المريض للبحث..."
-              autoComplete="off"
-            />
+          <div className="mc-panel">
+            <div className="mc-panel-body space-y-3">
+              <div className="relative">
+                <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-3">
+                  <span className="mc-icon-tile h-9 w-9 rounded-xl">
+                    <Search className="h-4 w-4" />
+                  </span>
+                </span>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  className="mc-field h-14 rounded-2xl ps-16 pe-4 text-base"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="اكتب اسم المريض للبحث..."
+                  autoComplete="off"
+                />
+              </div>
+              {!searched && query.trim().length < 2 && (
+                <p className="text-center text-xs text-slate-muted">
+                  ابدأ بكتابة حرفين على الأقل من اسم المراجع
+                </p>
+              )}
+            </div>
           </div>
 
           {loading && (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-16 animate-pulse rounded-xl bg-slate-100"
-                />
+                <div key={i} className="mc-skeleton h-[72px] rounded-2xl" />
               ))}
             </div>
           )}
@@ -255,55 +268,55 @@ export default function PatientsSearchPage() {
           )}
 
           {!loading && results.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-primary">
-                {results.length} نتيجة
-              </p>
+            <div className="space-y-2.5 animate-fade-in">
+              <div className="flex items-center gap-2 px-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-premium-500" />
+                <p className="text-xs font-bold tracking-wide text-slate-muted">
+                  {results.length} نتيجة
+                </p>
+              </div>
               {results.map((p) => (
-                <Link key={p.id} href={`/dashboard/patients/${p.id}`}>
-                  <Card className="mc-hover-lift flex cursor-pointer items-center justify-between gap-4 py-4 active:scale-[0.99]">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-700 text-sm font-bold text-white shadow-sm">
-                        {p.full_name_ar.slice(0, 2)}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-slate-text">
-                          {p.full_name_ar}
-                        </p>
-                        {getPatientDisplayPhone(p) && (
-                          <p className="text-xs text-slate-muted" dir="ltr">
-                            {getPatientDisplayPhone(p)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 text-left">
-                      {(p.total_debt ?? 0) > 0 && (
-                        <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold text-orange-900 ring-1 ring-orange-300">
-                          مديون · {formatCurrency(p.total_debt ?? 0)}
-                        </span>
-                      )}
-                      <FileText className="h-4 w-4 text-slate-muted" />
-                    </div>
-                  </Card>
+                <Link
+                  key={p.id}
+                  href={`/dashboard/patients/${p.id}`}
+                  className="group mc-list-row mc-press cursor-pointer"
+                >
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-mc-pearl text-sm font-bold text-[#0b1f3a] shadow-gold ring-1 ring-inset ring-premium-300/60">
+                    {p.full_name_ar.slice(0, 2)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-bold text-slate-text">
+                      {p.full_name_ar}
+                    </p>
+                    {getPatientDisplayPhone(p) && (
+                      <p className="mt-0.5 text-xs text-slate-muted tabular-nums" dir="ltr">
+                        {getPatientDisplayPhone(p)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    {(p.total_debt ?? 0) > 0 && (
+                      <span className="rounded-full border border-debt-border bg-debt px-2.5 py-1 text-xs font-bold text-debt-text tabular-nums">
+                        مديون · {formatCurrency(p.total_debt ?? 0)}
+                      </span>
+                    )}
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-border bg-surface text-slate-muted transition-colors group-hover:border-premium-300 group-hover:text-premium-500">
+                      <FileText className="h-4 w-4" />
+                    </span>
+                  </div>
                 </Link>
               ))}
             </div>
           )}
 
-          {!searched && query.trim().length < 2 && (
-            <p className="py-4 text-center text-sm text-slate-muted">
-              ابدأ بكتابة حرفين على الأقل من اسم المراجع
-            </p>
-          )}
-
           <AddPatientForm />
 
-          <Link href="/dashboard/ledger">
-            <Button variant="outline" size="sm">
+          <div className="flex justify-center">
+            <Link href="/dashboard/ledger" className="mc-btn-soft">
+              <NotebookPen className="h-4 w-4 text-premium-500" />
               تسجيل جلسة (الإدخال السريع)
-            </Button>
-          </Link>
+            </Link>
+          </div>
         </>
       )}
     </div>

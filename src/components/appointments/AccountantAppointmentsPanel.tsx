@@ -19,7 +19,7 @@ export function AccountantAppointmentsPanel({
 
   if (!clinicId) {
     return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-800">
+      <div className="rounded-2xl border border-warning-border bg-warning p-6 text-center text-sm font-medium text-warning-text shadow-card">
         {missingClinic
           ? "حسابك غير مربوط بعيادة — تواصل مع الإدارة"
           : "تعذر تحميل بيانات العيادة"}
@@ -30,16 +30,16 @@ export function AccountantAppointmentsPanel({
   return (
     <>
       {!fullPage && (
-        <div className="mb-2 flex justify-end gap-3">
+        <div className="mb-2 flex justify-end gap-2">
           <Link
             href="/dashboard/appointments/schedule"
-            className="text-sm font-semibold text-slate-muted hover:text-primary hover:underline"
+            className="mc-chip text-xs"
           >
             جدول المواعيد
           </Link>
           <Link
             href="/dashboard/appointments"
-            className="text-sm font-semibold text-primary hover:underline"
+            className="mc-chip mc-chip--active text-xs"
           >
             صفحة الحجز الكاملة ←
           </Link>

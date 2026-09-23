@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Input } from "@/components/ui/Input";
+import { ChevronLeft, Search, Users, WifiOff } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { EmptyState } from "@/components/ui/EmptyState";
 import {
   cacheRecentPatients,
   getCachedRecentPatients,
@@ -15,7 +17,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import type { Patient } from "@/types";
 
 export default function DoctorPatientsPage() {
-  const { t } = useLanguage();
+  const { t, bi } = useLanguage();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -89,45 +91,65 @@ export default function DoctorPatientsPage() {
   })();
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-bold text-slate-text">{t("docPatientCareTitle")}</h2>
-      <p className="text-xs text-slate-muted">{t("docPatientCareSubtitle")}</p>
-      {offlineList && (
-        <p className="text-xs text-amber-700">{t("offlineModeHint")}</p>
-      )}
-      <Input
-        label={t("search")}
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder={t("docSearchPatientPlaceholder")}
+    <div className="space-y-5">
+      <PageHeader
+        title={t("docPatientCareTitle")}
+        subtitle={t("docPatientCareSubtitle")}
+        eyebrow={bi("بوابة الطبيب", "Doctor portal")}
+        icon={Users}
       />
+      {offlineList && (
+        <p className="flex items-center gap-2 rounded-xl border border-warning-border bg-warning px-3 py-2 text-xs font-medium text-warning-text">
+          <WifiOff className="h-4 w-4 shrink-0" />
+          {t("offlineModeHint")}
+        </p>
+      )}
+      <div>
+        <label className="mc-label mb-1.5 block">{t("search")}</label>
+        <div className="relative">
+          <span className="pointer-events-none absolute inset-y-0 start-0 flex items-center ps-2.5">
+            <span className="mc-icon-tile h-9 w-9 rounded-xl">
+              <Search className="h-4 w-4" />
+            </span>
+          </span>
+          <input
+            type="text"
+            className="mc-field h-14 rounded-2xl ps-14 pe-4 text-base"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("docSearchPatientPlaceholder")}
+            autoComplete="off"
+          />
+        </div>
+      </div>
       {loading ? (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 animate-pulse rounded-xl bg-surface" />
+            <div key={i} className="mc-skeleton h-[72px] rounded-2xl" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-slate-muted">{t("docNoPatientsRegistered")}</p>
+        <EmptyState icon={Users} message={t("docNoPatientsRegistered")} className="rounded-2xl" />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2.5 animate-fade-in">
           {filtered.map((p) => (
             <Link
               key={p.id}
               href={`/doctor/patients/${p.id}`}
-              className="mc-hover-lift flex items-center gap-3 rounded-xl border border-slate-border bg-surface-card p-3.5 shadow-card"
+              className="group mc-list-row mc-press"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-700 text-sm font-bold text-white shadow-sm">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-mc-pearl text-sm font-bold text-[#0b1f3a] shadow-gold ring-1 ring-inset ring-premium-300/60">
                 {p.full_name_ar.slice(0, 2)}
               </div>
-              <div>
-                <p className="font-semibold text-slate-text">{p.full_name_ar}</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-bold text-slate-text">{p.full_name_ar}</p>
                 {p.phone && (
-                  <p className="text-sm text-slate-muted" dir="ltr">
+                  <p className="mt-0.5 text-xs text-slate-muted tabular-nums" dir="ltr">
                     {p.phone}
                   </p>
                 )}
               </div>
+              <ChevronLeft className="h-5 w-5 shrink-0 text-slate-muted transition-colors group-hover:text-premium-500 ltr:rotate-180" />
             </Link>
           ))}
         </div>

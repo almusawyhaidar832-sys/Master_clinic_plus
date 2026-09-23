@@ -18,7 +18,7 @@ function buildHandoffText(serverUrl: string | null): string {
     "=== طلب دعم Railway — Evolution API / Baileys لا يُسلّم الرسائل ===",
     "",
     `التاريخ: ${today}`,
-    "المشروع: Pearl Clinic",
+    "المشروع: Pearl System",
     "",
     "الأعراض:",
     "- HTTP 201 على sendText لكن status = PENDING",
@@ -63,7 +63,7 @@ export function WhatsAppRailwayHandoff({
   }
 
   return (
-    <Card className="border-slate-border bg-surface/60">
+    <Card className="border-slate-border bg-surface">
       <CardHeader>
         <CardTitle className="text-base">للمطوّr — انسخ وأرسل</CardTitle>
         <p className="text-sm text-slate-muted">
@@ -82,7 +82,7 @@ export function WhatsAppRailwayHandoff({
         </Alert>
         <pre
           dir="ltr"
-          className="max-h-48 overflow-auto rounded-lg border border-slate-border bg-white p-3 text-left text-xs text-slate-text"
+          className="max-h-48 overflow-auto rounded-xl border border-slate-border bg-surface-card p-3 text-left text-xs text-slate-text"
         >
           {buildHandoffText(serverUrl ?? null)}
         </pre>

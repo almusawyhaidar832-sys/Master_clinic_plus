@@ -1,8 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  ArrowDownToLine,
+  Banknote,
+  CheckCircle2,
+  Hourglass,
+  Loader2,
+  Send,
+  Wallet,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import {
@@ -121,18 +131,49 @@ export default function DoctorWithdrawPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-bold text-slate-text">{t("docWithdrawCashTitle")}</h2>
-      <p
-        className={`text-sm font-semibold tabular-nums ${
-          isDebtor ? "text-red-600" : "text-slate-muted"
-        }`}
+    <div className="space-y-5 animate-fade-in">
+      <PageHeader
+        title={t("docWithdrawCashTitle")}
+        eyebrow={bi("بوابة الطبيب", "Doctor portal")}
+        icon={ArrowDownToLine}
+        backHref="/doctor/wallet"
+        backLabel={t("wallet")}
+        className="!mb-0"
+      />
+
+      <section
+        className={cn(
+          "mc-hero rounded-[28px] p-5",
+          isDebtor && "ring-2 ring-inset ring-red-400/40"
+        )}
       >
-        {isDebtor ? t("docYourBalanceDebt") : t("docWithdrawableLabel")}{" "}
-        {formatMoney(Math.abs(available))}
-      </p>
+        <div className="pointer-events-none absolute -end-14 -top-16 h-44 w-44 rounded-full border border-white/[0.07]" />
+        {isDebtor && (
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-red-500/25 via-transparent to-transparent" />
+        )}
+        <div className="relative flex items-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/[0.08] text-[#dcc29a] backdrop-blur">
+            <Wallet className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-white/65">
+              {isDebtor ? t("docYourBalanceDebt") : t("docWithdrawableLabel")}
+            </p>
+            <p
+              className={cn(
+                "mt-1 text-[28px] font-black leading-none tracking-tight tabular-nums",
+                isDebtor ? "text-red-200" : "mc-text-champagne"
+              )}
+            >
+              {formatMoney(Math.abs(available))}
+            </p>
+          </div>
+        </div>
+      </section>
+
       {pending > 0 && (
-        <p className="text-xs text-amber-700">
+        <p className="flex items-start gap-2.5 rounded-2xl border border-warning-border bg-warning px-4 py-3 text-xs leading-relaxed text-warning-text">
+          <Hourglass className="mt-0.5 h-4 w-4 shrink-0" />
           {bi(
             `لديك طلبات معلّقة بقيمة ${formatMoney(pending)} — تُخصم عند الموافقة`,
             `You have pending requests totaling ${formatMoney(pending)} — deducted upon approval`
@@ -141,23 +182,48 @@ export default function DoctorWithdrawPage() {
       )}
 
       {sent ? (
-        <Alert variant="success">{t("docWithdrawSentSuccess")}</Alert>
+        <div className="mc-panel">
+          <div className="flex flex-col items-center gap-3 px-5 py-8 text-center">
+            <span className="mc-kpi__icon mc-tone-success h-14 w-14 rounded-2xl">
+              <CheckCircle2 className="h-7 w-7" />
+            </span>
+            <Alert variant="success" className="w-full text-start">
+              {t("docWithdrawSentSuccess")}
+            </Alert>
+          </div>
+        </div>
       ) : (
-        <>
-          {error && <Alert variant="error">{error}</Alert>}
-          <CurrencyInput
-            label={t("docRequestedAmountLabel")}
-            value={amount}
-            onChange={setAmount}
-          />
-          <Button
-            className="w-full"
-            onClick={() => void handleRequest()}
-            disabled={loading || withdrawLimit <= 0}
-          >
-            {loading ? t("saving") : t("docSendRequest")}
-          </Button>
-        </>
+        <section className="mc-panel">
+          <div className="mc-panel-head !px-4">
+            <h2 className="mc-panel-title no-accent">
+              <Banknote />
+              {t("docRequestedAmountLabel")}
+            </h2>
+          </div>
+          <div className="space-y-4 p-4 sm:p-5">
+            {error && <Alert variant="error">{error}</Alert>}
+            <CurrencyInput
+              value={amount}
+              onChange={setAmount}
+              size="large"
+              placeholder="0"
+              className="h-14 rounded-2xl border border-slate-border bg-surface-card text-center text-2xl font-black tracking-tight shadow-card focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10"
+            />
+            <button
+              type="button"
+              className="mc-btn-navy min-h-[52px] w-full rounded-2xl text-base"
+              onClick={() => void handleRequest()}
+              disabled={loading || withdrawLimit <= 0}
+            >
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4 text-premium-300" />
+              )}
+              {loading ? t("saving") : t("docSendRequest")}
+            </button>
+          </div>
+        </section>
       )}
     </div>
   );

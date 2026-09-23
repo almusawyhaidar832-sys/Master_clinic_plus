@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v27-pearl-login-about";
+const CACHE_NAME = "mcp-app-v28-pearl-system";
 
 const NOTIFICATION_ICON = "/icons/pearl-192.png";
 
@@ -84,7 +84,7 @@ function buildCustomNotification(title, payload) {
   }
 
   return {
-    title: title || "Pearl Clinic",
+    title: title || "Pearl System",
     options,
   };
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { X, Upload, RefreshCw } from "lucide-react";
+import { Upload, RefreshCw, Receipt } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
 import { notifyClinicProfitRefresh } from "@/lib/services/clinic-profit";
@@ -102,36 +103,35 @@ export function AddDoctorExpenseModal({
   const clinicShare = (Number(amount) || 0) - doctorShare;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">إضافة فاتورة صرفية</h2>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-slate-100">
-            <X className="h-5 w-5 text-slate-500" />
-          </button>
+    <Modal
+      onClose={onClose}
+      title="إضافة فاتورة صرفية"
+      icon={Receipt}
+      size="lg"
+      closeOnBackdrop={false}
+    >
+      {error && (
+        <p className="mb-4 rounded-xl border border-debt-border bg-debt px-3.5 py-2.5 text-sm text-debt-text">{error}</p>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="mc-label mb-1.5">الطبيب</label>
+          <select
+            value={doctorId}
+            onChange={(e) => setDoctorId(e.target.value)}
+            required
+            className="mc-field"
+          >
+            {doctors.map((d) => (
+              <option key={d.id} value={d.id}>{d.full_name_ar}</option>
+            ))}
+          </select>
         </div>
 
-        {error && (
-          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">الطبيب</label>
-            <select
-              value={doctorId}
-              onChange={(e) => setDoctorId(e.target.value)}
-              required
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
-            >
-              {doctors.map((d) => (
-                <option key={d.id} value={d.id}>{d.full_name_ar}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">المبلغ (د.ع)</label>
+            <label className="mc-label mb-1.5">المبلغ (د.ع)</label>
             <input
               type="number"
               min={0}
@@ -140,12 +140,12 @@ export function AddDoctorExpenseModal({
               onChange={(e) => setAmount(e.target.value)}
               required
               dir="ltr"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              className="mc-field font-semibold tabular-nums"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">
+            <label className="mc-label mb-1.5">
               نسبة تحمل الطبيب (%)
             </label>
             <input
@@ -156,58 +156,60 @@ export function AddDoctorExpenseModal({
               onChange={(e) => setPercentageSplit(e.target.value)}
               required
               dir="ltr"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              className="mc-field font-semibold tabular-nums"
             />
-            {Number(amount) > 0 && (
-              <p className="mt-1 text-xs text-slate-500">
-                على الطبيب: {doctorShare.toLocaleString("en-US")} د.ع ·
-                على العيادة: {clinicShare.toLocaleString("en-US")} د.ع
-              </p>
-            )}
           </div>
+        </div>
+        {Number(amount) > 0 && (
+          <p className="rounded-xl border border-slate-border bg-surface px-3.5 py-2.5 text-xs tabular-nums text-slate-muted">
+            على الطبيب: <strong className="text-debt-text">{doctorShare.toLocaleString("en-US")} د.ع</strong> ·
+            على العيادة: <strong className="text-slate-text">{clinicShare.toLocaleString("en-US")} د.ع</strong>
+          </p>
+        )}
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">وصف / ملاحظة</label>
+        <div>
+          <label className="mc-label mb-1.5">وصف / ملاحظة</label>
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="mc-field"
+          />
+        </div>
+
+        <div>
+          <label className="mc-label mb-1.5">صورة الفاتورة</label>
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-border bg-surface px-4 py-3.5 text-sm text-slate-text transition-colors hover:border-premium-300">
+            <span className="mc-kpi__icon mc-tone-gold h-9 w-9">
+              <Upload className="h-4 w-4" />
+            </span>
+            {file ? file.name : "رفع صورة أو PDF"}
             <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              type="file"
+              accept="image/*,application/pdf"
+              className="hidden"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
-          </div>
+          </label>
+        </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">صورة الفاتورة</label>
-            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-              <Upload className="h-4 w-4 text-slate-400" />
-              {file ? file.name : "رفع صورة أو PDF"}
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-          </div>
-
-          <div className="flex gap-2 pt-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white disabled:opacity-60"
-            >
-              {saving && <RefreshCw className="h-4 w-4 animate-spin" />}
-              حفظ الفاتورة
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm"
-            >
-              إلغاء
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="flex gap-2 border-t border-slate-border pt-4">
+          <button
+            type="submit"
+            disabled={saving}
+            className="mc-btn-navy flex-1 py-3"
+          >
+            {saving && <RefreshCw className="h-4 w-4 animate-spin" />}
+            حفظ الفاتورة
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mc-btn-soft px-5 py-3"
+          >
+            إلغاء
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

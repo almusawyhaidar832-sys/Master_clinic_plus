@@ -11,7 +11,7 @@ import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-case
 import type { MedicalLog, Patient, PatientOperation } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { opName } from "@/types";
-import { FileText, ImageIcon, Calendar } from "lucide-react";
+import { FileText, ImageIcon, Calendar, FolderHeart, NotebookPen } from "lucide-react";
 
 const ARCHIVE_PRINT_ID = "patient-archive-print";
 
@@ -74,16 +74,21 @@ export function PatientMedicalArchive({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-bold text-slate-text">الأرشيف الطبي</h3>
-          <p className="text-sm text-slate-muted">
-            تاريخ الزيارات، الفواتير، والأشعة — {patient.full_name_ar}
-          </p>
+      <div className="mc-panel flex flex-wrap items-center justify-between gap-4 p-5">
+        <div className="flex min-w-0 items-center gap-4">
+          <span className="mc-icon-tile h-12 w-12 rounded-2xl">
+            <FolderHeart className="h-6 w-6" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold text-slate-text">الأرشيف الطبي</h3>
+            <p className="truncate text-sm text-slate-muted">
+              تاريخ الزيارات، الفواتير، والأشعة — {patient.full_name_ar}
+            </p>
+          </div>
         </div>
         <Button
           type="button"
-          variant="outline"
+          variant={showPdf ? "outline" : "premium"}
           onClick={() => setShowPdf((v) => !v)}
         >
           <FileText className="h-4 w-4" />
@@ -92,7 +97,7 @@ export function PatientMedicalArchive({
       </div>
 
       {showPdf && (
-        <div className="space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <div className="space-y-4 rounded-2xl border border-slate-border bg-surface p-4 animate-fade-in">
           <ReportActions
             shareTitle={`أرشيف ${patient.full_name_ar} — ${clinicName}`}
             pdfLoading={pdfLoading}
@@ -122,58 +127,66 @@ export function PatientMedicalArchive({
         </div>
       )}
 
-      <section>
-        <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-text">
-          <Calendar className="h-4 w-4 text-primary" />
-          تاريخ الزيارات والفواتير ({sortedOps.length})
-        </h4>
+      <section className="mc-panel">
+        <div className="mc-panel-head">
+          <h4 className="mc-panel-title">
+            <Calendar />
+            تاريخ الزيارات والفواتير ({sortedOps.length})
+          </h4>
+        </div>
         {sortedOps.length === 0 ? (
-          <p className="text-sm text-slate-muted">لا توجد زيارات مسجّلة</p>
+          <p className="mc-panel-body text-center text-sm text-slate-muted">لا توجد زيارات مسجّلة</p>
         ) : (
-          <ul className="space-y-2">
+          <ol className="relative mx-5 my-5 space-y-3 border-s-2 border-premium-300/50 ps-5">
             {sortedOps.map((op) => (
-              <li
-                key={op.id}
-                className="mc-hover-lift rounded-lg border border-slate-border bg-surface-card px-3 py-2 text-sm"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium">{opName(op)}</span>
-                  <span className="text-xs text-slate-muted tabular-nums">
-                    {formatDate(op.operation_date)}
-                  </span>
-                </div>
-                <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-muted">
-                  <span>
-                    إجمالي:{" "}
-                    <strong className="text-slate-text">
-                      {formatCurrency(op.total_amount)}
-                    </strong>
-                  </span>
-                  <span>
-                    مدفوع:{" "}
-                    <strong className="text-primary">
-                      {formatCurrency(op.paid_amount)}
-                    </strong>
-                  </span>
-                  {Number(op.remaining_debt ?? 0) > 0 && (
-                    <span className="text-debt-text">
-                      متبقي: {formatCurrency(op.remaining_debt!)}
+              <li key={op.id} className="relative text-sm">
+                <span
+                  aria-hidden
+                  className="absolute -start-[27px] top-3.5 h-3 w-3 rounded-full border-2 border-surface-card bg-primary-600 shadow-soft"
+                />
+                <div className="rounded-xl border border-slate-border bg-surface-card px-4 py-3 shadow-card transition-shadow hover:shadow-soft">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="font-bold text-slate-text">{opName(op)}</span>
+                    <span className="text-xs text-slate-muted tabular-nums">
+                      {formatDate(op.operation_date)}
                     </span>
-                  )}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-muted">
+                    <span className="rounded-full bg-surface px-2.5 py-0.5">
+                      إجمالي:{" "}
+                      <strong className="text-slate-text tabular-nums">
+                        {formatCurrency(op.total_amount)}
+                      </strong>
+                    </span>
+                    <span className="rounded-full bg-surface px-2.5 py-0.5">
+                      مدفوع:{" "}
+                      <strong className="text-primary-700 tabular-nums dark:text-primary-300">
+                        {formatCurrency(op.paid_amount)}
+                      </strong>
+                    </span>
+                    {Number(op.remaining_debt ?? 0) > 0 && (
+                      <span className="rounded-full border border-debt-border bg-debt px-2.5 py-0.5 font-semibold text-debt-text tabular-nums">
+                        متبقي: {formatCurrency(op.remaining_debt!)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </li>
             ))}
-          </ul>
+          </ol>
         )}
       </section>
 
-      <section>
-        <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-text">
-          <ImageIcon className="h-4 w-4 text-primary" />
-          الأشعة والملفات ({xrays.length})
-        </h4>
+      <section className="mc-panel">
+        <div className="mc-panel-head">
+          <h4 className="mc-panel-title">
+            <ImageIcon />
+            الأشعة والملفات ({xrays.length})
+          </h4>
+        </div>
+        <div className="mc-panel-body">
         {xrays.length === 0 ? (
-          <p className="text-sm text-slate-muted">لا توجد أشعة مرفوعة</p>
+          <p className="text-center text-sm text-slate-muted">لا توجد أشعة مرفوعة</p>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {xrays.map((x) => (
@@ -182,7 +195,7 @@ export function PatientMedicalArchive({
                 href={x.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mc-hover-lift group overflow-hidden rounded-lg border border-slate-border bg-surface-card"
+                className="mc-hover-lift group overflow-hidden rounded-2xl border border-slate-border bg-surface-card shadow-card"
               >
                 <div className="relative aspect-square bg-surface">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -192,29 +205,32 @@ export function PatientMedicalArchive({
                     className="h-full w-full object-cover transition group-hover:scale-105"
                   />
                 </div>
-                <div className="p-2 text-[10px] text-slate-muted">
-                  <p className="truncate font-medium text-slate-text">
+                <div className="border-t border-slate-border p-2.5 text-[11px] text-slate-muted">
+                  <p className="truncate font-semibold text-slate-text">
                     {x.operationLabel}
                   </p>
-                  <p>{formatDate(x.operationDate)}</p>
+                  <p className="tabular-nums">{formatDate(x.operationDate)}</p>
                 </div>
               </a>
             ))}
           </div>
         )}
+        </div>
       </section>
 
       {medicalLogs.length > 0 && (
-        <section>
-          <h4 className="mb-3 text-sm font-bold text-slate-text">السجل الطبي</h4>
-          <ul className="space-y-2 text-sm">
+        <section className="mc-panel">
+          <div className="mc-panel-head">
+            <h4 className="mc-panel-title">
+              <NotebookPen />
+              السجل الطبي
+            </h4>
+          </div>
+          <ul className="divide-y divide-slate-border text-sm">
             {medicalLogs.map((log) => (
-              <li
-                key={log.id}
-                className="rounded-lg border border-slate-border bg-surface-card px-3 py-2"
-              >
-                <p className="text-slate-text">{log.content_ar}</p>
-                <p className="mt-1 text-xs text-slate-muted">
+              <li key={log.id} className="px-5 py-3.5">
+                <p className="leading-relaxed text-slate-text">{log.content_ar}</p>
+                <p className="mt-1 text-xs text-slate-muted tabular-nums">
                   {formatDate(log.log_date)}
                   {log.doctor?.full_name_ar &&
                     ` — د. ${log.doctor.full_name_ar}`}

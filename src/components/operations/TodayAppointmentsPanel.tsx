@@ -28,23 +28,24 @@ import {
   Check,
   X,
   Pencil,
+  Clock3,
 } from "lucide-react";
 
 const STATUS_STYLE: Record<
   AppointmentStatus,
-  { color: string; bg: string }
+  { color: string; bg: string; bar: string }
 > = {
-  pending:        { color: "text-amber-700",   bg: "bg-amber-100"   },
-  scheduled:      { color: "text-slate-600",   bg: "bg-slate-100"   },
-  confirmed:      { color: "text-blue-600",    bg: "bg-blue-100"    },
-  waiting:        { color: "text-amber-800",   bg: "bg-amber-50"    },
-  in_clinic:      { color: "text-teal-700",    bg: "bg-teal-100"    },
-  in_examination: { color: "text-emerald-700", bg: "bg-emerald-100" },
-  ready_for_billing: { color: "text-violet-700", bg: "bg-violet-100" },
-  ready_for_payment: { color: "text-violet-700", bg: "bg-violet-100" },
-  completed:      { color: "text-violet-600",  bg: "bg-violet-100"  },
-  cancelled:      { color: "text-red-600",     bg: "bg-red-100"     },
-  no_show:        { color: "text-amber-600",   bg: "bg-amber-100"   },
+  pending:           { color: "text-warning-text", bg: "border-warning-border bg-warning", bar: "bg-amber-400" },
+  scheduled:         { color: "text-slate-muted",  bg: "border-slate-border bg-surface",   bar: "bg-slate-300" },
+  confirmed:         { color: "text-primary-700",  bg: "border-primary-200 bg-primary-50", bar: "bg-primary-400" },
+  waiting:           { color: "text-warning-text", bg: "border-warning-border bg-warning", bar: "bg-amber-400" },
+  in_clinic:         { color: "text-primary-700",  bg: "border-primary-200 bg-primary-50", bar: "bg-primary-500" },
+  in_examination:    { color: "text-success-text", bg: "border-success-border bg-success", bar: "bg-emerald-500" },
+  ready_for_billing: { color: "text-royal-700",    bg: "border-royal-200 bg-royal-50",     bar: "bg-royal-500" },
+  ready_for_payment: { color: "text-royal-700",    bg: "border-royal-200 bg-royal-50",     bar: "bg-royal-500" },
+  completed:         { color: "text-royal-600",    bg: "border-royal-200 bg-royal-50",     bar: "bg-royal-400" },
+  cancelled:         { color: "text-debt-text",    bg: "border-debt-border bg-debt",       bar: "bg-red-400" },
+  no_show:           { color: "text-warning-text", bg: "border-warning-border bg-warning", bar: "bg-amber-400" },
 };
 
 interface TodayAppointmentsPanelProps {
@@ -299,55 +300,60 @@ export function TodayAppointmentsPanel({
   const pendingReview = appointments.filter((a) => a.status === "pending");
 
   return (
-    <section
-      className={cn(
-        "rounded-2xl border border-slate-200 bg-white shadow-sm",
-        compact ? "p-4" : "p-5"
-      )}
-    >
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
-          <CalendarClock className="h-5 w-5 text-primary" />
+    <section className="mc-panel">
+      <div className="mc-panel-head">
+        <h2 className="mc-panel-title">
+          <CalendarClock />
           {panelTitle}
-          <span className="text-sm font-normal text-slate-400">
-            ({pending.length} {t("todayActiveSuffix")})
+          <span className="rounded-full border border-premium-200 bg-premium-50 px-2 py-0.5 text-xs font-bold tabular-nums text-premium-700">
+            {pending.length} {t("todayActiveSuffix")}
           </span>
         </h2>
         <button
           type="button"
           onClick={load}
-          className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-border bg-surface-card text-slate-muted shadow-card transition-colors hover:border-premium-300 hover:text-slate-text"
         >
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
         </button>
       </div>
 
+      <div className={cn("space-y-3", compact ? "p-4" : "p-5")}>
       {toast && (
-        <p className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
+        <p className="flex items-center gap-2 rounded-xl border border-success-border bg-success px-3.5 py-2.5 text-sm font-medium text-success-text animate-fade-in">
+          <Check className="h-4 w-4 shrink-0" />
           {toast}
         </p>
       )}
 
       {pendingReview.length > 0 && (
-        <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          <strong>{pendingReview.length}</strong> {t("todayBarcodePending")}
+        <p className="flex items-center gap-2 rounded-xl border border-warning-border bg-warning px-3.5 py-2.5 text-sm text-warning-text">
+          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-amber-400 px-1.5 text-xs font-black text-white tabular-nums">
+            {pendingReview.length}
+          </span>
+          {t("todayBarcodePending")}
         </p>
       )}
 
       {message && (
-        <p className="mb-3 rounded-lg bg-primary/5 px-3 py-2 text-sm text-primary">
+        <p className="rounded-xl border border-primary-200 bg-primary-50 px-3.5 py-2.5 text-sm text-primary-800">
           {message}
         </p>
       )}
 
       {loading ? (
-        <div className="flex justify-center py-8">
-          <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+        <div className="space-y-2">
+          {Array.from({ length: compact ? 2 : 3 }).map((_, i) => (
+            <div key={i} className="mc-skeleton h-16 rounded-xl" />
+          ))}
         </div>
       ) : pending.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-400">
-          {t("todayNoActiveBookings")}
-        </p>
+        <div className="flex flex-col items-center gap-2 py-6 text-center">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface text-slate-muted">
+            <CalendarClock className="h-5 w-5 opacity-60" />
+          </span>
+          <p className="text-sm text-slate-muted">{t("todayNoActiveBookings")}</p>
+        </div>
       ) : (
         <div className="space-y-2">
           {pending.map((a) => {
@@ -364,33 +370,40 @@ export function TodayAppointmentsPanel({
               <div
                 key={a.id}
                 className={cn(
-                  "flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3",
+                  "relative flex flex-wrap items-center justify-between gap-3 overflow-hidden rounded-xl border p-3 ps-4 transition-colors",
                   isPending
-                    ? "border-amber-200 bg-amber-50/60"
-                    : "border-slate-100 bg-slate-50/80"
+                    ? "border-warning-border bg-warning"
+                    : "border-slate-border bg-surface-card hover:border-primary-200"
                 )}
               >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-slate-800">
-                      {a.patient_name_ar || t("entityPatient")}
+                <span aria-hidden className={cn("absolute inset-y-2.5 start-0 w-1 rounded-full", cfg.bar)} />
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-11 w-14 shrink-0 flex-col items-center justify-center rounded-xl border border-slate-border bg-surface text-slate-text">
+                    <Clock3 className="h-3 w-3 text-premium-500" />
+                    <span className="text-[11px] font-bold tabular-nums" dir="ltr">
+                      {formatTime(a.start_time)}
                     </span>
-                    <span
-                      className={cn(
-                        "rounded-full px-2 py-0.5 text-xs font-medium",
-                        cfg.bg,
-                        cfg.color
-                      )}
-                    >
-                      {statusLabel}
-                    </span>
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate font-bold text-slate-text">
+                        {a.patient_name_ar || t("entityPatient")}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded-full border px-2 py-0.5 text-[11px] font-bold",
+                          cfg.bg,
+                          cfg.color
+                        )}
+                      >
+                        {statusLabel}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-muted">
+                      <Stethoscope className="h-3 w-3 text-premium-500" />
+                      {a.doctor?.full_name_ar ?? t("entityDoctor")}
+                    </p>
                   </div>
-                  <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
-                    <Stethoscope className="h-3 w-3" />
-                    {a.doctor?.full_name_ar ?? t("entityDoctor")}
-                    <span>·</span>
-                    {formatTime(a.start_time)}
-                  </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -400,7 +413,7 @@ export function TodayAppointmentsPanel({
                         type="button"
                         disabled={actionId === a.id}
                         onClick={() => handleApprove(a)}
-                        className="flex items-center gap-1 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-700 disabled:opacity-60"
+                        className="mc-btn-navy px-3 py-1.5 text-xs"
                       >
                         {actionId === a.id ? (
                           <RefreshCw className="h-3 w-3 animate-spin" />
@@ -412,7 +425,7 @@ export function TodayAppointmentsPanel({
                       <button
                         type="button"
                         onClick={() => setRejecting(a)}
-                        className="flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50"
+                        className="mc-btn-soft px-3 py-1.5 text-xs text-debt-text hover:border-debt-border hover:bg-debt"
                       >
                         <X className="h-3 w-3" />
                         {t("apptReject")}
@@ -420,7 +433,7 @@ export function TodayAppointmentsPanel({
                       <button
                         type="button"
                         onClick={() => setEditing(a)}
-                        className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                        className="mc-btn-soft px-3 py-1.5 text-xs"
                       >
                         <Pencil className="h-3 w-3" />
                         {t("edit")}
@@ -432,7 +445,7 @@ export function TodayAppointmentsPanel({
                       type="button"
                       disabled={checkingIn === a.id}
                       onClick={() => handleCheckIn(a)}
-                      className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+                      className="mc-btn-navy px-3 py-1.5 text-xs"
                     >
                       {checkingIn === a.id ? (
                         <RefreshCw className="h-3 w-3 animate-spin" />
@@ -447,7 +460,7 @@ export function TodayAppointmentsPanel({
                       type="button"
                       disabled={cancellingId === a.id}
                       onClick={() => handleCancel(a)}
-                      className="flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-60"
+                      className="mc-btn-soft px-3 py-1.5 text-xs text-debt-text hover:border-debt-border hover:bg-debt"
                     >
                       {cancellingId === a.id ? (
                         <RefreshCw className="h-3 w-3 animate-spin" />
@@ -462,7 +475,7 @@ export function TodayAppointmentsPanel({
                       type="button"
                       disabled={finishingId === a.id}
                       onClick={() => handleFinishExamination(a)}
-                      className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                      className="mc-btn-soft px-3 py-1.5 text-xs text-royal-700 hover:border-royal-200 hover:bg-royal-50"
                     >
                       {finishingId === a.id ? (
                         <RefreshCw className="h-3 w-3 animate-spin" />
@@ -477,7 +490,7 @@ export function TodayAppointmentsPanel({
                       type="button"
                       disabled={payingId === a.id}
                       onClick={() => handleOpenPayment(a)}
-                      className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                      className="mc-btn-pearl px-4 py-1.5 text-xs"
                     >
                       {payingId === a.id ? (
                         <RefreshCw className="h-3 w-3 animate-spin" />
@@ -493,6 +506,7 @@ export function TodayAppointmentsPanel({
           })}
         </div>
       )}
+      </div>
 
       {editing && (
         <EditAppointmentModal

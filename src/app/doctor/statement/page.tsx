@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { PatientSearchField } from "@/components/patients/PatientSearchField";
 import { PatientStatementDocument } from "@/components/doctor/PatientStatementDocument";
 import { ReportActions } from "@/components/reports/ReportActions";
@@ -22,7 +22,7 @@ import {
 import type { Patient, PatientOperation, MedicalLog } from "@/types";
 import { VisitSessionClinicalPanel } from "@/components/clinical/VisitSessionClinicalPanel.lazy";
 import { Alert } from "@/components/ui/Alert";
-import { FileText } from "lucide-react";
+import { FileText, Info, UserSearch } from "lucide-react";
 
 function StatementContent() {
   const searchParams = useSearchParams();
@@ -127,13 +127,13 @@ function StatementContent() {
   }
 
   return (
-    <div className="space-y-4">
-      <h2 className="no-print flex items-center gap-2 text-lg font-bold tracking-tight text-slate-text">
-        <span className="mc-icon-badge-primary">
-          <FileText className="h-4.5 w-4.5" />
-        </span>
-        {t("docStatementTitle")}
-      </h2>
+    <div className="space-y-5 animate-fade-in">
+      <PageHeader
+        title={t("docStatementTitle")}
+        eyebrow={bi("بوابة الطبيب", "Doctor portal")}
+        icon={FileText}
+        className="no-print !mb-0"
+      />
 
       {accessDenied && accessError && (
         <Alert variant="error" className="no-print">
@@ -141,11 +141,14 @@ function StatementContent() {
         </Alert>
       )}
 
-      <div className="no-print space-y-3">
-        <div className="w-full space-y-1.5">
-          <label className="block text-sm font-medium text-slate-text">
+      <section className="no-print mc-panel !overflow-visible">
+        <div className="mc-panel-head !px-4 rounded-t-2xl">
+          <label className="mc-panel-title no-accent">
+            <UserSearch />
             {t("docSelectPatient")}
           </label>
+        </div>
+        <div className="space-y-3 p-4">
           <PatientSearchField
             value={patientQuery}
             onChange={(value) => {
@@ -161,19 +164,26 @@ function StatementContent() {
             portal="doctor"
             selectedPatientId={patientId || null}
             placeholder={t("docStatementSearchPlaceholder")}
-            inputClassName="h-10"
+            inputClassName="h-12 rounded-xl"
           />
-          <p className="text-xs text-slate-muted">
+          <p className="flex items-center gap-1.5 text-[11px] text-slate-muted">
+            <Info className="h-3.5 w-3.5 shrink-0 text-premium-500" />
             {t("docSearchPatientPhoneHint")}
           </p>
+          <button
+            type="button"
+            className="mc-btn-navy min-h-[50px] w-full rounded-2xl text-[15px]"
+            onClick={generate}
+            disabled={!patientId}
+          >
+            <FileText className="h-4 w-4 text-premium-300" />
+            {t("docGenerateStatement")}
+          </button>
         </div>
-        <Button className="w-full" onClick={generate} disabled={!patientId}>
-          {t("docGenerateStatement")}
-        </Button>
-      </div>
+      </section>
 
       {patientId && (
-        <div className="no-print rounded-2xl border border-primary/15 bg-surface-card p-4 shadow-card">
+        <div className="no-print mc-panel p-4">
           <VisitSessionClinicalPanel
             patientId={patientId}
             queueEntryId={queueEntryId}

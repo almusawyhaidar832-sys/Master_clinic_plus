@@ -2050,16 +2050,18 @@ export function QuickEntryForm({
   return (
     <Card
       className={
-        embedded ? "border-0 bg-transparent shadow-none p-0" : undefined
+        embedded
+          ? "border-0 bg-transparent shadow-none p-0"
+          : "rounded-3xl shadow-elevated"
       }
     >
       {!embedded && (
-        <CardHeader className="mb-5 flex-row items-center gap-3 border-b border-slate-100 pb-4">
-          <span className="mc-icon-badge-primary !rounded-2xl !bg-gradient-to-br !from-primary-600 !to-primary-500 !p-3 text-white shadow-md shadow-primary/20">
-            <Wallet className="h-5 w-5" />
+        <CardHeader className="relative -mx-6 -mt-6 mb-6 flex-row items-center gap-3.5 rounded-t-3xl border-b border-slate-border bg-gradient-to-b from-primary-50/70 to-transparent px-6 pb-5 pt-6">
+          <span className="mc-icon-tile h-12 w-12" aria-hidden>
+            <Wallet className="h-5 w-5" strokeWidth={1.9} />
           </span>
-          <div>
-            <CardTitle className="!text-lg !font-extrabold !ps-0 text-primary-800">
+          <div className="min-w-0">
+            <CardTitle className="!text-lg !font-extrabold !ps-0 tracking-tight text-slate-text">
               {loadingPlan && selectedPatientId
                 ? "جاري تحميل ملف المريض..."
                 : showCasePicker
@@ -2069,12 +2071,12 @@ export function QuickEntryForm({
                     : "حالة علاج جديدة"}
             </CardTitle>
             {isFollowUpSession && !loadingPlan && (
-              <p className="mt-0.5 text-sm font-medium text-slate-500">
+              <p className="mt-0.5 text-sm font-medium text-slate-muted">
                 اختر نوع التسجيل ثم المبلغ — بدون سعر كلي للحالة
               </p>
             )}
             {!isFollowUpSession && !showCasePicker && !loadingPlan && (
-              <p className="mt-0.5 text-sm font-medium text-slate-500">
+              <p className="mt-0.5 text-sm font-medium text-slate-muted">
                 نوع الإجراء ← نوع التسجيل (جلسة / دين / مكتمل) ← المبلغ
               </p>
             )}
@@ -2109,9 +2111,9 @@ export function QuickEntryForm({
         )}
 
         {forceNewPlan && !showCasePicker && (
-          <div className="sm:col-span-2 rounded-lg border border-primary/25 bg-primary/[0.06] px-3 py-2">
-            <p className="text-sm font-bold text-primary-800">حالة علاج جديدة</p>
-            <p className="mt-0.5 text-xs text-primary-700">
+          <div className="sm:col-span-2 rounded-2xl border border-slate-border border-s-4 border-s-premium-400 bg-surface px-4 py-3">
+            <p className="text-sm font-bold text-slate-text">حالة علاج جديدة</p>
+            <p className="mt-0.5 text-xs text-slate-muted">
               جلسة ← المبلغ المدفوع — أو دين ← مبلغ الذمة — أو مكتمل لإغلاق الحالة
             </p>
             {operationName.trim() && (
@@ -2160,7 +2162,7 @@ export function QuickEntryForm({
             </span>
             بيانات المراجع
             {selectedPatientId && (
-              <span className="mr-auto inline-flex items-center gap-1 rounded-full bg-blue-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
+              <span className="ms-auto inline-flex items-center gap-1 rounded-full bg-mc-navy px-2.5 py-1 text-[11px] font-bold text-white shadow-soft">
                 <CheckCircle2 className="h-3 w-3" /> مريض محدد
               </span>
             )}
@@ -2202,7 +2204,7 @@ export function QuickEntryForm({
                     setPatientQuery("");
                     setPatientPhone("");
                   }}
-                  className="rounded-lg px-2 text-xs text-slate-muted hover:bg-red-50 hover:text-debt-text"
+                  className="rounded-xl border border-slate-border bg-surface-card px-3 text-xs text-slate-muted transition-colors hover:border-debt-border hover:bg-debt hover:text-debt-text"
                 >
                   ✕
                 </button>
@@ -2214,7 +2216,7 @@ export function QuickEntryForm({
           {formSchema.showPatientSearch && !selectedPatientId && (
             <div>
               <label className="mc-entry-field-label flex items-center gap-1.5">
-                <Phone className="h-3.5 w-3.5 text-blue-600" />
+                <Phone className="h-3.5 w-3.5 text-premium-500" />
                 رقم هاتف المراجع <span className="text-debt-text">*</span>
               </label>
               <input
@@ -2235,10 +2237,10 @@ export function QuickEntryForm({
           {selectedPatientId && (
             <div>
               <label className="mc-entry-field-label flex items-center gap-1.5">
-                <Phone className="h-3.5 w-3.5 text-blue-600" />
+                <Phone className="h-3.5 w-3.5 text-premium-500" />
                 رقم واتساب المراجع{" "}
                 <span className="text-debt-text">*</span>
-                <span className="text-sm font-medium text-slate-500">
+                <span className="text-sm font-medium text-slate-muted">
                   {" "}
                   (لإرسال الفاتورة بعد الجلسة)
                 </span>
@@ -2258,7 +2260,7 @@ export function QuickEntryForm({
                 </p>
               )}
               {!patientPhone.trim() && !defaultPatientPhone?.trim() && isFollowUpSession && (
-                <p className="mt-1 text-xs font-medium text-amber-700">
+                <p className="mt-1.5 rounded-lg border border-warning-border bg-warning px-2.5 py-1.5 text-xs font-medium text-warning-text">
                   بدون رقم لن تُرسل رسالة واتساب — اختبار الإرسال يستخدم رقمك أنت
                   فقط.
                 </p>
@@ -2267,13 +2269,13 @@ export function QuickEntryForm({
           )}
 
           {formSchema.showAssignedDoctor && assignedDoctor && (
-            <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-white/80 px-4 py-3 shadow-sm">
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+            <div className="flex items-start gap-3 rounded-2xl border border-slate-border bg-surface-card px-4 py-3 shadow-card">
+              <span className="mc-kpi__icon mc-tone-navy mt-0.5 h-9 w-9">
                 <Stethoscope className="h-4 w-4" />
               </span>
               <div>
-                <p className="text-xs font-semibold text-slate-500">الطبيب المعالج لهذه الحالة</p>
-                <p className="text-base font-bold text-slate-800">
+                <p className="text-xs font-semibold text-slate-muted">الطبيب المعالج لهذه الحالة</p>
+                <p className="text-base font-bold text-slate-text">
                   {assignedDoctor.full_name_ar}
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-muted">
@@ -2333,21 +2335,21 @@ export function QuickEntryForm({
           </p>
         )}
         {isFollowUpSession && selectedCase && !embedded && (
-          <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-teal-200 bg-teal-50/70 px-4 py-3">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-white">
+          <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-border bg-surface px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="mc-icon-tile h-9 w-9 rounded-xl">
                 <ClipboardList className="h-4 w-4" />
               </span>
               <div>
-                <p className="text-xs font-semibold text-teal-700">الحالة المختارة</p>
-                <p className="font-bold text-slate-800">
+                <p className="text-xs font-semibold text-slate-muted">الحالة المختارة</p>
+                <p className="font-bold text-slate-text">
                   {selectedCase.treatment_name_ar}
                 </p>
               </div>
             </div>
             <button
               type="button"
-              className="rounded-lg px-2.5 py-1.5 text-sm font-semibold text-teal-700 hover:bg-teal-100"
+              className="mc-btn-soft px-3 py-1.5"
               onClick={() => {
                 setSelectedCaseId(null);
                 setFinancialPlan(EMPTY_FINANCIAL_PLAN);
@@ -2368,9 +2370,9 @@ export function QuickEntryForm({
             الطبيب المعالج
           </div>
         {lockDoctorId ? (
-          <div className="rounded-xl border border-indigo-200 bg-white/80 px-4 py-3 shadow-sm">
-            <p className="text-xs font-semibold text-slate-500">طبيب الموعد / الجلسة</p>
-            <p className="text-base font-bold text-slate-800">
+          <div className="rounded-2xl border border-slate-border bg-surface-card px-4 py-3 shadow-card">
+            <p className="text-xs font-semibold text-slate-muted">طبيب الموعد / الجلسة</p>
+            <p className="text-base font-bold text-slate-text">
               {selectedDoctor?.full_name_ar ??
                 assignedDoctor?.full_name_ar ??
                 lockDoctorName ??
@@ -2380,7 +2382,7 @@ export function QuickEntryForm({
         ) : (
           <>
             {selectedDoctor && (
-              <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+              <div className="flex items-center gap-2 rounded-xl border border-warning-border bg-warning px-4 py-2.5 text-sm text-warning-text">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 تأكد من <strong>الطبيب</strong> قبل الحفظ — الرصيد يُحسب لهذا الطبيب فقط
               </div>
@@ -2393,7 +2395,7 @@ export function QuickEntryForm({
               options={doctors.map((d) => ({ value: d.id, label: d.full_name_ar }))}
               placeholder="اختر الطبيب"
               required
-              className="!h-11 !rounded-lg !border-2 !border-indigo-200 !bg-white !text-sm !font-semibold focus:!border-indigo-500"
+              className="!h-11 !rounded-xl !text-sm !font-semibold"
             />
           </>
         )}
@@ -2401,18 +2403,18 @@ export function QuickEntryForm({
         )}
 
         {(formSchema.showPlanSummary || plan.total_paid > 0) && !showCasePicker && (
-          <div className="sm:col-span-2 space-y-1.5 rounded-xl border border-primary/25 bg-gradient-to-b from-primary-50/70 to-white px-4 py-3 text-sm shadow-sm">
-            <p className="flex items-center gap-1.5 text-sm font-extrabold text-primary-800">
-              <ClipboardList className="h-4 w-4" /> ملخص الحالة
+          <div className="sm:col-span-2 space-y-1.5 rounded-2xl border border-slate-border bg-surface-card px-4 py-3.5 text-sm shadow-card">
+            <p className="flex items-center gap-2 text-sm font-extrabold text-slate-text">
+              <ClipboardList className="h-4 w-4 text-premium-500" /> ملخص الحالة
             </p>
-            <p className="text-xs tabular-nums text-slate-600">
+            <p className="text-xs tabular-nums text-slate-muted">
               مجموع المدفوع:{" "}
               <span className="font-bold text-primary">
                 {formatCurrency(plan.total_paid)}
               </span>
             </p>
             {plan.final_price > FINANCIAL_EPSILON && (
-              <p className="text-xs tabular-nums text-slate-600">
+              <p className="text-xs tabular-nums text-slate-muted">
                 دين مسجّل / متبقٍ:{" "}
                 <span className="font-bold text-debt-text">
                   {formatCurrency(plan.remaining_balance)}
@@ -2420,7 +2422,7 @@ export function QuickEntryForm({
               </p>
             )}
             {(paid > 0 || billingMode === "debt") && (
-              <p className="mt-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-xs font-medium tabular-nums text-primary-800">
+              <p className="mt-2 rounded-xl border border-slate-border bg-surface px-3 py-2 text-xs font-medium tabular-nums text-slate-text">
                 بعد هذا الإدخال — مجموع المدفوع:{" "}
                 <strong>{formatCurrency(billingPreview.totalPaidAfter)}</strong>
                 {remaining > FINANCIAL_EPSILON && (
@@ -2466,7 +2468,7 @@ export function QuickEntryForm({
           formSchema.showAdditionalDiscount) && (
           <div className="sm:col-span-2 mc-entry-finance space-y-3">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-white shadow-sm">
+              <span className="mc-icon-tile h-10 w-10 rounded-xl">
                 <Wallet className="h-4 w-4" />
               </span>
               <div>
@@ -2499,12 +2501,12 @@ export function QuickEntryForm({
                   label: o.label,
                 }))}
                 required
-                className="!h-10 !rounded-lg !border-2 !text-sm !font-semibold"
+                className="!h-11 !rounded-xl !text-sm !font-semibold"
               />
             )}
 
             {billingMode === "examination" && (
-              <div className="space-y-3 rounded-lg border border-sky-200 bg-sky-50/70 p-3">
+              <div className="space-y-3 rounded-2xl border border-slate-border bg-surface p-4">
                 <div>
                   <label className="mc-entry-field-label">
                     نوع الكشف (اختياري)
@@ -2537,7 +2539,7 @@ export function QuickEntryForm({
                   </p>
                 )}
                 {applyExaminationFee && !reviewFeeEnabled && (
-                  <p className="text-xs text-amber-800">
+                  <p className="text-xs text-warning-text">
                     فعّل الكشفية من{" "}
                     <Link href="/dashboard/settings" className="underline font-medium">
                       إعدادات العيادة
@@ -2574,7 +2576,7 @@ export function QuickEntryForm({
                   isFollowUpSession && (
                   <button
                     type="button"
-                    className="w-full rounded-lg border border-primary bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-700"
+                    className="mc-btn-navy w-full py-2.5"
                     onClick={() =>
                       setPaidAmount(String(Math.round(remaining)))
                     }
@@ -2594,7 +2596,7 @@ export function QuickEntryForm({
                   placeholder="0"
                 />
                 {additionalDiscountNum > 0 && (
-                  <p className="text-xs font-semibold text-amber-800 tabular-nums">
+                  <p className="text-xs font-semibold text-warning-text tabular-nums">
                     يُخصم {formatCurrency(additionalDiscountNum)} — المتبقي:{" "}
                     {formatCurrency(remaining)}
                   </p>
@@ -2603,7 +2605,7 @@ export function QuickEntryForm({
             )}
 
             {billingMode === "session" && paid > 0 && (
-              <div className="rounded-lg border border-success-border bg-success px-3 py-2.5">
+              <div className="rounded-2xl border border-success-border bg-success px-4 py-3">
                 <p className="text-xs font-bold text-success-text">
                   بعد هذه الجلسة — مجموع المدفوع
                 </p>
@@ -2614,8 +2616,8 @@ export function QuickEntryForm({
             )}
 
             {billingMode === "debt" && paid > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
-                <p className="text-xs font-bold text-amber-900">
+              <div className="rounded-2xl border border-debt-border bg-debt px-4 py-3">
+                <p className="text-xs font-bold text-debt-text">
                   دين مسجّل على المراجع
                 </p>
                 <p className="mt-0.5 text-xl font-bold tabular-nums text-debt-text">
@@ -2673,8 +2675,8 @@ export function QuickEntryForm({
         )}
 
         {formSchema.showReviewCheckbox && billingMode !== "examination" && (
-        <div className="sm:col-span-2 space-y-1.5 rounded-xl border border-sky-200 bg-sky-50/60 px-4 py-3">
-          <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+        <div className="sm:col-span-2 space-y-1.5 rounded-2xl border border-slate-border bg-surface-card px-4 py-3 shadow-card">
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-text">
             <input
               type="checkbox"
               checked={isReviewStatement}
@@ -2690,7 +2692,7 @@ export function QuickEntryForm({
             )}
           </label>
           {!reviewFeeEnabled && (
-            <p className="text-xs text-amber-800">
+            <p className="text-xs text-warning-text">
               فعّل الكشفية من{" "}
               <Link href="/dashboard/settings" className="underline font-medium">
                 إعدادات العيادة
@@ -2698,7 +2700,7 @@ export function QuickEntryForm({
             </p>
           )}
           {isReviewStatement && reviewFeeLive > 0 && (
-            <p className="text-xs text-slate-600 tabular-nums">
+            <p className="text-xs text-slate-muted tabular-nums">
               الكشفية تُضاف للذمة وتذهب <strong>كاملة للعيادة</strong> — لا تدخل محفظة
               الطبيب. الإجمالي: {formatCurrency(finalPriceLive)}
             </p>
@@ -2715,7 +2717,7 @@ export function QuickEntryForm({
                     <Scan className="h-4 w-4" />
                   </span>
                   <div>
-                    <p className="text-sm font-extrabold text-cyan-900">
+                    <p className="text-sm font-extrabold text-slate-text">
                       مراجعة السجل البصري
                     </p>
                     <p className="mc-entry-section-hint">
@@ -2728,7 +2730,7 @@ export function QuickEntryForm({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="!border-cyan-300 !text-cyan-800 hover:!bg-cyan-100"
+                  className="!rounded-xl"
                   onClick={() => setShowVisualRecordReview(true)}
                 >
                   <Scan className="h-4 w-4" />
@@ -2746,7 +2748,7 @@ export function QuickEntryForm({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="mr-auto"
+                    className="ms-auto !rounded-xl"
                     onClick={() => setShowVisualRecordReview(false)}
                   >
                     <X className="h-4 w-4" />
@@ -2821,8 +2823,8 @@ export function QuickEntryForm({
           }`}
         >
           <span
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-sm ${
-              remaining > 0 ? "bg-red-600" : "bg-emerald-600"
+            className={`mc-kpi__icon h-12 w-12 rounded-2xl ${
+              remaining > 0 ? "mc-tone-danger" : "mc-tone-success"
             }`}
           >
             {remaining > 0 ? (
@@ -2832,7 +2834,7 @@ export function QuickEntryForm({
             )}
           </span>
           <div className="flex-1">
-            <p className="text-sm font-bold text-slate-700">
+            <p className="text-sm font-bold text-slate-muted">
               {isFollowUpSession || billingMode === "debt"
                 ? "الذمة المتبقية"
                 : "المتبقي (ذمة)"}
@@ -2843,7 +2845,7 @@ export function QuickEntryForm({
               </p>
             )}
             <p
-              className={`mt-0.5 text-2xl font-black tabular-nums ${
+              className={`mt-0.5 text-3xl font-black tracking-tight tabular-nums ${
                 remaining > 0 ? "text-debt-text" : "text-success-text"
               }`}
             >

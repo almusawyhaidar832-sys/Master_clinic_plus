@@ -88,7 +88,7 @@ export function PatientSearchField({
   return (
     <div ref={containerRef} className={cn("relative", className)}>
       {showIcon && (
-        <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-muted" />
+        <Search className="pointer-events-none absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-premium-500" />
       )}
       <input
         type="search"
@@ -110,8 +110,8 @@ export function PatientSearchField({
         }}
         placeholder={placeholder}
         className={cn(
-          "w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm text-slate-text outline-none focus:border-primary focus:ring-1 focus:ring-primary",
-          showIcon && "pr-10",
+          "mc-field disabled:cursor-not-allowed disabled:opacity-60",
+          showIcon && "ps-10",
           inputClassName
         )}
       />
@@ -125,12 +125,12 @@ export function PatientSearchField({
       )}
 
       {open && results.length > 0 && (
-        <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-border bg-white shadow-premium">
+        <div className="absolute z-50 mt-1.5 max-h-64 w-full overflow-y-auto rounded-2xl border border-slate-border bg-surface-card p-1.5 shadow-premium animate-fade-in">
           {results.map((p) => (
             <button
               key={p.id}
               type="button"
-              className="flex w-full flex-col items-start gap-0.5 px-4 py-2.5 text-right text-sm hover:bg-primary/5"
+              className="flex w-full flex-col items-start gap-0.5 rounded-xl px-3.5 py-2.5 text-start text-sm transition-colors hover:bg-primary-50 dark:hover:bg-primary-900/30"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 onSelect(p);
@@ -138,15 +138,15 @@ export function PatientSearchField({
               }}
             >
               <span className="flex w-full flex-wrap items-center gap-2">
-                <span className="font-medium text-slate-text">{p.full_name_ar}</span>
+                <span className="font-semibold text-slate-text">{p.full_name_ar}</span>
                 {getPatientDisplayPhone(p) && (
-                  <span className="text-xs text-slate-muted" dir="ltr">
+                  <span className="text-xs text-slate-muted tabular-nums" dir="ltr">
                     {getPatientDisplayPhone(p)}
                   </span>
                 )}
               </span>
               {p.primary_doctor_name && (
-                <span className="text-xs text-primary">
+                <span className="text-xs font-medium text-premium-600">
                   {formatDoctorDisplayName(p.primary_doctor_name)}
                 </span>
               )}
@@ -160,7 +160,7 @@ export function PatientSearchField({
         !error &&
         value.trim().length >= PATIENT_SEARCH_MIN_LENGTH &&
         results.length === 0 && (
-          <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-border bg-white px-4 py-3 text-sm text-slate-muted shadow-premium">
+          <div className="absolute z-50 mt-1.5 w-full rounded-2xl border border-slate-border bg-surface-card px-4 py-3 text-center text-sm text-slate-muted shadow-premium">
             لا يوجد مراجع بهذا الاسم
           </div>
         )}

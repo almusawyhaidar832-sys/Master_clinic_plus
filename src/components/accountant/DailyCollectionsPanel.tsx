@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { createClient } from "@/lib/supabase/client";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
@@ -50,6 +50,7 @@ import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { cn, formatCurrency, formatDate, todayISO, addDaysISO } from "@/lib/utils";
 import {
   Calendar,
+  Filter,
   ChevronDown,
   ChevronUp,
   ArrowDownToLine,
@@ -82,25 +83,92 @@ const STATUS_TABS: { id: CollectionStatusFilter; label: string }[] = [
   { id: "at_accountant", label: "عند المحاسب" },
 ];
 
+type SummaryTone = "navy" | "success" | "warning" | "danger" | "royal" | "gold";
+
+const SUMMARY_TONE_BAR: Record<SummaryTone, string> = {
+  navy: "bg-primary-500",
+  success: "bg-success-text",
+  warning: "bg-warning-text",
+  danger: "bg-debt-text",
+  royal: "bg-royal-500",
+  gold: "bg-premium-400",
+};
+
+const SUMMARY_TONE_TEXT: Record<SummaryTone, string> = {
+  navy: "text-slate-text",
+  success: "text-success-text",
+  warning: "text-warning-text",
+  danger: "text-debt-text",
+  royal: "text-royal-600",
+  gold: "text-premium-600",
+};
+
 function SummaryChip({
   label,
   value,
-  className,
+  tone = "navy",
 }: {
   label: string;
   value: number | string;
+  tone?: SummaryTone;
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-slate-border bg-surface-card px-4 py-3 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-soft">
+      <span
+        className={cn("absolute inset-y-3 start-0 w-1 rounded-e-full", SUMMARY_TONE_BAR[tone])}
+        aria-hidden
+      />
+      <p className={cn("text-lg font-black tabular-nums tracking-tight", SUMMARY_TONE_TEXT[tone])}>
+        {value}
+      </p>
+      <p className="mt-0.5 text-[11px] font-medium text-slate-muted">{label}</p>
+    </div>
+  );
+}
+
+const ROW_BASE =
+  "flex flex-col gap-3 border-b border-slate-border px-5 py-3.5 last:border-b-0 transition-colors hover:bg-surface sm:flex-row sm:items-center sm:justify-between";
+
+function RowAmount({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
   className?: string;
 }) {
   return (
-    <div
+    <div className="min-w-[5.5rem] text-end">
+      <p className="text-[11px] font-medium text-slate-muted">{label}</p>
+      <p className={cn("font-bold tabular-nums", className)}>{children}</p>
+    </div>
+  );
+}
+
+function SectionStrip({
+  tone,
+  children,
+}: {
+  tone: "warning" | "danger" | "success";
+  children: ReactNode;
+}) {
+  const toneClass =
+    tone === "warning"
+      ? "bg-warning text-warning-text"
+      : tone === "danger"
+        ? "bg-debt text-debt-text"
+        : "bg-success text-success-text";
+  return (
+    <p
       className={cn(
-        "rounded-xl border border-slate-border bg-surface px-3 py-2 text-center",
-        className
+        "flex items-center gap-2 border-y border-slate-border px-5 py-2 text-xs font-bold",
+        toneClass
       )}
     >
-      <p className="text-lg font-bold tabular-nums text-slate-text">{value}</p>
-      <p className="text-[11px] text-slate-muted">{label}</p>
-    </div>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
+      {children}
+    </p>
   );
 }
 
@@ -127,10 +195,10 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
       row.paymentStatus === "debtor");
 
   return (
-    <div className="flex flex-col gap-3 border-b border-slate-border/60 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+    <div className={ROW_BASE}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="font-semibold text-slate-text">{row.patientName}</p>
+          <p className="font-bold text-slate-text">{row.patientName}</p>
           <span
             className={cn(
               "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
@@ -141,7 +209,7 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
           </span>
         </div>
           {row.paymentStatus === "paid_full" && row.visitPaidToday > 0 && (
-            <p className="mt-1 text-xs font-semibold text-emerald-700">
+            <p className="mt-1 text-xs font-semibold text-success-text">
               ✓ دفع {formatCurrency(row.visitPaidToday)}
               {row.visitDoctorShare > 0 &&
                 ` · حصة الطبيب ${formatCurrency(row.visitDoctorShare)}`}
@@ -181,55 +249,41 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 sm:justify-end">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3 sm:justify-end">
         {row.requiredToday > FINANCIAL_EPSILON && (
-          <div className="text-right">
-            <p className="text-[11px] text-slate-muted">السعر الكلي</p>
-            <p className="font-bold tabular-nums text-slate-text">
-              {formatCurrency(row.requiredToday)}
-            </p>
-          </div>
+          <RowAmount label="السعر الكلي" className="text-slate-text">
+            {formatCurrency(row.requiredToday)}
+          </RowAmount>
         )}
-        <div className="text-right">
-          <p className="text-[11px] text-slate-muted">ما دفعه المراجع</p>
-          <p
-            className={cn(
-              "text-lg font-bold tabular-nums",
-              row.visitPaidToday > 0 ? "text-success-text" : "text-slate-muted"
-            )}
-          >
-            {formatCurrency(row.visitPaidToday)}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-[11px] text-slate-muted">حصة الطبيب</p>
-          <p
-            className={cn(
-              "text-lg font-bold tabular-nums",
-              row.visitDoctorShare > 0 ? "text-primary" : "text-slate-muted"
-            )}
-          >
-            {formatCurrency(row.visitDoctorShare)}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-[11px] text-slate-muted">
-            {row.paymentStatus === "debtor" ? "الدين" : "المتبقي"}
-          </p>
-          <p
-            className={cn(
-              "font-bold tabular-nums",
-              debtAmount > 0 ? "text-debt-text" : "text-success-text"
-            )}
-          >
-            {formatCurrency(debtAmount)}
-          </p>
-        </div>
+        <RowAmount
+          label="ما دفعه المراجع"
+          className={cn(
+            "text-lg",
+            row.visitPaidToday > 0 ? "text-success-text" : "text-slate-muted"
+          )}
+        >
+          {formatCurrency(row.visitPaidToday)}
+        </RowAmount>
+        <RowAmount
+          label="حصة الطبيب"
+          className={cn(
+            "text-lg",
+            row.visitDoctorShare > 0 ? "text-primary-700" : "text-slate-muted"
+          )}
+        >
+          {formatCurrency(row.visitDoctorShare)}
+        </RowAmount>
+        <RowAmount
+          label={row.paymentStatus === "debtor" ? "الدين" : "المتبقي"}
+          className={debtAmount > 0 ? "text-debt-text" : "text-success-text"}
+        >
+          {formatCurrency(debtAmount)}
+        </RowAmount>
         <div className="flex gap-2">
           {row.patientId && (
             <Link
               href={`/dashboard/patients/${row.patientId}`}
-              className="rounded-lg border border-slate-border px-3 py-1.5 text-xs font-medium text-slate-text hover:bg-surface"
+              className="mc-btn-soft px-3 py-1.5 text-xs"
             >
               الملف
             </Link>
@@ -237,7 +291,7 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
           {showCollect && (
             <Link
               href={payUrl}
-              className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90"
+              className="mc-btn-navy px-3 py-1.5 text-xs"
             >
               <Receipt className="h-3.5 w-3.5" />
               تحصيل
@@ -254,21 +308,23 @@ function AssistantPayrollRow({ line }: { line: DailyAssistantPayrollLine }) {
   const isCorrection = Boolean(line.isCorrection);
 
   return (
-    <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-amber-50/30 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+    <div className={ROW_BASE}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <UserRound className="h-4 w-4 shrink-0 text-amber-700" />
+          <span className="mc-kpi__icon mc-tone-warning h-7 w-7 rounded-lg">
+            <UserRound className="h-3.5 w-3.5" />
+          </span>
           <p className="font-semibold text-slate-text">
             مساعد: {line.assistantName}
           </p>
           <span
             className={cn(
-              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+              "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold",
               isCorrection
-                ? "bg-sky-100 text-sky-800"
+                ? "border-primary-200 bg-primary-50 text-primary-700"
                 : isConfirmed
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-amber-100 text-amber-900"
+                  ? "border-success-border bg-success text-success-text"
+                  : "border-warning-border bg-warning text-warning-text"
             )}
           >
             {isCorrection ? "تصحيح (استرجاع)" : line.statusLabel}
@@ -279,36 +335,25 @@ function AssistantPayrollRow({ line }: { line: DailyAssistantPayrollLine }) {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 sm:justify-end">
-        <div className="text-right">
-          <p className="text-[11px] text-slate-muted">
-            {isCorrection ? "المبلغ المسترجع" : "أجر المساعد"}
-          </p>
-          <p className="font-bold tabular-nums text-slate-text">
-            {formatCurrency(Math.abs(line.totalSalary))}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-[11px] text-slate-muted">
-            {isCorrection ? "يُرجع للطبيب" : "يُخصم من الطبيب"}
-          </p>
-          <p
-            className={cn(
-              "font-bold tabular-nums",
-              isCorrection ? "text-emerald-700" : "text-red-700"
-            )}
-          >
-            {isCorrection ? "+" : "−"} {formatCurrency(Math.abs(line.doctorDeduction))}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-[11px] text-slate-muted">
-            {isCorrection ? "يُرجع للعيادة" : "حصة العيادة"}
-          </p>
-          <p className="font-bold tabular-nums text-slate-text">
-            {formatCurrency(Math.abs(line.clinicShare))}
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3 sm:justify-end">
+        <RowAmount
+          label={isCorrection ? "المبلغ المسترجع" : "أجر المساعد"}
+          className="text-slate-text"
+        >
+          {formatCurrency(Math.abs(line.totalSalary))}
+        </RowAmount>
+        <RowAmount
+          label={isCorrection ? "يُرجع للطبيب" : "يُخصم من الطبيب"}
+          className={isCorrection ? "text-success-text" : "text-debt-text"}
+        >
+          {isCorrection ? "+" : "−"} {formatCurrency(Math.abs(line.doctorDeduction))}
+        </RowAmount>
+        <RowAmount
+          label={isCorrection ? "يُرجع للعيادة" : "حصة العيادة"}
+          className="text-slate-text"
+        >
+          {formatCurrency(Math.abs(line.clinicShare))}
+        </RowAmount>
       </div>
     </div>
   );
@@ -317,27 +362,24 @@ function AssistantPayrollRow({ line }: { line: DailyAssistantPayrollLine }) {
 function WithdrawalRow({ line }: { line: DoctorWithdrawalLine }) {
   const isPending = line.status === "pending";
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 border-b border-slate-border/60 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between",
-        isPending ? "bg-amber-50/30" : "bg-red-50/20"
-      )}
-    >
+    <div className={ROW_BASE}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <ArrowDownToLine
+          <span
             className={cn(
-              "h-4 w-4 shrink-0",
-              isPending ? "text-amber-600" : "text-red-600"
+              "mc-kpi__icon h-7 w-7 rounded-lg",
+              isPending ? "mc-tone-warning" : "mc-tone-danger"
             )}
-          />
+          >
+            <ArrowDownToLine className="h-3.5 w-3.5" />
+          </span>
           <p className="font-semibold text-slate-text">{line.source}</p>
           <span
             className={cn(
-              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+              "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold",
               isPending
-                ? "bg-amber-100 text-amber-900"
-                : "bg-red-100 text-red-800"
+                ? "border-warning-border bg-warning text-warning-text"
+                : "border-debt-border bg-debt text-debt-text"
             )}
           >
             {withdrawalStatusLabel(line.status)}
@@ -348,63 +390,54 @@ function WithdrawalRow({ line }: { line: DoctorWithdrawalLine }) {
           {isPending && " · يُحجز من الرصيد المتاح للسحب حتى الموافقة"}
         </p>
       </div>
-      <div className="text-right">
-        <p className="text-[11px] text-slate-muted">
-          {isPending ? "طلب سحب رصيد" : "سحب رصيد"}
-        </p>
-        <p
-          className={cn(
-            "font-bold tabular-nums",
-            isPending ? "text-amber-700" : "text-red-600"
-          )}
-        >
-          − {formatCurrency(line.amount)}
-        </p>
-      </div>
+      <RowAmount
+        label={isPending ? "طلب سحب رصيد" : "سحب رصيد"}
+        className={isPending ? "text-warning-text" : "text-debt-text"}
+      >
+        − {formatCurrency(line.amount)}
+      </RowAmount>
     </div>
   );
 }
 
 function BalanceTopUpRow({ line }: { line: DoctorBalanceTopUpLine }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-emerald-50/20 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+    <div className={ROW_BASE}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <ArrowUpToLine className="h-4 w-4 shrink-0 text-emerald-600" />
+          <span className="mc-kpi__icon mc-tone-success h-7 w-7 rounded-lg">
+            <ArrowUpToLine className="h-3.5 w-3.5" />
+          </span>
           <p className="font-semibold text-slate-text">{line.label}</p>
         </div>
         <p className="mt-1 text-xs text-slate-muted">
           {formatDate(line.effectiveDate)}
         </p>
       </div>
-      <div className="text-right">
-        <p className="text-[11px] text-slate-muted">شحن رصيد</p>
-        <p className="font-bold tabular-nums text-emerald-700">
-          + {formatCurrency(line.amount)}
-        </p>
-      </div>
+      <RowAmount label="شحن رصيد" className="text-success-text">
+        + {formatCurrency(line.amount)}
+      </RowAmount>
     </div>
   );
 }
 
 function ClinicBalanceTopUpRow({ line }: { line: ClinicBalanceTopUpLine }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-emerald-50/30 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+    <div className={ROW_BASE}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <ArrowUpToLine className="h-4 w-4 shrink-0 text-emerald-600" />
+          <span className="mc-kpi__icon mc-tone-success h-7 w-7 rounded-lg">
+            <ArrowUpToLine className="h-3.5 w-3.5" />
+          </span>
           <p className="font-semibold text-slate-text">{line.label}</p>
         </div>
         <p className="mt-1 text-xs text-slate-muted">
           {formatDate(line.effectiveDate)} · يُضاف لصافي ربح العيادة
         </p>
       </div>
-      <div className="text-right">
-        <p className="text-[11px] text-slate-muted">شحن رصيد العيادة</p>
-        <p className="font-bold tabular-nums text-emerald-700">
-          + {formatCurrency(line.amount)}
-        </p>
-      </div>
+      <RowAmount label="شحن رصيد العيادة" className="text-success-text">
+        + {formatCurrency(line.amount)}
+      </RowAmount>
     </div>
   );
 }
@@ -431,18 +464,18 @@ function DoctorSection({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <Card className="overflow-hidden p-0">
+    <div className="mc-panel">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-right hover:bg-surface/60"
+        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-start transition-colors hover:bg-surface"
       >
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <span className="mc-icon-badge-primary shrink-0">
-            <Stethoscope className="h-4 w-4" />
+        <div className="flex min-w-0 flex-1 items-center gap-3.5">
+          <span className="mc-icon-tile h-11 w-11 rounded-xl">
+            <Stethoscope className="h-5 w-5" strokeWidth={1.8} />
           </span>
-          <div className="min-w-0 text-right">
-            <p className="truncate font-bold text-slate-text">
+          <div className="min-w-0 text-start">
+            <p className="truncate text-[15px] font-bold text-slate-text">
               {formatDoctorDisplayName(doctorName)}
             </p>
             <p className="mt-0.5 text-xs text-slate-muted">
@@ -497,7 +530,7 @@ function DoctorSection({
                   {(stats.totalPatients > 0 ||
                     stats.assistantDoctorDeduction > 0) &&
                     " · "}
-                  <span className="font-medium text-red-600">
+                  <span className="font-medium text-debt-text">
                     سحب −{formatCurrency(stats.totalWithdrawnInPeriod)}
                   </span>
                 </>
@@ -508,7 +541,7 @@ function DoctorSection({
                     stats.assistantDoctorDeduction > 0 ||
                     stats.totalWithdrawnInPeriod > 0) &&
                     " · "}
-                  <span className="font-medium text-amber-700">
+                  <span className="font-medium text-warning-text">
                     طلب سحب معلّق −
                     {formatCurrency(stats.totalPendingWithdrawalInPeriod)}
                   </span>
@@ -520,7 +553,7 @@ function DoctorSection({
                     stats.assistantDoctorDeduction > 0 ||
                     stats.totalWithdrawnInPeriod > 0) &&
                     " · "}
-                  <span className="font-medium text-emerald-700">
+                  <span className="font-medium text-success-text">
                     شحن +{formatCurrency(stats.totalToppedUpInPeriod)}
                   </span>
                 </>
@@ -542,23 +575,25 @@ function DoctorSection({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <span className="hidden rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 sm:inline">
+          <span className="hidden rounded-full border border-success-border bg-success px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-success-text sm:inline">
             {stats.paidFull + stats.partial} دفع
           </span>
-          <span className="hidden rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-bold text-orange-900 sm:inline">
+          <span className="hidden rounded-full border border-warning-border bg-warning px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-warning-text sm:inline">
             {stats.debtors} مديون
           </span>
-          <span className="hidden rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700 sm:inline">
+          <span className="hidden rounded-full border border-debt-border bg-debt px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-debt-text sm:inline">
             {stats.unpaid} لم يدفع
           </span>
-          <span className="hidden rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-800 sm:inline">
+          <span className="hidden rounded-full border border-royal-200 bg-royal-50 px-2.5 py-0.5 text-[11px] font-semibold tabular-nums text-royal-600 sm:inline">
             {stats.atAccountant} عند المحاسب
           </span>
-          {open ? (
-            <ChevronUp className="h-5 w-5 text-slate-muted" />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-slate-muted" />
-          )}
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-border bg-surface-card">
+            {open ? (
+              <ChevronUp className="h-4 w-4 text-slate-muted" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-slate-muted" />
+            )}
+          </span>
         </div>
       </button>
 
@@ -585,30 +620,24 @@ function DoctorSection({
                 </StatementExpenseSection>
               )}
               {assistantPayroll.length > 0 && (
-                <div className="border-t border-amber-200/60">
-                  <p className="bg-amber-50/60 px-4 py-2 text-xs font-semibold text-amber-900">
-                    أجور مساعدي الطبيب
-                  </p>
+                <div>
+                  <SectionStrip tone="warning">أجور مساعدي الطبيب</SectionStrip>
                   {assistantPayroll.map((line) => (
                     <AssistantPayrollRow key={line.id} line={line} />
                   ))}
                 </div>
               )}
               {withdrawals.length > 0 && (
-                <div className="border-t border-red-200/60">
-                  <p className="bg-red-50/60 px-4 py-2 text-xs font-semibold text-red-900">
-                    سحوبات رصيد الطبيب
-                  </p>
+                <div>
+                  <SectionStrip tone="danger">سحوبات رصيد الطبيب</SectionStrip>
                   {withdrawals.map((line) => (
                     <WithdrawalRow key={line.id} line={line} />
                   ))}
                 </div>
               )}
               {balanceTopups.length > 0 && (
-                <div className="border-t border-emerald-200/60">
-                  <p className="bg-emerald-50/60 px-4 py-2 text-xs font-semibold text-emerald-900">
-                    شحن رصيد الطبيب
-                  </p>
+                <div>
+                  <SectionStrip tone="success">شحن رصيد الطبيب</SectionStrip>
                   {balanceTopups.map((line) => (
                     <BalanceTopUpRow key={line.id} line={line} />
                   ))}
@@ -618,12 +647,13 @@ function DoctorSection({
           )}
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
 export function DailyCollectionsPanel() {
   const { clinicId, loading: clinicLoading } = useActiveClinicId();
+  const { bi } = useLanguage();
   const [dateFrom, setDateFrom] = useState(todayISO());
   const [dateTo, setDateTo] = useState(todayISO());
   const [doctorId, setDoctorId] = useState("");
@@ -827,20 +857,38 @@ export function DailyCollectionsPanel() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-text">
-          <span className="mc-icon-badge-primary">
-            <Calendar className="h-5 w-5" />
-          </span>
-          كشف مالي
-        </h2>
-        <p className="mc-page-subtitle">
-          لكل مراجع: ما دفعه، حصة الطبيب من المدفوع، والمتبقي. الملخص =
-          مجموع الفترة المحددة — مو الرصيد التراكمي للطبيب.
-        </p>
-      </div>
+      <PageHeader
+        title="كشف مالي"
+        eyebrow={bi("المالية", "Finance")}
+        icon={Calendar}
+        subtitle="لكل مراجع: ما دفعه، حصة الطبيب من المدفوع، والمتبقي. الملخص = مجموع الفترة المحددة — مو الرصيد التراكمي للطبيب."
+        className="mb-0"
+      />
 
-      <Card>
+      <div className="mc-panel">
+        <div className="mc-panel-head">
+          <p className="mc-panel-title">
+            <Filter />
+            {bi("الفترة والتصفية", "Period & filters")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={setToday}
+              className="mc-chip px-3 py-1 text-xs"
+            >
+              اليوم
+            </button>
+            <button
+              type="button"
+              onClick={setLast7Days}
+              className="mc-chip px-3 py-1 text-xs"
+            >
+              آخر 7 أيام
+            </button>
+          </div>
+        </div>
+        <div className="mc-panel-body">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Input
             label="من تاريخ"
@@ -876,67 +924,45 @@ export function DailyCollectionsPanel() {
               size="sm"
               variant="outline"
             />
-            <Button
+            <button
               type="button"
               onClick={() => void refreshCollections()}
               disabled={loading}
-              className="w-full sm:w-auto"
+              className="mc-btn-navy h-9 w-full sm:w-auto"
             >
               {loading || refreshing ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
               ) : (
                 <RefreshCw className="h-4 w-4" />
               )}
-              <span className="mr-2">تحديث</span>
-            </Button>
-            <Button
+              <span>تحديث</span>
+            </button>
+            <button
               type="button"
-              variant="outline"
               onClick={() => window.print()}
               disabled={!result}
-              className="w-full sm:w-auto"
+              className="mc-btn-soft h-9 w-full sm:w-auto"
             >
-              <Printer className="h-4 w-4" />
-              <span className="mr-2">طباعة</span>
-            </Button>
+              <Printer className="h-4 w-4 text-premium-500" />
+              <span>طباعة</span>
+            </button>
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={setToday}
-            className="rounded-full border border-slate-border px-3 py-1 text-xs font-medium text-slate-muted hover:bg-surface"
-          >
-            اليوم
-          </button>
-          <button
-            type="button"
-            onClick={setLast7Days}
-            className="rounded-full border border-slate-border px-3 py-1 text-xs font-medium text-slate-muted hover:bg-surface"
-          >
-            آخر 7 أيام
-          </button>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-border pt-4">
           {STATUS_TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setStatusFilter(tab.id)}
-              className={cn(
-                "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-                statusFilter === tab.id
-                  ? "bg-primary text-white"
-                  : "bg-surface text-slate-muted hover:bg-surface/80"
-              )}
+              className={cn("mc-chip", statusFilter === tab.id && "mc-chip--active")}
             >
               {tab.label}
             </button>
           ))}
         </div>
-      </Card>
+        </div>
+      </div>
 
       <DailyCollectionsCacheBanner
         refreshing={refreshing}
@@ -947,116 +973,122 @@ export function DailyCollectionsPanel() {
       />
 
       {result && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="h-4 w-4 text-primary" />
-              ملخص {periodLabel}
-            </CardTitle>
-          </CardHeader>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10">
-            <SummaryChip label="جلسات" value={result.totals.totalPatients} />
-            <SummaryChip
-              label="دفعوا"
-              value={result.totals.paidFull + result.totals.partial}
-              className="border-emerald-200 bg-emerald-50/50"
-            />
-            <SummaryChip
-              label="مديونين"
-              value={result.totals.debtors}
-              className="border-orange-200 bg-orange-50/50"
-            />
-            <SummaryChip
-              label="لم يدفعوا"
-              value={result.totals.unpaid}
-              className="border-red-200 bg-red-50/50"
-            />
+        <div className="space-y-4">
+          <div className="mc-hero rounded-3xl p-6 sm:p-7">
+            <div className="relative flex flex-wrap items-end justify-between gap-6">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-premium-300">
+                  <Users className="h-4 w-4" />
+                  ملخص {periodLabel}
+                </p>
+                <p className="mt-3 text-sm font-medium text-white/70">مدفوع المراجعين</p>
+                <p className="mc-text-champagne mt-1 text-4xl font-black tracking-tight tabular-nums sm:text-5xl">
+                  {formatCurrency(result.totals.totalCollected)}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  { label: "جلسات", value: result.totals.totalPatients },
+                  {
+                    label: "دفعوا",
+                    value: result.totals.paidFull + result.totals.partial,
+                  },
+                  { label: "مديونين", value: result.totals.debtors },
+                  { label: "لم يدفعوا", value: result.totals.unpaid },
+                ].map((s) => (
+                  <div
+                    key={s.label}
+                    className="rounded-2xl bg-white/[0.07] px-4 py-2.5 text-center ring-1 ring-inset ring-white/10"
+                  >
+                    <p className="text-xl font-black tabular-nums text-white">{s.value}</p>
+                    <p className="text-[11px] font-medium text-white/60">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             <SummaryChip
               label="عند المحاسب"
               value={result.totals.atAccountant}
-              className="border-violet-200 bg-violet-50/50"
-            />
-            <SummaryChip
-              label="مدفوع المراجعين"
-              value={formatCurrency(result.totals.totalCollected)}
+              tone="royal"
             />
             <SummaryChip
               label="حصة الأطباء"
               value={formatCurrency(result.totals.doctorShareToday)}
-              className="border-primary/30 bg-primary/5"
+              tone="navy"
             />
             {result.totals.assistantDoctorDeduction > 0 && (
               <SummaryChip
                 label="خصم مساعدين"
                 value={`− ${formatCurrency(result.totals.assistantDoctorDeduction)}`}
-                className="border-red-200 bg-red-50/50"
+                tone="danger"
               />
             )}
             {result.totals.netDoctorShareToday > 0 && (
               <SummaryChip
                 label="صافي حصة الأطباء"
                 value={formatCurrency(result.totals.netDoctorShareToday)}
-                className="border-emerald-300 bg-emerald-50/70"
+                tone="success"
               />
             )}
             {result.totals.totalWithdrawnInPeriod > 0 && (
               <SummaryChip
                 label="سحوبات الأطباء"
                 value={`− ${formatCurrency(result.totals.totalWithdrawnInPeriod)}`}
-                className="border-red-200 bg-red-50/50 text-red-700"
+                tone="danger"
               />
             )}
             {result.totals.totalPendingWithdrawalInPeriod > 0 && (
               <SummaryChip
                 label="طلبات سحب معلّقة"
                 value={`− ${formatCurrency(result.totals.totalPendingWithdrawalInPeriod)}`}
-                className="border-amber-200 bg-amber-50/50 text-amber-800"
+                tone="warning"
               />
             )}
             {result.totals.totalToppedUpInPeriod > 0 && (
               <SummaryChip
                 label="شحن رصيد الأطباء"
                 value={`+ ${formatCurrency(result.totals.totalToppedUpInPeriod)}`}
-                className="border-emerald-200 bg-emerald-50/50 text-emerald-700"
+                tone="success"
               />
             )}
             {result.totals.totalClinicToppedUpInPeriod > 0 && (
               <SummaryChip
                 label="شحن رصيد العيادة"
                 value={`+ ${formatCurrency(result.totals.totalClinicToppedUpInPeriod)}`}
-                className="border-emerald-300 bg-emerald-50/70 text-emerald-800"
+                tone="success"
               />
             )}
             {result.totals.totalDoctorExpenseDeduction > 0 && (
               <SummaryChip
                 label="خصم فواتير أطباء"
                 value={`− ${formatCurrency(result.totals.totalDoctorExpenseDeduction)}`}
-                className="border-orange-200 bg-orange-50/50 text-orange-800"
+                tone="danger"
               />
             )}
             {result.totals.totalClinicGeneralExpenses > 0 && (
               <SummaryChip
                 label="صرفيات العيادة"
                 value={`− ${formatCurrency(result.totals.totalClinicGeneralExpenses)}`}
-                className="border-violet-200 bg-violet-50/50 text-violet-800"
+                tone="danger"
               />
             )}
             <SummaryChip
               label="متبقي"
               value={formatCurrency(result.totals.totalRemaining)}
-              className="border-amber-200 bg-amber-50/50"
+              tone="warning"
             />
           </div>
-        </Card>
+        </div>
       )}
 
       {loading && !rawResult && (
         <div className="space-y-3">
+          <div className="mc-skeleton h-36 rounded-3xl" />
           {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-20 animate-pulse rounded-xl bg-surface"
-            />
+            <div key={i} className="mc-skeleton h-20 rounded-2xl" />
           ))}
         </div>
       )}
@@ -1069,7 +1101,7 @@ export function DailyCollectionsPanel() {
       )}
 
       {result && result.doctors.length > 0 && !selectedDoctorId && (
-        <p className="text-sm font-medium text-slate-muted">
+        <p className="mc-section-divider">
           {result.doctors.length} طبيب في هذه الفترة
         </p>
       )}
@@ -1090,41 +1122,45 @@ export function DailyCollectionsPanel() {
         ))}
 
       {result && result.clinicBalanceTopups.length > 0 && (
-        <Card className="overflow-hidden p-0">
-          <div className="border-b border-slate-border bg-surface-card px-5 py-4">
-            <p className="flex items-center gap-2 font-bold text-slate-text">
-              <ArrowUpToLine className="h-5 w-5 text-emerald-600" />
-              شحن رصيد العيادة
-            </p>
-            <p className="mt-0.5 text-xs text-slate-muted">
-              يُضاف مباشرة إلى صافي ربح العيادة — يظهر أيضاً في «توضيح الربح»
-            </p>
+        <div className="mc-panel">
+          <div className="mc-panel-head">
+            <div>
+              <p className="mc-panel-title">
+                <ArrowUpToLine />
+                شحن رصيد العيادة
+              </p>
+              <p className="mt-0.5 text-xs text-slate-muted">
+                يُضاف مباشرة إلى صافي ربح العيادة — يظهر أيضاً في «توضيح الربح»
+              </p>
+            </div>
           </div>
           <div>
             {result.clinicBalanceTopups.map((line) => (
               <ClinicBalanceTopUpRow key={line.id} line={line} />
             ))}
           </div>
-        </Card>
+        </div>
       )}
 
       {result && result.clinicExpenses.length > 0 && (
-        <Card className="overflow-hidden p-0">
-          <div className="border-b border-slate-border bg-surface-card px-5 py-4">
-            <p className="flex items-center gap-2 font-bold text-slate-text">
-              <Receipt className="h-5 w-5 text-violet-600" />
-              صرفيات العيادة العامة
-            </p>
-            <p className="mt-0.5 text-xs text-slate-muted">
-              مختبر، مواد، ومصاريف تشغيل — تُخصم من ربح العيادة
-            </p>
+        <div className="mc-panel">
+          <div className="mc-panel-head">
+            <div>
+              <p className="mc-panel-title">
+                <Receipt />
+                صرفيات العيادة العامة
+              </p>
+              <p className="mt-0.5 text-xs text-slate-muted">
+                مختبر، مواد، ومصاريف تشغيل — تُخصم من ربح العيادة
+              </p>
+            </div>
           </div>
           <div>
             {result.clinicExpenses.map((line) => (
               <ClinicExpenseRow key={line.id} line={line} />
             ))}
           </div>
-        </Card>
+        </div>
       )}
 
       {!loading && showDebtPanel && clinicId && (

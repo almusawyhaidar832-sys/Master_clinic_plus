@@ -60,7 +60,7 @@ export function PatientSpeechNameEditor({
   return (
     <form
       onSubmit={handleSave}
-      className="rounded-lg border border-slate-border bg-surface/60 p-3 space-y-2"
+      className="rounded-lg border border-slate-border bg-surface p-3 space-y-2"
     >
       <div className="flex items-center gap-2 text-sm font-semibold text-slate-text">
         <Volume2 className="h-4 w-4 text-primary" />
@@ -77,7 +77,7 @@ export function PatientSpeechNameEditor({
       <input
         type="text"
         dir="rtl"
-        className="w-full rounded-lg border border-slate-border bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+        className="mc-field"
         value={speechName}
         onChange={(e) => setSpeechName(e.target.value)}
         placeholder="أَحْمَد مُحَمَّد"

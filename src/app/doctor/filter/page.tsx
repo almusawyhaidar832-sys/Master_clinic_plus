@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Calendar } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatTile } from "@/components/ui/StatTile";
+import { Calendar, ClipboardList, Coins, Filter, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -13,7 +13,7 @@ import type { PatientOperation } from "@/types";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 export default function DoctorFilterPage() {
-  const { t, formatMoney, dateLocale } = useLanguage();
+  const { t, bi, formatMoney, dateLocale } = useLanguage();
   const [from, setFrom] = useState(todayISO());
   const [to, setTo] = useState(todayISO());
   const [operations, setOperations] = useState<PatientOperation[]>([]);
@@ -60,83 +60,106 @@ export default function DoctorFilterPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 text-slate-text">
-        <Calendar className="h-5 w-5 text-primary" />
-        <h2 className="text-lg font-bold">{t("docFilterByDateTitle")}</h2>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title={t("docFilterByDateTitle")}
+        eyebrow={bi("بوابة الطبيب", "Doctor portal")}
+        icon={Calendar}
+      />
 
-      <Input
-        label={t("docFromDate")}
-        type="date"
-        value={from}
-        onChange={(e) => setFrom(e.target.value)}
-        dir="ltr"
-        className="text-left"
-      />
-      <Input
-        label={t("docToDate")}
-        type="date"
-        value={to}
-        onChange={(e) => setTo(e.target.value)}
-        dir="ltr"
-        className="text-left"
-      />
-      <Button className="w-full" onClick={applyFilter} disabled={loading}>
-        {loading ? t("docApplyingFilter") : t("docApplyFilter")}
-      </Button>
+      <section className="mc-panel">
+        <div className="mc-panel-body space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Input
+              label={t("docFromDate")}
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              dir="ltr"
+              className="text-left"
+            />
+            <Input
+              label={t("docToDate")}
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              dir="ltr"
+              className="text-left"
+            />
+          </div>
+          <button
+            type="button"
+            className="mc-btn-navy w-full py-3"
+            onClick={applyFilter}
+            disabled={loading}
+          >
+            <Filter className="h-4 w-4 text-premium-300" />
+            {loading ? t("docApplyingFilter") : t("docApplyFilter")}
+          </button>
+        </div>
+      </section>
 
       {applied && (
-        <>
-          <div className="grid grid-cols-3 gap-2 text-center text-sm">
-            <Card className="p-3">
-              <p className="font-bold text-primary">{stats.count}</p>
-              <p className="text-xs text-slate-muted">{t("operations")}</p>
-            </Card>
-            <Card className="p-3">
-              <p className="font-bold text-slate-text">
-                {formatMoney(stats.totalPaid)}
-              </p>
-              <p className="text-xs text-slate-muted">{t("execCollectedSub")}</p>
-            </Card>
-            <Card className="p-3">
-              <p className="font-bold text-primary">
-                {formatMoney(stats.totalEarned)}
-              </p>
-              <p className="text-xs text-slate-muted">{t("docYourShare")}</p>
-            </Card>
+        <div className="space-y-5 animate-fade-in">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <StatTile
+              icon={ClipboardList}
+              tone="navy"
+              value={<span className="tabular-nums">{stats.count}</span>}
+              label={t("operations")}
+            />
+            <StatTile
+              icon={Wallet}
+              tone="muted"
+              value={<span className="tabular-nums">{formatMoney(stats.totalPaid)}</span>}
+              label={t("execCollectedSub")}
+            />
+            <StatTile
+              icon={Coins}
+              tone="gold"
+              value={<span className="tabular-nums">{formatMoney(stats.totalEarned)}</span>}
+              label={t("docYourShare")}
+            />
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">{t("operations")}</CardTitle>
-            </CardHeader>
+          <section className="mc-panel">
+            <div className="mc-panel-head">
+              <h3 className="mc-panel-title">
+                <ClipboardList />
+                {t("operations")}
+              </h3>
+            </div>
             {operations.length === 0 ? (
-              <p className="text-sm text-slate-muted">{t("docNoOperationsInPeriod")}</p>
+              <div className="mc-panel-body">
+                <p className="py-6 text-center text-sm text-slate-muted">
+                  {t("docNoOperationsInPeriod")}
+                </p>
+              </div>
             ) : (
-              <ul className="space-y-2 text-sm">
+              <ul className="divide-y divide-slate-border text-sm">
                 {operations.map((op) => (
                   <li
                     key={op.id}
-                    className="flex justify-between border-b border-slate-border/40 py-2"
+                    className="flex items-center justify-between gap-3 px-5 py-3.5 transition-colors hover:bg-surface"
                   >
-                    <span>
-                      {(op.patient as { full_name_ar: string })?.full_name_ar} —{" "}
-                      {op.operation_type || op.operation_name_ar || "—"}
-                      <br />
-                      <span className="text-xs text-slate-muted">
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-slate-text">
+                        {(op.patient as { full_name_ar: string })?.full_name_ar} —{" "}
+                        {op.operation_type || op.operation_name_ar || "—"}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-slate-muted tabular-nums">
                         {formatDate(op.operation_date ?? "", dateLocale)}
                       </span>
                     </span>
-                    <span className="font-medium text-primary">
+                    <span className="shrink-0 rounded-full border border-premium-300/60 bg-premium-50 px-2.5 py-1 text-xs font-bold text-premium-800 tabular-nums dark:bg-premium-500/10 dark:text-premium-200">
                       {formatMoney(op.doctor_share_amount ?? 0)}
                     </span>
                   </li>
                 ))}
               </ul>
             )}
-          </Card>
-        </>
+          </section>
+        </div>
       )}
     </div>
   );

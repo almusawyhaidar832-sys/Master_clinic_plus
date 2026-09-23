@@ -46,7 +46,7 @@ export function ToothProcedureModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      className="mc-modal-backdrop animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="tooth-modal-title"
@@ -54,9 +54,12 @@ export function ToothProcedureModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-2xl border border-slate-border bg-white p-4 shadow-premium">
-        <div className="mb-3 flex items-start justify-between gap-2">
-          <div>
+      <div className="mc-modal sm:max-w-md">
+        <div className="mc-modal-head">
+          <span className="mc-icon-tile h-10 w-10 rounded-xl text-sm font-bold tabular-nums" aria-hidden>
+            {toothNumber}
+          </span>
+          <div className="min-w-0 flex-1">
             <h3
               id="tooth-modal-title"
               className="text-base font-bold text-slate-text"
@@ -72,15 +75,16 @@ export function ToothProcedureModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-muted hover:bg-slate-100"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-muted transition-colors hover:bg-surface hover:text-slate-text"
             aria-label="إغلاق"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
+        <div className="px-5 py-5">
         {readOnly ? (
-          <dl className="mb-4 space-y-2 text-sm">
+          <dl className="mb-4 grid gap-3 text-sm">
             <div>
               <dt className="text-xs font-medium text-slate-muted">الحالة</dt>
               <dd className="font-medium text-slate-text">
@@ -95,7 +99,7 @@ export function ToothProcedureModal({
               <dt className="text-xs font-medium text-slate-muted">
                 ملاحظة على السن
               </dt>
-              <dd className="mt-0.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-slate-800">
+              <dd className="mt-1 rounded-xl border border-warning-border bg-warning px-3 py-2 text-warning-text">
                 {note.trim() || "— لا توجد ملاحظة —"}
               </dd>
             </div>
@@ -110,10 +114,8 @@ export function ToothProcedureModal({
                   type="button"
                   onClick={() => setStatus(s)}
                   className={cn(
-                    "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
-                    status === s
-                      ? "bg-primary text-white"
-                      : "border border-slate-border bg-surface text-slate-text"
+                    "mc-chip px-3 py-1 text-xs",
+                    status === s && "mc-chip--active"
                   )}
                 >
                   {TOOTH_STATUS_LABELS_AR[s]}
@@ -129,10 +131,10 @@ export function ToothProcedureModal({
                   type="button"
                   onClick={() => setProcedure(p)}
                   className={cn(
-                    "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
+                    "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-all",
                     procedure === p
-                      ? "bg-primary/15 text-primary ring-1 ring-primary/40"
-                      : "border border-slate-border bg-white text-slate-text"
+                      ? "border-premium-300 bg-premium-50 text-premium-800 shadow-gold dark:bg-premium-500/10 dark:text-premium-200"
+                      : "border-slate-border bg-surface-card text-slate-muted hover:border-premium-300 hover:text-slate-text"
                   )}
                 >
                   {p}
@@ -145,7 +147,7 @@ export function ToothProcedureModal({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="ملاحظة على هذا السن..."
-              className="mb-4 w-full rounded-lg border border-slate-border px-3 py-2 text-sm"
+              className="mc-field mb-4"
             />
           </>
         )}
@@ -155,7 +157,7 @@ export function ToothProcedureModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white"
+              className="mc-btn-navy flex-1 py-2.5"
             >
               إغلاق
             </button>
@@ -172,7 +174,7 @@ export function ToothProcedureModal({
                     note: note.trim() || null,
                   })
                 }
-                className="flex-1 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                className="mc-btn-navy flex-1 py-2.5"
               >
                 {saving ? "جاري الحفظ..." : "حفظ"}
               </button>
@@ -181,7 +183,7 @@ export function ToothProcedureModal({
                   type="button"
                   disabled={saving}
                   onClick={onReset}
-                  className="rounded-lg border border-red-200 px-4 py-2.5 text-sm text-red-600 disabled:opacity-60"
+                  className="inline-flex items-center justify-center rounded-xl border border-debt-border bg-surface-card px-4 py-2.5 text-sm font-semibold text-debt-text transition-colors hover:bg-debt disabled:opacity-60"
                 >
                   إعادة سليم
                 </button>
@@ -189,12 +191,13 @@ export function ToothProcedureModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg px-4 py-2.5 text-sm text-slate-muted"
+                className="mc-btn-soft py-2.5"
               >
                 إلغاء
               </button>
             </>
           )}
+        </div>
         </div>
       </div>
     </div>

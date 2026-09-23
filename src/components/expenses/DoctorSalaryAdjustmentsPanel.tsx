@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Scale } from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
@@ -316,33 +315,47 @@ export function DoctorSalaryAdjustmentsPanel({
     onUpdated?.();
   }
 
+
   if (salaryDoctors.length === 0) {
     return (
-      <Card className="border-amber-200">
-        <CardHeader>
-          <CardTitle>خصم · مكافأة · سلفة — طبيب راتب ثابت</CardTitle>
-        </CardHeader>
-        <Alert variant="info">
-          لا يوجد أطباء على نظام الراتب الثابت. من صفحة الطبيب عيّن الاتفاق
-          المالي إلى «راتب ثابت شهري».
-        </Alert>
-      </Card>
+      <div className="mc-panel">
+        <div className="mc-panel-head">
+          <h3 className="mc-panel-title">
+            <Scale />
+            خصم · مكافأة · سلفة — طبيب راتب ثابت
+          </h3>
+        </div>
+        <div className="mc-panel-body">
+          <Alert variant="info">
+            لا يوجد أطباء على نظام الراتب الثابت. من صفحة الطبيب عيّن الاتفاق
+            المالي إلى «راتب ثابت شهري».
+          </Alert>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card className="border-amber-200 bg-gradient-to-b from-amber-50/60 to-white">
-      <CardHeader>
-        <CardTitle>خصم · مكافأة · سلفة — طبيب راتب ثابت</CardTitle>
-        <p className="text-sm text-slate-muted">
-          سجّل الحركات هنا ثم أكّد الصرف — أو من{" "}
-          <Link href="/dashboard/salary" className="font-medium text-primary underline">
-            لوحة الرواتب
-          </Link>
-        </p>
-      </CardHeader>
+    <div className="mc-panel">
+      <div className="mc-panel-head">
+        <div>
+          <h3 className="mc-panel-title">
+            <Scale />
+            خصم · مكافأة · سلفة — طبيب راتب ثابت
+          </h3>
+          <p className="mt-1 text-sm text-slate-muted">
+            سجّل الحركات هنا ثم أكّد الصرف — أو من{" "}
+            <Link
+              href="/dashboard/salary"
+              className="font-semibold text-primary-700 underline decoration-premium-400 underline-offset-4"
+            >
+              لوحة الرواتب
+            </Link>
+          </p>
+        </div>
+      </div>
 
-      <div className="space-y-4">
+      <div className="mc-panel-body space-y-5">
         {feedback && (
           <Alert variant={feedback.ok ? "success" : "error"}>{feedback.text}</Alert>
         )}
@@ -366,172 +379,181 @@ export function DoctorSalaryAdjustmentsPanel({
         </div>
 
         {selectedDoctor && (
-          <p className="rounded-lg bg-white/80 px-3 py-2 text-sm text-amber-950">
-            الراتب الأساسي: <strong>{formatCurrency(baseSalary)}</strong>
+          <p className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-border bg-surface px-4 py-2.5 text-sm text-slate-muted">
+            الراتب الأساسي: <strong className="tabular-nums text-slate-text">{formatCurrency(baseSalary)}</strong>
             {slip?.status === "paid" && (
-              <span className="mr-2 text-emerald-700"> — مُصرف ✓</span>
+              <span className="ms-auto rounded-full border border-success-border bg-success px-2.5 py-0.5 text-xs font-semibold text-success-text"> — مُصرف ✓</span>
             )}
           </p>
         )}
 
-        <div>
-          <p className="mb-2 text-sm font-medium">نوع الحركة</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {ENTRY_TYPES.map((t) => (
-              <button
-                key={t.value}
-                type="button"
+        <div className="grid gap-6 lg:grid-cols-5">
+          <div className="space-y-4 lg:col-span-3">
+            <div>
+              <p className="mc-label mb-2">نوع الحركة</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {ENTRY_TYPES.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    disabled={slip?.status === "paid"}
+                    onClick={() => setEntryType(t.value)}
+                    className={`rounded-xl border px-3 py-2.5 text-sm font-semibold transition-all disabled:opacity-60 ${
+                      entryType === t.value
+                        ? "border-transparent bg-mc-navy text-white shadow-soft"
+                        : "border-slate-border bg-surface-card text-slate-text shadow-card hover:border-premium-300"
+                    }`}
+                  >
+                    {t.short}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <CurrencyInput
+              label="المبلغ"
+              value={amount}
+              onChange={setAmount}
+              placeholder="50,000"
+              disabled={slip?.status === "paid"}
+            />
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input
+                label="تاريخ الحركة"
+                type="date"
+                value={entryDate}
+                min={monthFrom}
+                max={monthTo}
+                onChange={(e) => setEntryDate(e.target.value)}
                 disabled={slip?.status === "paid"}
-                onClick={() => setEntryType(t.value)}
-                className={`rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
-                  entryType === t.value
-                    ? "border-amber-600 bg-amber-600 text-white"
-                    : "border-slate-border bg-white hover:border-amber-500 hover:bg-amber-50"
-                }`}
-              >
-                {t.short}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <CurrencyInput
-          label="المبلغ"
-          value={amount}
-          onChange={setAmount}
-          placeholder="50,000"
-          disabled={slip?.status === "paid"}
-        />
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="تاريخ الحركة"
-            type="date"
-            value={entryDate}
-            min={monthFrom}
-            max={monthTo}
-            onChange={(e) => setEntryDate(e.target.value)}
-            disabled={slip?.status === "paid"}
-            dir="ltr"
-            className="text-left"
-          />
-          <Input
-            label={salaryReasonFieldLabel(entryType)}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder={salaryReasonPlaceholder(entryType)}
-            required={isSalaryReasonRequired(entryType)}
-            disabled={slip?.status === "paid"}
-          />
-        </div>
-
-        {netAfterPending != null && (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
-            صافي الراتب بعد هذه الحركة:{" "}
-            <strong>{formatCurrency(netAfterPending)}</strong>
-          </p>
-        )}
-
-        <Button
-          type="button"
-          className="w-full bg-amber-600 hover:bg-amber-700"
-          disabled={saving || slip?.status === "paid" || !doctorId}
-          onClick={() => void handleSaveEntry()}
-        >
-          {saving ? "جاري الحفظ..." : "حفظ الحركة"}
-        </Button>
-
-        <div className="rounded-lg border border-slate-border bg-white p-4 text-sm">
-          <p className="mb-3 font-semibold text-slate-text">
-            ملخص {formatMonthYearAr(workMonth)}
-          </p>
-          <div className="space-y-1">
-            <div className="flex justify-between">
-              <span>الراتب الأساسي</span>
-              <span>{formatCurrency(baseSalary)}</span>
+                dir="ltr"
+                className="text-left"
+              />
+              <Input
+                label={salaryReasonFieldLabel(entryType)}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={salaryReasonPlaceholder(entryType)}
+                required={isSalaryReasonRequired(entryType)}
+                disabled={slip?.status === "paid"}
+              />
             </div>
-            {advances > 0 && (
-              <div className="flex justify-between text-debt-text">
-                <span>− سلف</span>
-                <span>{formatCurrency(advances)}</span>
-              </div>
+
+            {netAfterPending != null && (
+              <p className="rounded-xl border border-warning-border bg-warning px-4 py-2.5 text-sm text-warning-text">
+                صافي الراتب بعد هذه الحركة:{" "}
+                <strong className="tabular-nums">{formatCurrency(netAfterPending)}</strong>
+              </p>
             )}
-            {deductions > 0 && (
-              <div className="flex justify-between text-debt-text">
-                <span>− خصومات/غياب</span>
-                <span>{formatCurrency(deductions)}</span>
-              </div>
-            )}
-            {bonuses > 0 && (
-              <div className="flex justify-between text-emerald-700">
-                <span>+ مكافآت</span>
-                <span>{formatCurrency(bonuses)}</span>
-              </div>
-            )}
-            <hr className="my-2 border-slate-border" />
-            <div className="flex justify-between text-base font-bold text-primary">
-              <span>صافي الصرف</span>
-              <span>{formatCurrency(slip?.net_payout ?? netPayout)}</span>
-            </div>
+
+            <button
+              type="button"
+              className="mc-btn-navy w-full py-3"
+              disabled={saving || slip?.status === "paid" || !doctorId}
+              onClick={() => void handleSaveEntry()}
+            >
+              {saving ? "جاري الحفظ..." : "حفظ الحركة"}
+            </button>
           </div>
 
-          {slip?.status !== "paid" && slip && (
-            <Button
-              type="button"
-              className="mt-4 w-full"
-              disabled={confirming}
-              onClick={() => void handleConfirmPayout()}
-            >
-              {confirming
-                ? "جاري التأكيد..."
-                : `تأكيد صرف الراتب (${formatCurrency(slip.net_payout)})`}
-            </Button>
-          )}
-          {slip?.status === "paid" && slip && (
-            <Button
-              type="button"
-              variant="outline"
-              className="mt-4 w-full border-amber-300 text-amber-800 hover:bg-amber-50"
-              disabled={confirming}
-              onClick={() => void handleUnconfirmPayout()}
-            >
-              {confirming ? "جاري الإلغاء..." : "إلغاء تأكيد الصرف"}
-            </Button>
-          )}
-        </div>
+          <div className="space-y-4 lg:col-span-2">
+            <div className="mc-hero rounded-2xl p-5 text-sm">
+              <p className="relative mb-3 text-xs font-bold uppercase tracking-[0.12em] text-premium-300">
+                ملخص {formatMonthYearAr(workMonth)}
+              </p>
+              <div className="relative space-y-1.5 text-white/80">
+                <div className="flex justify-between">
+                  <span>الراتب الأساسي</span>
+                  <span className="tabular-nums text-white">{formatCurrency(baseSalary)}</span>
+                </div>
+                {advances > 0 && (
+                  <div className="flex justify-between">
+                    <span>− سلف</span>
+                    <span className="tabular-nums text-red-300">{formatCurrency(advances)}</span>
+                  </div>
+                )}
+                {deductions > 0 && (
+                  <div className="flex justify-between">
+                    <span>− خصومات/غياب</span>
+                    <span className="tabular-nums text-red-300">{formatCurrency(deductions)}</span>
+                  </div>
+                )}
+                {bonuses > 0 && (
+                  <div className="flex justify-between">
+                    <span>+ مكافآت</span>
+                    <span className="tabular-nums text-emerald-300">{formatCurrency(bonuses)}</span>
+                  </div>
+                )}
+                <hr className="my-3 border-white/15" />
+                <div className="flex items-end justify-between gap-3">
+                  <span className="font-semibold text-white">صافي الصرف</span>
+                  <span className="mc-text-champagne text-2xl font-black tabular-nums">
+                    {formatCurrency(slip?.net_payout ?? netPayout)}
+                  </span>
+                </div>
+              </div>
 
-        {entries.length > 0 && (
-          <ul className="space-y-1 text-sm">
-            {entries.map((e) => (
-              <li
-                key={e.id}
-                className="flex justify-between border-b border-slate-border/40 py-1.5"
-              >
-                <span>
-                  {ENTRY_TYPES.find((t) => t.value === e.entry_type)?.label ??
-                    e.entry_type}{" "}
-                  — {e.entry_date}
-                  {e.notes_ar ? (
-                    <span className="block text-xs text-slate-muted">
-                      {isSalaryReasonRequired(e.entry_type)
-                        ? `السبب: ${e.notes_ar}`
-                        : e.notes_ar}
-                    </span>
-                  ) : null}
-                </span>
-                <span
-                  className={
-                    e.entry_type === "bonus" ? "text-emerald-700" : ""
-                  }
+              {slip?.status !== "paid" && slip && (
+                <button
+                  type="button"
+                  className="mc-btn-pearl relative mt-5 w-full py-2.5"
+                  disabled={confirming}
+                  onClick={() => void handleConfirmPayout()}
                 >
-                  {e.entry_type === "bonus" ? "+" : "−"}
-                  {formatCurrency(e.amount)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+                  {confirming
+                    ? "جاري التأكيد..."
+                    : `تأكيد صرف الراتب (${formatCurrency(slip.net_payout)})`}
+                </button>
+              )}
+              {slip?.status === "paid" && slip && (
+                <button
+                  type="button"
+                  className="relative mt-5 inline-flex w-full items-center justify-center rounded-xl border border-white/20 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:opacity-60"
+                  disabled={confirming}
+                  onClick={() => void handleUnconfirmPayout()}
+                >
+                  {confirming ? "جاري الإلغاء..." : "إلغاء تأكيد الصرف"}
+                </button>
+              )}
+            </div>
+
+            {entries.length > 0 && (
+              <ul className="divide-y divide-slate-border overflow-hidden rounded-2xl border border-slate-border bg-surface-card text-sm shadow-card">
+                {entries.map((e) => (
+                  <li
+                    key={e.id}
+                    className="flex justify-between gap-3 px-4 py-2.5"
+                  >
+                    <span className="text-slate-text">
+                      {ENTRY_TYPES.find((t) => t.value === e.entry_type)?.label ??
+                        e.entry_type}{" "}
+                      — <span className="tabular-nums text-slate-muted">{e.entry_date}</span>
+                      {e.notes_ar ? (
+                        <span className="block text-xs text-slate-muted">
+                          {isSalaryReasonRequired(e.entry_type)
+                            ? `السبب: ${e.notes_ar}`
+                            : e.notes_ar}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span
+                      className={
+                        e.entry_type === "bonus"
+                          ? "font-bold tabular-nums text-success-text"
+                          : "font-bold tabular-nums text-debt-text"
+                      }
+                    >
+                      {e.entry_type === "bonus" ? "+" : "−"}
+                      {formatCurrency(e.amount)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       </div>
-    </Card>
+    </div>
   );
 }

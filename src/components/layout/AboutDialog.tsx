@@ -41,8 +41,8 @@ const COPY = {
     en: "The complete dental clinic management system",
   },
   intro: {
-    ar: "Pearl Clinic يجمع كل شغل العيادة بمكان واحد: من لحظة حجز المريض، إلى جلسة العلاج عند الطبيب، إلى الدفع والحسابات والتقارير. كل موظف يدخل بحسابه ويشوف الشغل الخاص بيه فقط، بدون أوراق وبدون تعقيد.",
-    en: "Pearl Clinic brings the whole clinic into one place: from booking a patient, to the treatment session with the doctor, to payments, accounting and reports. Every team member signs in with their own account and sees only their own work — no paperwork, no complexity.",
+    ar: "Pearl System يجمع كل شغل العيادة بمكان واحد: من لحظة حجز المريض، إلى جلسة العلاج عند الطبيب، إلى الدفع والحسابات والتقارير. كل موظف يدخل بحسابه ويشوف الشغل الخاص بيه فقط، بدون أوراق وبدون تعقيد.",
+    en: "Pearl System brings the whole clinic into one place: from booking a patient, to the treatment session with the doctor, to payments, accounting and reports. Every team member signs in with their own account and sees only their own work — no paperwork, no complexity.",
   },
   featuresTitle: { ar: "ماذا يقدّم النظام؟", en: "What it does" },
   stepsTitle: { ar: "كيف يعمل؟", en: "How it works" },
@@ -274,7 +274,7 @@ export function AboutDialog({ open, onClose }: { open: boolean; onClose: () => v
                 "mt-2 bg-gradient-to-b from-white via-[#f1ebe1] to-[#cfb88f] bg-clip-text text-4xl font-semibold text-transparent sm:text-5xl"
               )}
             >
-              Pearl Clinic
+              Pearl System
             </h2>
             <p className="mt-2 text-base font-semibold text-white/85">{pick(COPY.tagline)}</p>
             <p className="mx-auto mt-4 max-w-xl text-[14px] leading-7 text-white/60">
@@ -392,16 +392,16 @@ export function NexuraSignature({ className }: { className?: string }) {
     >
       <DeveloperLogoMark size={30} animated={false} />
       <div className="leading-tight">
-        <p className="text-[11px] text-white/45">
+        <p className="text-[11px] text-slate-muted">
           {t("developedBy")}{" "}
           <span
             dir="ltr"
-            className="bg-gradient-to-r from-violet-300 via-white to-cyan-300 bg-clip-text font-bold tracking-wide text-transparent"
+            className="bg-gradient-to-r from-premium-500 via-primary-700 to-premium-400 bg-clip-text font-bold tracking-wide text-transparent"
           >
             {DEVELOPER.nameEn}
           </span>
         </p>
-        <p className="mt-0.5 text-[10px] text-white/35">
+        <p className="mt-0.5 text-[10px] text-slate-muted">
           <span dir="ltr">© {DEVELOPER.year}</span> · {t("allRightsReserved")}
         </p>
       </div>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { X, RefreshCw } from "lucide-react";
+import { CalendarCog, RefreshCw } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
 import type { Appointment } from "@/types";
 import { updateAssistantAppointmentViaApi } from "@/lib/services/assistant-appointments-client";
 import { updateAccountantAppointmentViaApi } from "@/lib/services/accountant-appointments-client";
@@ -90,22 +91,14 @@ export function EditAppointmentModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">تعديل الموعد</h2>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-slate-100">
-            <X className="h-5 w-5 text-slate-500" />
-          </button>
-        </div>
-
+    <Modal onClose={onClose} title="تعديل الموعد" icon={CalendarCog} size="lg">
         {error && (
-          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+          <p className="mb-4 rounded-xl border border-debt-border bg-debt px-3.5 py-2.5 text-sm text-debt-text">{error}</p>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">
+            <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
               اسم المريض
             </label>
             <PatientSearchField
@@ -116,7 +109,7 @@ export function EditAppointmentModal({
               showIcon={false}
               required
               placeholder="اكتب حرفين من اسم مراجع هذا الطبيب..."
-              inputClassName="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              inputClassName="mc-field"
               onChange={(v) => {
                 setName(v);
                 setSelectedPatientId(null);
@@ -129,7 +122,7 @@ export function EditAppointmentModal({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">الهاتف</label>
+            <label className="mb-1.5 block text-xs font-semibold text-slate-muted">الهاتف</label>
             <input
               value={phone}
               onChange={(e) => setPhone(sanitizePatientPhoneInput(e.target.value))}
@@ -137,23 +130,23 @@ export function EditAppointmentModal({
               dir="ltr"
               inputMode="tel"
               placeholder="07801234567"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              className="mc-field"
             />
-            <p className="mt-1 text-xs text-slate-500">ابدأ بـ 078 أو 077</p>
+            <p className="mt-1 text-xs text-slate-muted">ابدأ بـ 078 أو 077</p>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">التاريخ</label>
+            <label className="mb-1.5 block text-xs font-semibold text-slate-muted">التاريخ</label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
               required
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              className="mc-field"
             />
           </div>
           {portal === "accountant" ? (
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">
+              <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
                 وقت الموعد
               </label>
               <input
@@ -161,43 +154,43 @@ export function EditAppointmentModal({
                 value={appointmentTime}
                 onChange={(e) => setAppointmentTime(e.target.value)}
                 required
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+                className="mc-field"
               />
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">من</label>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">من</label>
                 <input
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
                   required
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+                  className="mc-field"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">إلى</label>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">إلى</label>
                 <input
                   type="time"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
                   required
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+                  className="mc-field"
                 />
               </div>
             </div>
           )}
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">ملاحظات</label>
+            <label className="mb-1.5 block text-xs font-semibold text-slate-muted">ملاحظات</label>
             <input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              className="mc-field"
             />
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-amber-800">
+          <div className="rounded-2xl border border-premium-200 bg-premium-50/60 p-3.5">
+            <label className="mb-1.5 block text-xs font-bold text-premium-700">
               سبب التغيير *
             </label>
             <textarea
@@ -206,17 +199,17 @@ export function EditAppointmentModal({
               required
               rows={3}
               placeholder="مثال: بناءً على طلب المريض — تغيير الوقت"
-              className="w-full rounded-xl border border-amber-200 bg-amber-50/50 px-4 py-2.5 text-sm"
+              className="mc-field"
             />
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1.5 text-xs text-slate-muted">
               يُرسل للمريض عبر واتساب مع تفاصيل الموعد الجديد
             </p>
           </div>
-          <div className="flex gap-2 pt-2">
+          <div className="flex gap-2 border-t border-slate-border pt-4">
             <button
               type="submit"
               disabled={saving}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-teal-600 py-3 text-sm font-bold text-white disabled:opacity-60"
+              className="mc-btn-navy flex-1 py-3"
             >
               {saving && <RefreshCw className="h-4 w-4 animate-spin" />}
               حفظ التعديل
@@ -224,13 +217,12 @@ export function EditAppointmentModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm"
+              className="mc-btn-soft px-5 py-3"
             >
               إلغاء
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

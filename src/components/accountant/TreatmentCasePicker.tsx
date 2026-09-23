@@ -8,8 +8,6 @@ import {
   isTreatmentCaseOpenForPicker,
   isTreatmentCaseSettledForPicker,
 } from "@/lib/services/patient-financial-plan";
-import { Button } from "@/components/ui/Button";
-
 interface TreatmentCasePickerProps {
   cases: PatientTreatmentCase[];
   onSelect: (treatmentCase: PatientTreatmentCase) => void;
@@ -28,13 +26,15 @@ export function TreatmentCasePicker({
   );
 
   return (
-    <div className="sm:col-span-2 space-y-3">
-      <p className="text-sm font-semibold text-slate-text">
-        اختر الحالة التي سيعمل عليها الطبيب اليوم
-      </p>
-      <p className="text-xs text-slate-muted">
-        نفس المريض قد يكون عنده أكثر من حالة (مثلاً حشوة ضوئية + تقويم) — لكل حالة سعر وذمة منفصلة
-      </p>
+    <div className="sm:col-span-2 space-y-4">
+      <div>
+        <p className="mc-section-title">
+          اختر الحالة التي سيعمل عليها الطبيب اليوم
+        </p>
+        <p className="mt-1 ps-3 text-xs text-slate-muted">
+          نفس المريض قد يكون عنده أكثر من حالة (مثلاً حشوة ضوئية + تقويم) — لكل حالة سعر وذمة منفصلة
+        </p>
+      </div>
 
       <div className="grid gap-2">
         {active.length === 0 && completed.length > 0 && (
@@ -52,7 +52,7 @@ export function TreatmentCasePicker({
             key={c.id}
             type="button"
             onClick={() => onSelect(c)}
-            className="mc-hover-lift flex w-full items-center justify-between gap-3 rounded-xl border-2 border-primary/30 bg-surface-card px-4 py-3 text-right shadow-sm transition-colors hover:border-primary hover:bg-primary/5"
+            className="mc-list-row mc-hover-lift w-full justify-between border-s-4 border-s-premium-400 text-start"
           >
             <div>
               <p className="font-semibold text-slate-text">{c.treatment_name_ar}</p>
@@ -68,9 +68,9 @@ export function TreatmentCasePicker({
                 )}
               </p>
             </div>
-            <div className="text-left shrink-0">
-              <p className="text-xs text-slate-muted">المتبقي</p>
-              <p className="text-lg font-bold text-debt-text tabular-nums">
+            <div className="shrink-0 rounded-xl border border-debt-border bg-debt px-3 py-1.5 text-end">
+              <p className="text-[11px] font-medium text-debt-text">المتبقي</p>
+              <p className="text-lg font-black text-debt-text tabular-nums">
                 {formatCurrency(computedCaseRemaining(c))}
               </p>
             </div>
@@ -79,15 +79,15 @@ export function TreatmentCasePicker({
       </div>
 
       {completed.length > 0 && (
-        <div className="rounded-lg border border-slate-border bg-surface/50 p-3">
-          <p className="text-xs font-medium text-slate-muted mb-2">حالات مكتملة (مرجع)</p>
+        <div className="rounded-2xl border border-slate-border bg-surface p-4">
+          <p className="mb-2.5 text-xs font-semibold text-slate-muted">حالات مكتملة (مرجع)</p>
           <div className="flex flex-wrap gap-2">
             {completed.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => onNewCase(c.treatment_name_ar)}
-                className="rounded-full border border-slate-border bg-surface-card px-3 py-1 text-xs text-slate-muted transition-colors hover:border-primary hover:text-primary"
+                className="mc-chip px-3 py-1 text-xs"
                 title="بدء حالة جديدة بنفس نوع العلاج — سعر كلي جديد"
               >
                 {c.treatment_name_ar} — ✓ مكتمل — إجمالي كلي جديد
@@ -97,9 +97,9 @@ export function TreatmentCasePicker({
         </div>
       )}
 
-      <Button type="button" variant="outline" className="w-full" onClick={() => onNewCase()}>
+      <button type="button" className="mc-btn-navy w-full py-3" onClick={() => onNewCase()}>
         + حالة علاج جديدة (مثلاً حشوة جذر — سعر جديد)
-      </Button>
+      </button>
     </div>
   );
 }

@@ -2,11 +2,11 @@
 
 import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { DoctorPaymentFields } from "@/components/doctors/DoctorPaymentFields";
 import type { DoctorPaymentType } from "@/types";
 import { createClient } from "@/lib/supabase/client";
@@ -22,10 +22,11 @@ import {
   type NewDoctorFormDraft,
 } from "@/lib/forms/portal-form-drafts";
 import { useSessionFormDraft } from "@/hooks/useSessionFormDraft";
-import { ArrowRight, CheckCircle2, Building2, Eye, EyeOff, KeyRound } from "lucide-react";
+import { CheckCircle2, Building2, Eye, EyeOff, KeyRound, UserPlus, IdCard } from "lucide-react";
 
 export default function NewDoctorPage() {
   const router = useRouter();
+  const { bi } = useLanguage();
   const { clinicId, clinicName, loading: clinicLoading, missingClinic } = useActiveClinicId();
 
   const [fullName,       setFullName]       = useState("");
@@ -199,16 +200,19 @@ export default function NewDoctorPage() {
 
 
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <Link href="/dashboard/doctors">
-        <Button variant="ghost" size="sm">
-          <ArrowRight className="h-4 w-4" />
-          العودة للأطباء
-        </Button>
-      </Link>
+    <div className="mx-auto max-w-2xl space-y-5">
+      <PageHeader
+        eyebrow={bi("إدارة العيادة", "Clinic management")}
+        title="إضافة طبيب جديد"
+        subtitle="أدخل بيانات الطبيب + username وكلمة مرور — يدخل فوراً من بوابة «تطبيق الطبيب»"
+        icon={UserPlus}
+        backHref="/dashboard/doctors"
+        backLabel="العودة للأطباء"
+        className="mb-0"
+      />
 
       {clinicLoading && (
-        <div className="h-8 animate-pulse rounded-lg bg-slate-100" />
+        <div className="mc-skeleton h-11 rounded-2xl" />
       )}
       {!clinicLoading && missingClinic && (
         <Alert variant="error">
@@ -216,28 +220,25 @@ export default function NewDoctorPage() {
         </Alert>
       )}
       {!clinicLoading && clinicId && (
-        <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2 text-sm text-primary">
-          <Building2 className="h-4 w-4 shrink-0" />
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-border bg-surface-card px-4 py-2.5 text-sm text-slate-muted shadow-card">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-200">
+            <Building2 className="h-4 w-4" />
+          </span>
           <span>
-            العيادة النشطة: <strong>{clinicName || clinicId}</strong>
+            العيادة النشطة: <strong className="text-slate-text">{clinicName || clinicId}</strong>
           </span>
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>إضافة طبيب جديد</CardTitle>
-          <p className="text-sm text-slate-muted">
-            أدخل بيانات الطبيب + username وكلمة مرور — يدخل فوراً من بوابة «تطبيق الطبيب»
-          </p>
-        </CardHeader>
-
+      <section className="mc-panel">
         {createdUsername ? (
-          <div className="flex flex-col items-center gap-3 py-6 text-center px-4">
-            <CheckCircle2 className="h-12 w-12 text-primary" />
-            <p className="text-lg font-semibold text-slate-text">تم إنشاء الطبيب بنجاح!</p>
-            <div className="w-full rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-right space-y-1">
-              <p className="font-bold text-emerald-800">بيانات دخول الطبيب:</p>
+          <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-success text-success-text ring-1 ring-inset ring-success-border">
+              <CheckCircle2 className="h-9 w-9" />
+            </span>
+            <p className="text-lg font-bold text-slate-text">تم إنشاء الطبيب بنجاح!</p>
+            <div className="w-full max-w-sm space-y-1.5 rounded-2xl border border-success-border bg-success p-4 text-start text-sm text-success-text">
+              <p className="font-bold">بيانات دخول الطبيب:</p>
               <p>البوابة: <strong>تطبيق الطبيب</strong></p>
               <p>اسم المستخدم: <strong dir="ltr" className="font-mono text-primary">{createdUsername}</strong></p>
               <p>كلمة المرور: <strong>نفس التي أدخلتها</strong></p>
@@ -245,7 +246,14 @@ export default function NewDoctorPage() {
             <p className="text-sm text-slate-muted">جاري الانتقال لقائمة الأطباء...</p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit}>
+            <div className="mc-panel-head">
+              <h2 className="mc-panel-title">
+                <IdCard />
+                {bi("بيانات الطبيب", "Doctor details")}
+              </h2>
+            </div>
+            <div className="mc-panel-body space-y-4">
             {draftRestored && (
               <Alert variant="info">
                 تم استعادة بيانات الطبيب التي كتبتها (كلمة المرور لا تُحفظ لأسباب أمنية).
@@ -296,18 +304,20 @@ export default function NewDoctorPage() {
               onMaterialsShareChange={setMaterialsShare}
             />
 
-            <div className="rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-bold text-primary">
-                <KeyRound className="h-4 w-4" />
+            <div className="space-y-3 rounded-2xl border border-premium-200 bg-premium-50/50 p-4">
+              <div className="flex items-center gap-2.5 text-sm font-bold text-slate-text">
+                <span className="mc-icon-tile h-8 w-8 rounded-xl">
+                  <KeyRound className="h-4 w-4" />
+                </span>
                 حساب دخول الطبيب
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-muted">
                 أدخل username وكلمة مرور — يُحفظان تلقائياً ويدخل الطبيب من بوابة «تطبيق الطبيب»
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">
-                    اسم المستخدم <span className="text-red-500">*</span>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
+                    اسم المستخدم <span className="text-debt-text">*</span>
                   </label>
                   <input
                     value={username}
@@ -316,12 +326,12 @@ export default function NewDoctorPage() {
                     required
                     minLength={3}
                     dir="ltr"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-left focus:border-primary focus:outline-none"
+                    className="mc-field text-left font-mono"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-600">
-                    كلمة المرور <span className="text-red-500">*</span>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
+                    كلمة المرور <span className="text-debt-text">*</span>
                   </label>
                   <div className="relative">
                     <input
@@ -332,12 +342,12 @@ export default function NewDoctorPage() {
                       required
                       minLength={6}
                       dir="ltr"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-left focus:border-primary focus:outline-none"
+                      className="mc-field pl-9 text-left"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPass(!showPass)}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-muted hover:text-slate-text"
                     >
                       {showPass ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                     </button>
@@ -345,22 +355,26 @@ export default function NewDoctorPage() {
                 </div>
               </div>
               {username && password && (
-                <p className="text-xs text-emerald-600 font-medium">
+                <p className="text-xs font-semibold text-success-text">
                   ✓ الطبيب سيدخل بـ <span dir="ltr">{username}</span> من بوابة «تطبيق الطبيب»
                 </p>
               )}
             </div>
+            </div>
 
+            <div className="border-t border-slate-border bg-surface px-5 py-4">
             <Button
               type="submit"
+              size="lg"
               className="w-full"
               disabled={saving || clinicLoading || missingClinic}
             >
               {saving ? "جاري الحفظ..." : "حفظ الطبيب وإنشاء حسابه"}
             </Button>
+            </div>
           </form>
         )}
-      </Card>
+      </section>
     </div>
   );
 }

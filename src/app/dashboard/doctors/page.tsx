@@ -17,9 +17,24 @@ import {
   fetchDoctorAccountingBalances,
   type DoctorAccountingBalance,
 } from "@/lib/services/doctor-accounting-balance";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import { Plus, RefreshCw, PencilLine, Check, X, Settings2 } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatTile } from "@/components/ui/StatTile";
+import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  Plus,
+  RefreshCw,
+  PencilLine,
+  Check,
+  X,
+  Settings2,
+  Stethoscope,
+  Users,
+  UserCheck,
+  KeyRound,
+  Phone,
+} from "lucide-react";
 
 interface EditState {
   id: string;
@@ -28,6 +43,7 @@ interface EditState {
 }
 
 export default function DoctorsPage() {
+  const { bi } = useLanguage();
   const { clinicId, clinicName, loading: clinicLoading } = useActiveClinicId();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [balances, setBalances] = useState<Map<string, DoctorAccountingBalance>>(
@@ -112,111 +128,146 @@ export default function DoctorsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-text">الأطباء</h2>
-          <p className="text-slate-muted">
-            {isLoading
-              ? "جاري التحميل..."
-              : `${doctors.length} طبيب${clinicName ? ` — ${clinicName}` : ""}`}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={load} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-          </Button>
-          <Link href="/dashboard/doctors/new">
-            <Button>
-              <Plus className="h-4 w-4" />
-              إضافة طبيب
+      <PageHeader
+        eyebrow={bi("إدارة العيادة", "Clinic management")}
+        title="الأطباء"
+        subtitle={
+          isLoading
+            ? "جاري التحميل..."
+            : `${doctors.length} طبيب${clinicName ? ` — ${clinicName}` : ""}`
+        }
+        icon={Stethoscope}
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={load} disabled={isLoading} aria-label={bi("تحديث", "Refresh")}>
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             </Button>
-          </Link>
-        </div>
-      </div>
+            <Link href="/dashboard/doctors/new">
+              <Button>
+                <Plus className="h-4 w-4" />
+                إضافة طبيب
+              </Button>
+            </Link>
+          </>
+        }
+      />
 
-      {/* Doctors list */}
+      {!isLoading && doctors.length > 0 && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <StatTile label={bi("إجمالي الأطباء", "Total doctors")} value={doctors.length} icon={Users} tone="navy" />
+          <StatTile
+            label={bi("نشط", "Active")}
+            value={doctors.filter((d) => d.is_active).length}
+            icon={UserCheck}
+            tone="success"
+          />
+          <StatTile
+            label={bi("بدون حساب دخول", "No login account")}
+            value={doctors.filter((d) => !d.profile_id).length}
+            icon={KeyRound}
+            tone="gold"
+          />
+        </div>
+      )}
+
       {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="mc-skeleton h-40 rounded-2xl" />
           ))}
         </div>
       ) : doctors.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-slate-border py-10 text-center text-sm text-slate-muted">
-          لا يوجد أطباء — اضغط «إضافة طبيب» للبدء
-        </p>
+        <div className="mc-panel flex flex-col items-center px-6 py-14 text-center">
+          <span className="mc-icon-tile mb-4 h-14 w-14">
+            <Stethoscope className="h-7 w-7" />
+          </span>
+          <p className="text-sm font-medium text-slate-muted">
+            لا يوجد أطباء — اضغط «إضافة طبيب» للبدء
+          </p>
+        </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-4 lg:grid-cols-2">
           {doctors.map((doc) => {
             const isEditing = editing?.id === doc.id;
             const isSaving = saving === doc.id;
+            const bal = balances.get(doc.id);
 
             return (
               <div
                 key={doc.id}
-                className={`rounded-xl border p-4 transition-all ${
-                  doc.is_active
-                    ? "border-slate-border bg-surface-card"
-                    : "border-slate-border/40 bg-slate-50 opacity-70"
-                }`}
+                className={cn(
+                  "mc-panel mc-hover-lift flex flex-col",
+                  !doc.is_active && "opacity-70"
+                )}
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  {/* Doctor info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-slate-text">
+                <div className="flex items-start gap-4 p-5">
+                  <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-mc-pearl text-xl font-extrabold text-[#0b1f3a] shadow-gold ring-1 ring-inset ring-premium-300/60">
+                    {doc.full_name_ar.trim().charAt(0)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-base font-bold text-slate-text">
                         {doc.full_name_ar}
                       </p>
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
                           doc.is_active
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-200 text-slate-500"
-                        }`}
+                            ? "bg-success text-success-text ring-success-border"
+                            : "bg-surface text-slate-muted ring-slate-border"
+                        )}
                       >
+                        <span className={cn("h-1.5 w-1.5 rounded-full", doc.is_active ? "bg-current" : "bg-slate-muted")} />
                         {doc.is_active ? "نشط" : "موقوف"}
                       </span>
                     </div>
                     {doc.specialty_ar && (
-                      <p className="text-xs text-slate-muted">{doc.specialty_ar}</p>
+                      <p className="mt-0.5 text-sm text-slate-muted">{doc.specialty_ar}</p>
                     )}
-                    <p className="text-[11px] font-medium text-primary">
+                    <p className="mt-1.5 inline-flex rounded-lg bg-primary-50 px-2 py-0.5 text-[11px] font-semibold text-primary-700 ring-1 ring-inset ring-primary-200">
                       {doctorPaymentLabel(doc)}
                     </p>
-                    {(() => {
-                      const bal = balances.get(doc.id);
-                      if (!bal) return null;
-                      return (
-                        <p
-                          className={`mt-1 text-sm font-semibold tabular-nums ${
-                            bal.isDebtor ? "text-red-600" : "text-emerald-700"
-                          }`}
-                        >
-                          الرصيد: {formatCurrency(Math.abs(bal.netBalance))}
-                          {bal.isDebtor && (
-                            <span className="mr-1 text-xs font-bold">(مدين)</span>
-                          )}
-                        </p>
-                      );
-                    })()}
-                    <p className="text-xs text-slate-muted" dir="ltr">
-                      {doc.phone ? (
-                        <>📱 {doc.phone}</>
-                      ) : (
-                        <span className="text-amber-600">بدون رقم واتساب</span>
+                    <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                      <span className="inline-flex items-center gap-1.5 text-slate-muted" dir="ltr">
+                        <Phone className="h-3.5 w-3.5 text-premium-500" />
+                        {doc.phone ? (
+                          <span className="tabular-nums">{doc.phone}</span>
+                        ) : (
+                          <span className="text-warning-text">بدون رقم واتساب</span>
+                        )}
+                      </span>
+                      {!doc.profile_id && (
+                        <span className="inline-flex items-center gap-1.5 text-warning-text">
+                          <KeyRound className="h-3.5 w-3.5" />
+                          بدون حساب دخول
+                        </span>
                       )}
-                    </p>
-                    {!doc.profile_id && (
-                      <p className="text-xs text-amber-600">بدون حساب دخول</p>
-                    )}
+                    </div>
                   </div>
+                  {bal && (
+                    <div
+                      className={cn(
+                        "shrink-0 rounded-xl px-3 py-2 text-end ring-1 ring-inset",
+                        bal.isDebtor
+                          ? "bg-debt text-debt-text ring-debt-border"
+                          : "bg-success text-success-text ring-success-border"
+                      )}
+                    >
+                      <p className="text-[10px] font-semibold opacity-80">الرصيد</p>
+                      <p className="text-sm font-black tabular-nums">
+                        {formatCurrency(Math.abs(bal.netBalance))}
+                      </p>
+                      {bal.isDebtor && (
+                        <p className="text-[10px] font-bold">(مدين)</p>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-                  {/* Percentage — inline edit */}
-                  <div className="flex items-center gap-2">
+                <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-slate-border bg-surface px-5 py-3">
                     {isEditing ? (
                       <>
-                        <div className="flex items-center gap-2">
+                        <div className="me-auto flex items-center gap-2">
                           <Input
                             aria-label="نسبة الطبيب"
                             type="number"
@@ -262,11 +313,11 @@ export default function DoctorsPage() {
                       </>
                     ) : (
                       <>
-                        <div className="text-right text-sm">
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                        <div className="me-auto flex items-center gap-2 text-sm">
+                          <span className="rounded-full bg-mc-navy px-2.5 py-1 text-xs font-bold text-white">
                             {formatPercentageLabel(doc.percentage)}
                           </span>
-                          <span className="mr-1 text-xs text-slate-muted">
+                          <span className="rounded-full bg-premium-50 px-2.5 py-1 text-xs font-semibold text-premium-700 ring-1 ring-inset ring-premium-200">
                             مواد:{" "}
                             {formatPercentageLabel(doc.materials_share)}
                           </span>
@@ -306,15 +357,14 @@ export default function DoctorsPage() {
                           onClick={() => toggleActive(doc)}
                           className={
                             doc.is_active
-                              ? "text-slate-muted hover:border-debt-text hover:text-debt-text"
-                              : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                              ? "text-slate-muted hover:border-debt-border hover:bg-debt hover:text-debt-text"
+                              : "border-success-border text-success-text hover:bg-success"
                           }
                         >
                           {doc.is_active ? "إيقاف" : "تفعيل"}
                         </Button>
                       </>
                     )}
-                  </div>
                 </div>
               </div>
             );

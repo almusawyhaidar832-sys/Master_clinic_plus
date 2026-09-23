@@ -21,12 +21,15 @@ import {
   KeyRound,
   Languages,
   Lock,
+  Moon,
   ShieldCheck,
+  Sun,
   User,
   Wallet,
 } from "lucide-react";
 import { AboutDialog, NexuraSignature } from "@/components/layout/AboutDialog";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { APP_NAME, APP_NAME_EN } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -51,9 +54,9 @@ function Notice({
       role={tone === "error" ? "alert" : "status"}
       className={cn(
         "flex items-start gap-2.5 rounded-2xl border px-4 py-3 text-[13px] leading-relaxed",
-        tone === "error" && "border-rose-400/30 bg-rose-500/10 text-rose-100",
-        tone === "warning" && "border-amber-300/30 bg-amber-400/10 text-amber-50",
-        tone === "info" && "border-sky-300/25 bg-sky-400/10 text-sky-50"
+        tone === "error" && "border-debt-border bg-debt text-debt-text",
+        tone === "warning" && "border-warning-border bg-warning text-warning-text",
+        tone === "info" && "border-primary-200 bg-primary-50 text-primary-800"
       )}
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0 opacity-80" />
@@ -145,9 +148,9 @@ function UnifiedLoginForm() {
       {error && <Notice tone="error">{error}</Notice>}
 
       <label className="flex flex-col gap-2">
-        <span className="text-[13px] font-medium text-white/70">{t("username")}</span>
+        <span className="pc-muted text-[13px] font-medium">{t("username")}</span>
         <div className="relative">
-          <User className="pointer-events-none absolute start-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-white/40" />
+          <User className="pointer-events-none absolute start-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[var(--pc-soft)]" />
           <input
             type="text"
             value={username}
@@ -167,9 +170,9 @@ function UnifiedLoginForm() {
       </label>
 
       <label className="flex flex-col gap-2">
-        <span className="text-[13px] font-medium text-white/70">{t("password")}</span>
+        <span className="pc-muted text-[13px] font-medium">{t("password")}</span>
         <div className="relative">
-          <KeyRound className="pointer-events-none absolute start-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-white/40" />
+          <KeyRound className="pointer-events-none absolute start-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-[var(--pc-soft)]" />
           <input
             type={showPass ? "text" : "password"}
             value={password}
@@ -188,7 +191,7 @@ function UnifiedLoginForm() {
             type="button"
             onClick={() => setShowPass(!showPass)}
             aria-label={showPass ? "Hide password" : "Show password"}
-            className="absolute end-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl text-white/45 transition-colors hover:bg-white/10 hover:text-white"
+            className="absolute end-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl text-[var(--pc-soft)] transition-colors hover:bg-primary-50 hover:text-[var(--pc-fg)]"
           >
             {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
@@ -228,7 +231,6 @@ function PearlLogo({ className }: { className?: string }) {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={LOGO_SRC} alt={APP_NAME_EN} className="h-full w-full object-cover" draggable={false} />
       </div>
-      <div className="pc-logo-reflection" aria-hidden />
     </div>
   );
 }
@@ -236,6 +238,7 @@ function PearlLogo({ className }: { className?: string }) {
 function LoginPageContent() {
   const searchParams = useSearchParams();
   const { t, lang, toggleLang, isRTL } = useLanguage();
+  const { isDark, toggleTheme } = useTheme();
   const [aboutOpen, setAboutOpen] = useState(false);
   const closeAbout = useCallback(() => setAboutOpen(false), []);
   const mismatch = searchParams.get("reason") === "role_mismatch";
@@ -253,34 +256,37 @@ function LoginPageContent() {
       dir={isRTL ? "rtl" : "ltr"}
     >
       <div className="pointer-events-none absolute inset-0" aria-hidden>
-        <div className="pc-orb pc-orb--teal right-[-10%] top-[-20%] h-[620px] w-[620px]" />
-        <div className="pc-orb pc-orb--pearl left-[8%] top-[18%] h-[420px] w-[420px]" />
-        <div className="pc-orb pc-orb--gold bottom-[-25%] left-[-10%] h-[560px] w-[560px]" />
-        <div className="pc-arcs absolute left-1/2 top-1/2 h-[1400px] w-[1400px] -translate-x-1/2 -translate-y-1/2" />
+        <div className="pc-orb pc-orb--teal right-[-8%] top-[-16%] h-[520px] w-[520px]" />
+        <div className="pc-orb pc-orb--gold bottom-[-20%] left-[-8%] h-[480px] w-[480px]" />
         <div className="pc-grain absolute inset-0" />
       </div>
 
       <header className="relative z-20 mx-auto flex w-full max-w-7xl items-center justify-between px-5 pt-5 sm:px-8 sm:pt-7">
-        <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/60 backdrop-blur-md sm:flex">
-          <ShieldCheck className="h-3.5 w-3.5 text-[#e6d3b3]" />
+        <div className="pc-nav-btn hidden sm:inline-flex">
+          <ShieldCheck className="h-3.5 w-3.5 text-[var(--pc-gold)]" />
           {t("loginSecure")}
         </div>
         <div className="ms-auto flex items-center gap-2">
           <button
             type="button"
             onClick={() => setAboutOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-white/80 backdrop-blur-md transition-colors hover:bg-white/10 hover:text-white"
+            className="pc-nav-btn"
           >
             <Info className="h-3.5 w-3.5" />
             {t("aboutSystem")}
           </button>
-          <button
-            type="button"
-            onClick={toggleLang}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-white/80 backdrop-blur-md transition-colors hover:bg-white/10 hover:text-white"
-          >
+          <button type="button" onClick={toggleLang} className="pc-nav-btn">
             <Languages className="h-3.5 w-3.5" />
             {lang === "ar" ? "English" : "العربية"}
+          </button>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="pc-nav-btn px-2.5"
+            title={isDark ? t("themeDayMode") : t("themeNightMode")}
+            aria-label={isDark ? t("themeDayMode") : t("themeNightMode")}
+          >
+            {isDark ? <Sun className="h-3.5 w-3.5 text-[var(--pc-gold)]" /> : <Moon className="h-3.5 w-3.5" />}
           </button>
         </div>
       </header>
@@ -296,11 +302,11 @@ function LoginPageContent() {
               "pc-wordmark mt-9 text-[44px] font-semibold leading-none sm:text-6xl lg:text-7xl"
             )}
           >
-            Pearl Clinic
+            {APP_NAME_EN}
           </h1>
           <p
             className={cn(
-              "mt-3 font-medium text-[#e6d3b3]/80",
+              "pc-gold mt-3 font-medium",
               lang === "ar" ? "text-base" : "text-xs tracking-[0.35em]"
             )}
           >
@@ -309,10 +315,10 @@ function LoginPageContent() {
 
           <div className="pc-divider my-7 w-40 lg:w-56" />
 
-          <h2 className="hidden max-w-lg text-2xl font-bold leading-snug text-white sm:block lg:text-[32px]">
+          <h2 className="pc-heading hidden max-w-lg text-2xl font-bold leading-snug sm:block lg:text-[32px]">
             {t("loginHeroTitle")}
           </h2>
-          <p className="mt-4 hidden max-w-md text-[15px] leading-8 text-white/55 sm:block">
+          <p className="pc-muted mt-4 hidden max-w-md text-[15px] leading-8 sm:block">
             {t("loginHeroSub")}
           </p>
 
@@ -320,9 +326,9 @@ function LoginPageContent() {
             {features.map(({ icon: Icon, label }) => (
               <li
                 key={label}
-                className="pc-chip inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] text-white/75"
+                className="pc-chip inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px]"
               >
-                <Icon className="h-4 w-4 text-[#e6d3b3]" />
+                <Icon className="h-4 w-4 text-[var(--pc-gold)]" />
                 {label}
               </li>
             ))}
@@ -332,11 +338,11 @@ function LoginPageContent() {
         <section className="pc-rise w-full [animation-delay:150ms]">
           <div className="pc-card mx-auto w-full max-w-[440px] rounded-[28px] p-6 sm:p-9">
             <div className="mb-7">
-              <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
-                <Lock className="h-5 w-5 text-[#e6d3b3]" />
+              <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--pc-chip-border)] bg-[var(--pc-chip)]">
+                <Lock className="h-5 w-5 text-[var(--pc-gold)]" />
               </div>
-              <h3 className="text-2xl font-bold text-white">{t("loginWelcome")}</h3>
-              <p className="mt-1.5 text-sm text-white/55">{t("loginWelcomeSub")}</p>
+              <h3 className="pc-heading text-2xl font-bold">{t("loginWelcome")}</h3>
+              <p className="pc-muted mt-1.5 text-sm">{t("loginWelcomeSub")}</p>
             </div>
 
             <div className="mb-5 flex flex-col gap-3 empty:hidden">
@@ -347,8 +353,8 @@ function LoginPageContent() {
 
             <UnifiedLoginForm />
 
-            <p className="mt-6 flex items-start gap-2 border-t border-white/10 pt-5 text-xs leading-relaxed text-white/45">
-              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#e6d3b3]/70" />
+            <p className="pc-line pc-soft mt-6 flex items-start gap-2 border-t pt-5 text-xs leading-relaxed">
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--pc-gold)]" />
               {t("loginRoleAuto")}
             </p>
           </div>
@@ -359,7 +365,7 @@ function LoginPageContent() {
         <button
           type="button"
           onClick={() => setAboutOpen(true)}
-          className="rounded-2xl px-4 py-2 transition-colors hover:bg-white/5"
+          className="rounded-2xl px-4 py-2 transition-colors hover:bg-[var(--pc-chip)]"
         >
           <NexuraSignature />
         </button>

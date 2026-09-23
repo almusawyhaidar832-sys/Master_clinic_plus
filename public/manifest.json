@@ -1,7 +1,7 @@
 {
-  "name": "Pearl Clinic",
-  "short_name": "Pearl Clinic",
-  "description": "نظام إدارة العيادات — بيرل كلينك",
+  "name": "Pearl System",
+  "short_name": "Pearl System",
+  "description": "نظام إدارة العيادات — بيرل سيستم",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

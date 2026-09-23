@@ -93,7 +93,7 @@ function CaseFinancialSummary({ group }: { group: PatientCaseGroup }) {
           "font-bold",
           group.remaining > FINANCIAL_EPSILON
             ? "text-debt-text"
-            : "text-emerald-700"
+            : "text-success-text"
         )}
       >
         {formatCurrency(group.remaining)}
@@ -181,49 +181,53 @@ function SessionRow({
       : null);
 
   return (
-    <div className="rounded-lg border border-slate-border/80 bg-white p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-primary">
-            {sessionKindLabel(op, !!clinicalView)} — جلسة {item.sessionNumber}{" "}
-            من {totalInCase}
-          </p>
-          <p className="text-sm font-semibold text-slate-text">
-            {clinicalView ? opName(op) : sessionDateLabel(item)}
-          </p>
-          <p className="text-sm text-slate-muted tabular-nums">
-            {sessionDateLabel(item)}
-          </p>
-          <p className="text-xs text-slate-muted">
-            {formatDoctorDisplayName(opWithDoctor.doctor?.full_name_ar)}
-          </p>
-          {op.notes && (
-            <p className="mt-1 text-xs text-slate-muted italic">{op.notes}</p>
-          )}
-          {Number(op.materials_cost ?? 0) > 0 && (
-            <p className="mt-1 text-xs text-slate-muted tabular-nums">
-              تكلفة المختبر: {formatCurrency(Number(op.materials_cost))}
+    <div className="relative rounded-2xl border border-slate-border bg-surface-card p-4 shadow-card">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-sm font-bold text-primary-700 ring-1 ring-inset ring-primary-100 tabular-nums dark:bg-primary-900/30 dark:text-primary-200 dark:ring-primary-800">
+            {item.sessionNumber}
+          </span>
+          <div className="min-w-0">
+            <p className="inline-flex items-center rounded-full bg-premium-50 px-2 py-0.5 text-[11px] font-semibold text-premium-800 ring-1 ring-inset ring-premium-300/50 dark:bg-premium-500/10 dark:text-premium-200">
+              {sessionKindLabel(op, !!clinicalView)} — جلسة {item.sessionNumber}{" "}
+              من {totalInCase}
             </p>
-          )}
-          {op.lab_notes?.trim() && (
-            <p className="mt-1 text-xs text-amber-800/90">
-              <span className="font-medium">ملاحظات المختبر: </span>
-              {op.lab_notes}
+            <p className="mt-1 text-sm font-bold text-slate-text">
+              {clinicalView ? opName(op) : sessionDateLabel(item)}
             </p>
-          )}
+            <p className="text-xs text-slate-muted tabular-nums">
+              {sessionDateLabel(item)}
+              <span className="mx-1.5 text-slate-border">•</span>
+              {formatDoctorDisplayName(opWithDoctor.doctor?.full_name_ar)}
+            </p>
+            {op.notes && (
+              <p className="mt-1.5 text-xs italic text-slate-muted">{op.notes}</p>
+            )}
+            {Number(op.materials_cost ?? 0) > 0 && (
+              <p className="mt-1 text-xs text-slate-muted tabular-nums">
+                تكلفة المختبر: {formatCurrency(Number(op.materials_cost))}
+              </p>
+            )}
+            {op.lab_notes?.trim() && (
+              <p className="mt-1.5 rounded-lg border border-warning-border bg-warning px-2 py-1 text-xs text-warning-text">
+                <span className="font-medium">ملاحظات المختبر: </span>
+                {op.lab_notes}
+              </p>
+            )}
+          </div>
         </div>
         {sessionPaid > 0 && (
-          <div className="shrink-0 text-left tabular-nums" dir="ltr">
-            <p className="text-xs text-slate-muted">مدفوع هذه الجلسة</p>
-            <p className="text-sm font-bold text-primary">
+          <div className="shrink-0 rounded-xl border border-slate-border bg-surface px-3 py-1.5 text-end tabular-nums">
+            <p className="text-[11px] text-slate-muted">مدفوع هذه الجلسة</p>
+            <p className="text-sm font-bold text-primary-700 dark:text-primary-300" dir="ltr">
               {formatCurrency(sessionPaid)}
             </p>
           </div>
         )}
         {sessionDebt > 0 && sessionPaid <= FINANCIAL_EPSILON && (
-          <div className="shrink-0 text-left tabular-nums" dir="ltr">
-            <p className="text-xs text-slate-muted">دين مسجّل</p>
-            <p className="text-sm font-bold text-debt-text">
+          <div className="shrink-0 rounded-xl border border-debt-border bg-debt px-3 py-1.5 text-end tabular-nums">
+            <p className="text-[11px] text-debt-text">دين مسجّل</p>
+            <p className="text-sm font-bold text-debt-text" dir="ltr">
               {formatCurrency(sessionDebt)}
             </p>
           </div>
@@ -231,11 +235,11 @@ function SessionRow({
       </div>
 
       {showContinueActions !== false && isPlan && linkedCaseId && (
-        <div className="mt-2">
+        <div className="mt-3">
           {onContinueCase ? (
             <button
               type="button"
-              className="w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
+              className="mc-btn-soft w-full border-primary-200 text-primary-700 dark:text-primary-200"
               onClick={() => onContinueCase(linkedCaseId)}
             >
               متابعة هذه الحالة (فتح ملف / إضافة دفعة)
@@ -243,7 +247,7 @@ function SessionRow({
           ) : (
             <Link
               href={`${ledgerPath}?patient=${encodeURIComponent(patientId)}&case=${encodeURIComponent(linkedCaseId)}`}
-              className="block w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-center text-sm font-semibold text-primary hover:bg-primary/10"
+              className="mc-btn-soft w-full border-primary-200 text-primary-700 dark:text-primary-200"
             >
               متابعة هذه الحالة (فتح ملف / إضافة دفعة)
             </Link>
@@ -251,7 +255,7 @@ function SessionRow({
         </div>
       )}
 
-      <div className="mt-2 border-t border-slate-border/50 pt-2">
+      <div className="mt-3 border-t border-slate-border pt-3">
         <VisualMedicalRecord
           operationId={op.id}
           portal={prescriptionPortal}
@@ -294,7 +298,7 @@ function SessionRow({
                   setRefundLoading(false);
                 }
               }}
-              className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+              className="inline-flex items-center rounded-xl border border-warning-border bg-warning px-3 py-1.5 text-xs font-semibold text-warning-text transition-all hover:-translate-y-px hover:shadow-soft disabled:opacity-50"
             >
               {refundLoading ? "جاري التحميل..." : "استرجاع مبلغ"}
             </button>
@@ -323,7 +327,7 @@ function ContinueCaseButton({
     return (
       <button
         type="button"
-        className="w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
+        className="mc-btn-navy w-full py-2.5"
         onClick={(e) => {
           e.stopPropagation();
           onContinueCase(caseId);
@@ -336,7 +340,7 @@ function ContinueCaseButton({
   return (
     <Link
       href={`${ledgerPath}?patient=${encodeURIComponent(patientId)}&case=${encodeURIComponent(caseId)}`}
-      className="block w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 text-center text-sm font-semibold text-primary hover:bg-primary/10"
+      className="mc-btn-navy w-full py-2.5"
       onClick={(e) => e.stopPropagation()}
     >
       متابعة الحالة — إضافة جلسة / دفعة
@@ -385,28 +389,47 @@ function CaseAccordion({
   return (
     <div
       className={cn(
-        "rounded-xl border overflow-hidden",
+        "relative overflow-hidden rounded-2xl border bg-surface-card shadow-card transition-shadow",
+        expanded && "shadow-soft",
         group.isComplete
-          ? "border-emerald-200 bg-emerald-50/30"
+          ? "border-success-border"
           : group.remaining > FINANCIAL_EPSILON
-            ? "border-debt/40 bg-debt/5"
-            : "border-slate-border bg-surface-card"
+            ? "border-debt-border"
+            : "border-slate-border"
       )}
     >
+      <span
+        aria-hidden
+        className={cn(
+          "absolute inset-y-0 start-0 w-1",
+          group.isComplete
+            ? "bg-success-text"
+            : group.remaining > FINANCIAL_EPSILON
+              ? "bg-debt-text"
+              : "bg-premium-300"
+        )}
+      />
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-start justify-between gap-3 px-4 py-3 text-right hover:bg-black/[0.02] transition-colors"
+        className="flex w-full items-start justify-between gap-3 px-5 py-4 text-start transition-colors hover:bg-surface"
       >
-        <div className="flex items-start gap-2 min-w-0">
-          <ChevronDown
+        <div className="flex min-w-0 items-start gap-3">
+          <span
             className={cn(
-              "mt-0.5 h-5 w-5 shrink-0 text-slate-muted transition-transform",
-              expanded && "rotate-180"
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-border bg-surface text-slate-muted transition-all",
+              expanded && "border-primary-200 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-200"
             )}
-          />
+          >
+            <ChevronDown
+              className={cn(
+                "h-5 w-5 transition-transform",
+                expanded && "rotate-180"
+              )}
+            />
+          </span>
           <div className="min-w-0">
-            <p className="font-semibold text-slate-text text-base">
+            <p className="text-base font-bold text-slate-text">
               {group.caseName}
               {group.total > 0 && (
                 <span className="font-normal text-slate-muted">
@@ -425,20 +448,20 @@ function CaseAccordion({
                 </>
               ) : null}
             </p>
-            <div className="mt-1.5">
+            <div className="mt-2 inline-block rounded-lg bg-surface px-2.5 py-1">
               <CaseFinancialSummary group={group} />
             </div>
           </div>
         </div>
         {group.isComplete && (
-          <span className="shrink-0 text-xs font-semibold text-emerald-700">
+          <span className="shrink-0 rounded-full border border-success-border bg-success px-2.5 py-0.5 text-xs font-semibold text-success-text">
             ✓ مكتمل
           </span>
         )}
       </button>
 
       {canContinue && linkedCaseId && (
-        <div className="border-t border-primary/20 bg-primary/5 px-3 py-2">
+        <div className="border-t border-slate-border bg-surface px-5 py-3">
           <ContinueCaseButton
             caseId={linkedCaseId}
             onContinueCase={onContinueCase}
@@ -449,7 +472,7 @@ function CaseAccordion({
       )}
 
       {expanded && (
-        <div className="border-t border-slate-border/60 px-3 pb-3 pt-2 space-y-2 bg-white/60">
+        <div className="space-y-3 border-t border-slate-border bg-surface px-4 pb-4 pt-3 animate-fade-in">
           {group.sessions.length === 0 ? (
             <p className="text-xs text-slate-muted px-2 py-2">
               لا جلسات مسجّلة في هذه الحالة بعد.
@@ -522,8 +545,8 @@ export function PatientSessionsByCase({
   if (caseGroups.length === 0) return null;
 
   return (
-    <div className="space-y-2">
-      <p className="text-xs text-slate-muted mb-2">
+    <div className="space-y-3">
+      <p className="px-1 text-xs text-slate-muted">
         كل حالة مجمّعة بمعرّفها — الملخص المالي محسوب من جلسات هذه الحالة فقط
       </p>
       {caseGroups.map((group) => (

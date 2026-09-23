@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
+import { StatTile } from "@/components/ui/StatTile";
 import { createClient } from "@/lib/supabase/client";
 import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import {
@@ -30,7 +30,20 @@ import {
 } from "@/lib/services/patient-case-groups";
 import { PatientSessionsByCase } from "@/components/patients/PatientSessionsByCase";
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
-import { ArrowRight, FileText, Plus, X } from "lucide-react";
+import {
+  Activity,
+  AlertCircle,
+  ArrowRight,
+  CalendarCheck,
+  CheckCircle2,
+  ClipboardList,
+  FileText,
+  NotebookPen,
+  Phone,
+  Plus,
+  Wallet,
+  X,
+} from "lucide-react";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { OfflineViewBanner } from "@/components/offline/OfflineViewBanner";
@@ -51,7 +64,7 @@ import {
 import { useSessionFormDraft } from "@/hooks/useSessionFormDraft";
 
 export default function DoctorPatientDetailPage() {
-  const { t, formatMoney, dateLocale } = useLanguage();
+  const { t, bi, formatMoney, dateLocale } = useLanguage();
   const params = useParams();
   const id = params.id as string;
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -287,15 +300,11 @@ export default function DoctorPatientDetailPage() {
   if (accessDenied) {
     return (
       <div className="space-y-4">
-        <Link href="/doctor/patients">
-          <Button variant="ghost" size="sm">
-            <ArrowRight className="h-4 w-4" />
-            {t("docPatientList")}
-          </Button>
+        <Link href="/doctor/patients" className="mc-btn-soft">
+          <ArrowRight className="h-4 w-4 ltr:rotate-180" />
+          {t("docPatientList")}
         </Link>
-        <p className="text-sm text-slate-muted">
-          {t("docPatientNotLinked")}
-        </p>
+        <Alert variant="warning">{t("docPatientNotLinked")}</Alert>
       </div>
     );
   }
@@ -304,21 +313,29 @@ export default function DoctorPatientDetailPage() {
     if (offlineMiss) {
       return (
         <div className="space-y-4">
-          <Link href="/doctor/patients">
-            <Button variant="ghost" size="sm">
-              <ArrowRight className="h-4 w-4" />
-              {t("docPatientList")}
-            </Button>
+          <Link href="/doctor/patients" className="mc-btn-soft">
+            <ArrowRight className="h-4 w-4 ltr:rotate-180" />
+            {t("docPatientList")}
           </Link>
           <Alert variant="warning">{t("offlinePatientCacheMiss")}</Alert>
         </div>
       );
     }
-    return <p className="text-slate-muted">{t("loading")}</p>;
+    return (
+      <div className="space-y-4" aria-label={t("loading")}>
+        <div className="mc-skeleton h-36 rounded-3xl" />
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="mc-skeleton h-20 rounded-2xl" />
+          <div className="mc-skeleton h-20 rounded-2xl" />
+          <div className="mc-skeleton h-20 rounded-2xl" />
+        </div>
+        <p className="text-center text-sm text-slate-muted">{t("loading")}</p>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <OfflineViewBanner
         refreshing={refreshing}
         offline={offlineView}
@@ -326,53 +343,68 @@ export default function DoctorPatientDetailPage() {
         refreshingLabel={t("offlineViewRefreshing")}
         offlineLabel={t("offlineViewCachedAt")}
       />
-      <Link href="/doctor/patients">
-        <Button variant="ghost" size="sm">
-          <ArrowRight className="h-4 w-4" />
-          {t("docPatientList")}
-        </Button>
+      <Link
+        href="/doctor/patients"
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-600 hover:text-primary-800"
+      >
+        <ArrowRight className="h-4 w-4 ltr:rotate-180" />
+        {t("docPatientList")}
       </Link>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-700 text-base font-bold text-white shadow-sm">
+      <section className="mc-panel rounded-3xl">
+        <div className="relative p-5">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-premium-100/40 to-transparent dark:from-premium-500/10"
+          />
+          <div className="relative flex items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-mc-pearl text-xl font-bold text-[#0b1f3a] shadow-gold ring-1 ring-inset ring-premium-300/60">
               {patient.full_name_ar.slice(0, 2)}
             </div>
-            <div>
-              <CardTitle>{patient.full_name_ar}</CardTitle>
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-premium-600">
+                {bi("بوابة الطبيب", "Doctor portal")}
+              </p>
+              <h1 className="mt-0.5 truncate text-xl font-bold text-slate-text">
+                {patient.full_name_ar}
+              </h1>
               {getPatientDisplayPhone(patient) && (
-                <p dir="ltr" className="text-sm text-slate-muted">
+                <p dir="ltr" className="mt-1 inline-flex items-center gap-1.5 text-sm text-slate-muted tabular-nums">
+                  <Phone className="h-3.5 w-3.5 text-premium-500" />
                   {getPatientDisplayPhone(patient)}
                 </p>
               )}
             </div>
           </div>
-        </CardHeader>
 
-        <div className="grid grid-cols-3 gap-3 px-4 pb-4">
-          <div className="mc-stat-neutral">
-            <p className="mc-stat-value">{clinicalSessionCount}</p>
-            <p className="mc-stat-label">{t("docTreatmentSessions")}</p>
-          </div>
-          <div className="mc-stat-primary">
-            <p className="mc-stat-value">{formatMoney(totalPaid)}</p>
-            <p className="mc-stat-label">{t("paid")}</p>
-          </div>
-          <div
-            className={totalDebt > FINANCIAL_EPSILON ? "mc-stat-debt" : "mc-stat-success"}
-          >
-            <p className="mc-stat-value">{formatMoney(totalDebt)}</p>
-            <p className="mc-stat-label">
-              {totalDebt > FINANCIAL_EPSILON ? t("docRemainingDebt") : t("docNoDebt")}
-            </p>
+          <div className="relative mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+            <StatTile
+              icon={CalendarCheck}
+              tone="navy"
+              value={<span className="tabular-nums">{clinicalSessionCount}</span>}
+              label={t("docTreatmentSessions")}
+            />
+            <StatTile
+              icon={Wallet}
+              tone="gold"
+              value={<span className="tabular-nums">{formatMoney(totalPaid)}</span>}
+              label={t("paid")}
+            />
+            <StatTile
+              icon={totalDebt > FINANCIAL_EPSILON ? AlertCircle : CheckCircle2}
+              tone={totalDebt > FINANCIAL_EPSILON ? "danger" : "success"}
+              value={<span className="tabular-nums">{formatMoney(totalDebt)}</span>}
+              label={
+                totalDebt > FINANCIAL_EPSILON ? t("docRemainingDebt") : t("docNoDebt")
+              }
+            />
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 px-4 pb-4">
+        <div className="flex flex-col gap-2.5 border-t border-slate-border bg-surface px-5 py-4">
           <Button
             variant="primary"
-            size="sm"
+            size="md"
             className="w-full"
             onClick={() => setShowClinicalPanel((v) => !v)}
           >
@@ -391,14 +423,12 @@ export default function DoctorPatientDetailPage() {
           <p className="text-center text-xs text-slate-muted">
             {t("docBillingAccountantOnly")}
           </p>
-          <Link href={`/doctor/statement?patientId=${id}`}>
-            <Button variant="outline" size="sm" className="w-full">
-              <FileText className="h-4 w-4" />
-              {t("docStatementShare")}
-            </Button>
+          <Link href={`/doctor/statement?patientId=${id}`} className="mc-btn-soft w-full py-2.5">
+            <FileText className="h-4 w-4 text-premium-500" />
+            {t("docStatementShare")}
           </Link>
         </div>
-      </Card>
+      </section>
 
       {showClinicalPanel && (
         <VisitSessionClinicalPanel
@@ -410,27 +440,40 @@ export default function DoctorPatientDetailPage() {
       )}
 
       {treatments.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("docActiveTreatments")}</CardTitle>
-          </CardHeader>
-          <ul className="space-y-2 px-4 pb-4 text-sm">
+        <section className="mc-panel">
+          <div className="mc-panel-head">
+            <h3 className="mc-panel-title">
+              <Activity />
+              {t("docActiveTreatments")}
+            </h3>
+          </div>
+          <ul className="divide-y divide-slate-border text-sm">
             {treatments.map((t) => (
-              <li key={t.id} className="rounded bg-amber-50 p-2">
-                {t.title_ar} ({t.completed_sessions}/{t.expected_sessions})
+              <li key={t.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                <span className="min-w-0 truncate font-medium text-slate-text">{t.title_ar}</span>
+                <span className="shrink-0 rounded-full border border-warning-border bg-warning px-2.5 py-0.5 text-xs font-bold text-warning-text tabular-nums">
+                  ({t.completed_sessions}/{t.expected_sessions})
+                </span>
               </li>
             ))}
           </ul>
-        </Card>
+        </section>
       )}
 
-      <div id="patient-sessions">
-        <h3 className="mb-1 text-lg font-semibold text-slate-text">
-          {t("docSessionsByCase")}
-        </h3>
-        <p className="mb-3 text-xs text-slate-muted">
-          {t("docSessionsByCaseHint")}
-        </p>
+      <div id="patient-sessions" className="space-y-3">
+        <div className="flex items-start gap-3 px-1">
+          <span className="mc-icon-tile h-9 w-9 rounded-xl">
+            <ClipboardList className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold text-slate-text">
+              {t("docSessionsByCase")}
+            </h3>
+            <p className="text-xs text-slate-muted">
+              {t("docSessionsByCaseHint")}
+            </p>
+          </div>
+        </div>
 
         {operations.length === 0 && doctorCases.length === 0 ? (
           <Alert variant="info">{t("docNoCasesWithYou")}</Alert>
@@ -448,17 +491,20 @@ export default function DoctorPatientDetailPage() {
         )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("docAddMedicalNote")}</CardTitle>
-        </CardHeader>
-        <div className="px-4 pb-4">
+      <section className="mc-panel">
+        <div className="mc-panel-head">
+          <h3 className="mc-panel-title">
+            <NotebookPen />
+            {t("docAddMedicalNote")}
+          </h3>
+        </div>
+        <div className="mc-panel-body space-y-3">
           {draftRestored && (
-            <Alert variant="info" className="mb-2">
+            <Alert variant="info">
               تم استعادة الملاحظة التي كتبتها.
               <button
                 type="button"
-                className="mr-2 underline"
+                className="ms-2 underline"
                 onClick={dismissDraftNotice}
               >
                 إخفاء
@@ -466,35 +512,45 @@ export default function DoctorPatientDetailPage() {
             </Alert>
           )}
           <textarea
-            className="mb-2 w-full rounded-lg border border-slate-border p-3 text-sm"
+            className="mc-field min-h-[96px] resize-y leading-relaxed"
             rows={3}
             value={newLog}
             onChange={(e) => setNewLog(e.target.value)}
             placeholder={t("docVisitNotesPlaceholder")}
           />
-          <Button size="sm" onClick={addLog} disabled={saving}>
-            {saving ? t("saving") : t("docSaveRecord")}
-          </Button>
+          <div className="flex justify-end">
+            <Button size="sm" onClick={addLog} disabled={saving}>
+              {saving ? t("saving") : t("docSaveRecord")}
+            </Button>
+          </div>
           {logs.length > 0 && (
-            <ul className="mt-4 space-y-2 text-sm">
+            <ol className="relative mt-2 space-y-3 border-s-2 border-premium-300/50 ps-5 text-sm">
               {logs.map((log) => (
-                <li key={log.id} className="rounded bg-surface p-2">
-                  <p className="text-xs text-slate-muted">
-                    {formatDate(log.log_date, dateLocale)}
-                  </p>
-                  <p className="mb-1 text-xs text-primary">
-                    {formatDoctorDisplayName(
-                      (log as { doctor?: { full_name_ar: string } }).doctor
-                        ?.full_name_ar ?? doctor?.full_name_ar
-                    )}
-                  </p>
-                  <p>{log.content_ar}</p>
+                <li key={log.id} className="relative">
+                  <span
+                    aria-hidden
+                    className="absolute -start-[27px] top-3 h-3 w-3 rounded-full border-2 border-surface-card bg-premium-500 shadow-gold"
+                  />
+                  <div className="rounded-xl border border-slate-border bg-surface p-3">
+                    <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-primary-700 dark:text-primary-300">
+                        {formatDoctorDisplayName(
+                          (log as { doctor?: { full_name_ar: string } }).doctor
+                            ?.full_name_ar ?? doctor?.full_name_ar
+                        )}
+                      </p>
+                      <p className="text-[11px] text-slate-muted tabular-nums">
+                        {formatDate(log.log_date, dateLocale)}
+                      </p>
+                    </div>
+                    <p className="leading-relaxed text-slate-text">{log.content_ar}</p>
+                  </div>
                 </li>
               ))}
-            </ul>
+            </ol>
           )}
         </div>
-      </Card>
+      </section>
     </div>
   );
 }

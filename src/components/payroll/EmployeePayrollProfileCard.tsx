@@ -69,7 +69,7 @@ export function EmployeePayrollProfileCard({
                 size="sm"
                 variant="outline"
                 onClick={onDeactivate}
-                className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                className="border-warning-border text-warning-text hover:bg-warning"
               >
                 <UserX className="h-3.5 w-3.5" />
                 إيقاف الموظف
@@ -96,7 +96,7 @@ export function EmployeePayrollProfileCard({
             readOnly
             disabled
             placeholder="—"
-            className="bg-slate-50"
+            className="bg-surface"
           />
           <CurrencyInput
             label={isDailyAssistant ? "الأجر اليومي (يُسجَّل يومياً)" : "الراتب الأساسي"}
@@ -110,7 +110,7 @@ export function EmployeePayrollProfileCard({
       </div>
 
       {options.length === 0 ? (
-        <p className="mt-4 rounded-lg border border-dashed border-amber-300 bg-amber-50 px-4 py-3 text-center text-sm text-amber-900">
+        <p className="mt-4 rounded-xl border border-dashed border-warning-border bg-warning px-4 py-3 text-center text-sm text-warning-text">
           لا يوجد عاملون في القائمة — أضف موظفاً من النموذج أدناه ثم سيظهر هنا تلقائياً
         </p>
       ) : !person ? (
@@ -123,7 +123,7 @@ export function EmployeePayrollProfileCard({
             <span className="rounded-full bg-violet-600 px-2.5 py-0.5 text-xs font-bold text-white">
               {isDailyStaff ? "محاسب — أجر يومي" : "محاسب"}
             </span>
-            <span className="text-slate-600">{person.role}</span>
+            <span className="text-slate-muted">{person.role}</span>
           </div>
           {isDailyStaff ? (
             <p className="font-medium text-primary">
@@ -139,17 +139,17 @@ export function EmployeePayrollProfileCard({
           </p>
         </div>
       ) : person.category === "doctor_salary" ? (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/80 p-4 text-sm">
+        <div className="mt-4 rounded-lg border border-warning-border bg-warning p-4 text-sm">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-amber-600 px-2.5 py-0.5 text-xs font-bold text-white">
               طبيب — راتب ثابت
             </span>
-            <span className="text-slate-600">{person.role}</span>
+            <span className="text-slate-muted">{person.role}</span>
           </div>
           <p className="font-medium text-primary">
             الراتب الشهري: {formatCurrency(person.base_salary)}
           </p>
-          <p className="mt-1 text-xs text-amber-900">
+          <p className="mt-1 text-xs text-warning-text">
             سجّل حركات الراتب (
             {formatPayrollEntryTypesList(EMPLOYEE_PAYROLL_ENTRY_TYPES)}) من النموذج
             أدناه — الصرف من مصاريف العيادة.
@@ -161,21 +161,21 @@ export function EmployeePayrollProfileCard({
             <span className="rounded-full bg-teal-600 px-2.5 py-0.5 text-xs font-bold text-white">
               {isDailyAssistant ? "مساعد — أجر يومي" : "مساعد طبيب"}
             </span>
-            <span className="text-slate-600">{person.role}</span>
+            <span className="text-slate-muted">{person.role}</span>
           </div>
           {isDailyAssistant ? (
             <>
               <p className="font-medium text-primary">
                 لا راتب شهري ثابت — سجّل أجر كل يوم من النموذج أدناه
               </p>
-              <p className="mt-1 text-xs text-teal-800">
+              <p className="mt-1 text-xs text-primary-700">
                 نسبة الطبيب {person.doctor_share_percentage ?? 0}% — يُجمع الشهر
                 ثم يُخصم من محفظة الطبيب ورصيد العيادة عند التوليد والتأكيد.
               </p>
             </>
           ) : (
             assistantBreakdown && (
-              <div className="grid gap-1 text-slate-700 sm:grid-cols-3">
+              <div className="grid gap-1 text-slate-text sm:grid-cols-3">
                 <span>
                   الراتب الكلي:{" "}
                   <strong>{formatCurrency(assistantBreakdown.totalSalary)}</strong>
@@ -184,7 +184,7 @@ export function EmployeePayrollProfileCard({
                   حصة العيادة:{" "}
                   <strong>{formatCurrency(assistantBreakdown.clinicShare)}</strong>
                 </span>
-                <span className="text-amber-800">
+                <span className="text-warning-text">
                   حصة الطبيب ({assistantBreakdown.doctorSharePercentage}%):{" "}
                   <strong>{formatCurrency(assistantBreakdown.doctorShare)}</strong>
                 </span>
@@ -192,19 +192,19 @@ export function EmployeePayrollProfileCard({
             )
           )}
           {!isDailyAssistant && (
-            <p className="mt-2 text-xs text-teal-800">
+            <p className="mt-2 text-xs text-primary-700">
               يُقسّم الراتب عند «توليد رواتب الشهر» — يُخصم من حساب الطبيب المرتبط.
               لتسجيل أجر يومي: اضغط «تعديل الراتب» واختر «أجر يومي متغير».
             </p>
           )}
         </div>
       ) : (
-        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+        <div className="mt-4 rounded-lg border border-slate-border bg-surface p-4 text-sm">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-slate-600 px-2.5 py-0.5 text-xs font-bold text-white">
               موظف خدمات / منظف
             </span>
-            <span className="text-slate-600">{person.role}</span>
+            <span className="text-slate-muted">{person.role}</span>
           </div>
           <p className="font-medium text-primary">
             مصروف عيادة كامل: {formatCurrency(person.base_salary)}

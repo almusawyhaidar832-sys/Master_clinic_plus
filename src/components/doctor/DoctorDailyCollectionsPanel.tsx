@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { createClient } from "@/lib/supabase/client";
@@ -38,6 +36,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { cn, formatCurrency, formatDate, todayISO, addDaysISO } from "@/lib/utils";
 import {
   Calendar,
+  CalendarDays,
   RefreshCw,
   Printer,
   ArrowDownToLine,
@@ -54,24 +53,97 @@ const STATUS_TABS: { id: CollectionStatusFilter; labelKey: "all" | "paid" | "deb
   { id: "at_accountant", labelKey: "atAccountant" },
 ];
 
+type SummaryTone = "default" | "navy" | "success" | "warning" | "danger" | "gold";
+
+const SUMMARY_TONE_DOT: Record<SummaryTone, string> = {
+  default: "bg-slate-muted/40",
+  navy: "bg-primary-500",
+  success: "bg-success-text",
+  warning: "bg-warning-text",
+  danger: "bg-debt-text",
+  gold: "bg-premium-400",
+};
+
+const SUMMARY_TONE_VALUE: Record<SummaryTone, string> = {
+  default: "text-slate-text",
+  navy: "text-primary-700 dark:text-primary-300",
+  success: "text-success-text",
+  warning: "text-warning-text",
+  danger: "text-debt-text",
+  gold: "text-premium-700",
+};
+
 function SummaryChip({
   label,
   value,
-  className,
+  tone = "default",
 }: {
   label: string;
   value: number | string;
-  className?: string;
+  tone?: SummaryTone;
 }) {
   return (
-    <div
-      className={cn(
-        "rounded-xl border border-slate-border bg-surface px-3 py-2 text-center",
-        className
-      )}
-    >
-      <p className="text-lg font-bold tabular-nums text-slate-text">{value}</p>
-      <p className="text-[11px] text-slate-muted">{label}</p>
+    <div className="rounded-2xl border border-slate-border bg-surface-card px-3.5 py-3 shadow-card">
+      <p className="flex items-center gap-1.5 text-[11px] font-medium text-slate-muted">
+        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", SUMMARY_TONE_DOT[tone])} />
+        <span className="truncate">{label}</span>
+      </p>
+      <p
+        className={cn(
+          "mt-1.5 text-base font-black leading-tight tracking-tight tabular-nums sm:text-lg",
+          SUMMARY_TONE_VALUE[tone]
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function AmountCell({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-xl bg-surface px-2.5 py-2 text-center">
+      <p className="truncate text-[10px] font-medium text-slate-muted">{label}</p>
+      <p className={cn("mt-0.5 truncate text-sm font-bold tabular-nums", valueClassName)}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function SectionHead({
+  icon: Icon,
+  title,
+  tone,
+}: {
+  icon: typeof Calendar;
+  title: string;
+  tone: "navy" | "warning" | "danger" | "success";
+}) {
+  return (
+    <div className="flex items-center gap-2.5 border-t border-slate-border bg-surface px-4 py-2.5">
+      <span
+        className={cn(
+          "mc-kpi__icon h-7 w-7 rounded-lg",
+          {
+            navy: "mc-tone-navy",
+            warning: "mc-tone-warning",
+            danger: "mc-tone-danger",
+            success: "mc-tone-success",
+          }[tone]
+        )}
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <p className="text-xs font-bold text-slate-text">{title}</p>
     </div>
   );
 }
@@ -80,13 +152,17 @@ function DoctorPatientRow({ row }: { row: DailyCollectionRow }) {
   const debtAmount = Math.max(row.caseDebtTotal, row.remaining);
 
   return (
-    <div className="flex flex-col gap-3 border-b border-slate-border/60 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0 flex-1">
+    <div className="flex flex-col gap-3 border-b border-slate-border px-4 py-4 last:border-b-0">
+      <div className="flex items-start gap-3">
+        <span className="mc-icon-tile h-10 w-10">
+          <UserRound className="h-[18px] w-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="font-semibold text-slate-text">{row.patientName}</p>
+          <p className="font-bold text-slate-text">{row.patientName}</p>
           <span
             className={cn(
-              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold",
               collectionStatusClass(row.paymentStatus)
             )}
           >
@@ -94,7 +170,7 @@ function DoctorPatientRow({ row }: { row: DailyCollectionRow }) {
           </span>
         </div>
         {row.paymentStatus === "paid_full" && row.visitPaidToday > 0 && (
-          <p className="mt-1 text-xs font-semibold text-emerald-700">
+          <p className="mt-1 text-xs font-semibold text-success-text">
             ✓ دفع {formatCurrency(row.visitPaidToday)}
             {row.visitDoctorShare > 0 &&
               ` · حصتك ${formatCurrency(row.visitDoctorShare)}`}
@@ -121,71 +197,62 @@ function DoctorPatientRow({ row }: { row: DailyCollectionRow }) {
               .join(" · ")}
           </p>
         )}
-        <p className="mt-0.5 text-xs text-slate-muted">{row.sessionLabel}</p>
-        {row.visitDate && (
-          <p className="mt-0.5 text-[11px] text-slate-muted">
-            {formatDate(new Date(row.visitDate + "T12:00:00"))}
-          </p>
-        )}
-        {row.patientPhone && (
-          <p className="mt-0.5 text-xs text-slate-muted" dir="ltr">
-            {row.patientPhone}
-          </p>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-4 sm:justify-end">
-        {row.requiredToday > FINANCIAL_EPSILON && (
-          <div className="text-right">
-            <p className="text-[11px] text-slate-muted">السعر الكلي</p>
-            <p className="font-bold tabular-nums text-slate-text">
-              {formatCurrency(row.requiredToday)}
+        <p className="mt-1 text-xs text-slate-muted">{row.sessionLabel}</p>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          {row.visitDate && (
+            <p className="text-[11px] text-slate-muted">
+              {formatDate(new Date(row.visitDate + "T12:00:00"))}
             </p>
-          </div>
-        )}
-        <div className="text-right">
-          <p className="text-[11px] text-slate-muted">ما دفعه المراجع</p>
-          <p
-            className={cn(
-              "text-lg font-bold tabular-nums",
-              row.visitPaidToday > 0 ? "text-success-text" : "text-slate-muted"
-            )}
-          >
-            {formatCurrency(row.visitPaidToday)}
-          </p>
+          )}
+          {row.patientPhone && (
+            <p className="text-[11px] text-slate-muted" dir="ltr">
+              {row.patientPhone}
+            </p>
+          )}
         </div>
-        <div className="text-right">
-          <p className="text-[11px] text-slate-muted">حصتك</p>
-          <p
-            className={cn(
-              "text-lg font-bold tabular-nums",
-              row.visitDoctorShare > 0 ? "text-primary" : "text-slate-muted"
-            )}
-          >
-            {formatCurrency(row.visitDoctorShare)}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-[11px] text-slate-muted">
-            {row.paymentStatus === "debtor" ? "الدين" : "المتبقي"}
-          </p>
-          <p
-            className={cn(
-              "font-bold tabular-nums",
-              debtAmount > 0 ? "text-debt-text" : "text-success-text"
-            )}
-          >
-            {formatCurrency(debtAmount)}
-          </p>
         </div>
         {row.patientId && (
           <Link
             href={`/doctor/patients/${row.patientId}`}
-            className="rounded-lg border border-slate-border px-3 py-1.5 text-xs font-medium text-slate-text hover:bg-surface"
+            className="mc-btn-soft min-h-[40px] shrink-0 rounded-xl px-3 py-1.5 text-xs"
           >
             الملف
           </Link>
         )}
+      </div>
+
+      <div
+        className={cn(
+          "grid gap-2",
+          row.requiredToday > FINANCIAL_EPSILON ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"
+        )}
+      >
+        {row.requiredToday > FINANCIAL_EPSILON && (
+          <AmountCell
+            label="السعر الكلي"
+            value={formatCurrency(row.requiredToday)}
+            valueClassName="text-slate-text"
+          />
+        )}
+        <AmountCell
+          label="ما دفعه المراجع"
+          value={formatCurrency(row.visitPaidToday)}
+          valueClassName={row.visitPaidToday > 0 ? "text-success-text" : "text-slate-muted"}
+        />
+        <AmountCell
+          label="حصتك"
+          value={formatCurrency(row.visitDoctorShare)}
+          valueClassName={
+            row.visitDoctorShare > 0
+              ? "text-primary-700 dark:text-primary-300"
+              : "text-slate-muted"
+          }
+        />
+        <AmountCell
+          label={row.paymentStatus === "debtor" ? "الدين" : "المتبقي"}
+          value={formatCurrency(debtAmount)}
+          valueClassName={debtAmount > 0 ? "text-debt-text" : "text-success-text"}
+        />
       </div>
     </div>
   );
@@ -196,53 +263,54 @@ function AssistantPayrollRow({ line }: { line: DailyAssistantPayrollLine }) {
   const isCorrection = Boolean(line.isCorrection);
 
   return (
-    <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-amber-50/30 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex items-center gap-3 border-b border-slate-border px-4 py-3.5 last:border-b-0">
+      <span
+        className={cn(
+          "mc-kpi__icon h-10 w-10 rounded-xl",
+          isCorrection ? "mc-tone-success" : "mc-tone-warning"
+        )}
+      >
+        <UserRound className="h-4 w-4" />
+      </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <UserRound className="h-4 w-4 shrink-0 text-amber-700" />
-          <p className="font-semibold text-slate-text">
+          <p className="truncate text-sm font-bold text-slate-text">
             مساعد: {line.assistantName}
           </p>
           <span
             className={cn(
-              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+              "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset",
               isCorrection
-                ? "bg-sky-100 text-sky-800"
+                ? "mc-tone-navy"
                 : isConfirmed
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-amber-100 text-amber-900"
+                  ? "mc-tone-success"
+                  : "mc-tone-warning"
             )}
           >
             {isCorrection ? "تصحيح (استرجاع)" : line.statusLabel}
           </span>
         </div>
-        <p className="mt-1 text-xs text-slate-muted">
+        <p className="mt-0.5 text-[11px] text-slate-muted">
           نسبتك من الأجر: {line.doctorSharePct}%
+          <span className="mx-1.5 text-slate-border">•</span>
+          {isCorrection ? "المبلغ المسترجع" : "أجر المساعد"}{" "}
+          <span className="font-semibold tabular-nums text-slate-text">
+            {formatCurrency(Math.abs(line.totalSalary))}
+          </span>
         </p>
       </div>
-
-      <div className="flex flex-wrap items-center gap-4 sm:justify-end">
-        <div className="text-right">
-          <p className="text-[11px] text-slate-muted">
-            {isCorrection ? "المبلغ المسترجع" : "أجر المساعد"}
-          </p>
-          <p className="font-bold tabular-nums text-slate-text">
-            {formatCurrency(Math.abs(line.totalSalary))}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-[11px] text-slate-muted">
-            {isCorrection ? "يُرجع لك" : "يُخصم منك"}
-          </p>
-          <p
-            className={cn(
-              "font-bold tabular-nums",
-              isCorrection ? "text-emerald-700" : "text-red-700"
-            )}
-          >
-            {isCorrection ? "+" : "−"} {formatCurrency(Math.abs(line.doctorDeduction))}
-          </p>
-        </div>
+      <div className="shrink-0 text-end">
+        <p className="text-[10px] text-slate-muted">
+          {isCorrection ? "يُرجع لك" : "يُخصم منك"}
+        </p>
+        <p
+          className={cn(
+            "text-sm font-black tabular-nums",
+            isCorrection ? "text-success-text" : "text-debt-text"
+          )}
+        >
+          {isCorrection ? "+" : "−"} {formatCurrency(Math.abs(line.doctorDeduction))}
+        </p>
       </div>
     </div>
   );
@@ -251,44 +319,39 @@ function AssistantPayrollRow({ line }: { line: DailyAssistantPayrollLine }) {
 function WithdrawalRow({ line }: { line: DoctorWithdrawalLine }) {
   const isPending = line.status === "pending";
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 border-b border-slate-border/60 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between",
-        isPending ? "bg-amber-50/30" : "bg-red-50/20"
-      )}
-    >
+    <div className="flex items-center gap-3 border-b border-slate-border px-4 py-3.5 last:border-b-0">
+      <span
+        className={cn(
+          "mc-kpi__icon h-10 w-10 rounded-xl",
+          isPending ? "mc-tone-warning" : "mc-tone-danger"
+        )}
+      >
+        <ArrowDownToLine className="h-4 w-4" />
+      </span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <ArrowDownToLine
-            className={cn(
-              "h-4 w-4 shrink-0",
-              isPending ? "text-amber-600" : "text-red-600"
-            )}
-          />
-          <p className="font-semibold text-slate-text">{line.source}</p>
+          <p className="truncate text-sm font-bold text-slate-text">{line.source}</p>
           <span
             className={cn(
-              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
-              isPending
-                ? "bg-amber-100 text-amber-900"
-                : "bg-red-100 text-red-800"
+              "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset",
+              isPending ? "mc-tone-warning" : "mc-tone-danger"
             )}
           >
             {withdrawalStatusLabel(line.status)}
           </span>
         </div>
-        <p className="mt-1 text-xs text-slate-muted">
+        <p className="mt-0.5 text-[11px] text-slate-muted">
           {formatDate(line.effectiveDate)}
         </p>
       </div>
-      <div className="text-right">
-        <p className="text-[11px] text-slate-muted">
+      <div className="shrink-0 text-end">
+        <p className="text-[10px] text-slate-muted">
           {isPending ? "طلب سحب رصيد" : "سحب رصيد"}
         </p>
         <p
           className={cn(
-            "font-bold tabular-nums",
-            isPending ? "text-amber-700" : "text-red-600"
+            "text-sm font-black tabular-nums",
+            isPending ? "text-warning-text" : "text-debt-text"
           )}
         >
           − {formatCurrency(line.amount)}
@@ -300,19 +363,19 @@ function WithdrawalRow({ line }: { line: DoctorWithdrawalLine }) {
 
 function BalanceTopUpRow({ line }: { line: DoctorBalanceTopUpLine }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-emerald-50/20 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex items-center gap-3 border-b border-slate-border px-4 py-3.5 last:border-b-0">
+      <span className="mc-kpi__icon mc-tone-success h-10 w-10 rounded-xl">
+        <ArrowUpToLine className="h-4 w-4" />
+      </span>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <ArrowUpToLine className="h-4 w-4 shrink-0 text-emerald-600" />
-          <p className="font-semibold text-slate-text">{line.label}</p>
-        </div>
-        <p className="mt-1 text-xs text-slate-muted">
+        <p className="truncate text-sm font-bold text-slate-text">{line.label}</p>
+        <p className="mt-0.5 text-[11px] text-slate-muted">
           {formatDate(line.effectiveDate)}
         </p>
       </div>
-      <div className="text-right">
-        <p className="text-[11px] text-slate-muted">شحن رصيد</p>
-        <p className="font-bold tabular-nums text-emerald-700">
+      <div className="shrink-0 text-end">
+        <p className="text-[10px] text-slate-muted">شحن رصيد</p>
+        <p className="text-sm font-black tabular-nums text-success-text">
           + {formatCurrency(line.amount)}
         </p>
       </div>
@@ -497,88 +560,89 @@ export function DoctorDailyCollectionsPanel({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-muted">{t("docDailyStatementIntro")}</p>
+      <p className="px-1 text-xs leading-relaxed text-slate-muted">{t("docDailyStatementIntro")}</p>
 
-      <Card>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label={t("docFromDate")}
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            dir="ltr"
-            className="text-left"
-          />
-          <Input
-            label={t("docToDate")}
-            type="date"
-            value={dateTo}
-            min={dateFrom}
-            onChange={(e) => setDateTo(e.target.value)}
-            dir="ltr"
-            className="text-left"
-          />
+      <section className="mc-panel">
+        <div className="space-y-3 p-4">
+          <div className="grid grid-cols-2 gap-2.5">
+            <Input
+              label={t("docFromDate")}
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              dir="ltr"
+              className="h-11 rounded-xl text-left"
+            />
+            <Input
+              label={t("docToDate")}
+              type="date"
+              value={dateTo}
+              min={dateFrom}
+              onChange={(e) => setDateTo(e.target.value)}
+              dir="ltr"
+              className="h-11 rounded-xl text-left"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={setToday}
+              className="mc-chip min-h-[40px] text-xs"
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              {t("docToday")}
+            </button>
+            <button
+              type="button"
+              onClick={setLast7Days}
+              className="mc-chip min-h-[40px] text-xs"
+            >
+              {t("docLast7Days")}
+            </button>
+            <span className="ms-auto flex items-center gap-2">
+              <button
+                type="button"
+                className="mc-btn-soft min-h-[40px] px-3"
+                onClick={() => void refreshCollections()}
+                disabled={loading}
+              >
+                {loading || refreshing ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                {t("refresh")}
+              </button>
+              <button
+                type="button"
+                className="mc-btn-soft min-h-[40px] px-3"
+                onClick={() => window.print()}
+                disabled={!result}
+              >
+                <Printer className="h-4 w-4" />
+                {t("print")}
+              </button>
+            </span>
+          </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={setToday}
-            className="rounded-full border border-slate-border px-3 py-1 text-xs font-medium text-slate-muted hover:bg-surface"
-          >
-            {t("docToday")}
-          </button>
-          <button
-            type="button"
-            onClick={setLast7Days}
-            className="rounded-full border border-slate-border px-3 py-1 text-xs font-medium text-slate-muted hover:bg-surface"
-          >
-            {t("docLast7Days")}
-          </button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => void refreshCollections()}
-            disabled={loading}
-          >
-            {loading || refreshing ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            {t("refresh")}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => window.print()}
-            disabled={!result}
-          >
-            <Printer className="h-4 w-4" />
-            {t("print")}
-          </Button>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="-mb-px flex gap-2 overflow-x-auto border-t border-slate-border bg-surface px-4 py-3 [scrollbar-width:none]">
           {STATUS_TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setStatusFilter(tab.id)}
               className={cn(
-                "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-                statusFilter === tab.id
-                  ? "bg-primary text-white"
-                  : "bg-surface text-slate-muted hover:bg-surface/80"
+                "mc-chip min-h-[40px] shrink-0 whitespace-nowrap text-xs",
+                statusFilter === tab.id && "mc-chip--active"
               )}
             >
               {statusLabels[tab.labelKey]}
             </button>
           ))}
         </div>
-      </Card>
+      </section>
 
       <DailyCollectionsCacheBanner
         refreshing={refreshing}
@@ -591,81 +655,89 @@ export function DoctorDailyCollectionsPanel({
       {error && <Alert variant="error">{error}</Alert>}
 
       {result && mySummary && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="h-4 w-4 text-primary" />
+        <section className="space-y-3">
+          <div className="flex items-center gap-3 px-1">
+            <h3 className="no-accent flex items-center gap-2 text-sm font-bold text-slate-text">
+              <Users className="h-4 w-4 text-premium-500" />
               {t("docDailySummary")} {periodLabel}
-            </CardTitle>
-          </CardHeader>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <SummaryChip label={t("docDailySessions")} value={mySummary.stats.totalPatients} />
+            </h3>
+            <span className="h-px flex-1 bg-gradient-to-l from-transparent to-slate-border" />
+          </div>
+
+          <div className="mc-hero grid grid-cols-2 gap-3 rounded-[24px] p-4">
+            <div className="relative">
+              <p className="text-[11px] font-medium text-white/65">{t("docDailyYourShare")}</p>
+              <p className="mc-text-champagne mt-1 text-2xl font-black leading-none tracking-tight tabular-nums">
+                {formatCurrency(mySummary.stats.doctorShareToday)}
+              </p>
+            </div>
+            <div className="relative border-s border-white/10 ps-3">
+              <p className="text-[11px] font-medium text-white/65">{t("docDailyCollected")}</p>
+              <p className="mt-1 text-xl font-bold leading-none tracking-tight tabular-nums text-white">
+                {formatCurrency(mySummary.stats.totalCollected)}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            <SummaryChip label={t("docDailySessions")} value={mySummary.stats.totalPatients} tone="navy" />
             <SummaryChip
               label={t("docDailyFilterPaid")}
               value={mySummary.stats.paidFull + mySummary.stats.partial}
-              className="border-emerald-200 bg-emerald-50/50"
+              tone="success"
             />
             <SummaryChip
               label={t("docDailyFilterDebtors")}
               value={mySummary.stats.debtors}
-              className="border-orange-200 bg-orange-50/50"
-            />
-            <SummaryChip
-              label={t("docDailyCollected")}
-              value={formatCurrency(mySummary.stats.totalCollected)}
-            />
-            <SummaryChip
-              label={t("docDailyYourShare")}
-              value={formatCurrency(mySummary.stats.doctorShareToday)}
-              className="border-primary/30 bg-primary/5"
+              tone="warning"
             />
             {mySummary.stats.assistantDoctorDeduction > 0 && (
               <SummaryChip
                 label={t("docDailyAssistantDeduction")}
                 value={`− ${formatCurrency(mySummary.stats.assistantDoctorDeduction)}`}
-                className="border-red-200 bg-red-50/50"
+                tone="danger"
               />
             )}
             {mySummary.stats.netDoctorShareToday > 0 && (
               <SummaryChip
                 label={t("docDailyNetShare")}
                 value={formatCurrency(mySummary.stats.netDoctorShareToday)}
-                className="border-emerald-300 bg-emerald-50/70"
+                tone="success"
               />
             )}
             {mySummary.stats.totalWithdrawnInPeriod > 0 && (
               <SummaryChip
                 label={t("docDailyWithdrawn")}
                 value={`− ${formatCurrency(mySummary.stats.totalWithdrawnInPeriod)}`}
-                className="border-red-200 bg-red-50/50 text-red-700"
+                tone="danger"
               />
             )}
             {mySummary.stats.totalPendingWithdrawalInPeriod > 0 && (
               <SummaryChip
                 label={t("docDailyWithdrawalPending")}
                 value={`− ${formatCurrency(mySummary.stats.totalPendingWithdrawalInPeriod)}`}
-                className="border-amber-200 bg-amber-50/50 text-amber-800"
+                tone="warning"
               />
             )}
             {mySummary.stats.totalToppedUpInPeriod > 0 && (
               <SummaryChip
                 label={t("docDailyToppedUp")}
                 value={`+ ${formatCurrency(mySummary.stats.totalToppedUpInPeriod)}`}
-                className="border-emerald-200 bg-emerald-50/50 text-emerald-700"
+                tone="success"
               />
             )}
             {mySummary.stats.totalDoctorExpenseDeduction > 0 && (
               <SummaryChip
                 label="خصم فواتير صرفية"
                 value={`− ${formatCurrency(mySummary.stats.totalDoctorExpenseDeduction)}`}
-                className="border-orange-200 bg-orange-50/50 text-orange-800"
+                tone="danger"
               />
             )}
             {mySummary.stats.availableBalance != null && (
               <SummaryChip
                 label={t("docDailyBalanceRemaining")}
                 value={formatCurrency(mySummary.stats.availableBalance)}
-                className="border-slate-200 bg-slate-50/80"
+                tone="gold"
               />
             )}
             {mySummary.stats.withdrawableLimit != null &&
@@ -674,25 +746,22 @@ export function DoctorDailyCollectionsPanel({
                 <SummaryChip
                   label={t("docDailyWithdrawable")}
                   value={formatCurrency(mySummary.stats.withdrawableLimit)}
-                  className="border-primary/30 bg-primary/5"
+                  tone="navy"
                 />
               )}
             <SummaryChip
               label={t("docDailyRemaining")}
               value={formatCurrency(mySummary.stats.totalRemaining)}
-              className="border-amber-200 bg-amber-50/50"
+              tone="warning"
             />
           </div>
-        </Card>
+        </section>
       )}
 
       {loading && !rawResult && (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-20 animate-pulse rounded-xl bg-surface"
-            />
+            <div key={i} className="mc-skeleton h-24 rounded-2xl" />
           ))}
         </div>
       )}
@@ -704,12 +773,12 @@ export function DoctorDailyCollectionsPanel({
       )}
 
       {mySummary && (mySummary.rows.length > 0 || mySummary.assistantPayroll.length > 0 || mySummary.withdrawals.length > 0 || mySummary.balanceTopups.length > 0 || mySummary.doctorExpenses.length > 0) && (
-        <Card className="overflow-hidden p-0">
-          <div className="border-b border-slate-border bg-surface-card px-4 py-3">
-            <p className="flex items-center gap-2 text-sm font-bold text-slate-text">
-              <Calendar className="h-4 w-4 text-primary" />
+        <section className="mc-panel">
+          <div className="mc-panel-head !px-4">
+            <h3 className="mc-panel-title no-accent">
+              <Calendar />
               {t("docDailyPatientList")}
-            </p>
+            </h3>
           </div>
           <div>
             {mySummary.rows.map((row) => (
@@ -726,37 +795,43 @@ export function DoctorDailyCollectionsPanel({
               </StatementExpenseSection>
             )}
             {mySummary.assistantPayroll.length > 0 && (
-              <div className="border-t border-amber-200/60">
-                <p className="bg-amber-50/60 px-4 py-2 text-xs font-semibold text-amber-900">
-                  {t("docDailyAssistantPayroll")}
-                </p>
+              <div>
+                <SectionHead
+                  icon={UserRound}
+                  title={t("docDailyAssistantPayroll")}
+                  tone="warning"
+                />
                 {mySummary.assistantPayroll.map((line) => (
                   <AssistantPayrollRow key={line.id} line={line} />
                 ))}
               </div>
             )}
             {mySummary.withdrawals.length > 0 && (
-              <div className="border-t border-red-200/60">
-                <p className="bg-red-50/60 px-4 py-2 text-xs font-semibold text-red-900">
-                  {t("docDailyWithdrawals")}
-                </p>
+              <div>
+                <SectionHead
+                  icon={ArrowDownToLine}
+                  title={t("docDailyWithdrawals")}
+                  tone="danger"
+                />
                 {mySummary.withdrawals.map((line) => (
                   <WithdrawalRow key={line.id} line={line} />
                 ))}
               </div>
             )}
             {mySummary.balanceTopups.length > 0 && (
-              <div className="border-t border-emerald-200/60">
-                <p className="bg-emerald-50/60 px-4 py-2 text-xs font-semibold text-emerald-900">
-                  {t("docDailyBalanceTopUps")}
-                </p>
+              <div>
+                <SectionHead
+                  icon={ArrowUpToLine}
+                  title={t("docDailyBalanceTopUps")}
+                  tone="success"
+                />
                 {mySummary.balanceTopups.map((line) => (
                   <BalanceTopUpRow key={line.id} line={line} />
                 ))}
               </div>
             )}
           </div>
-        </Card>
+        </section>
       )}
 
       {!loading && clinicId && doctorId && (

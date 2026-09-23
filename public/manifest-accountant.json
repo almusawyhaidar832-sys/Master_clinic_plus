@@ -1,8 +1,8 @@
 {
   "id": "/dashboard",
-  "name": "Pearl Clinic — المحاسب",
+  "name": "Pearl System — المحاسب",
   "short_name": "المحاسب",
-  "description": "بوابة المحاسب — بيرل كلينك",
+  "description": "بوابة المحاسب — بيرل سيستم",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",

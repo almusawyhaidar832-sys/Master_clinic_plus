@@ -5,7 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { getActiveClinicId } from "@/lib/clinic-context";
-import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatTile } from "@/components/ui/StatTile";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { AddDoctorExpenseModal } from "@/components/doctor-expenses/AddDoctorExpenseModal";
 import { DoctorExpenseInvoiceViewer } from "@/components/doctor-expenses/DoctorExpenseInvoiceViewer";
 import { DoctorSalaryAdjustmentsPanel } from "@/components/expenses/DoctorSalaryAdjustmentsPanel";
@@ -26,6 +28,8 @@ import {
   Zap,
   Banknote,
   Wallet,
+  FileText,
+  TrendingDown,
 } from "lucide-react";
 
 const VALID_TABS = [
@@ -102,6 +106,7 @@ export default function DoctorExpensesPage() {
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { bi } = useLanguage();
 
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
@@ -281,37 +286,39 @@ export default function DoctorExpensesPage() {
   );
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-slate-text">
-            <span className="mc-icon-badge-primary">
-              <Receipt className="h-5 w-5" />
-            </span>
-            صرفيات عامة
-          </h1>
-          <p className="mc-page-subtitle">
+    <div className="mx-auto max-w-5xl space-y-6">
+      <PageHeader
+        title="صرفيات عامة"
+        eyebrow={bi("المالية", "Finance")}
+        icon={Receipt}
+        className="mb-0"
+        subtitle={
+          <>
             فواتير وصرفيات الأطباء · رواتب الأطباء · صرفيات العيادة — السجل
             التاريخي في{" "}
             <button
               type="button"
-              className="font-semibold text-primary underline"
+              className="font-semibold text-primary-700 underline decoration-premium-400 underline-offset-4 hover:text-primary-800"
               onClick={() => router.push(patientsHistoryHref)}
             >
               ملفات المرضى
             </button>
-          </p>
-        </div>
-        {activeTab === "clinic_expenses" && (
-          <Button
-            onClick={() => setShowAdd(true)}
-            disabled={!clinicId || doctors.length === 0}
-          >
-            <Plus className="h-4 w-4" />
-            إضافة فاتورة صرف
-          </Button>
-        )}
-      </div>
+          </>
+        }
+        actions={
+          activeTab === "clinic_expenses" ? (
+            <button
+              type="button"
+              className="mc-btn-navy py-2.5"
+              onClick={() => setShowAdd(true)}
+              disabled={!clinicId || doctors.length === 0}
+            >
+              <Plus className="h-4 w-4 text-premium-300" />
+              إضافة فاتورة صرف
+            </button>
+          ) : undefined
+        }
+      />
 
       <div className="mc-tab-group">
         {TAB_ITEMS.map(({ id, label, icon: Icon, accent }) => (
@@ -350,29 +357,25 @@ export default function DoctorExpensesPage() {
 
       {activeTab === "clinic_expenses" && (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {[
-              {
-                label: "عدد الفواتير",
-                value: expenses.length,
-                color: "mc-stat-neutral",
-              },
-              {
-                label: "إجمالي الصرف",
-                value: formatCurrency(totalAmount),
-                color: "mc-stat-debt",
-              },
-              {
-                label: "حصة الأطباء",
-                value: formatCurrency(totalDoctorShare),
-                color: "mc-stat-warning",
-              },
-            ].map((s) => (
-              <div key={s.label} className={s.color}>
-                <p className="mc-stat-value">{s.value}</p>
-                <p className="mc-stat-label">{s.label}</p>
-              </div>
-            ))}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <StatTile
+              label="عدد الفواتير"
+              value={expenses.length}
+              icon={FileText}
+              tone="navy"
+            />
+            <StatTile
+              label="إجمالي الصرف"
+              value={formatCurrency(totalAmount)}
+              icon={TrendingDown}
+              tone="danger"
+            />
+            <StatTile
+              label="حصة الأطباء"
+              value={formatCurrency(totalDoctorShare)}
+              icon={Stethoscope}
+              tone="warning"
+            />
           </div>
 
           {actionError && (
@@ -380,16 +383,23 @@ export default function DoctorExpensesPage() {
           )}
 
           {loading ? (
-            <div className="flex justify-center py-12">
-              <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="mc-skeleton h-28 rounded-2xl" />
+              ))}
             </div>
           ) : expenses.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-border p-10 text-center text-sm text-slate-muted">
-              لا توجد صرفيات نشطة — بعد الاعتماد تنتقل الفاتورة إلى السجل
-              التاريخي في ملفات المرضى
+            <div className="mc-panel flex flex-col items-center gap-3 border-dashed px-6 py-12 text-center">
+              <span className="mc-icon-tile h-12 w-12">
+                <Receipt className="h-5 w-5" />
+              </span>
+              <p className="max-w-md text-sm text-slate-muted">
+                لا توجد صرفيات نشطة — بعد الاعتماد تنتقل الفاتورة إلى السجل
+                التاريخي في ملفات المرضى
+              </p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {expenses.map((e) => {
                 const doctorPart =
                   Number(e.amount) * (Number(e.percentage_split) / 100);
@@ -400,19 +410,20 @@ export default function DoctorExpensesPage() {
                   <div
                     key={e.id}
                     className={cn(
-                      "mc-hover-lift rounded-2xl border bg-surface-card p-4",
-                      isDeducted
-                        ? "border-slate-border"
-                        : "border-warning-border bg-warning/30"
+                      "mc-panel mc-hover-lift p-5",
+                      !isDeducted && "border-s-4 border-s-warning-border"
                     )}
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex min-w-0 flex-1 gap-3.5">
+                        <span className="mc-icon-tile h-11 w-11 rounded-xl">
+                          <Stethoscope className="h-5 w-5" strokeWidth={1.8} />
+                        </span>
                       <div className="min-w-0 flex-1">
-                        <p className="flex items-center gap-1 font-bold text-slate-text">
-                          <Stethoscope className="h-4 w-4 text-primary" />
+                        <p className="font-bold text-slate-text">
                           {e.doctor?.full_name_ar ?? "طبيب"}
                         </p>
-                        <p className="text-lg font-black text-debt-text">
+                        <p className="mt-0.5 text-lg font-black tabular-nums text-debt-text">
                           خصم الطبيب: {formatCurrency(doctorPart)}
                         </p>
                         <p className="text-sm text-slate-muted">
@@ -421,7 +432,7 @@ export default function DoctorExpensesPage() {
                           {formatCurrency(clinicPart)}
                         </p>
                         {!isDeducted && (
-                          <p className="mt-1 text-xs font-medium text-warning-text">
+                          <p className="mt-2 inline-flex rounded-full border border-warning-border bg-warning px-2.5 py-0.5 text-xs font-semibold text-warning-text">
                             لم يُخصم من محفظة الطبيب بعد
                           </p>
                         )}
@@ -445,17 +456,18 @@ export default function DoctorExpensesPage() {
                           </p>
                         )}
                       </div>
+                      </div>
                       <div className="flex flex-col items-end gap-2">
-                        <span className="text-xs text-slate-muted">
+                        <span className="rounded-full border border-slate-border bg-surface px-2.5 py-0.5 text-xs font-medium tabular-nums text-slate-muted">
                           {formatDate(e.expense_date)}
                         </span>
                         {!isDeducted && (
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap gap-1.5">
                             <button
                               type="button"
                               disabled={busy}
                               onClick={() => void applyDeduction(e.id)}
-                              className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-600 disabled:opacity-60"
+                              className="mc-btn-navy px-3 py-1.5 text-xs"
                             >
                               {busy ? (
                                 <RefreshCw className="h-3 w-3 animate-spin" />
@@ -468,7 +480,7 @@ export default function DoctorExpensesPage() {
                               type="button"
                               disabled={busy}
                               onClick={() => void deleteOrphan(e.id)}
-                              className="flex items-center gap-1 rounded-lg border border-debt-border px-2.5 py-1.5 text-xs text-debt-text transition-colors hover:bg-debt disabled:opacity-60"
+                              className="inline-flex items-center gap-1 rounded-xl border border-debt-border bg-surface-card px-3 py-1.5 text-xs font-semibold text-debt-text transition-colors hover:bg-debt disabled:opacity-60"
                             >
                               <Trash2 className="h-3 w-3" />
                               حذف

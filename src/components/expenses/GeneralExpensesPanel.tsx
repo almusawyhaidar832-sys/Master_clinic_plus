@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { PieChart, PlusCircle } from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { createClient } from "@/lib/supabase/client";
@@ -165,21 +164,21 @@ export function GeneralExpensesPanel({
             {row.category.name_ar}
           </span>
         ) : (
-          <span className="text-xs text-slate-400">غير مصنف</span>
+          <span className="text-xs text-slate-muted">غير مصنف</span>
         ),
     },
     {
       key: "desc",
       header: "الوصف",
       render: (row) => (
-        <span className="text-slate-700">{row.description_ar}</span>
+        <span className="text-slate-text">{row.description_ar}</span>
       ),
     },
     {
       key: "amount",
       header: "المبلغ",
       render: (row) => (
-        <span className="font-bold text-red-600 tabular-nums">
+        <span className="font-bold text-debt-text tabular-nums">
           {formatCurrency(row.amount)}
         </span>
       ),
@@ -188,40 +187,15 @@ export function GeneralExpensesPanel({
 
   return (
     <div className="space-y-6">
-      {catTotals.length > 0 && (
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-          <h3 className="mb-3 text-sm font-bold text-slate-600">
-            توزيع المصروفات
+      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="mc-panel lg:col-span-3">
+        <div className="mc-panel-head">
+          <h3 className="mc-panel-title">
+            <PlusCircle />
+            تسجيل صرفية عيادة
           </h3>
-          <div className="space-y-2">
-            {catTotals.slice(0, 6).map((c) => (
-              <div key={c.id} className="flex items-center gap-3">
-                <span className="w-24 truncate text-xs text-slate-600">
-                  {c.name_ar}
-                </span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${(c.total / catTotals[0].total) * 100}%`,
-                      backgroundColor: c.color,
-                    }}
-                  />
-                </div>
-                <span className="w-24 text-left text-xs font-semibold text-slate-700 tabular-nums">
-                  {formatCurrency(c.total)}
-                </span>
-              </div>
-            ))}
-          </div>
         </div>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>تسجيل صرفية عيادة</CardTitle>
-        </CardHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="mc-panel-body space-y-5">
           {message && (
             <Alert variant={message.type === "success" ? "success" : "error"}>
               {message.text}
@@ -229,7 +203,7 @@ export function GeneralExpensesPanel({
           )}
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">
+            <label className="mc-label mb-2">
               التصنيف
             </label>
             <div className="flex flex-wrap gap-2">
@@ -239,10 +213,8 @@ export function GeneralExpensesPanel({
                   type="button"
                   onClick={() => setCategoryId(c.id)}
                   className={cn(
-                    "rounded-full px-3 py-1 text-sm font-medium transition-all",
-                    categoryId === c.id
-                      ? "text-white shadow-sm ring-2 ring-offset-1"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    "mc-chip",
+                    categoryId === c.id && "border-transparent text-white shadow-soft hover:text-white"
                   )}
                   style={
                     categoryId === c.id
@@ -289,23 +261,71 @@ export function GeneralExpensesPanel({
             />
           </div>
 
-          <Button type="submit" disabled={loading || !clinicId}>
-            {loading ? "جارٍ الحفظ..." : "حفظ المصروف"}
-          </Button>
+          <div className="flex justify-end border-t border-slate-border pt-4">
+            <button
+              type="submit"
+              className="mc-btn-navy px-6 py-2.5"
+              disabled={loading || !clinicId}
+            >
+              {loading ? "جارٍ الحفظ..." : "حفظ المصروف"}
+            </button>
+          </div>
         </form>
-      </Card>
+      </div>
 
-      <div>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1">
+      <div className="mc-panel lg:col-span-2">
+        <div className="mc-panel-head">
+          <h3 className="mc-panel-title">
+            <PieChart />
+            توزيع المصروفات
+          </h3>
+        </div>
+        <div className="mc-panel-body">
+          {catTotals.length > 0 ? (
+            <div className="space-y-3.5">
+              {catTotals.slice(0, 6).map((c) => (
+                <div key={c.id} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="flex min-w-0 items-center gap-2 font-medium text-slate-text">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: c.color }}
+                        aria-hidden
+                      />
+                      <span className="truncate">{c.name_ar}</span>
+                    </span>
+                    <span className="font-bold tabular-nums text-slate-text">
+                      {formatCurrency(c.total)}
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-surface ring-1 ring-inset ring-slate-border">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${(c.total / catTotals[0].total) * 100}%`,
+                        backgroundColor: c.color,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="py-6 text-center text-sm text-slate-muted">—</p>
+          )}
+        </div>
+      </div>
+      </div>
+
+      <div className="mc-panel">
+        <div className="mc-panel-head">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => setFilterCat("all")}
               className={cn(
-                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                filterCat === "all"
-                  ? "bg-primary text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                "mc-chip px-3 py-1 text-xs",
+                filterCat === "all" && "mc-chip--active"
               )}
             >
               الكل
@@ -316,8 +336,8 @@ export function GeneralExpensesPanel({
                 type="button"
                 onClick={() => setFilterCat(c.id)}
                 className={cn(
-                  "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-                  filterCat === c.id ? "text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  "mc-chip px-3 py-1 text-xs",
+                  filterCat === c.id && "border-transparent text-white hover:text-white"
                 )}
                 style={filterCat === c.id ? { backgroundColor: c.color } : {}}
               >
@@ -325,15 +345,17 @@ export function GeneralExpensesPanel({
               </button>
             ))}
           </div>
-          <p className="text-sm font-bold text-red-600">
+          <p className="rounded-full border border-debt-border bg-debt px-3 py-1 text-sm font-bold tabular-nums text-debt-text">
             الإجمالي: {formatCurrency(total)}
           </p>
         </div>
-        <DataTable
-          columns={columns}
-          data={filtered}
-          emptyMessage="لا توجد مصروفات مسجّلة"
-        />
+        <div className="p-2 sm:p-3">
+          <DataTable
+            columns={columns}
+            data={filtered}
+            emptyMessage="لا توجد مصروفات مسجّلة"
+          />
+        </div>
       </div>
     </div>
   );

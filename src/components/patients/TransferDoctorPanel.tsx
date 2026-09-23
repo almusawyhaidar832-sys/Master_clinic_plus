@@ -169,9 +169,12 @@ export function TransferDoctorPanel({
     const hasAnyCase = treatmentCases.length > 0;
     if (!hasAnyCase) return null;
     return (
-      <div className="rounded-xl border border-amber-200/80 bg-amber-50/40 px-4 py-3 text-xs text-amber-900">
-        <p className="font-semibold">تحويل طبيب</p>
-        <p className="mt-1 text-amber-800/90">
+      <div className="rounded-2xl border border-warning-border bg-warning px-4 py-3 text-xs text-warning-text">
+        <p className="flex items-center gap-2 font-bold">
+          <ArrowRightLeft className="h-4 w-4" />
+          تحويل طبيب
+        </p>
+        <p className="mt-1 leading-relaxed opacity-90">
           لا توجد حالات علاج مربوطة في النظام بعد — سجّل جلسة أولى (حالة
           جديدة) ثم يظهر التحويل. إن كانت هناك جلسات قديمة، شغّل سكربت ربط
           الحالات في Supabase.
@@ -183,13 +186,17 @@ export function TransferDoctorPanel({
   return (
     <div
       className={cn(
-        "rounded-xl border px-4 py-3",
+        "rounded-2xl border p-4",
         embedded
-          ? "border-primary/25 bg-primary/5"
-          : "border-slate-border bg-surface/40"
+          ? "border-primary-200 bg-primary-50/60 dark:border-primary-800 dark:bg-primary-900/20"
+          : "border-slate-border bg-surface-card shadow-card"
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="mc-kpi__icon mc-tone-royal h-10 w-10">
+            <ArrowRightLeft className="h-4 w-4" />
+          </span>
         <div className="min-w-0">
           <p className="text-xs font-semibold text-slate-muted">
             تحويل طبيب — حالة واحدة فقط (لا تُحوَّل كل حالات المراجع)
@@ -202,6 +209,7 @@ export function TransferDoctorPanel({
             مثال: مراجع عنده «تقويم» و«حشوات» — تحويل «تقويم» فقط يغيّر طبيب
             التقويم؛ «حشوات» تبقى لطبيبها. الجلسات السابقة لا تُعدَّل.
           </p>
+        </div>
         </div>
         <Button
           type="button"
@@ -233,7 +241,7 @@ export function TransferDoctorPanel({
       {error && !open && <Alert variant="warning" className="mt-3">{error}</Alert>}
 
       {open && (
-        <div className="mt-3 space-y-3 border-t border-slate-border/60 pt-3">
+        <div className="mt-4 space-y-3 border-t border-slate-border pt-4 animate-fade-in">
           {error && <Alert variant="error">{error}</Alert>}
 
           <Select
@@ -248,7 +256,7 @@ export function TransferDoctorPanel({
           />
 
           {selectedCase && (
-            <p className="text-xs text-slate-muted rounded-lg bg-white/60 px-3 py-2 border border-slate-border/50">
+            <p className="rounded-xl border border-slate-border bg-surface px-3 py-2 text-xs text-slate-muted">
               الطبيب الحالي لهذه الحالة:{" "}
               <span className="font-semibold text-primary">
                 {selectedCase.doctor
@@ -297,13 +305,13 @@ export function TransferDoctorPanel({
       )}
 
       {history.length > 0 && (
-        <details className="mt-3 text-xs text-slate-muted">
-          <summary className="cursor-pointer font-semibold">
+        <details className="mt-3 rounded-xl border border-slate-border bg-surface px-3 py-2 text-xs text-slate-muted">
+          <summary className="cursor-pointer font-semibold text-slate-text">
             سجل التحويلات ({history.length})
           </summary>
-          <ul className="mt-2 space-y-1">
+          <ul className="mt-2 space-y-1.5 border-s-2 border-premium-300/50 ps-3">
             {history.map((h) => (
-              <li key={h.id}>
+              <li key={h.id} className="leading-relaxed">
                 {formatDate(h.created_at)}
                 {h.caseName ? ` — ${h.caseName}` : ""}: من{" "}
                 {h.fromDoctorName

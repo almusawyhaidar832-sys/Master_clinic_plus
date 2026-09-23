@@ -108,7 +108,7 @@ function XrayUploadSection({
           "flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed py-4 text-sm font-medium transition-colors disabled:opacity-50",
           examLayout
             ? "border-cyan-400/60 bg-cyan-50/80 text-cyan-800 hover:bg-cyan-100"
-            : "border-teal-300 bg-white text-teal-800 hover:bg-teal-50"
+            : "border-primary-200 bg-surface-card text-primary-700 hover:bg-primary-50 dark:text-primary-200"
         )}
       >
         <Upload className="h-4 w-4" />
@@ -119,14 +119,14 @@ function XrayUploadSection({
           {value.xrayFiles.map((f, i) => (
             <li
               key={`${f.name}-${i}`}
-              className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs"
+              className="flex items-center justify-between rounded-lg border border-slate-border bg-surface-card px-3 py-2 text-xs"
             >
-              <span className="truncate text-slate-700">{f.name}</span>
+              <span className="truncate text-slate-text">{f.name}</span>
               <button
                 type="button"
                 disabled={disabled}
                 onClick={() => removeFile(i)}
-                className="text-slate-400 hover:text-red-600"
+                className="text-slate-muted hover:text-debt-text"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -198,7 +198,7 @@ export function SessionClinicalRecord({
               href={x.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="block overflow-hidden rounded-lg border border-slate-border bg-white"
+              className="block overflow-hidden rounded-lg border border-slate-border bg-surface-card"
             >
               {isPdf ? (
                 <div className="flex h-24 items-center justify-center text-xs text-slate-muted">

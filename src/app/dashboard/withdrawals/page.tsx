@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile } from "@/lib/clinic-context";
 import { fetchDoctorWalletStats } from "@/lib/services/doctor-wallet";
@@ -17,11 +17,19 @@ import {
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { notifyFinancialMutation } from "@/lib/sync/mutation-notify";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { CurrencyInput } from "@/components/ui/CurrencyInput";
 import type { Doctor, DoctorWithdrawal } from "@/types";
-
+import {
+  ArrowDownToLine,
+  Banknote,
+  Clock,
+  ListFilter,
+  Stethoscope,
+  Wallet,
+} from "lucide-react";
 export default function WithdrawalsPage() {
+  const { bi } = useLanguage();
   const [items, setItems] = useState<DoctorWithdrawal[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [filter, setFilter] = useState<"pending" | "all">("pending");
@@ -187,46 +195,67 @@ export default function WithdrawalsPage() {
     accountant_cash: "دفع نقدي — محاسب",
   };
 
+
+  const statusBadge: Record<string, string> = {
+    pending: "border-warning-border bg-warning text-warning-text",
+    approved: "border-primary-200 bg-primary-50 text-primary-700",
+    paid: "border-success-border bg-success text-success-text",
+    rejected: "border-debt-border bg-debt text-debt-text",
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-text">سحوبات الأطباء</h2>
-          <p className="text-slate-muted">
-            موافقة على طلبات الطبيب أو تسجيل دفع نقدي مباشر
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            variant={filter === "pending" ? "primary" : "outline"}
-            onClick={() => setFilter("pending")}
-          >
-            المعلّقة
-          </Button>
-          <Button
-            size="sm"
-            variant={filter === "all" ? "primary" : "outline"}
-            onClick={() => setFilter("all")}
-          >
-            الكل
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
+      <PageHeader
+        title="سحوبات الأطباء"
+        eyebrow={bi("المالية", "Finance")}
+        icon={ArrowDownToLine}
+        subtitle="موافقة على طلبات الطبيب أو تسجيل دفع نقدي مباشر"
+        className="mb-0"
+        actions={
+          <button
+            type="button"
+            className="mc-btn-navy py-2.5"
             onClick={() => setShowCashForm((v) => !v)}
             disabled={!canManage}
           >
+            <Banknote className="h-4 w-4 text-premium-300" />
             دفع نقدي للطبيب
-          </Button>
+          </button>
+        }
+      />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={cn("mc-chip", filter === "pending" && "mc-chip--active")}
+            onClick={() => setFilter("pending")}
+          >
+            <Clock className="h-3.5 w-3.5" />
+            المعلّقة
+          </button>
+          <button
+            type="button"
+            className={cn("mc-chip", filter === "all" && "mc-chip--active")}
+            onClick={() => setFilter("all")}
+          >
+            <ListFilter className="h-3.5 w-3.5" />
+            الكل
+          </button>
         </div>
       </div>
 
       {message && <Alert variant="info">{message}</Alert>}
 
       {showCashForm && (
-        <Card>
-          <form onSubmit={recordCashWithdrawal} className="grid gap-4 sm:grid-cols-2">
+        <div className="mc-panel">
+          <div className="mc-panel-head">
+            <h3 className="mc-panel-title">
+              <Banknote />
+              دفع نقدي للطبيب
+            </h3>
+          </div>
+          <form onSubmit={recordCashWithdrawal} className="mc-panel-body grid gap-4 sm:grid-cols-2">
             <Select
               label="الطبيب"
               value={cashDoctorId}
@@ -247,27 +276,41 @@ export default function WithdrawalsPage() {
             />
             {walletPreview !== null && cashDoctorId && (
               <div
-                className={`sm:col-span-2 rounded-lg p-3 text-sm ${
-                  walletIsDebtor ? "bg-red-50" : "bg-primary/5"
-                }`}
-              >
-                <span className="text-slate-muted">الرصيد المتاح: </span>
-                <span
-                  className={`font-bold tabular-nums ${
-                    walletIsDebtor ? "text-red-600" : "text-primary"
-                  }`}
-                >
-                  {walletIsDebtor ? "−" : ""}
-                  {formatCurrency(Math.abs(walletPreview))}
-                  {walletIsDebtor && (
-                    <span className="mr-1 text-xs font-bold">(مدين)</span>
-                  )}
-                </span>
-                {walletIsDebtor && (
-                  <p className="mt-1 text-xs text-red-600">
-                    لا يمكن سحب مبلغ — الطبيب مدين للعيادة
-                  </p>
+                className={cn(
+                  "flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm sm:col-span-2",
+                  walletIsDebtor
+                    ? "border-debt-border bg-debt"
+                    : "border-slate-border bg-surface"
                 )}
+              >
+                <span
+                  className={cn(
+                    "mc-kpi__icon h-10 w-10",
+                    walletIsDebtor ? "mc-tone-danger" : "mc-tone-navy"
+                  )}
+                >
+                  <Wallet className="h-5 w-5" />
+                </span>
+                <div>
+                  <span className="text-slate-muted">الرصيد المتاح: </span>
+                  <span
+                    className={cn(
+                      "text-lg font-black tabular-nums",
+                      walletIsDebtor ? "text-debt-text" : "text-slate-text"
+                    )}
+                  >
+                    {walletIsDebtor ? "−" : ""}
+                    {formatCurrency(Math.abs(walletPreview))}
+                    {walletIsDebtor && (
+                      <span className="ms-1 text-xs font-bold">(مدين)</span>
+                    )}
+                  </span>
+                  {walletIsDebtor && (
+                    <p className="mt-0.5 text-xs text-debt-text">
+                      لا يمكن سحب مبلغ — الطبيب مدين للعيادة
+                    </p>
+                  )}
+                </div>
               </div>
             )}
             <Input
@@ -276,9 +319,10 @@ export default function WithdrawalsPage() {
               onChange={(e) => setCashNotes(e.target.value)}
               className="sm:col-span-2"
             />
-            <div className="sm:col-span-2">
-              <Button
+            <div className="flex justify-end border-t border-slate-border pt-4 sm:col-span-2">
+              <button
                 type="submit"
+                className="mc-btn-navy px-6 py-2.5"
                 disabled={loading || walletIsDebtor || (walletPreview ?? 0) <= 0}
               >
                 {loading
@@ -286,60 +330,91 @@ export default function WithdrawalsPage() {
                   : walletIsDebtor
                     ? "لا يمكن السحب — الطبيب مدين"
                     : "تسجيل دفع نقدي (يخصم فوراً)"}
-              </Button>
+              </button>
             </div>
           </form>
-        </Card>
+        </div>
       )}
 
       {items.length === 0 ? (
-        <Alert variant="info">
-          لا توجد طلبات سحب {filter === "pending" ? "معلّقة" : ""}
-        </Alert>
+        <div className="mc-panel flex flex-col items-center gap-3 px-6 py-12 text-center">
+          <span className="mc-icon-tile h-12 w-12">
+            <ArrowDownToLine className="h-5 w-5" />
+          </span>
+          <p className="text-sm text-slate-muted">
+            لا توجد طلبات سحب {filter === "pending" ? "معلّقة" : ""}
+          </p>
+        </div>
       ) : (
         <div className="space-y-3">
           {items.map((w) => (
-            <Card key={w.id} className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="font-semibold text-slate-text">
-                  {w.doctor?.full_name_ar || "طبيب"}
-                </p>
-                <p className="text-2xl font-bold text-primary">
-                  {formatCurrency(w.amount)}
-                </p>
-                <p className="text-xs text-slate-muted">
-                  {new Date(w.requested_at).toLocaleString("ar-EG")} —{" "}
-                  {statusLabel[w.status]}
-                  {w.source && ` · ${sourceLabel[w.source] ?? w.source}`}
-                </p>
+            <div key={w.id} className="mc-list-row flex-wrap justify-between">
+              <div className="flex min-w-0 items-center gap-4">
+                <span className="mc-icon-tile h-12 w-12 rounded-xl">
+                  <Stethoscope className="h-5 w-5" strokeWidth={1.8} />
+                </span>
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-text">
+                    {w.doctor?.full_name_ar || "طبيب"}
+                  </p>
+                  <p className="text-2xl font-black tracking-tight tabular-nums text-slate-text">
+                    {formatCurrency(w.amount)}
+                  </p>
+                  <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-muted">
+                    <span className="tabular-nums">
+                      {new Date(w.requested_at).toLocaleString("ar-EG")}
+                    </span>
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+                        statusBadge[w.status] ?? "border-slate-border bg-surface text-slate-muted"
+                      )}
+                    >
+                      {statusLabel[w.status]}
+                    </span>
+                    {w.source && (
+                      <span className="inline-flex rounded-full border border-slate-border bg-surface px-2 py-0.5 text-[11px] font-medium">
+                        {sourceLabel[w.source] ?? w.source}
+                      </span>
+                    )}
+                  </p>
+                </div>
               </div>
               {canManage && w.status === "pending" && (
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => updateStatus(w.id, "approved")}>
+                  <button
+                    type="button"
+                    className="mc-btn-navy px-3.5 py-1.5"
+                    onClick={() => updateStatus(w.id, "approved")}
+                  >
                     موافقة
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
+                  </button>
+                  <button
+                    type="button"
+                    className="mc-btn-soft px-3.5 py-1.5"
                     onClick={() => updateStatus(w.id, "paid")}
                   >
                     تم الدفع
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center rounded-xl px-3.5 py-1.5 text-sm font-semibold text-debt-text transition-colors hover:bg-debt"
                     onClick={() => updateStatus(w.id, "rejected")}
                   >
                     رفض
-                  </Button>
+                  </button>
                 </div>
               )}
               {canManage && w.status === "approved" && (
-                <Button size="sm" onClick={() => updateStatus(w.id, "paid")}>
+                <button
+                  type="button"
+                  className="mc-btn-navy px-3.5 py-1.5"
+                  onClick={() => updateStatus(w.id, "paid")}
+                >
                   تأكيد الدفع
-                </Button>
+                </button>
               )}
-            </Card>
+            </div>
           ))}
         </div>
       )}

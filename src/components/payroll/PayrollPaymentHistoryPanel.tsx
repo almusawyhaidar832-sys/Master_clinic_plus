@@ -281,8 +281,8 @@ export function PayrollPaymentHistoryPanel() {
             <CardTitle className="text-base">ملخص الفترة</CardTitle>
           </CardHeader>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 text-center">
-              <p className="text-xl font-bold tabular-nums text-emerald-800">
+            <div className="rounded-xl border border-success-border bg-success p-4 text-center">
+              <p className="text-xl font-bold tabular-nums text-success-text">
                 {formatCurrency(totals.confirmedPayouts)}
               </p>
               <p className="text-xs text-slate-muted">إجمالي الصرف المؤكّد</p>

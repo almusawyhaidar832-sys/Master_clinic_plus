@@ -54,7 +54,7 @@ function SplitColumns({
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-lg border border-primary/15 bg-white/80 p-3 space-y-2">
+      <div className="rounded-2xl border border-slate-border bg-surface-card p-4 space-y-2 shadow-card">
         <p className="text-xs font-bold text-primary">حصة الطبيب</p>
         <div className="space-y-1 text-sm">
           <div className="flex justify-between gap-2">
@@ -83,7 +83,7 @@ function SplitColumns({
               <span className="tabular-nums">{formatCurrency(preview.doctorGross)}</span>
             </div>
           )}
-          <div className="flex justify-between gap-2 text-amber-700">
+          <div className="flex justify-between gap-2 text-warning-text">
             <span>تحمل المواد (طبيب)</span>
             <span className="tabular-nums">−{formatCurrency(preview.doctorMaterials)}</span>
           </div>
@@ -94,10 +94,10 @@ function SplitColumns({
         </div>
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white/80 p-3 space-y-2">
+      <div className="rounded-2xl border border-slate-border bg-surface-card p-4 space-y-2 shadow-card">
         <p className="text-xs font-bold text-slate-text">حصة العيادة</p>
         <div className="space-y-1 text-sm">
-          <div className="flex justify-between gap-2 text-amber-700">
+          <div className="flex justify-between gap-2 text-warning-text">
             <span>تحمل المواد (عيادة)</span>
             <span className="tabular-nums">{formatCurrency(preview.clinicMaterials)}</span>
           </div>
@@ -139,12 +139,12 @@ function PaidSplitColumns({
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-lg border border-emerald-300/60 bg-emerald-50/60 p-3 space-y-2">
-        <p className="text-xs font-bold text-emerald-800">من المبلغ المدفوع → الطبيب</p>
+      <div className="rounded-2xl border border-success-border bg-success p-4 space-y-2">
+        <p className="text-xs font-bold text-success-text">من المبلغ المدفوع → الطبيب</p>
         <div className="space-y-1 text-sm">
           <div className="flex justify-between gap-2">
-            <span className="text-slate-600">المبلغ المدفوع</span>
-            <span className="font-semibold tabular-nums text-emerald-900">
+            <span className="text-slate-muted">المبلغ المدفوع</span>
+            <span className="font-semibold tabular-nums text-success-text">
               {formatCurrency(paidPreview.paidAmount)}
             </span>
           </div>
@@ -159,34 +159,34 @@ function PaidSplitColumns({
             </div>
           )}
           {labDoctor > 0 && (
-            <div className="flex justify-between gap-2 text-amber-700">
+            <div className="flex justify-between gap-2 text-warning-text">
               <span>تحمل المختبر (طبيب)</span>
               <span className="tabular-nums">−{formatCurrency(labDoctor)}</span>
             </div>
           )}
-          <div className="flex justify-between gap-2 border-t border-emerald-300/50 pt-2 font-bold text-emerald-800">
+          <div className="flex justify-between gap-2 border-t border-success-border pt-2 font-bold text-success-text">
             <span>يُضاف للمحفظة</span>
             <span className="tabular-nums">{formatCurrency(paidPreview.doctorShare)}</span>
           </div>
         </div>
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 space-y-2">
-        <p className="text-xs font-bold text-slate-800">من المبلغ المدفوع → العيادة</p>
+      <div className="rounded-2xl border border-slate-border bg-surface p-4 space-y-2">
+        <p className="text-xs font-bold text-slate-text">من المبلغ المدفوع → العيادة</p>
         <div className="space-y-1 text-sm">
           <div className="flex justify-between gap-2">
-            <span className="text-slate-600">المبلغ المدفوع</span>
+            <span className="text-slate-muted">المبلغ المدفوع</span>
             <span className="font-semibold tabular-nums">
               {formatCurrency(paidPreview.paidAmount)}
             </span>
           </div>
           {labClinic > 0 && (
-            <div className="flex justify-between gap-2 text-amber-700">
+            <div className="flex justify-between gap-2 text-warning-text">
               <span>تحمل المختبر (عيادة)</span>
               <span className="tabular-nums">−{formatCurrency(labClinic)}</span>
             </div>
           )}
-          <div className="flex justify-between gap-2 border-t border-slate-200 pt-2 font-bold text-slate-800">
+          <div className="flex justify-between gap-2 border-t border-slate-border pt-2 font-bold text-slate-text">
             <span>صافي العيادة</span>
             <span className="tabular-nums">{formatCurrency(paidPreview.clinicShare)}</span>
           </div>
@@ -350,12 +350,12 @@ export function FinancialPreview({
 
     return (
       <div className={`space-y-3 ${className}`}>
-        <div className="rounded-xl border border-emerald-400/40 bg-gradient-to-br from-emerald-50/80 to-white p-3.5 space-y-3">
+        <div className="rounded-2xl border border-slate-border bg-surface-card p-4 space-y-3 shadow-card">
           <div>
-            <p className="text-sm font-bold text-emerald-900">
+            <p className="text-sm font-bold text-slate-text">
               توزيع المبلغ المدفوع — الطبيب والعيادة
             </p>
-            <p className="text-xs text-emerald-800/80 mt-0.5">
+            <p className="text-xs text-slate-muted mt-0.5">
               من {formatCurrency(paidPreview.paidAmount)} المدفوع
               {materialsCost > 0
                 ? ` — بعد خصم المختبر (${formatCurrency(materialsCost)})`
@@ -386,9 +386,9 @@ export function FinancialPreview({
 
   return (
     <div className={`space-y-3 ${className}`}>
-      <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-surface p-3.5 space-y-3">
+      <div className="rounded-2xl border border-slate-border bg-surface-card p-4 space-y-3 shadow-card">
         <div>
-          <p className="text-sm font-bold text-primary-800">
+          <p className="text-sm font-bold text-slate-text">
             ١ — توزيع السعر النهائي للحالة
           </p>
           <p className="text-xs text-slate-muted mt-0.5">
@@ -397,13 +397,13 @@ export function FinancialPreview({
         </div>
 
         {preview.locked && !isPaymentSession && (
-          <p className="text-xs font-medium text-amber-800 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200/80">
+          <p className="text-xs font-medium text-warning-text bg-warning rounded-xl px-3 py-2 border border-warning-border">
             جلسة الدفع لا تعيد حساب حصص السعر الكلي — تُوزَّع الدفعات فقط حسب النسب
             أدناه
           </p>
         )}
         {isPaymentSession && materialsCost > 0 && (
-          <p className="text-xs font-medium text-amber-800 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200/80">
+          <p className="text-xs font-medium text-warning-text bg-warning rounded-xl px-3 py-2 border border-warning-border">
             تكلفة المختبر في هذه الجلسة تُخصم من الطبيب/العيادة حسب نسبة التحمّل (
             {doctor?.materials_share ?? 0}% طبيب)
           </p>
@@ -418,12 +418,12 @@ export function FinancialPreview({
       </div>
 
       {paidPreview ? (
-        <div className="rounded-xl border border-emerald-400/40 bg-gradient-to-br from-emerald-50/80 to-white p-3.5 space-y-3">
+        <div className="rounded-2xl border border-slate-border bg-surface-card p-4 space-y-3 shadow-card">
           <div>
-            <p className="text-sm font-bold text-emerald-900">
+            <p className="text-sm font-bold text-slate-text">
               ٢ — توزيع المبلغ المدفوع في هذه الجلسة
             </p>
-            <p className="text-xs text-emerald-800/80 mt-0.5">
+            <p className="text-xs text-slate-muted mt-0.5">
               من {formatCurrency(paidPreview.paidAmount)} المدفوع اليوم
               {isPaymentSession && materialsCost > 0
                 ? ` — بعد خصم المختبر (${formatCurrency(materialsCost)})`
@@ -437,7 +437,7 @@ export function FinancialPreview({
           />
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-2.5 text-xs text-slate-muted">
+        <div className="rounded-xl border border-dashed border-slate-border bg-surface px-3 py-2.5 text-xs text-slate-muted">
           أدخل المبلغ المدفوع لمعاينة توزيعه بين الطبيب والعيادة
         </div>
       )}

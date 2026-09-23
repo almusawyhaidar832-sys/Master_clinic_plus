@@ -27,7 +27,9 @@ import {
   ArrowDownToLine,
   ScrollText,
   Calendar,
+  Wallet,
 } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 const VALID_TABS = ["statement", "invoices", "patients", "operations"] as const;
 type LedgerTab = (typeof VALID_TABS)[number];
@@ -53,7 +55,7 @@ const TAB_ITEMS: {
 export default function DoctorFinancialLedgerPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { t } = useLanguage();
+  const { t, bi } = useLanguage();
 
   const [doctorId, setDoctorId] = useState<string | null>(null);
   const [salaryDoctor, setSalaryDoctor] = useState(false);
@@ -130,30 +132,39 @@ export default function DoctorFinancialLedgerPage() {
   });
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="flex items-center gap-2 text-lg font-bold tracking-tight text-slate-text">
-          <span className="mc-icon-badge-primary">
-            <ScrollText className="h-4.5 w-4.5" />
-          </span>
-          {t("docFinancialLedgerTitle")}
-        </h1>
-        <p className="mt-1 text-sm text-slate-muted">{t("docFinancialLedgerSubtitleFull")}</p>
-      </div>
+    <div className="space-y-5 animate-fade-in">
+      <PageHeader
+        title={t("docFinancialLedgerTitle")}
+        subtitle={t("docFinancialLedgerSubtitleFull")}
+        eyebrow={bi("بوابة الطبيب", "Doctor portal")}
+        icon={ScrollText}
+        className="!mb-0"
+      />
 
       {balance !== null && (
-        <div className="relative overflow-hidden rounded-2xl bg-mc-navy p-4 text-white shadow-premium">
-          <div className="pointer-events-none absolute -end-8 -top-10 h-32 w-32 rounded-full bg-white/5 blur-2xl" />
-          <p className="relative text-xs text-white/70">
-            {salaryDoctor ? t("docRemainingSalary") : t("docWithdrawableBalanceLabel")}
-          </p>
-          <DoctorPrivateBalance
-            amount={balance}
-            className="relative mt-1 text-xl font-extrabold tracking-tight"
-            isDebtor={balance < 0}
-            showDebtLabel
-          />
-        </div>
+        <section className="mc-hero rounded-[24px] px-5 py-4">
+          <div className="pointer-events-none absolute -end-10 -top-12 h-36 w-36 rounded-full border border-white/[0.08]" />
+          <div className="relative flex items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/[0.08] text-[#dcc29a] backdrop-blur">
+              <Wallet className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-white/65">
+                {salaryDoctor ? t("docRemainingSalary") : t("docWithdrawableBalanceLabel")}
+              </p>
+              <DoctorPrivateBalance
+                amount={balance}
+                className={cn(
+                  "mt-1 text-2xl font-black leading-none tracking-tight",
+                  balance < 0 ? "text-red-200" : "mc-text-champagne"
+                )}
+                isDebtor={balance < 0}
+                showDebtLabel
+                iconClassName="text-white/70 hover:text-white"
+              />
+            </div>
+          </div>
+        </section>
       )}
 
       <DoctorFinancialReportPanel />

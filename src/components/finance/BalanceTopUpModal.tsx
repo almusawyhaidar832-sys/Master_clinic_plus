@@ -295,7 +295,7 @@ export function BalanceTopUpModal({
                 onClick={() => handleChoose("clinic")}
                 className="flex items-center gap-3 rounded-xl border border-slate-border bg-surface p-4 text-right transition hover:border-primary hover:bg-primary/5"
               >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-success text-success-text">
                   <Building2 className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -323,7 +323,7 @@ export function BalanceTopUpModal({
                 className={cn(
                   "rounded-xl border px-3 py-2 text-sm",
                   target === "clinic"
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                    ? "border-success-border bg-success text-success-text"
                     : "border-blue-200 bg-blue-50 text-blue-900"
                 )}
               >

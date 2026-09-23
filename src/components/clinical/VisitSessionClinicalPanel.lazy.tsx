@@ -16,9 +16,9 @@ export const VisitSessionClinicalPanel = dynamic(
     ssr: false,
     loading: () => (
       <div className="space-y-3 animate-pulse p-4">
-        <div className="h-5 w-40 rounded bg-slate-100" />
-        <div className="h-24 rounded-xl bg-slate-100" />
-        <div className="h-24 rounded-xl bg-slate-100" />
+        <div className="mc-skeleton h-5 w-40 rounded" />
+        <div className="mc-skeleton h-24 rounded-xl" />
+        <div className="mc-skeleton h-24 rounded-xl" />
       </div>
     ),
   }

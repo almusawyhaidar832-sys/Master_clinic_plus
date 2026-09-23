@@ -94,7 +94,7 @@ export function WhatsAppTestButton({ portal }: WhatsAppTestButtonProps) {
   }
 
   return (
-    <div className="rounded-xl border border-slate-border bg-surface/50 p-4">
+    <div className="rounded-2xl border border-slate-border bg-surface-card p-4 shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="font-semibold text-slate-text">اختبار إشعار الواتساب</p>
@@ -122,7 +122,7 @@ export function WhatsAppTestButton({ portal }: WhatsAppTestButtonProps) {
             <input
               type="tel"
               dir="ltr"
-              className="w-full max-w-sm rounded-lg border border-slate-border bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              className="mc-field max-w-sm"
               value={phone}
               onChange={(e) => setPhone(sanitizePatientPhoneInput(e.target.value))}
               placeholder="07801234567"

@@ -137,33 +137,34 @@ export function PatientBasicInfoEditor({
   return (
     <form
       onSubmit={handleSave}
-      className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-3"
+      className="mt-3 space-y-3 rounded-2xl border border-slate-border bg-surface-card p-4 shadow-card animate-fade-in"
     >
-      <p className="text-sm font-semibold text-slate-text">تعديل بيانات المراجع</p>
+      <p className="flex items-center gap-2 text-sm font-bold text-slate-text">
+        <Pencil className="h-4 w-4 text-premium-500" />تعديل بيانات المراجع</p>
       {error && <Alert variant="error">{error}</Alert>}
       {saved && (
         <Alert variant="success">تم حفظ التعديلات</Alert>
       )}
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-muted">
+        <label className="mc-label mb-1.5 block">
           اسم المراجع
         </label>
         <input
           type="text"
-          className="w-full rounded-lg border border-slate-border bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+          className="mc-field"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-muted">
+        <label className="mc-label mb-1.5 block">
           رقم هاتف المراجع
         </label>
         <input
           type="tel"
           dir="ltr"
-          className="w-full rounded-lg border border-slate-border bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+          className="mc-field"
           value={phone}
           onChange={(e) => setPhone(sanitizePatientPhoneInput(e.target.value))}
           placeholder="07XX XXX XXXX"
@@ -173,12 +174,12 @@ export function PatientBasicInfoEditor({
         </p>
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-muted">
+        <label className="mc-label mb-1.5 block">
           ملاحظات
         </label>
         <input
           type="text"
-          className="w-full rounded-lg border border-slate-border bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+          className="mc-field"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />

@@ -35,9 +35,14 @@ import type { PatientSearchResult } from "@/lib/services/patient-search";
 import {
   Users, Clock, CheckCircle2, UserCheck, Plus, Volume2,
   RefreshCw, Monitor, Phone, X, ChevronRight, Send, RotateCcw, Receipt, LogOut,
-  ArrowRightLeft,
+  ArrowRightLeft, ListOrdered, UserPlus, Stethoscope, StickyNote, Wallet,
+  ChevronDown, AlertTriangle, MessageSquareText,
 } from "lucide-react";
 import { QueueScreenSetupButton } from "@/components/queue/QueueScreenSetupModal";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatTile } from "@/components/ui/StatTile";
+import { Modal } from "@/components/ui/Modal";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 type QueueStatus =
   | "waiting"
@@ -88,14 +93,66 @@ interface QueueStats {
   total: number;
 }
 
-const STATUS_STYLE: Record<QueueStatus, { color: string; bg: string; border: string }> = {
-  waiting:     { color: "text-amber-600",  bg: "bg-amber-50",   border: "border-amber-200" },
-  called:      { color: "text-blue-600",   bg: "bg-blue-50",    border: "border-blue-200"  },
-  in_progress: { color: "text-emerald-600",bg: "bg-emerald-50", border: "border-emerald-200"},
-  ready_for_billing: { color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200" },
-  ready_for_payment: { color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200" },
-  done:        { color: "text-slate-500",  bg: "bg-slate-50",   border: "border-slate-200" },
-  cancelled:   { color: "text-red-500",    bg: "bg-red-50",     border: "border-red-200"   },
+const STATUS_STYLE: Record<
+  QueueStatus,
+  { color: string; bg: string; border: string; bar: string; pill: string; active: boolean }
+> = {
+  waiting: {
+    color: "text-warning-text",
+    bg: "bg-warning",
+    border: "border-warning-border",
+    bar: "bg-amber-400",
+    pill: "border-warning-border bg-warning text-warning-text",
+    active: false,
+  },
+  called: {
+    color: "text-primary-700",
+    bg: "bg-primary-50",
+    border: "border-primary-200",
+    bar: "bg-primary-500",
+    pill: "border-primary-200 bg-primary-50 text-primary-700",
+    active: true,
+  },
+  in_progress: {
+    color: "text-success-text",
+    bg: "bg-success",
+    border: "border-success-border",
+    bar: "bg-emerald-500",
+    pill: "border-success-border bg-success text-success-text",
+    active: true,
+  },
+  ready_for_billing: {
+    color: "text-royal-700",
+    bg: "bg-royal-50",
+    border: "border-royal-200",
+    bar: "bg-royal-500",
+    pill: "border-royal-200 bg-royal-50 text-royal-700",
+    active: true,
+  },
+  ready_for_payment: {
+    color: "text-royal-700",
+    bg: "bg-royal-50",
+    border: "border-royal-200",
+    bar: "bg-royal-500",
+    pill: "border-royal-200 bg-royal-50 text-royal-700",
+    active: true,
+  },
+  done: {
+    color: "text-slate-muted",
+    bg: "bg-surface",
+    border: "border-slate-border",
+    bar: "bg-slate-300",
+    pill: "border-slate-border bg-surface text-slate-muted",
+    active: false,
+  },
+  cancelled: {
+    color: "text-debt-text",
+    bg: "bg-debt",
+    border: "border-debt-border",
+    bar: "bg-red-400",
+    pill: "border-debt-border bg-debt text-debt-text",
+    active: false,
+  },
 };
 
 const NEXT_STATUS: Partial<Record<QueueStatus, QueueStatus>> = {
@@ -119,7 +176,7 @@ function AddToQueueModal({
     notes?: string;
   }) => Promise<boolean>;
 }) {
-  const { t } = useLanguage();
+  const { t, bi } = useLanguage();
   const [doctorId, setDoctorId] = useState(doctors[0]?.id ?? "");
   const [name, setName]   = useState("");
   const [phone, setPhone] = useState("");
@@ -174,91 +231,19 @@ function AddToQueueModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">{t("addToQueue")}</h2>
-          <button onClick={onClose} className="rounded-lg p-1 hover:bg-slate-100">
-            <X className="h-5 w-5 text-slate-500" />
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">{t("selectDoctor")}</label>
-            <select
-              value={doctorId}
-              onChange={(e) => setDoctorId(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
-            >
-              {doctors.map((d) => (
-                <option key={d.id} value={d.id}>{d.full_name_ar}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">{t("patientName")}</label>
-            <PatientSearchField
-              portal="accountant"
-              value={name}
-              selectedPatientId={selectedPatientId}
-              onChange={(value) => {
-                setName(value);
-                setSelectedPatientId(null);
-              }}
-              onSelect={handlePatientSelect}
-              placeholder={t("queueSearchPlaceholder")}
-              inputClassName="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pr-10 pl-4 text-sm focus:border-primary focus:outline-none"
-            />
-            {selectedPatientId && (
-              <p className="mt-1 text-xs text-emerald-600">{t("queueLinkedPatient")}</p>
-            )}
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">{t("patientPhone")}</label>
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder={t("queuePhonePlaceholder")}
-              dir="ltr"
-              inputMode="tel"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
-            />
-            <p className="mt-1 text-xs text-slate-500">{t("queuePhoneHint")}</p>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">{t("queueIntakeNotes")}</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder={t("queueIntakeNotesPlaceholder")}
-              rows={3}
-              className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
-            />
-            <p className="mt-1 text-xs text-slate-500">{t("queueIntakeNotesHint")}</p>
-          </div>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
-            <input
-              type="checkbox"
-              checked={sendNow}
-              onChange={(e) => setSendNow(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary"
-            />
-            {t("queueNotifyDoctor")}
-          </label>
-          {formError && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-              {formError}
-            </p>
-          )}
-        </div>
-
-        <div className="mt-6 flex gap-3">
+    <Modal
+      onClose={onClose}
+      title={t("addToQueue")}
+      subtitle={bi("تسجيل مراجع جديد في غرفة الانتظار", "Register a new patient in the waiting room")}
+      icon={UserPlus}
+      size="md"
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+            className="mc-btn-soft flex-1 py-2.5"
           >
             {t("cancel")}
           </button>
@@ -266,33 +251,102 @@ function AddToQueueModal({
             type="button"
             disabled={submitting || !doctorId}
             onClick={() => void handleSubmit()}
-            className="flex-1 rounded-xl bg-primary py-2.5 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-60"
+            className="mc-btn-navy flex-1 py-2.5"
           >
+            {sendNow ? <Send className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
             {submitting
               ? t("queueAddingPatient")
               : sendNow
                 ? t("queueAddAndSend")
                 : t("queueAddOnly")}
           </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-slate-muted">
+            <Stethoscope className="h-3.5 w-3.5 text-premium-500" />
+            {t("selectDoctor")}
+          </label>
+          <select
+            value={doctorId}
+            onChange={(e) => setDoctorId(e.target.value)}
+            className="mc-field"
+          >
+            {doctors.map((d) => (
+              <option key={d.id} value={d.id}>{d.full_name_ar}</option>
+            ))}
+          </select>
         </div>
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-slate-muted">
+            <Users className="h-3.5 w-3.5 text-premium-500" />
+            {t("patientName")}
+          </label>
+          <PatientSearchField
+            portal="accountant"
+            value={name}
+            selectedPatientId={selectedPatientId}
+            onChange={(value) => {
+              setName(value);
+              setSelectedPatientId(null);
+            }}
+            onSelect={handlePatientSelect}
+            placeholder={t("queueSearchPlaceholder")}
+            inputClassName="mc-field pr-10 pl-4"
+          />
+          {selectedPatientId && (
+            <p className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-success-border bg-success px-2.5 py-0.5 text-[11px] font-semibold text-success-text">
+              <CheckCircle2 className="h-3 w-3" />
+              {t("queueLinkedPatient")}
+            </p>
+          )}
+        </div>
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-slate-muted">
+            <Phone className="h-3.5 w-3.5 text-premium-500" />
+            {t("patientPhone")}
+          </label>
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder={t("queuePhonePlaceholder")}
+            dir="ltr"
+            inputMode="tel"
+            className="mc-field"
+          />
+          <p className="mt-1 text-[11px] text-slate-muted">{t("queuePhoneHint")}</p>
+        </div>
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-slate-muted">
+            <StickyNote className="h-3.5 w-3.5 text-premium-500" />
+            {t("queueIntakeNotes")}
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={t("queueIntakeNotesPlaceholder")}
+            rows={3}
+            className="mc-field resize-none"
+          />
+          <p className="mt-1 text-[11px] text-slate-muted">{t("queueIntakeNotesHint")}</p>
+        </div>
+        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-border bg-surface px-3.5 py-3 text-sm font-medium text-slate-text transition-colors hover:border-primary-200">
+          <input
+            type="checkbox"
+            checked={sendNow}
+            onChange={(e) => setSendNow(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-primary"
+          />
+          <Send className="h-4 w-4 text-premium-500" />
+          {t("queueNotifyDoctor")}
+        </label>
+        {formError && (
+          <Alert variant="error">{formError}</Alert>
+        )}
       </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value, icon: Icon, color }: {
-  label: string; value: number; icon: React.ComponentType<{ className?: string }>; color: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-      <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl", color)}>
-        <Icon className="h-5 w-5" />
-      </div>
-      <div>
-        <p className="text-2xl font-bold text-slate-800">{value}</p>
-        <p className="text-xs text-slate-500">{label}</p>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -775,15 +829,65 @@ export default function QueuePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="mc-skeleton h-24 rounded-3xl" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="mc-skeleton h-[76px] rounded-2xl" />
+          ))}
+        </div>
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="mc-skeleton h-20 rounded-2xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
     <>
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6 animate-fade-in">
+
+      <PageHeader
+        className="mb-0"
+        title={t("queueTitle")}
+        eyebrow={bi("العمليات اليومية", "Daily operations")}
+        icon={ListOrdered}
+        subtitle={new Date().toLocaleDateString(dateLocale, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+        actions={
+          <>
+            <QueueScreenSetupButton
+              className="mc-btn-soft [&>svg]:text-premium-500"
+              label="ربط التلفاز"
+            />
+            <a
+              href={effectiveClinicId ? `/queue-screen?clinic=${effectiveClinicId}` : "/queue-screen"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mc-btn-soft"
+            >
+              <Monitor className="h-4 w-4 text-premium-500" />
+              {t("queuePatientScreen")}
+            </a>
+            <button
+              onClick={() => fetchQueue()}
+              className="mc-btn-soft"
+              title={t("queueRefresh")}
+            >
+              <RefreshCw className="h-4 w-4 text-premium-500" />
+              <span className="hidden sm:inline">{t("queueRefresh")}</span>
+            </button>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="mc-btn-navy"
+            >
+              <Plus className="h-4 w-4" />
+              {t("queueAddPatientBtn")}
+            </button>
+          </>
+        }
+      />
 
       {pageError && (
         <Alert variant="error">
@@ -797,54 +901,16 @@ export default function QueuePage() {
         <Alert variant="success">{pageSuccess}</Alert>
       )}
 
-      <TodayAppointmentsPanel compact />
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">{t("queueTitle")}</h1>
-          <p className="text-sm text-slate-500">
-            {new Date().toLocaleDateString(dateLocale, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <QueueScreenSetupButton
-            className="flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2 text-sm font-medium text-primary shadow-sm hover:bg-primary/10"
-            label="ربط التلفاز"
-          />
-          <a
-            href={effectiveClinicId ? `/queue-screen?clinic=${effectiveClinicId}` : "/queue-screen"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
-          >
-            <Monitor className="h-4 w-4" />
-            {t("queuePatientScreen")}
-          </a>
-          <button
-            onClick={() => fetchQueue()}
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm hover:bg-slate-50"
-          >
-            <RefreshCw className="h-4 w-4" />
-            {t("queueRefresh")}
-          </button>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
-            {t("queueAddPatientBtn")}
-          </button>
-        </div>
-      </div>
-
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard label={t("waitingCount")}   value={stats.waiting}     icon={Clock}        color="bg-amber-100 text-amber-600"   />
-        <StatCard label={t("calledStatus")}      value={stats.called}      icon={Volume2}      color="bg-blue-100 text-blue-600"     />
-        <StatCard label={t("inProgressStatus")}    value={stats.in_progress} icon={UserCheck}    color="bg-emerald-100 text-emerald-600"/>
-        <StatCard label={t("apptStatus_ready_for_billing")}   value={stats.ready_for_billing} icon={Receipt} color="bg-violet-100 text-violet-600"/>
-        <StatCard label={t("apptStatus_ready_for_payment")}    value={stats.ready_for_payment} icon={Receipt} color="bg-violet-100 text-violet-600"/>
-        <StatCard label={t("doneToday")}  value={stats.done}        icon={CheckCircle2} color="bg-slate-100 text-slate-600"   />
+        <StatTile label={t("waitingCount")} value={stats.waiting} icon={Clock} tone="warning" />
+        <StatTile label={t("calledStatus")} value={stats.called} icon={Volume2} tone="navy" />
+        <StatTile label={t("inProgressStatus")} value={stats.in_progress} icon={UserCheck} tone="success" />
+        <StatTile label={t("apptStatus_ready_for_billing")} value={stats.ready_for_billing} icon={Receipt} tone="royal" />
+        <StatTile label={t("apptStatus_ready_for_payment")} value={stats.ready_for_payment} icon={Wallet} tone="gold" />
+        <StatTile label={t("doneToday")} value={stats.done} icon={CheckCircle2} tone="muted" />
       </div>
+
+      <TodayAppointmentsPanel compact />
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <div className="w-full shrink-0 lg:sticky lg:top-4 lg:w-72">
@@ -855,19 +921,30 @@ export default function QueuePage() {
           />
         </div>
 
-        <div className="min-w-0 flex-1 space-y-6">
+        <div className="min-w-0 flex-1 space-y-4">
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2.5 text-[15px] font-bold text-slate-text">
+          <span className="mc-icon-tile h-8 w-8 rounded-lg">
+            <Users className="h-4 w-4" />
+          </span>
+          {bi("المراجعون الحاليون", "Active patients")}
+          <span className="rounded-full border border-premium-200 bg-premium-50 px-2 py-0.5 text-xs font-bold tabular-nums text-premium-700">
+            {activeEntries.length}
+          </span>
+        </h2>
+      </div>
 
       {doctors.length > 1 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible">
           <button
             onClick={() => setFilterDoctor("all")}
             className={cn(
-              "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-              filterDoctor === "all"
-                ? "bg-primary text-white"
-                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              "mc-chip shrink-0",
+              filterDoctor === "all" && "mc-chip--active"
             )}
           >
+            <Users className="h-3.5 w-3.5" />
             {t("queueAllDoctors")}
           </button>
           {doctors.map((d) => (
@@ -875,12 +952,11 @@ export default function QueuePage() {
               key={d.id}
               onClick={() => setFilterDoctor(d.id)}
               className={cn(
-                "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-                filterDoctor === d.id
-                  ? "bg-primary text-white"
-                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                "mc-chip shrink-0",
+                filterDoctor === d.id && "mc-chip--active"
               )}
             >
+              <Stethoscope className="h-3.5 w-3.5" />
               {d.full_name_ar}
             </button>
           ))}
@@ -889,11 +965,12 @@ export default function QueuePage() {
 
       <div className="space-y-3">
         {activeEntries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white py-16 text-center">
-            <Users className="mb-3 h-10 w-10 text-slate-300" />
-            <p className="font-medium text-slate-500">{t("queueEmpty")}</p>
-            <p className="text-sm text-slate-400">{t("queueEmptyHint")}</p>
-          </div>
+          <EmptyState
+            icon={Users}
+            title={t("queueEmpty")}
+            message={t("queueEmptyHint")}
+            className="rounded-2xl py-16"
+          />
         ) : (
           activeEntries.map((entry) => {
             const style = STATUS_STYLE[entry.status];
@@ -935,79 +1012,95 @@ export default function QueuePage() {
               <div
                 key={entry.id}
                 className={cn(
-                  "flex items-center gap-4 rounded-2xl border bg-white p-4 shadow-sm transition-all",
+                  "mc-list-row flex-col items-stretch gap-3 overflow-hidden ps-5 sm:flex-row sm:items-center sm:gap-4",
                   transferPending
-                    ? "border-violet-300 ring-1 ring-violet-200"
+                    ? "border-royal-300 ring-1 ring-royal-200"
                     : cancellationPending
-                      ? "border-red-300 ring-1 ring-red-200"
-                      : cfg.border
+                      ? "border-debt-border ring-1 ring-red-200"
+                      : undefined
                 )}
               >
-                <div className={cn(
-                  "flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl text-xl font-black",
-                  cfg.bg, cfg.color
-                )}>
-                  {entry.ticket_number}
-                </div>
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute inset-y-3 start-0 w-1 rounded-full",
+                    transferPending ? "bg-royal-500" : cancellationPending ? "bg-red-400" : cfg.bar
+                  )}
+                />
 
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-slate-800">{patientDisplay}</p>
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                    <span className={cn("font-medium", cfg.color)}>{cfg.label}</span>
-                    {entry.sent_to_doctor_at && (
-                      <>
-                        <span>•</span>
-                        <span className="text-emerald-600">{t("queueSentToDoctor")}</span>
-                      </>
-                    )}
-                    {transferPending && (
-                      <>
-                        <span>•</span>
-                        <span className="font-medium text-violet-700">
+                <div className="flex min-w-0 flex-1 items-start gap-3.5 sm:items-center">
+                  <div className={cn(
+                    "flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl text-xl font-black tabular-nums",
+                    cfg.active
+                      ? "mc-icon-tile"
+                      : cn("border", cfg.bg, cfg.color, cfg.border)
+                  )}>
+                    {entry.ticket_number}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-[15px] font-bold text-slate-text">{patientDisplay}</p>
+                      <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold", cfg.pill)}>
+                        <span className={cn("h-1.5 w-1.5 rounded-full", cfg.bar)} />
+                        {cfg.label}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-muted">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 font-medium text-slate-text">
+                        <Stethoscope className="h-3 w-3 text-premium-500" />
+                        {entry.doctor?.full_name_ar ?? "—"}
+                      </span>
+                      {entry.sent_to_doctor_at && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-success-border bg-success px-2 py-0.5 font-medium text-success-text">
+                          <Send className="h-3 w-3" />
+                          {t("queueSentToDoctor")}
+                        </span>
+                      )}
+                      {transferPending && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-royal-200 bg-royal-50 px-2 py-0.5 font-semibold text-royal-700">
+                          <ArrowRightLeft className="h-3 w-3" />
                           {t("queueTransferTo")} {entry.transfer_to_doctor?.full_name_ar ?? "—"}
                         </span>
-                      </>
-                    )}
-                    {cancellationPending && (
-                      <>
-                        <span>•</span>
-                        <span className="font-medium text-red-700">
+                      )}
+                      {cancellationPending && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-debt-border bg-debt px-2 py-0.5 font-semibold text-debt-text">
+                          <AlertTriangle className="h-3 w-3" />
                           {bi("طلب إلغاء", "Cancel request")}:{" "}
                           {entry.cancellation_actor_label ?? "—"}
                         </span>
-                      </>
-                    )}
-                    <span>•</span>
-                    <span>{entry.doctor?.full_name_ar ?? "—"}</span>
-                    {entry.patient_phone && (
-                      <>
-                        <span>•</span>
+                      )}
+                      {entry.patient_phone && (
                         <a
                           href={`https://wa.me/${entry.patient_phone.replace(/\D/g, "")}`}
                           target="_blank"
-                          className="flex items-center gap-0.5 text-green-600 hover:underline"
+                          dir="ltr"
+                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium text-success-text hover:bg-success"
                         >
                           <Phone className="h-3 w-3" />
                           {entry.patient_phone}
                         </a>
-                      </>
-                    )}
+                      )}
+                    </div>
                     {entry.notes?.trim() && (
-                      <>
-                        <span>•</span>
-                        <span className="text-slate-600">{entry.notes.trim()}</span>
-                      </>
+                      <p className="mt-1.5 flex items-start gap-1.5 text-xs text-slate-muted">
+                        <StickyNote className="mt-0.5 h-3 w-3 shrink-0 text-premium-500" />
+                        <span className="text-slate-text">{entry.notes.trim()}</span>
+                      </p>
+                    )}
+                    {entry.doctor_notes?.trim() && (
+                      <div className="mt-2 flex items-start gap-2 rounded-xl border border-royal-200 bg-royal-50 px-3 py-2 text-xs text-royal-800">
+                        <MessageSquareText className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <div>
+                          <span className="font-semibold">{t("queueDoctorNotes")}: </span>
+                          {entry.doctor_notes.trim()}
+                        </div>
+                      </div>
                     )}
                   </div>
-                  {entry.doctor_notes?.trim() && (
-                    <div className="mt-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900">
-                      <span className="font-semibold">{t("queueDoctorNotes")}: </span>
-                      {entry.doctor_notes.trim()}
-                    </div>
-                  )}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-border pt-3 sm:border-t-0 sm:pt-0">
                   {cancellationPending && (
                     <>
                       <button
@@ -1016,7 +1109,7 @@ export default function QueuePage() {
                           setCancelTransferTargetId("");
                         }}
                         disabled={updating === entry.id}
-                        className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                        className="mc-btn-navy px-3"
                       >
                         <ArrowRightLeft className="h-3.5 w-3.5" />
                         <span className="hidden sm:inline">
@@ -1026,7 +1119,7 @@ export default function QueuePage() {
                       <button
                         onClick={() => void cancelEntry(entry)}
                         disabled={updating === entry.id}
-                        className="flex items-center gap-1.5 rounded-xl bg-red-600 px-3 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-60"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-debt-border bg-debt px-3 py-2 text-sm font-bold text-debt-text transition-colors hover:bg-red-600 hover:text-white disabled:pointer-events-none disabled:opacity-60"
                       >
                         <X className="h-3.5 w-3.5" />
                         <span className="hidden sm:inline">
@@ -1040,7 +1133,7 @@ export default function QueuePage() {
                       <button
                         onClick={() => void confirmTransfer(entry)}
                         disabled={updating === entry.id}
-                        className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                        className="mc-btn-navy px-3"
                       >
                         {updating === entry.id ? (
                           <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -1052,7 +1145,7 @@ export default function QueuePage() {
                       <button
                         onClick={() => void dismissTransfer(entry)}
                         disabled={updating === entry.id}
-                        className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                        className="mc-btn-soft px-3"
                       >
                         {t("queueRejectTransferBtn")}
                       </button>
@@ -1062,7 +1155,7 @@ export default function QueuePage() {
                     <button
                       onClick={() => recallPatient(entry)}
                       disabled={updating === entry.id}
-                      className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+                      className="mc-btn-soft px-3 text-primary-700"
                       title={recallLabel}
                     >
                       {updating === entry.id
@@ -1079,7 +1172,7 @@ export default function QueuePage() {
                         setTransferTargetId("");
                       }}
                       disabled={updating === entry.id}
-                      className="flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-800 hover:bg-violet-100 disabled:opacity-60"
+                      className="mc-btn-soft px-3 text-royal-700"
                       title={t("docTransferToOther")}
                     >
                       <ArrowRightLeft className="h-3.5 w-3.5" />
@@ -1090,7 +1183,7 @@ export default function QueuePage() {
                     <button
                       onClick={() => sendToDoctor(entry)}
                       disabled={updating === entry.id}
-                      className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                      className="mc-btn-navy px-3"
                       title={t("queueSendDoctorTitle")}
                     >
                       {updating === entry.id
@@ -1104,7 +1197,7 @@ export default function QueuePage() {
                     <button
                       onClick={() => finishExamination(entry, true)}
                       disabled={updating === entry.id}
-                      className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60"
+                      className="mc-btn-soft px-3 text-royal-700"
                       title={t("queueFinishTitle")}
                     >
                       {updating === entry.id
@@ -1118,7 +1211,7 @@ export default function QueuePage() {
                     <button
                       onClick={() => openPayment(entry)}
                       disabled={updating === entry.id}
-                      className="flex items-center gap-1.5 rounded-xl bg-gradient-to-l from-violet-600 to-violet-500 px-4 py-2.5 text-sm font-extrabold text-white shadow-md shadow-violet-600/25 ring-2 ring-violet-200 transition-transform hover:scale-[1.03] hover:shadow-lg disabled:opacity-60 disabled:hover:scale-100"
+                      className="mc-btn-pearl px-5 py-2.5 font-extrabold"
                     >
                       {updating === entry.id ? (
                         <RefreshCw className="h-4 w-4 animate-spin" />
@@ -1133,10 +1226,7 @@ export default function QueuePage() {
                       onClick={() => advanceStatus(entry)}
                       disabled={updating === entry.id}
                       className={cn(
-                        "flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold transition-colors",
-                        entry.status === "called"
-                          ? "bg-blue-500 text-white hover:bg-blue-600"
-                          : "bg-amber-500 text-white hover:bg-amber-600",
+                        "mc-btn-navy px-3",
                         updating === entry.id && "opacity-60"
                       )}
                     >
@@ -1150,7 +1240,7 @@ export default function QueuePage() {
                   {!cancellationPending && (
                     <button
                       onClick={() => void cancelEntry(entry)}
-                      className="rounded-xl p-2 text-slate-400 hover:bg-red-50 hover:text-red-500"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-transparent text-slate-muted transition-colors hover:border-debt-border hover:bg-debt hover:text-debt-text"
                       title={t("queueCancelTitle")}
                     >
                       <X className="h-4 w-4" />
@@ -1164,20 +1254,31 @@ export default function QueuePage() {
       </div>
 
       {doneEntries.length > 0 && (
-        <details className="group rounded-2xl border border-slate-100 bg-white">
-          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-medium text-slate-500 hover:text-slate-700">
-            <span>{t("queueDoneTodaySection")} ({doneEntries.length})</span>
-            <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
+        <details className="mc-panel group">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3.5 transition-colors hover:bg-surface">
+            <span className="mc-panel-title">
+              <CheckCircle2 />
+              {t("queueDoneTodaySection")}
+              <span className="rounded-full border border-success-border bg-success px-2 py-0.5 text-xs font-bold tabular-nums text-success-text">
+                {doneEntries.length}
+              </span>
+            </span>
+            <ChevronDown className="h-4 w-4 text-slate-muted transition-transform group-open:rotate-180" />
           </summary>
-          <div className="border-t border-slate-100 p-2 space-y-1">
+          <div className="divide-y divide-slate-border border-t border-slate-border">
             {doneEntries.map((entry) => (
-              <div key={entry.id} className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-400">
-                <span className="w-6 text-center font-bold">#{entry.ticket_number}</span>
-                <span className="flex-1 truncate">
+              <div key={entry.id} className="flex items-center gap-3 px-5 py-2.5 text-sm">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-border bg-surface text-xs font-bold tabular-nums text-slate-muted">
+                  {entry.ticket_number}
+                </span>
+                <span className="flex-1 truncate font-medium text-slate-text">
                   {entry.patient?.full_name_ar ?? entry.patient_name ?? "—"}
                 </span>
-                <span className="text-xs">{entry.doctor?.full_name_ar}</span>
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                <span className="hidden items-center gap-1 text-xs text-slate-muted sm:inline-flex">
+                  <Stethoscope className="h-3 w-3 text-premium-500" />
+                  {entry.doctor?.full_name_ar}
+                </span>
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
               </div>
             ))}
           </div>
@@ -1188,52 +1289,24 @@ export default function QueuePage() {
       </div>
 
       {cancelTransferEntry && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-          <div className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-800">
-                {bi("تحويل المراجع لطبيب آخر", "Transfer patient to another doctor")}
-              </h3>
+        <Modal
+          onClose={() => {
+            setCancelTransferEntry(null);
+            setCancelTransferTargetId("");
+          }}
+          title={bi("تحويل المراجع لطبيب آخر", "Transfer patient to another doctor")}
+          subtitle={cancelTransferEntry.patient?.full_name_ar ?? cancelTransferEntry.patient_name ?? undefined}
+          icon={ArrowRightLeft}
+          size="md"
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => {
                   setCancelTransferEntry(null);
                   setCancelTransferTargetId("");
                 }}
-                className="rounded-lg p-1 hover:bg-slate-100"
-              >
-                <X className="h-5 w-5 text-slate-500" />
-              </button>
-            </div>
-            <p className="mb-4 text-sm text-slate-600">
-              {bi(
-                "بعد طلب الإلغاء من الطبيب/المساعد — اختر الطبيب الجديد",
-                "After doctor/assistant cancel request — choose the new doctor"
-              )}
-            </p>
-            <select
-              value={cancelTransferTargetId}
-              onChange={(e) => setCancelTransferTargetId(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
-            >
-              <option value="">{t("selectDoctor")}</option>
-              {doctors
-                .filter((d) => d.id !== cancelTransferEntry.doctor_id)
-                .map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.full_name_ar}
-                    {d.specialty_ar ? ` — ${d.specialty_ar}` : ""}
-                  </option>
-                ))}
-            </select>
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setCancelTransferEntry(null);
-                  setCancelTransferTargetId("");
-                }}
-                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600"
+                className="mc-btn-soft flex-1 py-2.5"
               >
                 {t("cancel")}
               </button>
@@ -1241,60 +1314,62 @@ export default function QueuePage() {
                 type="button"
                 onClick={() => void submitCancelTransfer()}
                 disabled={!cancelTransferTargetId || updating === cancelTransferEntry.id}
-                className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                className="mc-btn-navy flex-1 py-2.5"
               >
+                <ArrowRightLeft className="h-4 w-4" />
                 {bi("تأكيد التحويل", "Confirm transfer")}
               </button>
-            </div>
+            </>
+          }
+        >
+          <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-warning-border bg-warning px-3.5 py-3 text-sm text-warning-text">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            {bi(
+              "بعد طلب الإلغاء من الطبيب/المساعد — اختر الطبيب الجديد",
+              "After doctor/assistant cancel request — choose the new doctor"
+            )}
           </div>
-        </div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-slate-muted">
+            <Stethoscope className="h-3.5 w-3.5 text-premium-500" />
+            {t("selectDoctor")}
+          </label>
+          <select
+            value={cancelTransferTargetId}
+            onChange={(e) => setCancelTransferTargetId(e.target.value)}
+            className="mc-field"
+          >
+            <option value="">{t("selectDoctor")}</option>
+            {doctors
+              .filter((d) => d.id !== cancelTransferEntry.doctor_id)
+              .map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.full_name_ar}
+                  {d.specialty_ar ? ` — ${d.specialty_ar}` : ""}
+                </option>
+              ))}
+          </select>
+        </Modal>
       )}
 
       {transferEntry && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-          <div className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-800">{t("docTransferModalTitle")}</h3>
+        <Modal
+          onClose={() => {
+            setTransferEntry(null);
+            setTransferTargetId("");
+          }}
+          title={t("docTransferModalTitle")}
+          subtitle={transferEntry.patient?.full_name_ar ?? transferEntry.patient_name ?? undefined}
+          icon={ArrowRightLeft}
+          size="md"
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => {
                   setTransferEntry(null);
                   setTransferTargetId("");
                 }}
-                className="rounded-lg p-1 hover:bg-slate-100"
-              >
-                <X className="h-5 w-5 text-slate-500" />
-              </button>
-            </div>
-            <p className="mb-4 text-sm text-slate-600">
-              {bi(
-                "سيتم تحويل المراجع مباشرة وإشعار الطبيب الجديد",
-                "The patient will be transferred immediately and the new doctor will be notified"
-              )}
-            </p>
-            <select
-              value={transferTargetId}
-              onChange={(e) => setTransferTargetId(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
-            >
-              <option value="">{t("selectDoctor")}</option>
-              {doctors
-                .filter((d) => d.id !== transferEntry.doctor_id)
-                .map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.full_name_ar}
-                    {d.specialty_ar ? ` — ${d.specialty_ar}` : ""}
-                  </option>
-                ))}
-            </select>
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setTransferEntry(null);
-                  setTransferTargetId("");
-                }}
-                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600"
+                className="mc-btn-soft flex-1 py-2.5"
               >
                 {t("cancel")}
               </button>
@@ -1302,13 +1377,40 @@ export default function QueuePage() {
                 type="button"
                 onClick={() => void submitTransfer()}
                 disabled={!transferTargetId || updating === transferEntry.id}
-                className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                className="mc-btn-navy flex-1 py-2.5"
               >
+                <ArrowRightLeft className="h-4 w-4" />
                 {bi("تأكيد التحويل", "Confirm transfer")}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="mb-4 text-sm text-slate-muted">
+            {bi(
+              "سيتم تحويل المراجع مباشرة وإشعار الطبيب الجديد",
+              "The patient will be transferred immediately and the new doctor will be notified"
+            )}
+          </p>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-slate-muted">
+            <Stethoscope className="h-3.5 w-3.5 text-premium-500" />
+            {t("selectDoctor")}
+          </label>
+          <select
+            value={transferTargetId}
+            onChange={(e) => setTransferTargetId(e.target.value)}
+            className="mc-field"
+          >
+            <option value="">{t("selectDoctor")}</option>
+            {doctors
+              .filter((d) => d.id !== transferEntry.doctor_id)
+              .map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.full_name_ar}
+                  {d.specialty_ar ? ` — ${d.specialty_ar}` : ""}
+                </option>
+              ))}
+          </select>
+        </Modal>
       )}
 
       {showAdd && (

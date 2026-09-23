@@ -132,34 +132,47 @@ function GrowthBadge({ pct }: { pct: number | null }) {
 // KPI Card
 // ─────────────────────────────────────────────
 function KpiCard({
-  label, value, sub, icon: Icon, color, growth, highlight,
+  label, value, sub, icon: Icon, growth, highlight,
 }: {
   label: string;
   value: string;
   sub?: string;
   icon: React.ComponentType<{ className?: string }>;
-  color: string;
+  color?: string;
   growth?: number | null;
   highlight?: boolean;
 }) {
-  return (
-    <div className={cn(
-      "mc-hover-lift relative overflow-hidden rounded-2xl border bg-surface-card p-5 shadow-card",
-      highlight ? "border-premium-300/50 shadow-gold" : "border-slate-border"
-    )}>
-      {highlight && (
-        <div className="absolute inset-x-0 top-0 h-1 bg-mc-gold" />
-      )}
-      <div className="flex items-start justify-between gap-2">
-        <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl", color)}>
-          <Icon className="h-5 w-5" />
+  if (highlight) {
+    return (
+      <div className="mc-hero col-span-2 rounded-3xl p-5 sm:p-6">
+        <div className="pointer-events-none absolute -end-10 -top-12 h-40 w-40 rounded-full border border-white/[0.07]" />
+        <div className="relative flex items-start justify-between gap-2">
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-mc-pearl text-[#0b1f3a] shadow-gold">
+            <Icon className="h-5 w-5" />
+          </span>
+          {growth !== undefined && <GrowthBadge pct={growth ?? null} />}
         </div>
+        <div className="relative mt-5">
+          <p className="text-sm font-medium text-white/65">{label}</p>
+          <p className="mc-text-champagne mt-1 text-3xl font-black tabular-nums sm:text-4xl">{value}</p>
+          {sub && <p className="mt-1.5 text-xs text-white/50">{sub}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-slate-border bg-surface-card p-5 shadow-card transition-all duration-300 ease-mc-out hover:-translate-y-0.5 hover:border-premium-300/60 hover:shadow-elevated">
+      <div className="flex items-start justify-between gap-2">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-700 ring-1 ring-primary/10 transition-colors duration-300 group-hover:bg-mc-navy group-hover:text-[#dcc29a] group-hover:ring-0">
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
         {growth !== undefined && <GrowthBadge pct={growth ?? null} />}
       </div>
-      <div className="mt-3">
-        <p className="text-2xl font-black tabular-nums text-slate-text">{value}</p>
-        <p className="text-sm font-medium text-slate-muted">{label}</p>
-        {sub && <p className="mt-0.5 text-xs text-slate-muted/80">{sub}</p>}
+      <div className="mt-4">
+        <p className="text-[13px] font-medium text-slate-muted">{label}</p>
+        <p className="mt-1 text-2xl font-extrabold tabular-nums tracking-tight text-slate-text">{value}</p>
+        {sub && <p className="mt-1 text-xs text-slate-muted/80">{sub}</p>}
       </div>
     </div>
   );
@@ -608,7 +621,10 @@ export function ExecutiveDashboard() {
 
       {/* Period selector */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-bold tracking-tight text-slate-text">{t("executiveDashboard")}</h2>
+        <h2 className="no-accent flex items-center gap-2.5 text-xl font-bold tracking-tight text-slate-text">
+          <span className="h-6 w-1.5 rounded-full bg-gradient-to-b from-premium-300 to-primary-700" />
+          {t("executiveDashboard")}
+        </h2>
         <div className="flex flex-wrap items-center gap-2">
           <BalanceTopUpButton
             portal="accountant"
@@ -618,16 +634,16 @@ export function ExecutiveDashboard() {
             portal="accountant"
             onCleared={() => void fetchData({ silent: true })}
           />
-          <div className="flex gap-1 rounded-xl border border-slate-border bg-surface-card p-1 shadow-card">
+          <div className="flex gap-1 rounded-2xl border border-slate-border bg-surface-card p-1 shadow-card">
           {PERIODS.map((p) => (
             <button
               key={p.key}
               onClick={() => setPeriod(p.key)}
               className={cn(
-                "rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-200 ease-mc-out",
+                "rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 ease-mc-out",
                 period === p.key
                   ? "bg-mc-navy text-white shadow-elevated"
-                  : "text-slate-muted hover:bg-surface"
+                  : "text-slate-muted hover:bg-surface hover:text-slate-text"
               )}
             >
               {p.label}
@@ -655,7 +671,7 @@ export function ExecutiveDashboard() {
       {loading || !snap ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="h-28 animate-pulse rounded-2xl bg-surface" />
+            <div key={i} className="mc-skeleton h-32 rounded-2xl" />
           ))}
         </div>
       ) : (

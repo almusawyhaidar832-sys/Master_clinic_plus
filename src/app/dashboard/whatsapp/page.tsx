@@ -1,19 +1,33 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { getClinicIdFromProfile } from "@/lib/clinic-context";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
-import { QrCode, MessageCircle, RefreshCw, Wifi, WifiOff, Wrench } from "lucide-react";
+import {
+  QrCode,
+  MessageCircle,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  Wrench,
+  Stethoscope,
+  LifeBuoy,
+  Sparkles,
+  Send,
+} from "lucide-react";
 import { WhatsAppTestButton } from "@/components/patients/WhatsAppTestButton";
 import { WhatsAppRailwayHandoff } from "@/components/patients/WhatsAppRailwayHandoff";
 
 type ConnState = "open" | "close" | "connecting" | "unknown";
 
 export default function WhatsAppSettingsPage() {
+  const { bi } = useLanguage();
   const [linked, setLinked] = useState(false);
   const [connState, setConnState] = useState<ConnState>("unknown");
   const [qrImage, setQrImage] = useState<string | null>(null);
@@ -378,25 +392,163 @@ export default function WhatsAppSettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-text">ربط واتساب</h2>
-        <p className="text-slate-muted">
-          Evolution API (Baileys) — امسح QR من تطبيق واتساب على جوال العيادة
-        </p>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <PageHeader
+        eyebrow={bi("التكاملات", "Integrations")}
+        title="ربط واتساب"
+        subtitle="Evolution API (Baileys) — امسح QR من تطبيق واتساب على جوال العيادة"
+        icon={MessageCircle}
+        className="mb-0"
+        actions={
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold ring-1 ring-inset",
+              linked
+                ? "bg-success text-success-text ring-success-border"
+                : connState === "connecting"
+                  ? "bg-warning text-warning-text ring-warning-border"
+                  : "bg-surface text-slate-muted ring-slate-border"
+            )}
+          >
+            {linked ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+            {stateLabel[connState]}
+          </span>
+        }
+      />
 
-      <Card className="border-amber-200 bg-amber-50/80">
-        <CardHeader>
-          <CardTitle className="text-base text-amber-950">
-            إصلاح واتساب تلقائياً
-          </CardTitle>
-          <p className="text-sm text-amber-900/90">
-            يحذف الجلسات الزائدة ويعيد ضبط الربط —{" "}
-            <strong>تحتاج فقط مسح QR مرة واحدة</strong> من جوال العيادة.
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="min-w-0 space-y-5">
+
+      <section className="mc-panel">
+        <div className="mc-panel-head">
+          <h3 className="mc-panel-title">
+            <QrCode />
+            {bi("حالة الربط", "Connection status")}
+          </h3>
+          {instanceName && (
+            <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-[11px] text-slate-muted ring-1 ring-inset ring-slate-border" dir="ltr">
+              ({instanceName})
+            </span>
+          )}
+        </div>
+        <div className="mc-panel-body text-center">
+          <div
+            className={cn(
+              "mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl ring-1 ring-inset",
+              linked
+                ? "bg-success text-success-text ring-success-border"
+                : "bg-surface text-slate-muted ring-slate-border"
+            )}
+          >
+            <MessageCircle className="h-8 w-8" />
+          </div>
+          <h4 className="text-lg font-bold text-slate-text">
+            {linked ? "واتساب مربوط ✓" : "امسح رمز QR من تطبيق واتساب"}
+          </h4>
+          <p className="mt-2 flex items-center justify-center gap-2 text-sm text-slate-muted">
+            {linked ? (
+              <Wifi className="h-4 w-4 text-success-text" />
+            ) : (
+              <WifiOff className="h-4 w-4" />
+            )}
+            الحالة: {stateLabel[connState]}
           </p>
-        </CardHeader>
-        <div className="px-4 pb-4">
+          {linked && linkedPhoneDisplay && (
+            <div className="mx-auto mt-4 max-w-sm rounded-2xl border border-success-border bg-success px-4 py-3 text-sm text-success-text">
+              <p className="font-semibold">الرقم المربوط</p>
+              <p className="mt-1 text-xl font-black tracking-wide tabular-nums" dir="ltr">
+                {linkedPhoneDisplay}
+              </p>
+              {linkedProfileName && (
+                <p className="mt-1 text-xs opacity-90">{linkedProfileName}</p>
+              )}
+              <p className="mt-2 text-xs opacity-90">
+                رسائل الحجز تُرسل من هذا الرقم — تأكد أنه واتساب العيادة الصحيح
+              </p>
+            </div>
+          )}
+
+        {error && (
+          <div className="mt-4 text-start">
+            <Alert variant="error">{error}</Alert>
+          </div>
+        )}
+
+        {!linked && (
+          <div className="mt-5 flex flex-col items-center gap-3">
+            {qrImage ? (
+              <div className="rounded-3xl bg-mc-pearl p-2 shadow-gold ring-1 ring-inset ring-premium-300/60">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={qrImage}
+                alt="رمز QR للربط — WhatsApp"
+                className="h-56 w-56 rounded-2xl bg-white p-2"
+              />
+              </div>
+            ) : (
+              <div className="flex h-56 w-56 items-center justify-center rounded-3xl border-2 border-dashed border-slate-border bg-surface">
+                <QrCode className="h-24 w-24 text-slate-muted" strokeWidth={1.2} />
+              </div>
+            )}
+            <p className="max-w-xs text-xs leading-relaxed text-slate-muted">
+              واتساب → الإعدادات → الأجهزة المرتبطة → ربط جهاز. يتجدد الرمز
+              كل 15 ثانية — امسح خلال 20 ثانية.
+            </p>
+          </div>
+        )}
+        </div>
+
+        <div className="flex flex-col gap-2 border-t border-slate-border bg-surface px-5 py-4 sm:flex-row sm:flex-wrap">
+          <Button
+            onClick={linked ? restartSession : startScan}
+            disabled={loading}
+            className="w-full sm:flex-1"
+          >
+            {loading ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                جاري التحميل...
+              </>
+            ) : linked ? (
+              "إعادة الربط (QR جديد)"
+            ) : (
+              "عرض رمز QR"
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={checkConnection}
+            disabled={loading}
+          >
+            تحديث حالة الاتصال
+          </Button>
+          {!linked && (
+            <Button
+              variant="outline"
+              onClick={restartSession}
+              disabled={loading}
+              className="text-warning-text hover:border-warning-border hover:bg-warning"
+            >
+              QR جديد (بعد خطأ الربط)
+            </Button>
+          )}
+        </div>
+      </section>
+
+      <section className="mc-panel border-warning-border">
+        <div className="mc-panel-head">
+          <div>
+            <h3 className="mc-panel-title">
+              <Wrench />
+              إصلاح واتساب تلقائياً
+            </h3>
+            <p className="mt-1 text-xs text-slate-muted">
+              يحذف الجلسات الزائدة ويعيد ضبط الربط —{" "}
+              <strong className="text-slate-text">تحتاج فقط مسح QR مرة واحدة</strong> من جوال العيادة.
+            </p>
+          </div>
+        </div>
+        <div className="mc-panel-body">
           {repairMessage && (
             <Alert variant="success" className="mb-3">
               {repairMessage}
@@ -404,7 +556,8 @@ export default function WhatsAppSettingsPage() {
           )}
           <Button
             type="button"
-            className="w-full bg-amber-700 hover:bg-amber-800"
+            variant="premium"
+            className="w-full"
             disabled={loading}
             onClick={runAutoRepair}
           >
@@ -420,156 +573,35 @@ export default function WhatsAppSettingsPage() {
               </>
             )}
           </Button>
-          <ol className="mt-3 list-decimal space-y-1 pr-5 text-xs text-amber-950/80">
-            <li>اضغط الزر أعلاه وانتظر 10–20 ثانية</li>
-            <li>امسح QR من واتسapp جوال العيادة (07770010105)</li>
+          <ol className="mt-4 space-y-2 text-xs text-slate-muted">
+            <li className="flex items-center gap-2.5">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-mc-navy text-[11px] font-bold text-white">1</span>
+              اضغط الزر أعلاه وانتظر 10–20 ثانية
+            </li>
+            <li className="flex items-center gap-2.5">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-mc-navy text-[11px] font-bold text-white">2</span>
+              امسح QR من واتسapp جوال العيادة (07770010105)
+            </li>
           </ol>
         </div>
-      </Card>
-
-      <Card className="text-center">
-        <CardHeader>
-          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-green-50">
-            <MessageCircle className="h-10 w-10 text-green-600" />
-          </div>
-          <CardTitle>
-            {linked ? "واتساب مربوط ✓" : "امسح رمز QR من تطبيق واتساب"}
-          </CardTitle>
-          <p className="mt-2 flex items-center justify-center gap-2 text-sm text-slate-muted">
-            {linked ? (
-              <Wifi className="h-4 w-4 text-emerald-600" />
-            ) : (
-              <WifiOff className="h-4 w-4" />
-            )}
-            الحالة: {stateLabel[connState]}
-            {instanceName && (
-              <span className="text-xs" dir="ltr">
-                ({instanceName})
-              </span>
-            )}
-          </p>
-          {linked && linkedPhoneDisplay && (
-            <div className="mx-auto mt-3 max-w-sm rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
-              <p className="font-semibold text-emerald-900">الرقم المربوط</p>
-              <p className="mt-1 text-lg font-bold tracking-wide text-emerald-800" dir="ltr">
-                {linkedPhoneDisplay}
-              </p>
-              {linkedProfileName && (
-                <p className="mt-1 text-xs text-emerald-700">{linkedProfileName}</p>
-              )}
-              <p className="mt-2 text-xs text-emerald-700">
-                رسائل الحجز تُرسل من هذا الرقم — تأكد أنه واتساب العيادة الصحيح
-              </p>
-            </div>
-          )}
-        </CardHeader>
-
-        {error && (
-          <div className="mb-4 px-4">
-            <Alert variant="error">{error}</Alert>
-          </div>
-        )}
-
-        {!linked && (
-          <div className="mb-6 flex flex-col items-center gap-2 px-4">
-            {qrImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={qrImage}
-                alt="رمز QR للربط — WhatsApp"
-                className="h-56 w-56 rounded-xl border-2 border-green-200 bg-white p-2 shadow-md"
-              />
-            ) : (
-              <div className="flex h-56 w-56 items-center justify-center rounded-xl border-2 border-dashed border-slate-border bg-surface">
-                <QrCode className="h-24 w-24 text-slate-muted" />
-              </div>
-            )}
-            <p className="text-xs text-slate-muted max-w-xs">
-              واتساب → الإعدادات → الأجهزة المرتبطة → ربط جهاز. يتجدد الرمز
-              كل 15 ثانية — امسح خلال 20 ثانية.
-            </p>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2 px-4 pb-4">
-          <Button
-            onClick={linked ? restartSession : startScan}
-            disabled={loading}
-            className="w-full"
-          >
-            {loading ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                جاري التحميل...
-              </>
-            ) : linked ? (
-              "إعادة الربط (QR جديد)"
-            ) : (
-              "عرض رمز QR"
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={checkConnection}
-            disabled={loading}
-          >
-            تحديث حالة الاتصال
-          </Button>
-          {!linked && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={restartSession}
-              disabled={loading}
-              className="text-amber-800 border-amber-300"
-            >
-              QR جديد (بعد خطأ الربط)
-            </Button>
-          )}
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            خطأ «Couldn&apos;t link device» على الجوال؟
-          </CardTitle>
-        </CardHeader>
-        <ul className="list-disc space-y-2 pr-5 text-sm text-slate-muted">
-          <li>
-            اضغط <strong>QR جديد (بعد خطأ الربط)</strong> ثم امسح فوراً — لا
-            تنتظر دقيقة.
-          </li>
-          <li>
-            على الجوال: احذف جهازاً قديماً من «الأجهزة المرتبطة» إن وصلت
-            للحد (4 أجهزة).
-          </li>
-          <li>حدّث تطبيق واتساب من المتجر، واستخدم نفس شبكة Wi‑Fi أو 4G مستقرة.</li>
-          <li>
-            في Railway (مشروع Evolution): اترك{" "}
-            <code dir="ltr">CONFIG_SESSION_PHONE_VERSION</code> فارغاً، وحدّث
-            الصورة إلى <code dir="ltr">evoapicloud/evolution-api:v2.3.6</code>{" "}
-            أو أحدث.
-          </li>
-          <li>
-            تأكد <code dir="ltr">SERVER_URL</code> في Evolution = نفس رابط
-            Railway العام للجسر.
-          </li>
-        </ul>
-      </Card>
+      </section>
 
       <WhatsAppTestButton portal="accountant" />
 
-      <Card className="border-slate-border bg-surface/60">
-        <CardHeader>
-          <CardTitle className="text-base">فحص شامل للسيرفر</CardTitle>
-          <p className="text-sm text-slate-muted">
-            يفحص Evolution على Railway بدون إرسال رسالة — يوضح إن كانت الجلسة
-            «متصلة ظاهرياً» لكن معطّلة (zombie).
-          </p>
-        </CardHeader>
-        <div className="space-y-3 px-4 pb-4">
+      <section className="mc-panel">
+        <div className="mc-panel-head">
+          <div>
+            <h3 className="mc-panel-title">
+              <Stethoscope />
+              فحص شامل للسيرفر
+            </h3>
+            <p className="mt-1 text-xs text-slate-muted">
+              يفحص Evolution على Railway بدون إرسال رسالة — يوضح إن كانت الجلسة
+              «متصلة ظاهرياً» لكن معطّلة (zombie).
+            </p>
+          </div>
+        </div>
+        <div className="mc-panel-body space-y-3">
           <Button
             type="button"
             variant="outline"
@@ -590,7 +622,7 @@ export default function WhatsAppSettingsPage() {
             <Alert variant={healthReport.zombieRisk ? "error" : "info"}>
               <p className="font-semibold">{healthReport.diagnosisAr}</p>
               {healthReport.fixSteps.length > 0 && (
-                <ol className="mt-2 list-decimal space-y-1 pr-5 text-sm">
+                <ol className="mt-2 list-decimal space-y-1 ps-5 text-sm">
                   {healthReport.fixSteps.map((step) => (
                     <li key={step}>{step}</li>
                   ))}
@@ -599,51 +631,92 @@ export default function WhatsAppSettingsPage() {
             </Alert>
           )}
         </div>
-      </Card>
+      </section>
 
       <WhatsAppRailwayHandoff serverUrl={evolutionPublicUrl} />
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>رسائل تلقائية (عربي)</CardTitle>
-        </CardHeader>
-        <ul className="space-y-3 text-sm text-slate-muted">
-          <li className="rounded-lg bg-surface p-3">
+      <aside className="space-y-5 lg:sticky lg:top-4">
+      <section className="mc-panel">
+        <div className="mc-panel-head">
+          <h3 className="mc-panel-title">
+            <LifeBuoy />
+            خطأ «Couldn&apos;t link device» على الجوال؟
+          </h3>
+        </div>
+        <ul className="mc-panel-body list-disc space-y-2 ps-9 text-sm leading-relaxed text-slate-muted">
+          <li>
+            اضغط <strong>QR جديد (بعد خطأ الربط)</strong> ثم امسح فوراً — لا
+            تنتظر دقيقة.
+          </li>
+          <li>
+            على الجوال: احذف جهازاً قديماً من «الأجهزة المرتبطة» إن وصلت
+            للحد (4 أجهزة).
+          </li>
+          <li>حدّث تطبيق واتساب من المتجر، واستخدم نفس شبكة Wi‑Fi أو 4G مستقرة.</li>
+          <li>
+            في Railway (مشروع Evolution): اترك{" "}
+            <code dir="ltr">CONFIG_SESSION_PHONE_VERSION</code> فارغاً، وحدّث
+            الصورة إلى <code dir="ltr">evoapicloud/evolution-api:v2.3.6</code>{" "}
+            أو أحدث.
+          </li>
+          <li>
+            تأكد <code dir="ltr">SERVER_URL</code> في Evolution = نفس رابط
+            Railway العام للجسر.
+          </li>
+        </ul>
+      </section>
+
+      <section className="mc-panel">
+        <div className="mc-panel-head">
+          <h3 className="mc-panel-title">
+            <Sparkles />
+            رسائل تلقائية (عربي)
+          </h3>
+        </div>
+        <ul className="mc-panel-body space-y-2.5 text-sm text-slate-muted">
+          <li className="rounded-xl border border-slate-border bg-surface p-3">
             <strong className="text-slate-text">تأكيد الموعد:</strong> التاريخ،
             الوقت، اسم الطبيب
           </li>
-          <li className="rounded-lg bg-surface p-3">
+          <li className="rounded-xl border border-slate-border bg-surface p-3">
             <strong className="text-slate-text">إيصال دفع:</strong> المبلغ
             المدفوع + شكر —{" "}
             <span className="text-debt-text">بدون ذكر متبقي أو ديون</span>
           </li>
         </ul>
-      </Card>
+      </section>
 
       {messages.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>آخر الرسائل</CardTitle>
-          </CardHeader>
-          <ul className="space-y-2 text-sm">
+        <section className="mc-panel">
+          <div className="mc-panel-head">
+            <h3 className="mc-panel-title">
+              <Send />
+              آخر الرسائل
+            </h3>
+          </div>
+          <ul className="divide-y divide-slate-border text-sm">
             {messages.map((m) => (
               <li
                 key={m.id}
-                className="flex justify-between border-b border-slate-border/40 py-2"
+                className="flex items-center justify-between gap-3 px-5 py-3"
               >
-                <span>
-                  {typeLabels[m.message_type] ?? m.message_type}
-                  <br />
-                  <span className="text-xs" dir="ltr">
+                <span className="min-w-0">
+                  <span className="block font-medium text-slate-text">
+                    {typeLabels[m.message_type] ?? m.message_type}
+                  </span>
+                  <span className="text-xs tabular-nums text-slate-muted" dir="ltr">
                     {m.recipient_phone}
                   </span>
                 </span>
-                <span className="text-xs text-slate-muted">{m.status}</span>
+                <span className="shrink-0 rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-slate-muted ring-1 ring-inset ring-slate-border">{m.status}</span>
               </li>
             ))}
           </ul>
-        </Card>
+        </section>
       )}
+      </aside>
+      </div>
 
       {bridgeConfigured === false && (
         <Alert variant="error">
@@ -665,7 +738,7 @@ export default function WhatsAppSettingsPage() {
       )}
 
       {bridgeConfigured === true && (
-        <p className="text-center text-xs text-emerald-700">
+        <p className="text-center text-xs font-medium text-success-text">
           ✓ متغيرات الواتساب مُحمّلة — الجسر: {instanceName ?? "master_clinic"}
         </p>
       )}

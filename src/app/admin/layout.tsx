@@ -3,8 +3,8 @@ import { AdminLayoutClient } from "@/components/layout/AdminLayoutClient";
 import { AppProviders } from "@/components/providers/AppProviders";
 
 export const metadata: Metadata = {
-  title: "Owner | Pearl Clinic",
-  applicationName: "Pearl Clinic Owner",
+  title: "Owner | Pearl System",
+  applicationName: "Pearl System Owner",
   icons: {
     icon: [{ url: "/icons/pearl-192.png", sizes: "192x192", type: "image/png" }],
     apple: [{ url: "/icons/pearl-192.png", sizes: "180x180", type: "image/png" }],
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Pearl Clinic Owner",
+    title: "Pearl System Owner",
   },
 };
 

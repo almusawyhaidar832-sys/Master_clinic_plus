@@ -2,10 +2,22 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Pencil, RefreshCw, UserX, Users, History } from "lucide-react";
+import {
+  Pencil,
+  RefreshCw,
+  UserX,
+  Users,
+  History,
+  BadgeDollarSign,
+  Calculator,
+  UserRound,
+  Stethoscope,
+} from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatTile } from "@/components/ui/StatTile";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { DeactivateEmployeeDialog } from "@/components/payroll/DeactivateEmployeeDialog";
 import { EditEmployeeSalaryModal } from "@/components/payroll/EditEmployeeSalaryModal";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
@@ -17,13 +29,14 @@ import {
 import { formatCurrency } from "@/lib/utils";
 
 const CATEGORY_STYLES = {
-  assistant: "bg-teal-100 text-teal-800",
-  general: "bg-slate-100 text-slate-700",
-  accountant: "bg-violet-100 text-violet-800",
-  doctor_salary: "bg-amber-100 text-amber-900",
+  assistant: "bg-primary-50 text-primary-700 ring-primary-200",
+  general: "bg-surface text-slate-muted ring-slate-border",
+  accountant: "bg-royal-50 text-royal-700 ring-royal-200",
+  doctor_salary: "bg-premium-50 text-premium-700 ring-premium-200",
 };
 
 export default function EmployeesPage() {
+  const { bi } = useLanguage();
   const { clinicId, clinicName, source: clinicSource } = useActiveClinicId();
   const [persons, setPersons] = useState<PayrollPerson[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,10 +77,13 @@ export default function EmployeesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-text">إدارة رواتب الموظفين</h2>
-          <p className="text-slate-muted">
+      <PageHeader
+        eyebrow={bi("إدارة العيادة", "Clinic management")}
+        title="إدارة رواتب الموظفين"
+        icon={BadgeDollarSign}
+        className="mb-0"
+        subtitle={
+          <>
             تعديل الراتب أو إيقاف أي عامل — محاسبون، مساعدون، موظفو عيادة
             {clinicName ? (
               <>
@@ -76,28 +92,36 @@ export default function EmployeesPage() {
                 {clinicSource === "developer" ? " (دخول نيابة)" : ""}
               </>
             ) : null}
-          </p>
+          </>
+        }
+        actions={
+          <>
+            <Link href="/dashboard/payroll-history" className="mc-btn-soft">
+              <History className="h-4 w-4" />
+              سجل الصرف التاريخي
+            </Link>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              تحديث
+            </Button>
+          </>
+        }
+      />
+
+      {!loading && persons.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatTile label="محاسبون" value={byCategory.accountant.length} icon={Calculator} tone="royal" />
+          <StatTile label="مساعدون" value={byCategory.assistant.length} icon={UserRound} tone="navy" />
+          <StatTile label="موظفو عيادة" value={byCategory.general.length} icon={Users} tone="muted" />
+          <StatTile label="أطباء راتب" value={byCategory.doctor_salary.length} icon={Stethoscope} tone="gold" />
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/dashboard/payroll-history"
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-border px-3 py-2 text-sm font-medium text-slate-text hover:bg-surface"
-          >
-            <History className="h-4 w-4" />
-            سجل الصرف التاريخي
-          </Link>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void load()}
-            disabled={loading}
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            تحديث
-          </Button>
-        </div>
-      </div>
+      )}
 
       {successMsg && <Alert variant="success">{successMsg}</Alert>}
 
@@ -112,43 +136,47 @@ export default function EmployeesPage() {
       )}
 
       {loading ? (
-        <p className="text-center text-sm text-slate-muted">جاري التحميل...</p>
+        <div className="space-y-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="mc-skeleton h-14 rounded-2xl" />
+          ))}
+        </div>
       ) : persons.length === 0 ? (
-        <Card>
-          <div className="flex flex-col items-center gap-3 py-12 text-center">
-            <Users className="h-10 w-10 text-slate-300" />
-            <p className="text-slate-muted">لا يوجد عاملون نشطون بعد</p>
-            <Link
-              href="/dashboard/salary"
-              className="text-sm font-medium text-primary hover:underline"
-            >
-              أضف موظفاً من صفحة الرواتب ←
-            </Link>
-          </div>
-        </Card>
+        <div className="mc-panel flex flex-col items-center gap-3 px-6 py-14 text-center">
+          <span className="mc-icon-tile h-14 w-14">
+            <Users className="h-7 w-7" />
+          </span>
+          <p className="text-sm font-medium text-slate-muted">لا يوجد عاملون نشطون بعد</p>
+          <Link href="/dashboard/salary" className="mc-btn-soft">
+            أضف موظفاً من صفحة الرواتب ←
+          </Link>
+        </div>
       ) : (
         <>
           <div className="space-y-3 md:hidden">
             {persons.map((p) => (
               <div
                 key={`${p.category}-${p.id}`}
-                className="rounded-xl border border-slate-border bg-white p-4 shadow-sm"
+                className="mc-panel"
               >
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-bold text-slate-text">{p.full_name_ar}</p>
+                <div className="flex items-start gap-3 p-4">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-mc-pearl text-base font-extrabold text-[#0b1f3a] ring-1 ring-inset ring-premium-300/60">
+                    {p.full_name_ar.trim().charAt(0)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-bold text-slate-text">{p.full_name_ar}</p>
                     <p className="text-xs text-slate-muted">{p.job_title_ar}</p>
+                    <p className="mt-1.5 text-lg font-black tabular-nums text-slate-text">
+                      {formatCurrency(p.base_salary)}
+                    </p>
                   </div>
                   <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${CATEGORY_STYLES[p.category]}`}
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${CATEGORY_STYLES[p.category]}`}
                   >
                     {payrollCategoryLabel(p.category)}
                   </span>
                 </div>
-                <p className="mb-3 text-lg font-bold text-primary">
-                  {formatCurrency(p.base_salary)}
-                </p>
-                <div className="flex gap-2">
+                <div className="flex gap-2 border-t border-slate-border bg-surface px-4 py-2.5">
                   <Button
                     type="button"
                     size="sm"
@@ -162,7 +190,7 @@ export default function EmployeesPage() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="flex-1 border-amber-300 text-amber-800"
+                    className="flex-1 text-warning-text hover:border-warning-border hover:bg-warning"
                     onClick={() => setDeactivating(p)}
                   >
                     <UserX className="h-4 w-4" />
@@ -173,40 +201,50 @@ export default function EmployeesPage() {
             ))}
           </div>
 
-          <Card className="hidden md:block">
-            <CardHeader>
-              <CardTitle>جميع العاملين ({persons.length})</CardTitle>
-            </CardHeader>
+          <section className="mc-panel hidden md:block">
+            <div className="mc-panel-head">
+              <h3 className="mc-panel-title">
+                <Users />
+                جميع العاملين ({persons.length})
+              </h3>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-sm">
                 <thead>
-                  <tr className="border-b text-right text-xs text-slate-muted">
-                    <th className="py-2 pe-2">الاسم</th>
-                    <th className="py-2 pe-2">النوع</th>
-                    <th className="py-2 pe-2">الوظيفة</th>
-                    <th className="py-2 pe-2">الراتب</th>
-                    <th className="py-2">إجراءات</th>
+                  <tr className="text-xs text-slate-muted">
+                    <th className="px-5 py-3 text-start font-semibold">الاسم</th>
+                    <th className="px-3 py-3 text-start font-semibold">النوع</th>
+                    <th className="px-3 py-3 text-start font-semibold">الوظيفة</th>
+                    <th className="px-3 py-3 text-start font-semibold">الراتب</th>
+                    <th className="px-3 py-3 text-start font-semibold">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
                   {persons.map((p) => (
                     <tr
                       key={`${p.category}-${p.id}`}
-                      className="border-b border-slate-border/30"
+                      className="border-b border-slate-border last:border-0"
                     >
-                      <td className="py-3 pe-2 font-medium">{p.full_name_ar}</td>
-                      <td className="py-3 pe-2">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-mc-pearl text-sm font-bold text-[#0b1f3a] ring-1 ring-inset ring-premium-200">
+                            {p.full_name_ar.trim().charAt(0)}
+                          </span>
+                          <span className="font-semibold text-slate-text">{p.full_name_ar}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
                         <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-bold ${CATEGORY_STYLES[p.category]}`}
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${CATEGORY_STYLES[p.category]}`}
                         >
                           {payrollCategoryLabel(p.category)}
                         </span>
                       </td>
-                      <td className="py-3 pe-2 text-slate-600">{p.job_title_ar}</td>
-                      <td className="py-3 pe-2 font-semibold text-primary">
+                      <td className="px-3 py-3 text-slate-muted">{p.job_title_ar}</td>
+                      <td className="px-3 py-3 font-bold tabular-nums text-slate-text">
                         {formatCurrency(p.base_salary)}
                       </td>
-                      <td className="py-3">
+                      <td className="px-3 py-3">
                         <div className="flex flex-wrap gap-2">
                           <Button
                             type="button"
@@ -222,7 +260,7 @@ export default function EmployeesPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => setDeactivating(p)}
-                            className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                            className="text-warning-text hover:border-warning-border hover:bg-warning"
                           >
                             <UserX className="h-3.5 w-3.5" />
                             إيقاف الموظف
@@ -234,14 +272,7 @@ export default function EmployeesPage() {
                 </tbody>
               </table>
             </div>
-
-            <div className="mt-4 flex flex-wrap gap-4 border-t border-slate-border/40 px-4 pb-4 pt-4 text-xs text-slate-muted">
-              <span>محاسبون: {byCategory.accountant.length}</span>
-              <span>مساعدون: {byCategory.assistant.length}</span>
-              <span>موظفو عيادة: {byCategory.general.length}</span>
-              <span>أطباء راتب: {byCategory.doctor_salary.length}</span>
-            </div>
-          </Card>
+          </section>
         </>
       )}
 

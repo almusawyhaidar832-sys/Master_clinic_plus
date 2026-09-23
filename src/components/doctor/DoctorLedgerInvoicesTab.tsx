@@ -8,7 +8,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { cn, formatDate } from "@/lib/utils";
 import type { DoctorLedgerInvoiceRow } from "@/lib/services/doctor-financial-ledger";
 import { truncateLabNotes } from "@/lib/invoices/lab-session-details";
-import { RefreshCw } from "lucide-react";
+import { AlertCircle, FileText, Receipt, RefreshCw, Stethoscope } from "lucide-react";
 import { DoctorExpenseInvoiceViewer } from "@/components/doctor-expenses/DoctorExpenseInvoiceViewer";
 
 function invoiceStatement(row: DoctorLedgerInvoiceRow): string {
@@ -76,6 +76,41 @@ export function DoctorLedgerInvoicesTab({
     void load();
   }, [load, refreshKey]);
 
+  const typeBadge = (row: DoctorLedgerInvoiceRow) =>
+    row.record_kind === "doctor_expense" ? (
+      <span className="mc-tone-warning inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset">
+        {/مختبر|lab/i.test(row.procedure_label)
+          ? "مختبر"
+          : t("docKindDoctorExpenseShort")}
+      </span>
+    ) : (
+      <span className="mc-tone-navy inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset">
+        {t("docKindSession")}
+      </span>
+    );
+
+  const descriptionCell = (row: DoctorLedgerInvoiceRow) => (
+    <div className="text-slate-text">
+      <span>
+        {row.record_kind === "doctor_expense"
+          ? invoiceStatement(row)
+          : `${row.patient_name_ar} — ${invoiceStatement(row)}`}
+      </span>
+      {row.record_kind === "doctor_expense" &&
+      row.expense_percentage_split != null ? (
+        <span className="mt-0.5 block text-[10px] font-normal text-slate-muted">
+          نسبتك {Math.round(row.expense_percentage_split)}% — إجمالي{" "}
+          {formatMoney(row.total_amount)}
+        </span>
+      ) : null}
+      {row.record_kind !== "doctor_expense" && row.lab_notes ? (
+        <span className="mt-0.5 block text-[10px] font-normal text-slate-muted">
+          {truncateLabNotes(row.lab_notes, 48)}
+        </span>
+      ) : null}
+    </div>
+  );
+
   const columns: Column<DoctorLedgerInvoiceRow>[] = [
     {
       key: "date",
@@ -94,54 +129,23 @@ export function DoctorLedgerInvoicesTab({
     {
       key: "type",
       header: t("docColType"),
-      render: (row) =>
-        row.record_kind === "doctor_expense" ? (
-          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-900">
-            {/مختبر|lab/i.test(row.procedure_label)
-              ? "مختبر"
-              : t("docKindDoctorExpenseShort")}
-          </span>
-        ) : (
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-            {t("docKindSession")}
-          </span>
-        ),
+      render: (row) => typeBadge(row),
     },
     {
       key: "statement",
       header: t("docColDescription"),
-      render: (row) => (
-        <div className="text-slate-700">
-          <span>
-            {row.record_kind === "doctor_expense"
-              ? invoiceStatement(row)
-              : `${row.patient_name_ar} — ${invoiceStatement(row)}`}
-          </span>
-          {row.record_kind === "doctor_expense" &&
-          row.expense_percentage_split != null ? (
-            <span className="mt-0.5 block text-[10px] text-slate-500">
-              نسبتك {Math.round(row.expense_percentage_split)}% — إجمالي{" "}
-              {formatMoney(row.total_amount)}
-            </span>
-          ) : null}
-          {row.record_kind !== "doctor_expense" && row.lab_notes ? (
-            <span className="mt-0.5 block text-[10px] text-slate-500">
-              {truncateLabNotes(row.lab_notes, 48)}
-            </span>
-          ) : null}
-        </div>
-      ),
+      render: (row) => descriptionCell(row),
     },
     {
       key: "lab",
       header: t("docColLabCost"),
       render: (row) =>
         row.materials_cost > 0 ? (
-          <span className="tabular-nums text-amber-800">
+          <span className="tabular-nums text-warning-text">
             {formatMoney(row.materials_cost)}
           </span>
         ) : (
-          <span className="text-slate-400">—</span>
+          <span className="text-slate-muted">—</span>
         ),
     },
     {
@@ -160,7 +164,7 @@ export function DoctorLedgerInvoicesTab({
       header: t("docColAttachment"),
       render: (row) => {
         if (!row.has_invoice_attachment || !row.doctor_expense_id) {
-          return <span className="text-slate-400">—</span>;
+          return <span className="text-slate-muted">—</span>;
         }
         return (
           <DoctorExpenseInvoiceViewer
@@ -175,13 +179,13 @@ export function DoctorLedgerInvoicesTab({
       key: "share",
       header: t("docColYourShare"),
       render: (row) => (
-        <div className="text-right">
+        <div className="text-end">
           <span
             className={cn(
               "font-bold tabular-nums",
               row.record_kind === "doctor_expense"
-                ? "text-red-600"
-                : "text-emerald-600"
+                ? "text-debt-text"
+                : "text-success-text"
             )}
           >
             {row.record_kind === "doctor_expense" ? "−" : ""}
@@ -200,57 +204,143 @@ export function DoctorLedgerInvoicesTab({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-muted">{t("docLedgerInvoicesIntro")}</p>
+      <p className="px-1 text-xs leading-relaxed text-slate-muted">{t("docLedgerInvoicesIntro")}</p>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Input
-          label={t("docFromDate")}
-          type="date"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-          dir="ltr"
-          className="text-left"
-        />
-        <Input
-          label={t("docToDate")}
-          type="date"
-          value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
-          dir="ltr"
-          className="text-left"
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-slate-600">
-          {t("docResultsCount")} <strong>{total}</strong>
-        </p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="flex items-center gap-1 rounded-lg border border-slate-border px-3 py-1.5 text-sm text-slate-muted hover:bg-surface-card"
-        >
-          <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          {t("refresh")}
-        </button>
-      </div>
+      <section className="mc-panel">
+        <div className="grid grid-cols-2 gap-2.5 p-4">
+          <Input
+            label={t("docFromDate")}
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            dir="ltr"
+            className="h-11 rounded-xl text-left"
+          />
+          <Input
+            label={t("docToDate")}
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            dir="ltr"
+            className="h-11 rounded-xl text-left"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t border-slate-border bg-surface px-4 py-2.5">
+          <p className="text-xs text-slate-muted">
+            {t("docResultsCount")}{" "}
+            <strong className="text-sm font-black tabular-nums text-slate-text">{total}</strong>
+          </p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="mc-btn-soft min-h-[40px] px-3"
+          >
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            {t("refresh")}
+          </button>
+        </div>
+      </section>
 
       {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+        <p className="flex items-center gap-2 rounded-2xl border border-debt-border bg-debt px-4 py-3 text-sm text-debt-text">
+          <AlertCircle className="h-4 w-4 shrink-0" />
           {error}
         </p>
       )}
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+        <div className="space-y-2.5">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="mc-skeleton h-20 rounded-2xl" />
+          ))}
         </div>
       ) : (
-        <DataTable
-          columns={columns}
-          data={rows}
-          emptyMessage={t("docNoInvoicesInPeriod")}
-        />
+        <>
+          <div className="space-y-2.5 sm:hidden">
+            {rows.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-slate-border bg-surface-card px-4 py-10 text-center">
+                <span className="mc-kpi__icon mc-tone-muted h-11 w-11">
+                  <FileText className="h-5 w-5" />
+                </span>
+                <p className="text-sm text-slate-muted">{t("docNoInvoicesInPeriod")}</p>
+              </div>
+            ) : (
+              rows.map((row) => {
+                const isExpense = row.record_kind === "doctor_expense";
+                return (
+                  <div key={row.id} className="mc-list-row !items-start gap-3 !p-3.5">
+                    <span
+                      className={cn(
+                        "mc-kpi__icon h-10 w-10 rounded-xl",
+                        isExpense ? "mc-tone-warning" : "mc-tone-navy"
+                      )}
+                    >
+                      {isExpense ? (
+                        <Receipt className="h-4 w-4" />
+                      ) : (
+                        <Stethoscope className="h-4 w-4" />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {typeBadge(row)}
+                        <span className="font-mono text-[11px] text-slate-muted" dir="ltr">
+                          {row.invoice_number}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-sm font-semibold leading-snug">
+                        {descriptionCell(row)}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-muted">
+                        <span>{formatDate(row.invoice_date, dateLocale)}</span>
+                        {row.materials_cost > 0 && (
+                          <span>
+                            {t("docColLabCost")}:{" "}
+                            <span className="font-semibold tabular-nums text-warning-text">
+                              {formatMoney(row.materials_cost)}
+                            </span>
+                          </span>
+                        )}
+                        {row.has_invoice_attachment && row.doctor_expense_id && (
+                          <DoctorExpenseInvoiceViewer
+                            expenseId={row.doctor_expense_id}
+                            fileName={row.invoice_file_name}
+                            portal="doctor"
+                          />
+                        )}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-end">
+                      <p className="text-[10px] text-slate-muted">{t("docColYourShare")}</p>
+                      <p
+                        className={cn(
+                          "text-sm font-black tabular-nums",
+                          isExpense ? "text-debt-text" : "text-success-text"
+                        )}
+                      >
+                        {isExpense ? "−" : ""}
+                        {formatMoney(row.doctor_share)}
+                      </p>
+                      <p className="mt-1 text-[10px] text-slate-muted">{t("docColInvoiceAmount")}</p>
+                      <p className="text-xs font-semibold tabular-nums text-slate-text">
+                        {formatMoney(
+                          row.total_amount > 0 ? row.total_amount : row.paid_amount
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <div className="hidden sm:block">
+            <DataTable
+              columns={columns}
+              data={rows}
+              emptyMessage={t("docNoInvoicesInPeriod")}
+            />
+          </div>
+        </>
       )}
     </div>
   );

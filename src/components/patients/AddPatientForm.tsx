@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
@@ -187,19 +186,21 @@ export function AddPatientForm() {
   }
 
   return (
-    <Card className="p-4">
-      <h3 className="mb-3 flex items-center gap-2 font-bold text-slate-text">
-        <UserPlus className="h-5 w-5 text-primary" />
-        إضافة مراجع جديد
-      </h3>
-      <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
+    <section className="mc-panel">
+      <div className="mc-panel-head">
+        <h3 className="mc-panel-title">
+          <UserPlus />
+          إضافة مراجع جديد
+        </h3>
+      </div>
+      <form onSubmit={handleSubmit} className="mc-panel-body grid gap-4 sm:grid-cols-2">
         {draftRestored && (
           <div className="sm:col-span-2">
             <Alert variant="info">
               تم استعادة بيانات المراجع التي كتبتها.
               <button
                 type="button"
-                className="mr-2 underline"
+                className="ms-2 underline"
                 onClick={dismissDraftNotice}
               >
                 إخفاء
@@ -218,7 +219,7 @@ export function AddPatientForm() {
           </div>
         )}
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-slate-text">
+          <label className="mc-label mb-1.5 block">
             اسم المراجع
           </label>
           <PatientSearchField
@@ -254,13 +255,13 @@ export function AddPatientForm() {
           )}
         </div>
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-slate-text">
+          <label className="mc-label mb-1.5 block">
             رقم هاتف المراجع
           </label>
           <input
             type="tel"
             dir="ltr"
-            className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            className="mc-field tabular-nums disabled:cursor-not-allowed disabled:opacity-60"
             value={phone}
             onChange={(e) => setPhone(sanitizePatientPhoneInput(e.target.value))}
             placeholder="07XX XXX XXXX أو +964..."
@@ -272,18 +273,18 @@ export function AddPatientForm() {
           </p>
         </div>
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-slate-text">
+          <label className="mc-label mb-1.5 block">
             ملاحظات (اختياري)
           </label>
           <input
             type="text"
-            className="w-full rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            className="mc-field"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
         </div>
-        <div className="sm:col-span-2">
-          <Button type="submit" disabled={loading}>
+        <div className="flex justify-end border-t border-slate-border pt-4 sm:col-span-2">
+          <Button type="submit" disabled={loading} className="min-w-[160px]">
             {loading
               ? "جاري الحفظ..."
               : selectedPatientId
@@ -292,6 +293,6 @@ export function AddPatientForm() {
           </Button>
         </div>
       </form>
-    </Card>
+    </section>
   );
 }

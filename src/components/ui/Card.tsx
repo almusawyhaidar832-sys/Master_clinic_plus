@@ -25,7 +25,7 @@ export function Card({
         premium
           ? "mc-card-premium"
           : cn(
-              "rounded-xl border border-slate-border bg-surface-card",
+              "rounded-2xl border border-slate-border bg-surface-card",
               elevated ? "shadow-elevated" : "shadow-card"
             ),
         hoverable && "mc-hover-lift",

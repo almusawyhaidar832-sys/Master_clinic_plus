@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Archive, RefreshCw, X } from "lucide-react";
+import { Archive, RefreshCw } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import {
   payrollCategoryLabel,
@@ -51,41 +52,21 @@ export function DeactivateEmployeeDialog({
     onClose();
   }
 
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">إيقاف موظف</h2>
+    <Modal
+      onClose={onClose}
+      title="إيقاف موظف"
+      subtitle={payrollCategoryLabel(person.category)}
+      icon={Archive}
+      size="sm"
+      closeOnBackdrop={false}
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 hover:bg-slate-100"
-          >
-            <X className="h-5 w-5 text-slate-400" />
-          </button>
-        </div>
-
-        <p className="mb-2 text-sm text-slate-600">
-          إيقاف <strong>{person.full_name_ar}</strong> (
-          {payrollCategoryLabel(person.category)})؟
-        </p>
-        <ul className="mb-4 list-inside list-disc space-y-1 text-xs text-slate-500">
-          <li>يختفي من قائمة الرواتب والقائمة المنسدلة</li>
-          <li>سجلات الرواتب السابقة تبقى محفوظة</li>
-          <li>لا يُحذف من قاعدة البيانات — أرشفة فقط</li>
-        </ul>
-
-        {error && (
-          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        )}
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium hover:bg-slate-50"
+            className="mc-btn-soft flex-1 py-2.5"
           >
             إلغاء
           </button>
@@ -93,7 +74,7 @@ export function DeactivateEmployeeDialog({
             type="button"
             onClick={() => void handleDeactivate()}
             disabled={saving}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-60"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-warning-border bg-warning px-4 py-2.5 text-sm font-bold text-warning-text transition-colors hover:brightness-95 disabled:opacity-60"
           >
             {saving ? (
               <RefreshCw className="h-4 w-4 animate-spin" />
@@ -102,8 +83,31 @@ export function DeactivateEmployeeDialog({
             )}
             إيقاف الموظف
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <p className="mb-3 text-sm text-slate-text">
+        إيقاف <strong>{person.full_name_ar}</strong> (
+        {payrollCategoryLabel(person.category)})؟
+      </p>
+      <ul className="space-y-1.5 rounded-xl border border-slate-border bg-surface p-3.5 text-xs text-slate-muted">
+        {[
+          "يختفي من قائمة الرواتب والقائمة المنسدلة",
+          "سجلات الرواتب السابقة تبقى محفوظة",
+          "لا يُحذف من قاعدة البيانات — أرشفة فقط",
+        ].map((item) => (
+          <li key={item} className="flex items-start gap-2">
+            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-premium-400" />
+            {item}
+          </li>
+        ))}
+      </ul>
+
+      {error && (
+        <p className="mt-3 rounded-xl border border-debt-border bg-debt px-3.5 py-2.5 text-sm text-debt-text">
+          {error}
+        </p>
+      )}
+    </Modal>
   );
 }

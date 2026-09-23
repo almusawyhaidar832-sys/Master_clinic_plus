@@ -27,19 +27,30 @@ const ACTION_OPTIONS = [
   { value: "create", label: "الإنشاء فقط" },
 ];
 
+const ACTION_TONES: Record<string, string> = {
+  refund: "bg-warning text-warning-text ring-warning-border",
+  update: "bg-primary-50 text-primary-700 ring-primary-200",
+  delete: "bg-debt text-debt-text ring-debt-border",
+  create: "bg-success text-success-text ring-success-border",
+};
+
+function actionTone(action: string): string {
+  return ACTION_TONES[action] ?? "bg-surface text-slate-muted ring-slate-border";
+}
+
 function ActionIcon({ action }: { action: string }) {
   const cls = "h-4 w-4 shrink-0";
   switch (action) {
     case "refund":
-      return <Undo2 className={cn(cls, "text-amber-600")} />;
+      return <Undo2 className={cls} />;
     case "update":
-      return <Pencil className={cn(cls, "text-blue-600")} />;
+      return <Pencil className={cls} />;
     case "delete":
-      return <Trash2 className={cn(cls, "text-red-600")} />;
+      return <Trash2 className={cls} />;
     case "create":
-      return <Plus className={cn(cls, "text-emerald-600")} />;
+      return <Plus className={cls} />;
     default:
-      return <Activity className={cn(cls, "text-slate-muted")} />;
+      return <Activity className={cls} />;
   }
 }
 
@@ -116,7 +127,7 @@ export function ActivityFeed({
   return (
     <div className="space-y-4">
       {!compact && (
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="mc-panel flex flex-wrap items-end gap-3 p-4">
           <div className="min-w-[140px] flex-1">
             <Select
               label="نوع العملية"
@@ -156,7 +167,7 @@ export function ActivityFeed({
       )}
 
       {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-xl border border-debt-border bg-debt px-3.5 py-2.5 text-sm text-debt-text">
           {error}
         </p>
       )}
@@ -166,38 +177,50 @@ export function ActivityFeed({
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-16 animate-pulse rounded-xl bg-slate-100"
+              className="mc-skeleton h-20 rounded-2xl"
             />
           ))}
         </div>
       ) : items.length === 0 ? (
-        <p className="py-8 text-center text-sm text-slate-muted">
-          لا توجد عمليات مسجّلة بعد
-        </p>
+        <div className="flex flex-col items-center py-10 text-center">
+          <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-surface text-slate-muted ring-1 ring-inset ring-slate-border">
+            <Activity className="h-6 w-6" strokeWidth={1.6} />
+          </span>
+          <p className="text-sm font-medium text-slate-muted">
+            لا توجد عمليات مسجّلة بعد
+          </p>
+        </div>
       ) : (
-        <ul className="space-y-2">
+        <ul className="relative space-y-3 before:absolute before:inset-y-3 before:start-[19px] before:w-px before:bg-slate-border">
           {(maxItems ? items.slice(0, maxItems) : items).map((item) => (
             <li
               key={item.id}
-              className={cn(
-                "rounded-xl border border-slate-border bg-white p-3 shadow-sm",
-                item.action === "refund" && "border-amber-200 bg-amber-50/40"
-              )}
+              className="relative flex items-start gap-3"
             >
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg bg-surface">
-                  <ActionIcon action={item.action} />
-                </div>
+              <span
+                className={cn(
+                  "relative z-[1] mt-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset shadow-card",
+                  actionTone(item.action)
+                )}
+              >
+                <ActionIcon action={item.action} />
+              </span>
+              <div
+                className={cn(
+                  "min-w-0 flex-1 rounded-2xl border border-slate-border bg-surface-card p-3.5 shadow-card transition-shadow hover:shadow-soft",
+                  item.action === "refund" && "border-warning-border"
+                )}
+              >
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-bold ring-1 ring-inset", actionTone(item.action))}>
                       {item.actionLabel}
                     </span>
-                    <span className="text-xs text-slate-muted">
+                    <span className="text-[11px] tabular-nums text-slate-muted">
                       {formatDate(item.changedAt)}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm font-medium text-slate-text">
+                  <p className="mt-1.5 text-sm font-semibold text-slate-text">
                     {item.summary}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-muted">
@@ -207,7 +230,7 @@ export function ActivityFeed({
                     </span>
                   </p>
                   {item.changes.length > 0 && (
-                    <ul className="mt-1.5 space-y-0.5 rounded-lg bg-slate-50 px-2 py-1.5 text-xs text-slate-muted">
+                    <ul className="mt-2 space-y-0.5 rounded-xl border border-slate-border bg-surface px-3 py-2 text-xs text-slate-muted">
                       {item.changes.map((line) => (
                         <li
                           key={line}
@@ -227,10 +250,10 @@ export function ActivityFeed({
                     item.financialAmount !== 0 && (
                       <p
                         className={cn(
-                          "mt-1 text-sm font-bold tabular-nums",
+                          "mt-2 inline-flex rounded-lg px-2 py-0.5 text-sm font-bold tabular-nums ring-1 ring-inset",
                           item.financialAmount < 0
-                            ? "text-amber-700"
-                            : "text-emerald-700"
+                            ? "bg-warning text-warning-text ring-warning-border"
+                            : "bg-success text-success-text ring-success-border"
                         )}
                       >
                         {item.financialAmount < 0 ? "−" : "+"}

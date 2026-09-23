@@ -29,7 +29,9 @@ import { fetchPatientTreatmentCases } from "@/lib/services/patient-treatment-cas
 import { getPatientDisplayPhone } from "@/lib/phone";
 import { opName, type PatientOperation } from "@/types";
 import type { PatientTreatmentCase } from "@/lib/services/patient-treatment-cases";
-import { RefreshCw, NotebookPen, CheckCircle2 } from "lucide-react";
+import { RefreshCw, NotebookPen, CheckCircle2, CalendarCheck } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { VisualMedicalRecord } from "@/components/clinical/VisualMedicalRecord";
 
 type RowWithJoins = ConsolidatedTodayOperationRow;
@@ -56,6 +58,7 @@ function LedgerPageContent() {
   const presetCaseId = searchParams.get("case") ?? undefined;
 
   const { clinicId, loading: clinicLoading } = useActiveClinicId();
+  const { bi } = useLanguage();
   const [operations, setOperations] = useState<RowWithJoins[]>([]);
   const [caseRemainingById, setCaseRemainingById] = useState<
     Map<string, number>
@@ -417,7 +420,7 @@ function LedgerPageContent() {
       render: (row) => (
         <Link
           href={`/dashboard/patients/${row.patient_id}`}
-          className="text-primary text-xs hover:underline"
+          className="inline-flex items-center rounded-lg border border-slate-border bg-surface-card px-2.5 py-1 text-xs font-semibold text-primary-700 transition-colors hover:border-premium-300"
         >
           الملف
         </Link>
@@ -431,25 +434,19 @@ function LedgerPageContent() {
 
   return (
     <div className="space-y-6">
-      <div className="mc-gradient-header flex flex-wrap items-center justify-between gap-3 rounded-2xl px-5 py-5 text-white">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 shadow-inner">
-            <NotebookPen className="h-6 w-6" />
-          </span>
-          <div>
-            <h2 className="text-xl font-extrabold tracking-tight sm:text-2xl">
-              إدخال جلسة
-            </h2>
-            <p className="mt-0.5 text-sm font-medium text-white/85">
-              إدخال سريع وعمليات اليوم — {formatDate(new Date())}
-            </p>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="إدخال جلسة"
+        eyebrow={bi("المالية", "Finance")}
+        icon={NotebookPen}
+        subtitle={<>إدخال سريع وعمليات اليوم — {formatDate(new Date())}</>}
+        className="mb-0"
+      />
 
       {contextLoading && (
-        <div className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-medium text-primary">
-          <RefreshCw className="h-4 w-4 animate-spin" />
+        <div className="mc-panel flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-text">
+          <span className="mc-kpi__icon mc-tone-navy h-9 w-9">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          </span>
           جاري تحميل بيانات المريض والحالات السابقة...
         </div>
       )}
@@ -459,16 +456,16 @@ function LedgerPageContent() {
       )}
 
       {patientContext && !contextLoading && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-blue-200 bg-gradient-to-l from-blue-50 to-white px-4 py-3 shadow-sm">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
+        <div className="mc-panel flex flex-wrap items-center gap-3 border-s-4 border-s-success-border px-4 py-3">
+          <span className="mc-kpi__icon mc-tone-success h-9 w-9">
             <CheckCircle2 className="h-4 w-4" />
           </span>
-          <p className="text-sm text-slate-700">
-            تم تحميل ملف <strong className="text-blue-900">{patientContext.patientName}</strong>
+          <p className="text-sm text-slate-muted">
+            تم تحميل ملف <strong className="text-slate-text">{patientContext.patientName}</strong>
             {patientContext.doctorName && (
               <>
                 {" "}
-                — الطبيب: <strong className="text-blue-900">{patientContext.doctorName}</strong>
+                — الطبيب: <strong className="text-slate-text">{patientContext.doctorName}</strong>
               </>
             )}
             {patientContext.treatmentCases.length > 0
@@ -528,22 +525,26 @@ function LedgerPageContent() {
         />
       )}
 
-      <div>
-        <h3 className="mb-3 text-lg font-semibold text-slate-text">
-          جلسات اليوم
+      <div className="mc-panel">
+        <div className="mc-panel-head">
+          <h3 className="mc-panel-title">
+            <CalendarCheck />
+            جلسات اليوم
+          </h3>
           {!loading && operations.length > 0 && (
-            <span className="mr-2 text-sm font-normal text-slate-muted">
+            <span className="mc-chip pointer-events-none px-3 py-1 text-xs tabular-nums">
               ({operations.length} جلسة)
             </span>
           )}
-        </h3>
+        </div>
         {loading ? (
-          <div className="space-y-2">
+          <div className="space-y-2 p-5">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-12 animate-pulse rounded-xl bg-surface" />
+              <div key={i} className="mc-skeleton h-12 rounded-xl" />
             ))}
           </div>
         ) : (
+          <div className="overflow-x-auto p-2 sm:p-3">
           <DataTable
             columns={columns}
             data={operations}
@@ -553,6 +554,7 @@ function LedgerPageContent() {
               0
             }
           />
+          </div>
         )}
       </div>
     </div>

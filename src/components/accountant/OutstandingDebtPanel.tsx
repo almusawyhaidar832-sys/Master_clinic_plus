@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -48,9 +47,9 @@ export function OutstandingDebtPanel({
 
   if (loading) {
     return (
-      <Card className={embedded ? "border-amber-200/80" : undefined}>
-        <div className="h-24 animate-pulse rounded-lg bg-surface" />
-      </Card>
+      <div className="mc-panel p-5">
+        <div className="mc-skeleton h-24 rounded-xl" />
+      </div>
     );
   }
 
@@ -63,34 +62,38 @@ export function OutstandingDebtPanel({
   }
 
   return (
-    <Card className={cn("overflow-hidden p-0", embedded && "border-amber-200/80")}>
-      <CardHeader className="border-b border-amber-200/60 bg-amber-50/40">
-        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base text-amber-950">
-          <span className="inline-flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            قائمة المديونين — تفصيل الذمم
+    <div className={cn("mc-panel", embedded && "shadow-none")}>
+      <div className="mc-panel-head">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="mc-kpi__icon mc-tone-danger h-10 w-10">
+            <AlertCircle className="h-5 w-5" />
           </span>
-          <span className="text-sm font-bold tabular-nums text-debt-text">
-            {debtors.length} مراجع · {formatCurrency(totalDebt)}
-          </span>
-        </CardTitle>
-        <p className="mt-1 text-xs text-amber-900/80">
-          كل دين مسجّل صراحةً — ليس من سعر كلي وهمي
-        </p>
-      </CardHeader>
+          <div className="min-w-0">
+            <p className="text-[15px] font-bold text-slate-text">
+              قائمة المديونين — تفصيل الذمم
+            </p>
+            <p className="mt-0.5 text-xs text-slate-muted">
+              كل دين مسجّل صراحةً — ليس من سعر كلي وهمي
+            </p>
+          </div>
+        </div>
+        <span className="rounded-full border border-debt-border bg-debt px-3 py-1 text-sm font-bold tabular-nums text-debt-text">
+          {debtors.length} مراجع · {formatCurrency(totalDebt)}
+        </span>
+      </div>
 
-      <div className="divide-y divide-slate-border/60">
+      <div className="divide-y divide-slate-border">
         {debtors.map((debtor) => (
           <div
             key={debtor.patientId}
-            className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
+            className="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-surface sm:flex-row sm:items-start sm:justify-between"
           >
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold text-slate-text">
+                <p className="font-bold text-slate-text">
                   {debtor.patientName}
                 </p>
-                <span className="inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-bold text-orange-900 ring-1 ring-orange-300">
+                <span className="inline-flex rounded-full border border-warning-border bg-warning px-2 py-0.5 text-[11px] font-bold text-warning-text">
                   مديون
                 </span>
               </div>
@@ -122,8 +125,8 @@ export function OutstandingDebtPanel({
             </div>
 
             <div className="flex shrink-0 flex-col items-end gap-2">
-              <div className="text-right">
-                <p className="text-[11px] text-slate-muted">إجمالي الدين</p>
+              <div className="text-end">
+                <p className="text-[11px] font-medium text-slate-muted">إجمالي الدين</p>
                 <p className="text-lg font-black tabular-nums text-debt-text">
                   {formatCurrency(debtor.totalDebt)}
                 </p>
@@ -131,7 +134,7 @@ export function OutstandingDebtPanel({
               <div className="flex gap-2">
                 <Link
                   href={`/dashboard/patients/${debtor.patientId}`}
-                  className="rounded-lg border border-slate-border px-3 py-1.5 text-xs font-medium text-slate-text hover:bg-surface"
+                  className="mc-btn-soft px-3 py-1.5 text-xs"
                 >
                   الملف
                 </Link>
@@ -141,7 +144,7 @@ export function OutstandingDebtPanel({
                     patientName: debtor.patientName,
                     patientPhone: debtor.patientPhone,
                   })}
-                  className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90"
+                  className="mc-btn-navy px-3 py-1.5 text-xs"
                 >
                   <Receipt className="h-3.5 w-3.5" />
                   تحصيل
@@ -151,6 +154,6 @@ export function OutstandingDebtPanel({
           </div>
         ))}
       </div>
-    </Card>
+    </div>
   );
 }

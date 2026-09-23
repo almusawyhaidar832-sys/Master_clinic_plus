@@ -2,7 +2,7 @@
   "id": "/queue-screen",
   "name": "شاشة انتظار المرضى",
   "short_name": "شاشة الانتظار",
-  "description": "شاشة نداء المراجعين — بيرل كلينك",
+  "description": "شاشة نداء المراجعين — بيرل سيستم",
   "start_url": "/queue-screen?source=pwa",
   "scope": "/queue-screen",
   "display": "standalone",

@@ -176,10 +176,10 @@ export function VisitSessionClinicalPanel({
       {!hideHeader && isAccountantView ? (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-base font-bold text-slate-800">
+            <h3 className="text-base font-bold text-slate-text">
               {t("docReviewVisualRecord")}
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-muted">
               {bi(
                 "راجع السجل — إذا نُسي المخطط أو الأشعة أو الوصفة يمكنك إضافتها أو تعديلها هنا",
                 "Review the record — add or edit chart, X-rays, or prescription if the doctor forgot"
@@ -197,19 +197,19 @@ export function VisitSessionClinicalPanel({
           </Button>
         </div>
       ) : !hideHeader ? (
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-2 border-b border-slate-border pb-3">
           <div>
             <h3
               className={
                 isExamPortal
                   ? "flex items-center gap-2 text-lg font-bold text-primary"
-                  : "text-base font-bold text-slate-800"
+                  : "text-base font-bold text-slate-text"
               }
             >
               {isExamPortal && <Scan className="h-5 w-5 shrink-0" />}
               {t("docVisualMedicalRecord")}
             </h3>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-slate-muted">
               {t("docVisualMedicalRecordHint")}
             </p>
           </div>
@@ -272,7 +272,7 @@ export function VisitSessionClinicalPanel({
       )}
 
       {loading && (
-        <p className="text-sm text-slate-500">{t("docPreparingExamSession")}</p>
+        <p className="text-sm text-slate-muted">{t("docPreparingExamSession")}</p>
       )}
 
       {error && <Alert variant="error">{error}</Alert>}
@@ -289,7 +289,7 @@ export function VisitSessionClinicalPanel({
             onChange={(e) => setAccountingNotes(e.target.value)}
             placeholder={t("docAccountingNotesPlaceholder")}
             rows={3}
-            className="w-full resize-none rounded-xl border border-violet-200 bg-white px-4 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none"
+            className="w-full resize-none rounded-xl border border-slate-border bg-surface-card px-4 py-2.5 text-sm text-slate-text focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 focus:outline-none"
           />
           <p className="mt-1 text-xs text-violet-700">{t("docAccountingNotesHint")}</p>
         </div>
@@ -335,7 +335,7 @@ export function VisitSessionClinicalPanel({
         )}
 
       {!loading && !session?.operationId && !error && isAccountantView && (
-        <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-muted">
+        <p className="rounded-lg border border-dashed border-slate-border bg-surface px-3 py-4 text-sm text-slate-muted">
           {t("docNoVisualRecordYet")}
         </p>
       )}

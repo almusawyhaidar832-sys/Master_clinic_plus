@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { X, RefreshCw } from "lucide-react";
+import { Banknote, RefreshCw } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import {
@@ -107,180 +108,167 @@ export function EditEmployeeSalaryModal({
 
   const category = person.category as PayrollEmployeeCategory;
 
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl">
-        <div className="mb-4 flex items-center justify-between">
+    <Modal
+      onClose={onClose}
+      title={<>تعديل راتب — {person.full_name_ar}</>}
+      subtitle={payrollCategoryLabel(category)}
+      icon={Banknote}
+      closeOnBackdrop={false}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {person.category !== "assistant" &&
+          person.category !== "doctor_salary" && (
           <div>
-            <h2 className="text-lg font-bold text-slate-800">
-              تعديل راتب — {person.full_name_ar}
-            </h2>
-            <p className="text-xs text-slate-500">
-              {payrollCategoryLabel(category)}
-            </p>
+            <label className="mc-label mb-1.5">
+              الوظيفة
+            </label>
+            <input
+              type="text"
+              value={jobTitle}
+              onChange={(e) => setJobTitle(e.target.value)}
+              className="mc-field"
+            />
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1 hover:bg-slate-100"
-          >
-            <X className="h-5 w-5 text-slate-400" />
-          </button>
-        </div>
+        )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {person.category !== "assistant" &&
-            person.category !== "doctor_salary" && (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">
-                الوظيفة
-              </label>
-              <input
-                type="text"
-                value={jobTitle}
-                onChange={(e) => setJobTitle(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
-              />
-            </div>
-          )}
-
-          {supportsCompensationMode && (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">
-                نظام التعويض
-              </label>
-              <select
-                value={compensationMode}
-                onChange={(e) =>
-                  setCompensationMode(
-                    e.target.value === "daily_wage" ? "daily_wage" : "monthly_fixed"
-                  )
-                }
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
-              >
-                <option value="monthly_fixed">
-                  {ASSISTANT_COMPENSATION_LABELS.monthly_fixed}
-                </option>
-                <option value="daily_wage">
-                  {ASSISTANT_COMPENSATION_LABELS.daily_wage}
-                </option>
-              </select>
-              {isDaily && (
-                <p className="mt-1 text-xs text-teal-800">
-                  يُسجَّل أجر كل يوم من صفحة الرواتب — يُجمع الشهر ثم يُخصم من
-                  مصاريف العيادة عند التأكيد.
-                </p>
-              )}
-            </div>
-          )}
-
-          {!(supportsCompensationMode && isDaily) && (
+        {supportsCompensationMode && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">
-              {person.category === "assistant"
-                ? "الراتب الكلي"
-                : person.category === "doctor_salary"
-                  ? "الراتب الثابت الشهري"
-                  : "الراتب الشهري"}
+            <label className="mc-label mb-1.5">
+              نظام التعويض
+            </label>
+            <select
+              value={compensationMode}
+              onChange={(e) =>
+                setCompensationMode(
+                  e.target.value === "daily_wage" ? "daily_wage" : "monthly_fixed"
+                )
+              }
+              className="mc-field"
+            >
+              <option value="monthly_fixed">
+                {ASSISTANT_COMPENSATION_LABELS.monthly_fixed}
+              </option>
+              <option value="daily_wage">
+                {ASSISTANT_COMPENSATION_LABELS.daily_wage}
+              </option>
+            </select>
+            {isDaily && (
+              <p className="mt-1.5 text-xs text-primary-700">
+                يُسجَّل أجر كل يوم من صفحة الرواتب — يُجمع الشهر ثم يُخصم من
+                مصاريف العيادة عند التأكيد.
+              </p>
+            )}
+          </div>
+        )}
+
+        {!(supportsCompensationMode && isDaily) && (
+        <div>
+          <label className="mc-label mb-1.5">
+            {person.category === "assistant"
+              ? "الراتب الكلي"
+              : person.category === "doctor_salary"
+                ? "الراتب الثابت الشهري"
+                : "الراتب الشهري"}
+          </label>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={baseSalary}
+            onChange={(e) => setBaseSalary(e.target.value)}
+            required
+            dir="ltr"
+            className="mc-field font-semibold tabular-nums"
+          />
+        </div>
+        )}
+
+        {person.category === "assistant" && (
+          <div>
+            <label className="mc-label mb-1.5">
+              نسبة تحمّل الطبيب (%)
             </label>
             <input
               type="number"
               min={0}
-              step={1}
-              value={baseSalary}
-              onChange={(e) => setBaseSalary(e.target.value)}
-              required
+              max={100}
+              value={doctorSharePct}
+              onChange={(e) => setDoctorSharePct(e.target.value)}
               dir="ltr"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              className="mc-field font-semibold tabular-nums"
             />
+            {assistantPreview && (
+              <div className="mt-2 space-y-1 rounded-xl border border-primary-200 bg-primary-50/60 px-3.5 py-2.5 text-xs text-primary-800 dark:border-primary-800 dark:bg-primary-900/20 dark:text-primary-200">
+                <p>
+                  من راتب {formatCurrency(assistantPreview.totalSalary)}:
+                </p>
+                <p>
+                  الطبيب يتحمل {assistantPreview.doctorSharePercentage}% ={" "}
+                  <strong>{formatCurrency(assistantPreview.doctorShare)}</strong>
+                </p>
+                <p>
+                  العيادة تتحمل {100 - assistantPreview.doctorSharePercentage}% ={" "}
+                  <strong>{formatCurrency(assistantPreview.clinicShare)}</strong>
+                </p>
+              </div>
+            )}
           </div>
-          )}
+        )}
 
-          {person.category === "assistant" && (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-600">
-                نسبة تحمّل الطبيب (%)
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={doctorSharePct}
-                onChange={(e) => setDoctorSharePct(e.target.value)}
-                dir="ltr"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
-              />
-              {assistantPreview && (
-                <div className="mt-2 space-y-1 rounded-lg bg-teal-50 px-3 py-2 text-xs text-teal-900">
-                  <p>
-                    من راتب {formatCurrency(assistantPreview.totalSalary)}:
-                  </p>
-                  <p>
-                    الطبيب يتحمل {assistantPreview.doctorSharePercentage}% ={" "}
-                    <strong>{formatCurrency(assistantPreview.doctorShare)}</strong>
-                  </p>
-                  <p>
-                    العيادة تتحمل {100 - assistantPreview.doctorSharePercentage}% ={" "}
-                    <strong>{formatCurrency(assistantPreview.clinicShare)}</strong>
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {person.category === "doctor_salary" && (
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              طبيب راتب ثابت — الجلسات للعيادة. سلف/خصم/مكافأة من هذه اللوحة.
-            </p>
-          )}
-
-          {person.category === "accountant" && (
-            <p className="rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-800">
-              راتب المحاسب يُصرف كمصاريف عيادة — يظهر في قائمة رواتب الموظفين.
-            </p>
-          )}
-
-          {person.category === "general" && (
-            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              موظف خدمات — الراتب كامل من مصاريف العيادة.
-            </p>
-          )}
-
-          <p className="text-xs text-slate-400">
-            {person.category === "assistant"
-              ? "يُحدَّث تلقائياً في سجلات الرواتب غير المُصرفة لهذا المساعد (من أي صفحة تعدّل منها)."
-              : person.category === "doctor_salary"
-                ? "يُحدَّث تلقائياً في قسائم الراتب غير المُصرفة — يظهر أيضاً عند تعديل الطبيب من صفحة الأطباء."
-                : isStaffLike && isDaily
-                  ? "يُحدَّث تلقائياً في قسائم الراتب غير المُسلَّمة — صافي الشهر = مجموع أيام العمل."
-                  : "يُحدَّث تلقائياً في قسائم الراتب غير المُسلَّمة لموظفي العيادة."}
+        {person.category === "doctor_salary" && (
+          <p className="rounded-xl border border-warning-border bg-warning px-3.5 py-2.5 text-xs text-warning-text">
+            طبيب راتب ثابت — الجلسات للعيادة. سلف/خصم/مكافأة من هذه اللوحة.
           </p>
+        )}
 
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </p>
-          )}
+        {person.category === "accountant" && (
+          <p className="rounded-xl border border-royal-200 bg-royal-50/60 px-3.5 py-2.5 text-xs text-royal-800 dark:border-royal-800 dark:bg-royal-900/20 dark:text-royal-200">
+            راتب المحاسب يُصرف كمصاريف عيادة — يظهر في قائمة رواتب الموظفين.
+          </p>
+        )}
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-            >
-              إلغاء
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-60"
-            >
-              {saving && <RefreshCw className="h-4 w-4 animate-spin" />}
-              حفظ
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {person.category === "general" && (
+          <p className="rounded-xl border border-slate-border bg-surface px-3.5 py-2.5 text-xs text-slate-muted">
+            موظف خدمات — الراتب كامل من مصاريف العيادة.
+          </p>
+        )}
+
+        <p className="text-xs leading-relaxed text-slate-muted">
+          {person.category === "assistant"
+            ? "يُحدَّث تلقائياً في سجلات الرواتب غير المُصرفة لهذا المساعد (من أي صفحة تعدّل منها)."
+            : person.category === "doctor_salary"
+              ? "يُحدَّث تلقائياً في قسائم الراتب غير المُصرفة — يظهر أيضاً عند تعديل الطبيب من صفحة الأطباء."
+              : isStaffLike && isDaily
+                ? "يُحدَّث تلقائياً في قسائم الراتب غير المُسلَّمة — صافي الشهر = مجموع أيام العمل."
+                : "يُحدَّث تلقائياً في قسائم الراتب غير المُسلَّمة لموظفي العيادة."}
+        </p>
+
+        {error && (
+          <p className="rounded-xl border border-debt-border bg-debt px-3.5 py-2.5 text-sm text-debt-text">
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-2 border-t border-slate-border pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="mc-btn-soft flex-1 py-2.5"
+          >
+            إلغاء
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="mc-btn-navy flex-1 py-2.5"
+          >
+            {saving && <RefreshCw className="h-4 w-4 animate-spin" />}
+            حفظ
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { MasterReportDocument } from "@/components/reports/MasterReportDocument";
 import { MonthlySettlementDocument } from "@/components/reports/MonthlySettlementDocument";
 import { ReportActions } from "@/components/reports/ReportActions";
@@ -32,7 +32,16 @@ import {
   readSettlementReportCache,
   writeSettlementReportCache,
 } from "@/lib/offline/settlement-report-cache";
-import { FileText, Loader2, ClipboardList, Scale } from "lucide-react";
+import {
+  FileText,
+  Loader2,
+  ClipboardList,
+  Scale,
+  FileBarChart,
+  CalendarDays,
+  ListChecks,
+  CheckCircle2,
+} from "lucide-react";
 
 export default function AccountantReportsPage() {
   const [monthYear, setMonthYear] = useState(currentMonthYear());
@@ -52,6 +61,7 @@ export default function AccountantReportsPage() {
     null
   );
 
+  const { bi } = useLanguage();
   const periodOptions = getReportPeriodOptions();
 
   useEffect(() => {
@@ -159,14 +169,13 @@ export default function AccountantReportsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-text">تقارير العيادة</h2>
-        <p className="text-slate-muted">
-          تقرير شامل للمالك — عمليات يومية وشهرية، مصروفات، سلف الموظفين،
-          وأطباء
-        </p>
-      </div>
+    <div className="mx-auto max-w-4xl space-y-6">
+      <PageHeader
+        title="تقارير العيادة"
+        eyebrow={bi("التقارير والتحليلات", "Reports & analytics")}
+        icon={FileBarChart}
+        subtitle="تقرير شامل للمالك — عمليات يومية وشهرية، مصروفات، سلف الموظفين، وأطباء"
+      />
 
       <OfflineViewBanner
         refreshing={false}
@@ -184,106 +193,129 @@ export default function AccountantReportsPage() {
         offlineLabel="بدون اتصال — آخر تحديث لكشف التسوية: {time}"
       />
 
-      <Card className="border-primary/20 bg-primary/5">
-        <CardHeader>
-          <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-primary/10 p-2">
-              <ClipboardList className="h-6 w-6 text-primary" />
-            </div>
-            <div>
-              <CardTitle>تقرير تسليم للمالك</CardTitle>
-              <p className="mt-1 text-sm text-slate-muted">
-                بنقرة واحدة يُجمّع كل إحصائيات العيادة المالية في تقرير
-                جاهز للطباعة أو المشاركة مع صاحب العيادة.
-              </p>
-            </div>
-          </div>
-        </CardHeader>
-
-        <div className="space-y-4">
+      <div className="mc-panel">
+        <div className="mc-panel-head">
+          <p className="mc-panel-title">
+            <CalendarDays />
+            الشهر
+          </p>
+        </div>
+        <div className="mc-panel-body">
           <Select
-            label="الشهر"
             value={monthYear}
             onChange={(e) => {
               setMonthYear(e.target.value);
               setError(null);
             }}
             options={periodOptions}
+            className="h-11 rounded-xl font-semibold"
           />
-
-          <Button
-            className="w-full"
-            size="lg"
-            onClick={generateReport}
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin" />
-                جاري تجميع التقرير الشامل...
-              </>
-            ) : (
-              <>
-                <FileText className="h-5 w-5" />
-                {offlineView && report
-                  ? "عرض التقرير المحفوظ"
-                  : "إنشاء تقرير العيادة الكامل"}
-              </>
-            )}
-          </Button>
         </div>
-      </Card>
+      </div>
 
-      <Card className="border-amber-200/60 bg-amber-50/30">
-        <CardHeader>
-          <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-amber-100 p-2">
-              <Scale className="h-6 w-6 text-amber-700" />
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="mc-hero flex flex-col rounded-3xl p-6">
+          <div className="relative flex items-start gap-3.5">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-premium-300 ring-1 ring-inset ring-white/15">
+              <ClipboardList className="h-6 w-6" strokeWidth={1.75} />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-lg font-extrabold tracking-tight text-white">
+                تقرير تسليم للمالك
+              </h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-white/70">
+                بنقرة واحدة يُجمّع كل إحصائيات العيادة المالية في تقرير
+                جاهز للطباعة أو المشاركة مع صاحب العيادة.
+              </p>
             </div>
-            <div>
-              <CardTitle>كشف التسوية الشهرية</CardTitle>
-              <p className="mt-1 text-sm text-slate-muted">
+          </div>
+          <div className="relative mt-auto pt-6">
+            <button
+              type="button"
+              className="mc-btn-pearl w-full py-3 text-base"
+              onClick={generateReport}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  جاري تجميع التقرير الشامل...
+                </>
+              ) : (
+                <>
+                  <FileText className="h-5 w-5" />
+                  {offlineView && report
+                    ? "عرض التقرير المحفوظ"
+                    : "إنشاء تقرير العيادة الكامل"}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="mc-panel flex flex-col p-6">
+          <div className="flex items-start gap-3.5">
+            <span className="mc-kpi__icon mc-tone-gold h-12 w-12 rounded-2xl">
+              <Scale className="h-6 w-6" strokeWidth={1.75} />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-lg font-extrabold tracking-tight text-slate-text">
+                كشف التسوية الشهرية
+              </h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-slate-muted">
                 يجمع تصفية كل الأطباء — خصم حصة العيادة والمصاريف ورواتب
                 المساعدين — ويعطي الصافي النهائي لكل طبيب وللعيادة.
               </p>
             </div>
           </div>
-        </CardHeader>
-        <Button
-          className="w-full"
-          variant="outline"
-          onClick={generateSettlement}
-          disabled={settlementLoading}
-        >
-          {settlementLoading ? (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin" />
-              جاري تجميع كشف التسوية...
-            </>
-          ) : (
-            <>
-              <Scale className="h-5 w-5" />
-              {settlementOfflineView && settlement
-                ? "عرض كشف التسوية المحفوظ"
-                : "إصدار كشف حساب شهري (تسوية)"}
-            </>
-          )}
-        </Button>
-      </Card>
+          <div className="mt-auto pt-6">
+            <button
+              type="button"
+              className="mc-btn-navy w-full py-3 text-base"
+              onClick={generateSettlement}
+              disabled={settlementLoading}
+            >
+              {settlementLoading ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  جاري تجميع كشف التسوية...
+                </>
+              ) : (
+                <>
+                  <Scale className="h-5 w-5 text-premium-300" />
+                  {settlementOfflineView && settlement
+                    ? "عرض كشف التسوية المحفوظ"
+                    : "إصدار كشف حساب شهري (تسوية)"}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">يتضمن التقرير</CardTitle>
-        </CardHeader>
-        <ul className="list-inside list-disc space-y-1 text-sm text-slate-muted">
-          <li>ملخص الإيرادات والمصروفات والرواتب ومستحقات الأطباء</li>
-          <li>عمليات اليوم والشهر مع المقبوضات والديون</li>
-          <li>قائمة المصروفات العامة للفترة</li>
-          <li>تفاصيل سلف وخصومات الموظفين</li>
-          <li>حسابات الأطباء وطلبات السحب المعلّقة</li>
-          <li>سجل عمليات الشهر (حتى 50 عملية في الطباعة)</li>
+      <div className="mc-panel">
+        <div className="mc-panel-head">
+          <p className="mc-panel-title">
+            <ListChecks />
+            يتضمن التقرير
+          </p>
+        </div>
+        <ul className="grid gap-2.5 p-5 text-sm text-slate-muted sm:grid-cols-2">
+          {[
+            "ملخص الإيرادات والمصروفات والرواتب ومستحقات الأطباء",
+            "عمليات اليوم والشهر مع المقبوضات والديون",
+            "قائمة المصروفات العامة للفترة",
+            "تفاصيل سلف وخصومات الموظفين",
+            "حسابات الأطباء وطلبات السحب المعلّقة",
+            "سجل عمليات الشهر (حتى 50 عملية في الطباعة)",
+          ].map((item) => (
+            <li key={item} className="flex items-start gap-2.5">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-premium-500" />
+              <span>{item}</span>
+            </li>
+          ))}
         </ul>
-      </Card>
+      </div>
 
       {error && <Alert variant="error">{error}</Alert>}
 

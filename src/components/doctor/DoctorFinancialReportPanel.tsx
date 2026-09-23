@@ -62,58 +62,60 @@ export function DoctorFinancialReportPanel() {
   }, [dateFrom, dateTo, t]);
 
   return (
-    <div className="rounded-xl border border-slate-border bg-surface-card p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <FileBarChart className="h-5 w-5 text-primary" />
-        <h2 className="text-sm font-bold text-slate-text">
-          {t("docFinancialReportShort")}
-        </h2>
-      </div>
-      <p className="mb-3 text-xs text-slate-muted">
-        {t("docFinancialReportDesc")}
-      </p>
-
-      <div className="mb-3 grid gap-2 sm:grid-cols-2">
-        <Input
-          label={t("docFromDate")}
-          type="date"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-          dir="ltr"
-          className="text-left"
-        />
-        <Input
-          label={t("docToDate")}
-          type="date"
-          value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
-          dir="ltr"
-          className="text-left"
-        />
+    <section className="mc-panel">
+      <div className="flex items-start gap-3 border-b border-slate-border px-4 py-3.5">
+        <span className="mc-icon-tile h-10 w-10">
+          <FileBarChart className="h-[18px] w-[18px]" />
+        </span>
+        <div className="min-w-0">
+          <h2 className="no-accent text-sm font-bold text-slate-text">
+            {t("docFinancialReportShort")}
+          </h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-muted">
+            {t("docFinancialReportDesc")}
+          </p>
+        </div>
       </div>
 
-      {error && (
-        <Alert variant="error" className="mb-3">
-          {error}
-        </Alert>
-      )}
+      <div className="space-y-3 p-4">
+        <div className="grid grid-cols-2 gap-2.5">
+          <Input
+            label={t("docFromDate")}
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            dir="ltr"
+            className="h-11 rounded-xl text-left"
+          />
+          <Input
+            label={t("docToDate")}
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            dir="ltr"
+            className="h-11 rounded-xl text-left"
+          />
+        </div>
 
-      <Button
-        type="button"
-        className="w-full"
-        disabled={loading}
-        onClick={() => void loadReport()}
-      >
-        {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <FileBarChart className="h-4 w-4" />
-        )}
-        {loading ? t("docPreparingReport") : t("docGenerateReport")}
-      </Button>
+        {error && <Alert variant="error">{error}</Alert>}
+
+        <Button
+          type="button"
+          className="min-h-[48px] w-full rounded-xl"
+          disabled={loading}
+          onClick={() => void loadReport()}
+        >
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <FileBarChart className="h-4 w-4" />
+          )}
+          {loading ? t("docPreparingReport") : t("docGenerateReport")}
+        </Button>
+      </div>
 
       {open && report && (
-        <div className="mt-4 space-y-3 border-t border-slate-border pt-4">
+        <div className="space-y-3 border-t border-slate-border p-4">
           <ReportActions
             shareTitle={bi(
               `تقرير مالي — ${report.doctor_name_ar}`,
@@ -136,6 +138,6 @@ export function DoctorFinancialReportPanel() {
           <DoctorFinancialReportDocument report={report} />
         </div>
       )}
-    </div>
+    </section>
   );
 }

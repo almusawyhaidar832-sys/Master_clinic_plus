@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     default: APP_NAME,
     template: `%s | ${APP_NAME}`,
   },
-  description: "نظام إدارة عيادات متعدد المستأجرين — بيرل كلينك",
+  description: "نظام إدارة عيادات متعدد المستأجرين — بيرل سيستم",
   applicationName: APP_NAME_EN,
   authors: [{ name: DEVELOPER.nameEn }],
   creator: DEVELOPER.nameEn,

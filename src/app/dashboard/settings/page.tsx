@@ -4,15 +4,27 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Alert } from "@/components/ui/Alert";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { createClient } from "@/lib/supabase/client";
 import { fetchClinicProfile, updateClinicProfile } from "@/lib/services/clinic-profile";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 import Link from "next/link";
-import { Building2, QrCode, RefreshCw, Upload } from "lucide-react";
+import {
+  Building2,
+  Eye,
+  Image as ImageIcon,
+  Lock,
+  MapPin,
+  QrCode,
+  Receipt,
+  RefreshCw,
+  Save,
+  Upload,
+} from "lucide-react";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { getAuthProfile } from "@/lib/clinic-context";
 import { useClinicModules } from "@/contexts/ClinicModulesContext";
@@ -20,6 +32,7 @@ import type { ClinicProfile } from "@/types/clinic-profile";
 
 export default function ClinicSettingsPage() {
   const router = useRouter();
+  const { bi } = useLanguage();
   const { refresh: refreshContext } = useClinicProfile();
   const { clinicId, loading: clinicLoading, missingClinic } = useActiveClinicId();
   const { hasModule } = useClinicModules();
@@ -156,18 +169,24 @@ export default function ClinicSettingsPage() {
   const loading = clinicLoading || profileLoading;
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-text">ملف العيادة</h2>
-        <p className="text-slate-muted">
-          الاسم والعنوان والشعار يظهران تلقائياً في التقارير وفواتير PDF
-        </p>
-        {!canEditClinic && !loading && (
-          <p className="mt-2 text-xs text-amber-700">
-            التعديل متاح للمحاسب أو مالك العيادة فقط — أنت تعرض الإعدادات للقراءة.
-          </p>
-        )}
-      </div>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <PageHeader
+        eyebrow={bi("الإعدادات", "Settings")}
+        title="ملف العيادة"
+        icon={Building2}
+        className="mb-0"
+        subtitle={
+          <>
+            الاسم والعنوان والشعار يظهران تلقائياً في التقارير وفواتير PDF
+            {!canEditClinic && !loading && (
+              <span className="mt-2 flex w-fit items-center gap-1.5 rounded-lg bg-warning px-2.5 py-1 text-xs font-medium text-warning-text ring-1 ring-inset ring-warning-border">
+                <Lock className="h-3.5 w-3.5" />
+                التعديل متاح للمحاسب أو مالك العيادة فقط — أنت تعرض الإعدادات للقراءة.
+              </span>
+            )}
+          </>
+        }
+      />
 
       {missingClinic && (
         <Alert variant="error">
@@ -175,45 +194,22 @@ export default function ClinicSettingsPage() {
         </Alert>
       )}
 
-      {/* Live preview */}
-      {profile && (
-        <Card>
-          <ClinicBrandingHeader
-            profile={{
-              ...profile,
-              name_ar: nameAr || profile.name_ar,
-              name: nameEn || profile.name,
-              address: address || profile.address,
-              logo_url: logoUrl || profile.logo_url,
-            }}
-            title="معاينة"
-            size="sm"
-          />
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-primary" />
-              <CardTitle>بيانات العيادة</CardTitle>
-            </div>
-            {clinicId && (
-              <span className="text-[10px] text-slate-muted font-mono">
-                {clinicId.slice(0, 8)}...
-              </span>
-            )}
-          </div>
-        </CardHeader>
-
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="min-w-0 space-y-5">
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-slate-muted py-4">
-            <RefreshCw className="h-4 w-4 animate-spin" />
-            جاري التحميل...
-          </div>
+          <section className="mc-panel">
+            <div className="space-y-3 p-5">
+              <p className="flex items-center gap-2 text-sm text-slate-muted">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                جاري التحميل...
+              </p>
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="mc-skeleton h-11 rounded-xl" />
+              ))}
+            </div>
+          </section>
         ) : (
-          <form onSubmit={handleSave} className="space-y-4">
+          <form onSubmit={handleSave} className="space-y-5">
             {message && (
               <Alert
                 variant={
@@ -228,6 +224,19 @@ export default function ClinicSettingsPage() {
               </Alert>
             )}
 
+            <section className="mc-panel">
+              <div className="mc-panel-head">
+                <h3 className="mc-panel-title">
+                  <Building2 />
+                  بيانات العيادة
+                </h3>
+                {clinicId && (
+                  <span className="rounded-md bg-surface px-2 py-0.5 font-mono text-[10px] text-slate-muted ring-1 ring-inset ring-slate-border" dir="ltr">
+                    {clinicId.slice(0, 8)}...
+                  </span>
+                )}
+              </div>
+              <div className="mc-panel-body grid gap-4 sm:grid-cols-2">
             <Input
               label="اسم العيادة (عربي) — يظهر في التقارير"
               value={nameAr}
@@ -245,7 +254,17 @@ export default function ClinicSettingsPage() {
               required
               disabled={!canEditClinic}
             />
+              </div>
+            </section>
 
+            <section className="mc-panel">
+              <div className="mc-panel-head">
+                <h3 className="mc-panel-title">
+                  <MapPin />
+                  {bi("العنوان والتواصل", "Address & contact")}
+                </h3>
+              </div>
+              <div className="mc-panel-body grid gap-4 sm:grid-cols-2">
             <Input
               label="العنوان"
               value={address}
@@ -263,11 +282,19 @@ export default function ClinicSettingsPage() {
               placeholder="+201xxxxxxxxx"
               disabled={!canEditClinic}
             />
+              </div>
+            </section>
 
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-slate-text">شعار العيادة</p>
+            <section className="mc-panel">
+              <div className="mc-panel-head">
+                <h3 className="mc-panel-title">
+                  <ImageIcon />
+                  شعار العيادة
+                </h3>
+              </div>
+            <div className="mc-panel-body space-y-3">
               {logoUrl && (
-                <div className="flex justify-center rounded-lg border border-slate-border bg-surface p-3">
+                <div className="flex justify-center rounded-2xl border border-dashed border-slate-border bg-surface p-5">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={logoUrl}
@@ -323,12 +350,19 @@ export default function ClinicSettingsPage() {
                 )
               )}
             </div>
+            </section>
 
             {/* Review fee — only shown when optional columns exist */}
             {hasOptionalCols && (
-              <div className="rounded-lg border border-slate-border p-4 space-y-3">
-                <p className="text-sm font-semibold text-slate-text">كشفية المراجع</p>
-                <label className="flex items-center gap-2 text-sm">
+              <section className="mc-panel">
+                <div className="mc-panel-head">
+                  <h3 className="mc-panel-title">
+                    <Receipt />
+                    كشفية المراجع
+                  </h3>
+                </div>
+                <div className="mc-panel-body space-y-3">
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-border bg-surface px-3.5 py-3 text-sm font-medium text-slate-text">
                   <input
                     type="checkbox"
                     checked={reviewFeeEnabled}
@@ -350,18 +384,21 @@ export default function ClinicSettingsPage() {
                     disabled={!canEditClinic}
                   />
                 )}
-              </div>
+                </div>
+              </section>
             )}
 
             {!hasOptionalCols && (
-              <p className="text-xs text-slate-muted rounded-lg bg-slate-50 p-3">
+              <p className="rounded-2xl border border-slate-border bg-surface p-3.5 text-xs text-slate-muted">
                 ملاحظة: أعمدة كشفية المراجع غير موجودة بعد في الـ schema cache.{" "}
                 <span className="font-mono">شغّل reload-schema-cache.sql في Supabase</span>
               </p>
             )}
 
+            <div className="sticky bottom-3 z-10 rounded-2xl border border-slate-border bg-surface-card p-3 shadow-elevated">
             <Button
               type="submit"
+              size="lg"
               className="w-full"
               disabled={saving || !clinicId || !canEditClinic}
             >
@@ -371,34 +408,66 @@ export default function ClinicSettingsPage() {
                   جاري الحفظ...
                 </>
               ) : (
-                "حفظ ملف العيادة"
+                <>
+                  <Save className="h-4 w-4" />
+                  حفظ ملف العيادة
+                </>
               )}
             </Button>
+            </div>
           </form>
         )}
-      </Card>
+      </div>
+
+      <aside className="space-y-5 lg:sticky lg:top-4">
+      {/* Live preview */}
+      {profile && (
+        <section className="mc-panel">
+          <div className="mc-panel-head">
+            <h3 className="mc-panel-title">
+              <Eye />
+              {bi("معاينة مباشرة", "Live preview")}
+            </h3>
+          </div>
+          <div className="mc-panel-body">
+          <ClinicBrandingHeader
+            profile={{
+              ...profile,
+              name_ar: nameAr || profile.name_ar,
+              name: nameEn || profile.name,
+              address: address || profile.address,
+              logo_url: logoUrl || profile.logo_url,
+            }}
+            title="معاينة"
+            size="sm"
+          />
+          </div>
+        </section>
+      )}
 
       {hasModule("online_booking") && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <QrCode className="h-5 w-5 text-teal-600" />
-              <CardTitle>بوابة الحجوزات</CardTitle>
-            </div>
-          </CardHeader>
-          <p className="px-4 pb-2 text-sm text-slate-muted">
+        <section className="mc-panel">
+          <div className="mc-panel-head">
+            <h3 className="mc-panel-title">
+              <QrCode />
+              بوابة الحجوزات
+            </h3>
+          </div>
+          <div className="mc-panel-body space-y-4">
+          <p className="text-sm text-slate-muted">
             باركود فريد يوجّه المرضى مباشرة لصفحة حجز عيادتك.
           </p>
-          <div className="p-4 pt-0">
-            <Link href="/dashboard/booking">
+            <Link href="/dashboard/booking" className="block">
               <Button type="button" variant="outline" className="w-full">
                 <QrCode className="h-4 w-4" />
                 عرض باركود العيادة
               </Button>
             </Link>
           </div>
-        </Card>
+        </section>
       )}
+      </aside>
+      </div>
     </div>
   );
 }

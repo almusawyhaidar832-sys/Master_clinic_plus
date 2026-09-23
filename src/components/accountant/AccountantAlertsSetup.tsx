@@ -284,9 +284,9 @@ export function AccountantAlertsSetup({
     <>
       <div className="space-y-2">
         {showTopBanner && (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+          <div className="rounded-2xl border border-success-border bg-success p-4 shadow-sm">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-200 text-emerald-800">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-200 text-success-text">
                 <Volume2 className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
@@ -306,7 +306,7 @@ export function AccountantAlertsSetup({
                   <button
                     type="button"
                     onClick={dismiss}
-                    className="touch-target rounded-xl border border-emerald-200 px-4 py-2 text-sm text-emerald-800"
+                    className="touch-target rounded-xl border border-success-border px-4 py-2 text-sm text-success-text"
                   >
                     {t("docLater")}
                   </button>
@@ -325,8 +325,8 @@ export function AccountantAlertsSetup({
         )}
 
         {voiceReady && browserGranted && !pushReady && isWebPushSupported() && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2">
-            <p className="text-xs font-medium text-amber-950">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning-border bg-amber-50/90 px-3 py-2">
+            <p className="text-xs font-medium text-warning-text">
               {t("accPushPendingHint")}
             </p>
             <button
@@ -342,18 +342,18 @@ export function AccountantAlertsSetup({
         )}
 
         {showTestControls && voiceReady && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm font-bold text-slate-800">
+          <div className="rounded-2xl border border-slate-border bg-surface-card p-4 shadow-sm">
+            <p className="text-sm font-bold text-slate-text">
               {t("accVoiceSettingsTitle")}
             </p>
-            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+            <p className="mt-1 text-xs leading-relaxed text-slate-muted">
               {alertsFullyActive ? t("accVoiceActive") : t("accVoicePartial")}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => void testAlert()}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-900"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-success-border bg-success px-4 py-2 text-xs font-semibold text-success-text"
               >
                 <Volume2 className="h-3.5 w-3.5" />
                 {t("accTestVoice")}
@@ -377,8 +377,8 @@ export function AccountantAlertsSetup({
           <p
             className={
               messageIsError
-                ? "rounded-xl bg-red-50 px-4 py-2 text-sm text-red-800"
-                : "rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800"
+                ? "rounded-xl bg-debt px-4 py-2 text-sm text-debt-text"
+                : "rounded-xl bg-success px-4 py-2 text-sm text-success-text"
             }
           >
             {message}
@@ -389,7 +389,7 @@ export function AccountantAlertsSetup({
       {showFloatingBar && (
         <div
           role="alert"
-          className="fixed inset-x-3 bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] z-[110] mx-auto flex max-w-lg items-center gap-3 rounded-2xl border border-emerald-300 bg-emerald-900 px-4 py-3 text-white shadow-2xl"
+          className="fixed inset-x-3 bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] z-[110] mx-auto flex max-w-lg items-center gap-3 rounded-2xl border border-success-border bg-emerald-900 px-4 py-3 text-white shadow-2xl"
         >
           <Volume2 className="h-6 w-6 shrink-0 text-emerald-200" />
           <div className="min-w-0 flex-1">
@@ -400,7 +400,7 @@ export function AccountantAlertsSetup({
             type="button"
             disabled={activating}
             onClick={() => void activate()}
-            className="shrink-0 rounded-xl bg-white px-4 py-2 text-sm font-bold text-emerald-900 hover:bg-emerald-50 disabled:opacity-60"
+            className="shrink-0 rounded-xl bg-surface-card px-4 py-2 text-sm font-bold text-success-text hover:bg-emerald-50 disabled:opacity-60"
           >
             {activating ? "…" : t("accEnableVoice")}
           </button>

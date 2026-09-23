@@ -1,8 +1,8 @@
 {
   "id": "/doctor",
-  "name": "Pearl Clinic Doctor",
+  "name": "Pearl System Doctor",
   "short_name": "Doctor",
-  "description": "تطبيق الطبيب — بيرل كلينك",
+  "description": "تطبيق الطبيب — بيرل سيستم",
   "start_url": "/doctor",
   "scope": "/",
   "display": "standalone",

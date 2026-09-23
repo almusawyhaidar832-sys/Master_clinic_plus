@@ -61,7 +61,7 @@ export function ClinicFinancialOverview() {
       label: "مقبوضات اليوم",
       value: today.totalCollected,
       icon: Wallet,
-      color: "text-emerald-700 bg-emerald-50",
+      color: "text-success-text bg-success",
     },
     {
       label: "ديون متبقية",
@@ -111,13 +111,13 @@ export function ClinicFinancialOverview() {
             {profit.breakdown.map((row) => (
               <div
                 key={row.label}
-                className="flex justify-between border-b border-slate-border/60 py-2 text-sm last:border-0"
+                className="flex justify-between border-b border-slate-border py-2 text-sm last:border-0"
               >
                 <span className="text-slate-muted">{row.label}</span>
                 <span
                   className={
                     row.amount < 0
-                      ? "font-medium text-amber-700"
+                      ? "font-medium text-warning-text"
                       : row.label.includes("صافي")
                         ? "font-bold text-primary"
                         : "font-medium text-slate-text"

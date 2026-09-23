@@ -6,6 +6,8 @@ import {
   materialsShareHint,
 } from "@/lib/constants";
 import type { DoctorPaymentType } from "@/types";
+import { cn } from "@/lib/utils";
+import { Wallet } from "lucide-react";
 
 interface DoctorPaymentFieldsProps {
   paymentType: DoctorPaymentType;
@@ -32,16 +34,22 @@ export function DoctorPaymentFields({
   const labHint = materialsShareHint(materialsShare);
 
   return (
-    <div className="space-y-4 rounded-xl border border-slate-border bg-surface/40 p-4">
+    <div className="space-y-4 rounded-2xl border border-slate-border bg-surface p-4">
       <div>
-        <p className="mb-2 text-sm font-semibold text-slate-text">
+        <p className="mb-2.5 flex items-center gap-2 text-sm font-bold text-slate-text">
+          <Wallet className="h-4 w-4 text-premium-500" />
           الاتفاق المالي (financial_agreement)
         </p>
-        <div className="flex flex-wrap gap-4">
+        <div className="grid gap-2 sm:grid-cols-2">
           {DOCTOR_PAYMENT_TYPE_OPTIONS.map((opt) => (
             <label
               key={opt.value}
-              className="flex cursor-pointer items-center gap-2 text-sm text-slate-text"
+              className={cn(
+                "flex cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition-all",
+                paymentType === opt.value
+                  ? "border-primary-300 bg-primary-50 text-primary-800 shadow-card ring-1 ring-inset ring-primary-200"
+                  : "border-slate-border bg-surface-card text-slate-muted hover:border-premium-300 hover:text-slate-text"
+              )}
             >
               <input
                 type="radio"
@@ -59,7 +67,7 @@ export function DoctorPaymentFields({
         </div>
       </div>
 
-      <p className="text-xs text-slate-500">
+      <p className="rounded-xl border border-slate-border bg-surface-card px-3 py-2 text-xs leading-relaxed text-slate-muted">
         {isSalary
           ? "راتب ثابت: الجلسات تذهب للعيادة — صرف الراتب من مصروفات العيادة → راتب الطبيب."
           : "تعديل النسبة يُحدَّث تلقائياً في حالات العلاج النشطة غير المسددة. الحالات المكتملة والمدفوعة تبقى كما هي."}
@@ -104,7 +112,7 @@ export function DoctorPaymentFields({
               required
             />
             {labHint ? (
-              <p className="mt-1 text-xs text-slate-500">{labHint}</p>
+              <p className="mt-1 text-xs text-slate-muted">{labHint}</p>
             ) : null}
           </div>
         </div>

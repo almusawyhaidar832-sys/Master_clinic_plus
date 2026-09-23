@@ -25,7 +25,10 @@ import {
 import { formatDate, formatTime } from "@/lib/utils";
 import { phoneToLocalDisplay } from "@/lib/phone";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
+  Hourglass,
   CalendarClock,
   Plus,
   RefreshCw,
@@ -54,6 +57,7 @@ export function AppointmentTable({
   subtitle,
   compact = false,
 }: AppointmentTableProps) {
+  const { bi } = useLanguage();
   const filterDoctorId = role === "doctor" ? doctorId : role === "assistant" ? doctorId : null;
 
   const { appointments, loading, refresh, pendingCount } = useCentralizedAppointments({
@@ -123,86 +127,113 @@ export function AppointmentTable({
     refresh();
   }
 
+  const asPage = !compact && role !== "doctor";
+
+  const headerActions = (
+    <>
+      {canManage && (
+        <button
+          type="button"
+          onClick={() => setShowAdd(true)}
+          className="mc-btn-navy"
+        >
+          <Plus className="h-4 w-4" />
+          {role === "accountant" ? "حجز مراجع" : "إضافة موعد"}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => refresh()}
+        className="mc-btn-soft h-9 w-9 !p-0"
+        aria-label="تحديث"
+      >
+        <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+      </button>
+    </>
+  );
+
   return (
     <div className={cn("space-y-4", compact && "space-y-3")}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2
-            className={cn(
-              "font-bold text-slate-800",
-              compact ? "text-base" : "text-xl"
-            )}
-          >
-            {title ?? defaultTitle}
-          </h2>
-          <p className="text-sm text-slate-500">{subtitle ?? defaultSubtitle}</p>
-        </div>
-        <div className="flex gap-2">
-          {canManage && (
-            <button
-              type="button"
-              onClick={() => setShowAdd(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700"
-            >
-              <Plus className="h-4 w-4" />
-              {role === "accountant" ? "حجز مراجع" : "إضافة موعد"}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => refresh()}
-            className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-white"
-            aria-label="تحديث"
-          >
-            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          </button>
-        </div>
-      </div>
+      {asPage ? (
+        <PageHeader
+          eyebrow={bi("المواعيد", "Scheduling")}
+          title={title ?? defaultTitle}
+          subtitle={subtitle ?? defaultSubtitle}
+          icon={CalendarClock}
+          actions={headerActions}
+          className="mb-0"
+        />
+      ) : null}
 
       {canManage && pendingCount > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <strong>{pendingCount}</strong> طلب من الباركود بانتظار الموافقة
+        <div className="flex items-center gap-3 rounded-2xl border border-warning-border bg-warning px-4 py-3 text-sm text-warning-text shadow-card">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-surface-card ring-1 ring-inset ring-warning-border">
+            <Hourglass className="h-4 w-4" />
+          </span>
+          <p>
+            <strong className="text-base tabular-nums">{pendingCount}</strong> طلب من الباركود بانتظار الموافقة
+          </p>
         </div>
       )}
 
       {message && (
-        <p className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+        <p className="flex items-center gap-2 rounded-2xl border border-success-border bg-success px-4 py-2.5 text-sm font-medium text-success-text">
+          <Check className="h-4 w-4 shrink-0" />
           {message}
         </p>
       )}
 
+      <section className="mc-panel">
+        {!asPage && (
+          <div className="mc-panel-head">
+            <div className="min-w-0">
+              <h2 className="mc-panel-title">
+                <CalendarClock />
+                {title ?? defaultTitle}
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-muted">{subtitle ?? defaultSubtitle}</p>
+            </div>
+            <div className="flex items-center gap-2">{headerActions}</div>
+          </div>
+        )}
+
       {loading ? (
-        <div className="flex justify-center py-12">
-          <RefreshCw className="h-6 w-6 animate-spin text-teal-600" />
+        <div className="space-y-2 p-5">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="mc-skeleton h-12 w-full" />
+          ))}
         </div>
       ) : appointments.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center">
-          <CalendarClock className="mx-auto mb-3 h-10 w-10 text-slate-300" />
-          <p className="text-sm text-slate-500">لا توجد مواعيد قادمة</p>
+        <div className="flex flex-col items-center px-6 py-12 text-center">
+          <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-surface text-slate-muted ring-1 ring-inset ring-slate-border">
+            <CalendarClock className="h-7 w-7" strokeWidth={1.6} />
+          </span>
+          <p className="text-sm font-medium text-slate-muted">لا توجد مواعيد قادمة</p>
           {canManage && (
             <button
               type="button"
               onClick={() => setShowAdd(true)}
-              className="mt-3 text-sm font-medium text-teal-600 hover:underline"
+              className="mc-btn-soft mt-4"
             >
+              <Plus className="h-4 w-4" />
               إضافة موعد
             </button>
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
-              <tr className="border-b bg-slate-50 text-right text-xs text-slate-500">
-                <th className="px-4 py-3 font-medium">المريض</th>
-                <th className="px-4 py-3 font-medium">الهاتف</th>
+              <tr className="text-start text-xs text-slate-muted">
+                <th className="px-5 py-3 text-start font-semibold">المريض</th>
+                <th className="px-4 py-3 text-start font-semibold">الهاتف</th>
                 {showDoctorColumn && (
-                  <th className="px-4 py-3 font-medium">الطبيب</th>
+                  <th className="px-4 py-3 text-start font-semibold">الطبيب</th>
                 )}
-                <th className="px-4 py-3 font-medium">التاريخ والوقت</th>
-                <th className="px-4 py-3 font-medium">الحالة</th>
+                <th className="px-4 py-3 text-start font-semibold">التاريخ والوقت</th>
+                <th className="px-4 py-3 text-start font-semibold">الحالة</th>
                 {canManage && (
-                  <th className="px-4 py-3 font-medium">إجراءات</th>
+                  <th className="px-4 py-3 text-start font-semibold">إجراءات</th>
                 )}
               </tr>
             </thead>
@@ -226,6 +257,7 @@ export function AppointmentTable({
           </table>
         </div>
       )}
+      </section>
 
       {showAdd && (
         <AddAppointmentModal
@@ -318,42 +350,48 @@ function AppointmentRow({
   return (
     <tr
       className={cn(
-        "border-b border-slate-100 last:border-0",
-        isPending && "bg-amber-50/40"
+        "border-b border-slate-border last:border-0",
+        isPending && "bg-premium-50/40"
       )}
     >
-      <td className="px-4 py-3">
-        <p className="font-semibold text-slate-800">
-          {a.patient_name_ar || "مريض"}
-        </p>
-        {a.notes ? (
-          <p className="text-xs text-slate-500">{String(a.notes)}</p>
-        ) : null}
-        {a.reason_for_change && a.status === "cancelled" && (
-          <p className="text-xs text-red-600">سبب: {a.reason_for_change}</p>
-        )}
+      <td className="px-5 py-3.5">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-mc-pearl text-sm font-bold text-[#0b1f3a] ring-1 ring-inset ring-premium-200">
+            {(a.patient_name_ar || "م").trim().charAt(0)}
+          </span>
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-text">
+              {a.patient_name_ar || "مريض"}
+            </p>
+            {a.notes ? (
+              <p className="truncate text-xs text-slate-muted">{String(a.notes)}</p>
+            ) : null}
+            {a.reason_for_change && a.status === "cancelled" && (
+              <p className="text-xs text-debt-text">سبب: {a.reason_for_change}</p>
+            )}
+          </div>
+        </div>
       </td>
-      <td className="px-4 py-3 text-slate-600" dir="ltr">
+      <td className="px-4 py-3.5 tabular-nums text-slate-muted" dir="ltr">
         {phoneToLocalDisplay(a.patient_phone) || "—"}
       </td>
       {showDoctorColumn && (
-        <td className="px-4 py-3 text-slate-700">
+        <td className="px-4 py-3.5 font-medium text-slate-text">
           {doctorName ?? "—"}
         </td>
       )}
-      <td className="px-4 py-3 text-slate-600">
-        {formatDate(a.appointment_date)}
-        <br />
-        <span className="text-xs">
+      <td className="px-4 py-3.5">
+        <p className="font-medium text-slate-text">{formatDate(a.appointment_date)}</p>
+        <span className="text-xs tabular-nums text-slate-muted">
           {singleTimeDisplay
             ? formatTime(a.start_time)
             : `${formatTime(a.start_time)} – ${formatTime(a.end_time)}`}
         </span>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-3.5">
         <span
           className={cn(
-            "inline-block rounded-full px-2.5 py-1 text-xs font-medium",
+            "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
             APPOINTMENT_STATUS_COLORS[a.status] ??
               APPOINTMENT_STATUS_COLORS.scheduled
           )}
@@ -362,21 +400,21 @@ function AppointmentRow({
         </span>
       </td>
       {canManage && (
-        <td className="px-4 py-3">
+        <td className="px-4 py-3.5">
           <div className="flex flex-wrap gap-1.5">
             {isPending && (
               <>
                 <ActionBtn
                   onClick={onAccept}
                   disabled={actionId === a.id}
-                  className="bg-emerald-600 text-white hover:bg-emerald-700"
+                  className="border-transparent bg-mc-navy text-white shadow-soft hover:brightness-110"
                 >
                   <Check className="h-3.5 w-3.5" />
                   موافقة
                 </ActionBtn>
                 <ActionBtn
                   onClick={onReject}
-                  className="border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                  className="text-debt-text hover:border-debt-border hover:bg-debt"
                 >
                   <X className="h-3.5 w-3.5" />
                   رفض
@@ -386,7 +424,7 @@ function AppointmentRow({
             {canEdit && (
               <ActionBtn
                 onClick={onEdit}
-                className="border border-slate-200 text-slate-700 hover:bg-slate-50"
+                className="text-slate-text hover:border-primary-200 hover:bg-primary-50"
               >
                 <Pencil className="h-3.5 w-3.5" />
                 تعديل
@@ -396,7 +434,7 @@ function AppointmentRow({
               <ActionBtn
                 onClick={onCancel}
                 disabled={actionId === a.id}
-                className="border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                className="text-warning-text hover:border-warning-border hover:bg-warning"
               >
                 <Ban className="h-3.5 w-3.5" />
                 إلغاء
@@ -406,7 +444,7 @@ function AppointmentRow({
               <ActionBtn
                 onClick={onDelete}
                 disabled={actionId === a.id}
-                className="border border-red-200 text-red-600 hover:bg-red-50"
+                className="text-debt-text hover:border-debt-border hover:bg-debt"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 حذف
@@ -436,7 +474,7 @@ function ActionBtn({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium disabled:opacity-50",
+        "inline-flex items-center gap-1 rounded-lg border border-slate-border bg-surface-card px-2.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50",
         className
       )}
     >

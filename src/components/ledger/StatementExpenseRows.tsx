@@ -12,6 +12,9 @@ function isLabExpense(text: string): boolean {
   return /مختبر|lab/i.test(text);
 }
 
+const ROW_CLASS =
+  "flex flex-col gap-3 border-b border-slate-border px-5 py-3.5 last:border-b-0 transition-colors hover:bg-surface sm:flex-row sm:items-center sm:justify-between";
+
 export function DoctorExpenseRow({
   line,
   forDoctor = false,
@@ -24,22 +27,24 @@ export function DoctorExpenseRow({
   const doctorPct = Math.round(line.percentageSplit);
 
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 border-b border-slate-border/60 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between",
-        isLab ? "bg-violet-50/25" : "bg-orange-50/20"
-      )}
-    >
+    <div className={ROW_CLASS}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Stethoscope className="h-4 w-4 shrink-0 text-orange-600" />
+          <span
+            className={cn(
+              "mc-kpi__icon h-7 w-7 rounded-lg",
+              isLab ? "mc-tone-royal" : "mc-tone-danger"
+            )}
+          >
+            <Stethoscope className="h-3.5 w-3.5" />
+          </span>
           <p className="font-semibold text-slate-text">{line.description}</p>
           <span
             className={cn(
-              "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
+              "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold",
               isLab
-                ? "bg-violet-100 text-violet-900"
-                : "bg-orange-100 text-orange-900"
+                ? "border-royal-200 bg-royal-50 text-royal-600"
+                : "border-debt-border bg-debt text-debt-text"
             )}
           >
             {isLab ? "مختبر" : "فاتورة صرفية"}
@@ -61,29 +66,29 @@ export function DoctorExpenseRow({
           </p>
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-4 sm:justify-end">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3 sm:justify-end">
         {!forDoctor && (
-          <div className="text-right">
-            <p className="text-[11px] text-slate-muted">إجمالي الفاتورة</p>
+          <div className="text-end">
+            <p className="text-[11px] font-medium text-slate-muted">إجمالي الفاتورة</p>
             <p className="font-bold tabular-nums text-slate-text">
               {formatCurrency(line.totalAmount)}
             </p>
           </div>
         )}
-        <div className="text-right">
-          <p className="text-[11px] text-slate-muted">
+        <div className="text-end">
+          <p className="text-[11px] font-medium text-slate-muted">
             {forDoctor
               ? `يُخصم منك (${doctorPct}%)`
               : "يُخصم من الطبيب"}
           </p>
-          <p className="font-bold tabular-nums text-red-700">
+          <p className="font-bold tabular-nums text-debt-text">
             − {formatCurrency(line.doctorShare)}
           </p>
         </div>
         {!forDoctor && line.clinicShare > 0 && (
-          <div className="text-right">
-            <p className="text-[11px] text-slate-muted">حصة العيادة</p>
-            <p className="font-bold tabular-nums text-amber-800">
+          <div className="text-end">
+            <p className="text-[11px] font-medium text-slate-muted">حصة العيادة</p>
+            <p className="font-bold tabular-nums text-warning-text">
               − {formatCurrency(line.clinicShare)}
             </p>
           </div>
@@ -97,22 +102,24 @@ export function ClinicExpenseRow({ line }: { line: DailyClinicExpenseLine }) {
   const isLab = isLabExpense(`${line.description} ${line.categoryName ?? ""}`);
 
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-3 border-b border-slate-border/60 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between",
-        isLab ? "bg-violet-50/30" : "bg-slate-50/40"
-      )}
-    >
+    <div className={ROW_CLASS}>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Receipt className="h-4 w-4 shrink-0 text-slate-600" />
+          <span
+            className={cn(
+              "mc-kpi__icon h-7 w-7 rounded-lg",
+              isLab ? "mc-tone-royal" : "mc-tone-muted"
+            )}
+          >
+            <Receipt className="h-3.5 w-3.5" />
+          </span>
           <p className="font-semibold text-slate-text">{line.description}</p>
           {line.categoryName && (
-            <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+            <span className="inline-flex rounded-full border border-slate-border bg-surface px-2 py-0.5 text-[11px] font-medium text-slate-text">
               {line.categoryName}
             </span>
           )}
-          <span className="inline-flex rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+          <span className="inline-flex rounded-full border border-premium-200 bg-premium-50 px-2 py-0.5 text-[10px] font-semibold text-premium-600">
             للإدارة فقط
           </span>
         </div>
@@ -127,9 +134,9 @@ export function ClinicExpenseRow({ line }: { line: DailyClinicExpenseLine }) {
           )}
         </p>
       </div>
-      <div className="text-right">
-        <p className="text-[11px] text-slate-muted">خصم من ربح العيادة</p>
-        <p className="font-bold tabular-nums text-red-700">
+      <div className="text-end">
+        <p className="text-[11px] font-medium text-slate-muted">خصم من ربح العيادة</p>
+        <p className="font-bold tabular-nums text-debt-text">
           − {formatCurrency(line.amount)}
         </p>
       </div>
@@ -148,14 +155,20 @@ export function StatementExpenseSection({
 }) {
   const toneClass =
     tone === "violet"
-      ? "border-violet-200/60 bg-violet-50/60 text-violet-900"
+      ? "bg-royal-50 text-royal-600"
       : tone === "slate"
-        ? "border-slate-200/60 bg-slate-50/60 text-slate-800"
-        : "border-orange-200/60 bg-orange-50/60 text-orange-900";
+        ? "bg-surface text-slate-text"
+        : "bg-debt text-debt-text";
 
   return (
-    <div className={cn("border-t", toneClass.split(" ")[0])}>
-      <p className={cn("px-4 py-2 text-xs font-semibold", toneClass)}>
+    <div>
+      <p
+        className={cn(
+          "flex items-center gap-2 border-y border-slate-border px-5 py-2 text-xs font-bold",
+          toneClass
+        )}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
         {title}
       </p>
       {children}

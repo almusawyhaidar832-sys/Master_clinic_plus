@@ -25,7 +25,7 @@ export function AppointmentsNavTabs() {
 
   return (
     <nav
-      className="flex gap-1 rounded-xl border border-slate-border bg-surface p-1"
+      className="mc-tab-group"
       aria-label="أقسام الحجوزات"
     >
       {TABS.map(({ href, label, icon: Icon, exact }) => {
@@ -36,12 +36,7 @@ export function AppointmentsNavTabs() {
           <Link
             key={href}
             href={href}
-            className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors",
-              active
-                ? "bg-primary text-white shadow-sm"
-                : "text-slate-muted hover:bg-white hover:text-slate-text"
-            )}
+            className={cn("mc-tab", active && "mc-tab--active")}
           >
             <Icon className="h-4 w-4 shrink-0" />
             {label}

@@ -15,7 +15,7 @@ interface MasterReportDocumentProps {
 export function MasterReportDocument({
   report,
   title = "التقرير المالي الشامل للعيادة",
-  subtitle = "Pearl Clinic",
+  subtitle = "Pearl System",
 }: MasterReportDocumentProps) {
   const { summary } = report;
 

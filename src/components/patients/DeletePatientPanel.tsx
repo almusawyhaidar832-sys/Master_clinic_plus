@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, RefreshCw, Trash2, X } from "lucide-react";
+import { AlertTriangle, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { Alert } from "@/components/ui/Alert";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { translateDbError } from "@/lib/db-errors";
@@ -67,80 +68,40 @@ export function DeletePatientPanel({
 
   return (
     <>
-      <div className="rounded-xl border border-red-200 bg-red-50/60 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-red-800">حذف المريض نهائياً</p>
-            <p className="mt-1 text-xs text-red-700/90 leading-relaxed">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-debt-border bg-surface-card p-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="mc-kpi__icon mc-tone-danger h-10 w-10">
+            <Trash2 className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-debt-text">حذف المريض نهائياً</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-slate-muted">
               يُحذف الملف المالي والأرشيف الطبي وجميع الجلسات والأشعة — لا يمكن
               استرجاعه.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-red-300 text-red-700 hover:bg-red-100"
-            onClick={() => setOpen(true)}
-          >
-            <Trash2 className="h-4 w-4" />
-            حذف من العيادة
-          </Button>
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="border-debt-border text-debt-text hover:bg-debt"
+          onClick={() => setOpen(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+          حذف من العيادة
+        </Button>
       </div>
 
       {open ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-red-700">
-                <AlertTriangle className="h-5 w-5" />
-                <h2 className="text-lg font-bold">تأكيد الحذف النهائي</h2>
-              </div>
-              <button
-                type="button"
-                onClick={closeDialog}
-                className="rounded-lg p-1 hover:bg-slate-100"
-                disabled={saving}
-              >
-                <X className="h-5 w-5 text-slate-400" />
-              </button>
-            </div>
-
-            <p className="mb-3 text-sm text-slate-600">
-              سيتم حذف <strong>{patientName}</strong> وجميع بياناته من العيادة
-              بشكل دائم.
-            </p>
-
-            <ul className="mb-4 list-inside list-disc space-y-1 text-xs text-slate-500">
-              <li>جميع الجلسات والمدفوعات والديون</li>
-              <li>الأرشيف الطبي والأشعة والوصفات</li>
-              <li>المواعيد وسجل الانتظار</li>
-            </ul>
-
-            <label className="mb-4 block">
-              <span className="mb-1 block text-xs font-medium text-slate-600">
-                للتأكيد، اكتب اسم المريض:{" "}
-                <span className="font-bold text-slate-800">{patientName}</span>
-              </span>
-              <input
-                type="text"
-                value={confirmName}
-                onChange={(e) => setConfirmName(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-100"
-                placeholder={patientName}
-                autoComplete="off"
-                disabled={saving}
-              />
-            </label>
-
-            {error ? (
-              <Alert variant="error" className="mb-3">
-                {error}
-              </Alert>
-            ) : null}
-
-            <div className="flex gap-2">
+        <Modal
+          onClose={closeDialog}
+          title="تأكيد الحذف النهائي"
+          subtitle={patientName}
+          icon={AlertTriangle}
+          size="md"
+          footer={
+            <>
               <Button
                 type="button"
                 variant="outline"
@@ -152,7 +113,8 @@ export function DeletePatientPanel({
               </Button>
               <Button
                 type="button"
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white border-red-600"
+                variant="danger"
+                className="flex-1"
                 onClick={() => void handleDelete()}
                 disabled={saving || !nameMatches}
               >
@@ -163,9 +125,49 @@ export function DeletePatientPanel({
                 )}
                 حذف نهائياً
               </Button>
-            </div>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-slate-text">
+              سيتم حذف <strong>{patientName}</strong> وجميع بياناته من العيادة
+              بشكل دائم.
+            </p>
+
+            <ul className="space-y-1.5 rounded-xl border border-debt-border bg-debt px-4 py-3 text-xs text-debt-text">
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+                جميع الجلسات والمدفوعات والديون
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+                الأرشيف الطبي والأشعة والوصفات
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+                المواعيد وسجل الانتظار
+              </li>
+            </ul>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-slate-muted">
+                للتأكيد، اكتب اسم المريض:{" "}
+                <span className="font-bold text-slate-text">{patientName}</span>
+              </span>
+              <input
+                type="text"
+                value={confirmName}
+                onChange={(e) => setConfirmName(e.target.value)}
+                className="mc-field focus:border-debt-border focus:ring-red-500/10"
+                placeholder={patientName}
+                autoComplete="off"
+                disabled={saving}
+              />
+            </label>
+
+            {error ? <Alert variant="error">{error}</Alert> : null}
           </div>
-        </div>
+        </Modal>
       ) : null}
     </>
   );

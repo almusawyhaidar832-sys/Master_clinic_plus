@@ -53,7 +53,7 @@ function ToothButton({
         "flex h-9 w-9 min-h-[36px] min-w-[36px] touch-manipulation items-center justify-center rounded-lg border text-[11px] font-semibold tabular-nums transition-all sm:h-10 sm:w-10",
         record
           ? "border-primary bg-primary/15 text-primary shadow-sm"
-          : "border-slate-border bg-white text-slate-muted hover:border-primary/50",
+          : "border-slate-border bg-surface-card text-slate-muted hover:border-primary/50",
         selected && "ring-2 ring-primary ring-offset-1",
         disabled && "opacity-50 cursor-not-allowed"
       )}
@@ -169,7 +169,7 @@ export function DentalChart({
         </p>
       )}
 
-      <div className="rounded-xl border border-slate-border bg-surface/80 p-3 space-y-3">
+      <div className="rounded-xl border border-slate-border bg-surface p-3 space-y-3">
         <div>
           <p className="mb-1 text-center text-[10px] text-slate-muted">الفك العلوي</p>
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-center sm:gap-4">
@@ -235,7 +235,7 @@ export function DentalChart({
                   "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
                   procedure === p
                     ? "bg-primary text-white"
-                    : "bg-white border border-slate-border text-slate-text"
+                    : "bg-surface-card border border-slate-border text-slate-text"
                 )}
               >
                 {p}
@@ -251,7 +251,7 @@ export function DentalChart({
                 ? "ملاحظة مشتركة على الأسنان المختارة..."
                 : "ملاحظة على هذا السن..."
             }
-            className="w-full rounded-lg border border-slate-border bg-white px-3 py-2 text-sm"
+            className="w-full mc-field"
           />
           <div className="flex flex-wrap gap-2">
             <button
@@ -267,7 +267,7 @@ export function DentalChart({
               <button
                 type="button"
                 onClick={removeTooth}
-                className="rounded-lg border border-red-200 px-4 py-2 text-xs text-red-600"
+                className="rounded-xl border border-debt-border px-4 py-2 text-xs font-semibold text-debt-text hover:bg-debt"
               >
                 {selectedTeeth.length > 1
                   ? "إزالة من السجل"

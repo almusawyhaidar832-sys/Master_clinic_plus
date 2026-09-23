@@ -11,36 +11,42 @@
 
   body {
     @apply bg-surface font-arabic text-slate-text antialiased transition-colors duration-200;
+    background-attachment: fixed;
     background-image:
       radial-gradient(
-        ellipse 120% 80% at 100% -20%,
-        rgb(0 86 179 / 0.05),
-        transparent 55%
+        ellipse 90% 60% at 100% -10%,
+        rgb(22 103 154 / 0.07),
+        transparent 60%
       ),
       radial-gradient(
-        ellipse 80% 50% at 0% 100%,
-        rgb(0 86 179 / 0.04),
-        transparent 50%
+        ellipse 70% 50% at 0% 110%,
+        rgb(203 169 119 / 0.09),
+        transparent 55%
       );
   }
 
   html.dark body {
     background-image:
       radial-gradient(
-        ellipse 100% 60% at 100% 0%,
-        rgb(59 130 246 / 0.07),
-        transparent 50%
+        ellipse 90% 60% at 100% -10%,
+        rgb(15 76 111 / 0.35),
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 70% 50% at 0% 110%,
+        rgb(203 169 119 / 0.06),
+        transparent 55%
       );
   }
 
   ::selection {
-    background-color: var(--color-primary-100);
+    background-color: var(--color-premium-200);
     color: var(--color-primary-900);
   }
 
   html.dark ::selection {
-    background-color: var(--color-primary-200);
-    color: var(--color-primary-900);
+    background-color: var(--color-premium-300);
+    color: #fff;
   }
 
   input,
@@ -59,17 +65,40 @@
   html.dark input,
   html.dark select,
   html.dark textarea {
-    @apply bg-slate-800 text-slate-100 border-slate-600;
+    @apply bg-surface-elevated text-slate-text border-slate-border;
   }
 }
 
 @layer components {
   .mc-card {
-    @apply rounded-xl border border-slate-border bg-surface-card shadow-card transition-shadow duration-200;
+    @apply rounded-2xl border border-slate-border bg-surface-card shadow-card transition-shadow duration-200;
   }
 
   .mc-card-elevated {
-    @apply rounded-xl border border-slate-border bg-surface-card shadow-elevated transition-shadow duration-200;
+    @apply rounded-2xl border border-slate-border bg-surface-card shadow-elevated transition-shadow duration-200;
+  }
+
+  /* ── Brand hero surface — navy gradient with pearl glow ── */
+  .mc-hero {
+    @apply relative overflow-hidden text-white;
+    background:
+      radial-gradient(420px 220px at 100% 0%, rgb(255 255 255 / 0.12), transparent 70%),
+      radial-gradient(360px 240px at 0% 100%, rgb(203 169 119 / 0.22), transparent 70%),
+      var(--pearl-navy-gradient);
+    box-shadow: var(--shadow-premium);
+  }
+
+  .mc-hero::after {
+    content: "";
+    @apply pointer-events-none absolute inset-0 rounded-[inherit];
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  }
+
+  .mc-text-champagne {
+    background: linear-gradient(180deg, #ffffff 0%, #f1ebe1 45%, #d9c29a 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
 
   /* ── Premium card — sparing use for VIP/owner highlights (profit summary, top doctor, wallet hero) ── */
@@ -101,7 +130,7 @@
     @apply absolute inset-y-1 start-0 w-1 rounded-full;
     background: linear-gradient(
       180deg,
-      var(--color-primary-400),
+      var(--color-premium-300),
       var(--color-primary-700)
     );
   }
@@ -141,7 +170,7 @@
     @apply absolute inset-y-1 start-0 w-1 rounded-full;
     background: linear-gradient(
       180deg,
-      var(--color-primary-400),
+      var(--color-premium-300),
       var(--color-primary-700)
     );
   }
@@ -225,13 +254,13 @@
   }
 
   .mc-entry-section--doctor {
-    @apply border-indigo-200 bg-gradient-to-b from-indigo-50/70 to-white;
+    @apply border-royal-200 bg-gradient-to-b from-royal-50/70 to-white;
   }
   .mc-entry-section--doctor .mc-entry-section-header {
-    @apply text-indigo-900;
+    @apply text-royal-900;
   }
   .mc-entry-section--doctor .mc-entry-section-icon {
-    @apply bg-indigo-600 text-white;
+    @apply bg-royal-600 text-white;
   }
 
   .mc-entry-section--treatment {
@@ -265,13 +294,13 @@
   }
 
   .mc-entry-section--clinical {
-    @apply border-cyan-200 bg-gradient-to-b from-cyan-50/70 to-white;
+    @apply border-premium-200 bg-gradient-to-b from-premium-50/70 to-white;
   }
   .mc-entry-section--clinical .mc-entry-section-header {
-    @apply text-cyan-900;
+    @apply text-premium-800;
   }
   .mc-entry-section--clinical .mc-entry-section-icon {
-    @apply bg-cyan-600 text-white;
+    @apply bg-premium-600 text-white;
   }
 
   .mc-entry-remaining--debt {
@@ -292,69 +321,41 @@
 
   /* ── Tab bar (صرفيات، تقارير، …) ── */
   .mc-tab-group {
-    @apply flex flex-wrap gap-1 rounded-xl border border-primary/15 bg-primary-50/60 p-1 shadow-sm;
+    @apply flex flex-wrap gap-1 rounded-2xl border border-slate-border bg-surface-card p-1.5 shadow-card;
   }
 
   html.dark .mc-tab-group {
-    @apply border-primary/25 bg-primary-900/20;
+    @apply bg-surface-card;
   }
 
   .mc-tab {
-    @apply flex min-w-[calc(50%-0.25rem)] flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-xs font-medium transition-all sm:min-w-0 sm:text-sm;
-    @apply text-slate-muted hover:bg-white/70 hover:text-slate-text;
+    @apply flex min-w-[calc(50%-0.25rem)] flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold transition-all duration-200 ease-mc-out sm:min-w-0 sm:text-sm;
+    @apply text-slate-muted hover:bg-surface hover:text-slate-text;
   }
 
   html.dark .mc-tab {
-    @apply hover:bg-surface-card hover:text-slate-text;
+    @apply hover:bg-surface-elevated hover:text-slate-text;
   }
 
   .mc-tab--active {
-    @apply bg-white text-primary shadow-sm ring-1 ring-primary/10;
+    @apply bg-mc-navy text-white shadow-elevated hover:bg-mc-navy hover:text-white;
   }
 
   html.dark .mc-tab--active {
-    @apply bg-surface-card text-primary-300 ring-primary/20;
+    @apply text-white;
   }
 
-  .mc-tab--active.mc-tab-accent-history {
-    color: var(--accent-history-text);
-  }
-
-  .mc-tab--active.mc-tab-accent-history svg {
-    @apply text-primary;
-  }
-
-  .mc-tab--active.mc-tab-accent-clinic {
-    color: var(--accent-clinic-text);
-  }
-
-  .mc-tab--active.mc-tab-accent-clinic svg {
-    @apply text-primary-600;
-  }
-
-  .mc-tab--active.mc-tab-accent-salary {
-    color: var(--accent-salary-text);
-  }
-
-  .mc-tab--active.mc-tab-accent-salary svg {
-    @apply text-primary-500;
-  }
-
-  .mc-tab--active.mc-tab-accent-general {
-    color: var(--accent-general-text);
-  }
-
-  .mc-tab--active.mc-tab-accent-general svg {
-    @apply text-slate-muted;
+  .mc-tab--active svg {
+    color: var(--color-premium-300) !important;
   }
 
   /* ── Stat mini-cards ── */
   .mc-stat-neutral {
-    @apply rounded-2xl border border-slate-border bg-surface p-4 text-center text-slate-text transition-shadow hover:shadow-card;
+    @apply rounded-2xl border border-slate-border bg-surface-card p-4 text-center text-slate-text shadow-card transition-shadow hover:shadow-soft;
   }
 
   .mc-stat-primary {
-    @apply rounded-2xl border border-primary/20 bg-primary-50 p-4 text-center text-primary-700 transition-shadow hover:shadow-card;
+    @apply rounded-2xl border border-primary/15 bg-gradient-to-b from-primary-50 to-surface-card p-4 text-center text-primary-700 shadow-card transition-shadow hover:shadow-soft;
   }
 
   .mc-stat-warning {
@@ -385,36 +386,46 @@
 
   /* ── Quick-link icon badge ── */
   .mc-icon-badge {
-    @apply inline-flex rounded-lg p-2.5;
+    @apply inline-flex rounded-xl p-2.5;
   }
 
   .mc-icon-badge-primary {
-    @apply inline-flex rounded-lg bg-primary/10 p-2.5 text-primary;
+    @apply inline-flex rounded-xl bg-primary/10 p-2.5 text-primary-700 ring-1 ring-primary/10;
   }
 
   .mc-icon-badge-soft {
-    @apply inline-flex rounded-lg bg-primary-50 p-2.5 text-primary-600;
+    @apply inline-flex rounded-xl bg-primary-50 p-2.5 text-primary-600 ring-1 ring-primary/10;
   }
 
   .mc-icon-badge-success {
-    @apply inline-flex rounded-lg bg-success p-2.5 text-success-text;
+    @apply inline-flex rounded-xl bg-success p-2.5 text-success-text ring-1 ring-success-border;
   }
 
   .mc-icon-badge-warning {
-    @apply inline-flex rounded-lg bg-warning p-2.5 text-warning-text;
+    @apply inline-flex rounded-xl bg-warning p-2.5 text-warning-text ring-1 ring-warning-border;
   }
 
   .mc-icon-badge-premium {
-    @apply inline-flex rounded-lg bg-premium-50 p-2.5 text-premium-600;
+    @apply inline-flex rounded-xl bg-premium-50 p-2.5 text-premium-600 ring-1 ring-premium-200;
   }
 
   html.dark .mc-icon-badge-premium {
     @apply bg-premium-100 text-premium-500;
   }
 
+  /* ── Brand icon tile — navy with champagne glyph ── */
+  .mc-icon-tile {
+    @apply inline-flex shrink-0 items-center justify-center rounded-2xl text-premium-300 shadow-elevated ring-1 ring-white/10;
+    background: var(--pearl-navy-gradient);
+  }
+
+  html.dark .mc-icon-tile {
+    color: #dcc29a;
+  }
+
   /* ── Premium pill badge — "VIP" / top performer / featured labels ── */
   .mc-badge-premium {
-    @apply inline-flex items-center gap-1 rounded-full bg-mc-gold px-2.5 py-1 text-xs font-bold text-white shadow-gold;
+    @apply inline-flex items-center gap-1 rounded-full bg-mc-gold px-2.5 py-1 text-xs font-bold text-[#0b1f3a] shadow-gold;
   }
 
   /* ── Section divider with optional centered label ── */
@@ -487,7 +498,7 @@
   }
 
   .mc-exam-shell-header {
-    @apply bg-gradient-to-r from-primary via-blue-600 to-indigo-600 px-4 py-3.5 text-white shadow-md;
+    @apply bg-mc-navy px-4 py-3.5 text-white shadow-md;
   }
 
   .mc-exam-shell-body {
@@ -515,11 +526,11 @@
   }
 
   .mc-exam-prescription-card {
-    @apply rounded-xl border border-violet-300/70 bg-gradient-to-br from-violet-50/90 via-white to-indigo-50/40 p-4 shadow-md;
+    @apply rounded-xl border border-premium-300/70 bg-gradient-to-br from-premium-50/90 via-white to-primary-50/40 p-4 shadow-md;
   }
 
   .mc-exam-prescription-inner {
-    @apply space-y-3 rounded-xl border border-violet-200/80 bg-white/90 p-4 shadow-sm;
+    @apply space-y-3 rounded-xl border border-premium-200/80 bg-white/90 p-4 shadow-sm;
   }
 
   .mc-exam-input {
@@ -532,6 +543,132 @@
 
   .mc-exam-med-row {
     @apply grid gap-2 rounded-xl border border-slate-300 bg-slate-50/80 p-3 shadow-sm sm:grid-cols-2;
+  }
+
+  /* ═══ Pearl page kit — shared building blocks for every portal page ═══ */
+
+  /* Page header banner: icon tile + title + subtitle + actions */
+  .mc-page-hero {
+    @apply relative mb-6 flex flex-wrap items-center justify-between gap-4 overflow-hidden rounded-3xl border border-slate-border bg-surface-card px-5 py-4 shadow-card sm:px-6 sm:py-5;
+    background-image:
+      radial-gradient(420px 160px at 0% 0%, rgb(var(--color-premium-300-rgb) / 0.16), transparent 70%),
+      radial-gradient(380px 180px at 100% 100%, rgb(var(--color-primary-500-rgb) / 0.07), transparent 70%);
+  }
+
+  .mc-page-hero::before {
+    content: "";
+    @apply pointer-events-none absolute inset-x-6 top-0 h-px;
+    background: linear-gradient(90deg, transparent, rgb(var(--color-premium-400-rgb) / 0.7), transparent);
+  }
+
+  .mc-page-hero__icon {
+    @apply mc-icon-tile h-12 w-12 sm:h-14 sm:w-14;
+  }
+
+  .mc-page-hero__eyebrow {
+    @apply text-[11px] font-bold uppercase tracking-[0.14em] text-premium-600;
+  }
+
+  .mc-page-hero__title {
+    @apply text-xl font-extrabold tracking-tight text-slate-text sm:text-2xl;
+  }
+
+  .mc-page-hero__subtitle {
+    @apply mt-0.5 text-sm text-slate-muted;
+  }
+
+  /* Panel: card with optional header strip */
+  .mc-panel {
+    @apply overflow-hidden rounded-2xl border border-slate-border bg-surface-card shadow-card;
+  }
+
+  .mc-panel-head {
+    @apply flex flex-wrap items-center justify-between gap-3 border-b border-slate-border px-5 py-3.5;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary-50) 55%, transparent), transparent);
+  }
+
+  .mc-panel-title {
+    @apply flex items-center gap-2.5 text-[15px] font-bold text-slate-text;
+  }
+
+  .mc-panel-title svg {
+    @apply h-[18px] w-[18px] text-premium-500;
+  }
+
+  .mc-panel-body {
+    @apply p-5;
+  }
+
+  /* KPI tile */
+  .mc-kpi {
+    @apply relative flex items-center gap-3.5 overflow-hidden rounded-2xl border border-slate-border bg-surface-card p-4 shadow-card transition-all duration-300 ease-mc-out hover:-translate-y-0.5 hover:shadow-elevated;
+  }
+
+  .mc-kpi__icon {
+    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset;
+  }
+
+  .mc-kpi__value {
+    @apply text-2xl font-black leading-none tracking-tight text-slate-text tabular-nums;
+  }
+
+  .mc-kpi__label {
+    @apply mt-1 text-xs font-medium text-slate-muted;
+  }
+
+  .mc-tone-navy    { @apply bg-primary-50 text-primary-700 ring-primary-200/70; }
+  .mc-tone-gold    { @apply bg-premium-50 text-premium-600 ring-premium-200; }
+  .mc-tone-royal   { @apply bg-royal-50 text-royal-600 ring-royal-200; }
+  .mc-tone-success { @apply bg-success text-success-text ring-success-border; }
+  .mc-tone-warning { @apply bg-warning text-warning-text ring-warning-border; }
+  .mc-tone-danger  { @apply bg-debt text-debt-text ring-debt-border; }
+  .mc-tone-muted   { @apply bg-surface text-slate-muted ring-slate-border; }
+
+  /* Filter chips */
+  .mc-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-slate-border bg-surface-card px-3.5 py-1.5 text-sm font-medium text-slate-muted shadow-card transition-all duration-200 hover:border-premium-300 hover:text-slate-text;
+  }
+
+  .mc-chip--active {
+    @apply border-transparent bg-mc-navy text-white shadow-soft hover:text-white;
+  }
+
+  /* Form field */
+  .mc-field {
+    @apply w-full rounded-xl border border-slate-border bg-surface-card px-3.5 py-2.5 text-sm text-slate-text shadow-card outline-none transition-all placeholder:text-slate-muted hover:border-primary-300 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10;
+  }
+
+  /* List row (queue entries, records, etc.) */
+  .mc-list-row {
+    @apply relative flex items-center gap-4 rounded-2xl border border-slate-border bg-surface-card p-4 shadow-card transition-all duration-200 ease-mc-out hover:border-primary-200 hover:shadow-soft;
+  }
+
+  /* Soft tinted action button */
+  .mc-btn-soft {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-border bg-surface-card px-3.5 py-2 text-sm font-semibold text-slate-text shadow-card transition-all duration-200 hover:-translate-y-px hover:border-premium-300 hover:shadow-soft disabled:pointer-events-none disabled:opacity-60;
+  }
+
+  .mc-btn-navy {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-xl bg-mc-navy px-4 py-2 text-sm font-bold text-white shadow-soft ring-1 ring-inset ring-white/10 transition-all duration-200 hover:-translate-y-px hover:shadow-elevated hover:brightness-110 disabled:pointer-events-none disabled:opacity-60;
+  }
+
+  .mc-btn-pearl {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-xl bg-mc-pearl px-4 py-2 text-sm font-bold text-[#0b1f3a] shadow-gold ring-1 ring-inset ring-premium-300/60 transition-all duration-200 hover:-translate-y-px hover:brightness-[1.03] disabled:pointer-events-none disabled:opacity-60;
+  }
+
+  /* Modal */
+  .mc-modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4;
+    background-color: rgb(6 14 26 / 0.55);
+    backdrop-filter: blur(6px);
+  }
+
+  .mc-modal {
+    @apply relative max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl border border-slate-border bg-surface-card shadow-premium sm:rounded-3xl;
+  }
+
+  .mc-modal-head {
+    @apply sticky top-0 z-10 flex items-center gap-3 border-b border-slate-border bg-surface-card px-5 py-4;
   }
 
   .master-odontogram.mc-exam-odontogram .mc-exam-chart-card {
@@ -576,7 +713,7 @@
   border-radius: 9999px;
   background: linear-gradient(
     180deg,
-    var(--color-primary-400),
+    var(--color-premium-300),
     var(--color-primary-700)
   );
 }
@@ -599,6 +736,137 @@ html.dark .mc-app-main h3.text-lg.font-bold {
 
 .mc-app-main form label.text-sm.font-medium {
   color: var(--accent-form-label);
+}
+
+/* ═══ Pearl refinements for legacy markup (all portals) ═══ */
+
+:is(button, a, label).bg-primary.text-white {
+  background-image: var(--pearl-navy-gradient);
+  box-shadow: 0 10px 22px -12px rgb(11 31 58 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+:is(button, a).bg-primary.text-white:not(:disabled):hover {
+  filter: brightness(1.12);
+}
+
+:is(button, a).text-white:is(.bg-violet-600, .bg-royal-600) {
+  background-image: linear-gradient(135deg, rgb(var(--color-royal-700-rgb)), rgb(var(--color-royal-500-rgb)));
+  box-shadow: 0 10px 22px -12px rgb(var(--color-royal-700-rgb) / 0.7);
+}
+
+.fixed.inset-0:is(.bg-black\/30, .bg-black\/40, .bg-black\/50, .bg-black\/60, .bg-slate-900\/40, .bg-slate-900\/50) {
+  background-color: rgb(6 14 26 / 0.55);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.fixed.inset-0 > :is(.bg-white, .bg-surface-card):is(.shadow-2xl, .shadow-xl) {
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-premium);
+}
+
+.mc-app-main .shadow-sm {
+  --tw-shadow: 0 1px 2px rgb(11 31 58 / 0.04), 0 3px 8px -4px rgb(11 31 58 / 0.08);
+  --tw-shadow-colored: var(--tw-shadow);
+}
+
+.mc-app-main :is(.border-slate-100, .border-slate-200):not(:hover):not(:focus) {
+  border-color: var(--color-border);
+}
+
+.mc-app-main
+  :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea):focus {
+  border-color: rgb(var(--color-primary-500-rgb));
+  box-shadow: 0 0 0 4px rgb(var(--color-primary-500-rgb) / 0.12);
+  outline: none;
+}
+
+.mc-app-main input[type="checkbox"],
+.mc-app-main input[type="radio"] {
+  accent-color: rgb(var(--color-primary-600-rgb));
+}
+
+/* Tables — skip printable / PDF documents */
+.mc-app-main table:not(:is(.mc-pdf-doc, [id$="-print"]) table) thead tr {
+  background: color-mix(in srgb, var(--color-primary-50) 75%, var(--color-surface-card));
+}
+
+.mc-app-main table:not(:is(.mc-pdf-doc, [id$="-print"]) table) thead th {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.mc-app-main table:not(:is(.mc-pdf-doc, [id$="-print"]) table) tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.mc-app-main table:not(:is(.mc-pdf-doc, [id$="-print"]) table) tbody tr:hover {
+  background-color: color-mix(in srgb, var(--color-primary-50) 65%, transparent);
+}
+
+.mc-app-main table:not(:is(.mc-pdf-doc, [id$="-print"]) table) :is(td, th) {
+  border-color: var(--color-border-subtle);
+}
+
+/* Dark mode for hardcoded light utilities inside app shells & modals */
+html.dark :is(.mc-app-main, .fixed.inset-0) .bg-white {
+  background-color: var(--color-surface-card);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) :is(.bg-slate-50, .bg-slate-100, .bg-gray-50, .bg-gray-100) {
+  background-color: var(--color-surface-elevated);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) :is(.hover\:bg-slate-50, .hover\:bg-slate-100, .hover\:bg-gray-50):hover {
+  background-color: var(--color-surface-elevated);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) :is(.text-slate-900, .text-slate-800, .text-slate-700, .text-gray-900, .text-gray-800, .text-gray-700) {
+  color: var(--color-text);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) :is(.text-slate-600, .text-slate-500, .text-slate-400, .text-gray-600, .text-gray-500) {
+  color: var(--color-muted);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) :is(.border-slate-100, .border-slate-200, .border-slate-300, .border-gray-200) {
+  border-color: var(--color-border);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) :is(.bg-amber-50, .bg-orange-50, .bg-yellow-50) {
+  background-color: var(--color-warning-bg);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) :is(.text-amber-700, .text-amber-800, .text-amber-900, .text-orange-700, .text-orange-800) {
+  color: var(--color-warning-text);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) :is(.border-amber-200, .border-amber-300, .border-orange-200) {
+  border-color: var(--color-warning-border);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) :is(.bg-red-50, .bg-rose-50) {
+  background-color: var(--color-debt-bg);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) :is(.text-red-600, .text-red-700, .text-red-800, .text-rose-700) {
+  color: var(--color-debt-text);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) :is(.border-red-200, .border-red-300, .border-rose-200) {
+  border-color: var(--color-debt-border);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) .to-white {
+  --tw-gradient-to: var(--color-surface-card) var(--tw-gradient-to-position);
+}
+
+html.dark :is(.mc-app-main, .fixed.inset-0) .from-white {
+  --tw-gradient-from: var(--color-surface-card) var(--tw-gradient-from-position);
 }
 
 @layer utilities {

@@ -14,8 +14,7 @@ import { todayISO } from "@/lib/utils";
 import { doctorQuickActions, QUICK_ACTION_ICON_MAP } from "@/components/layout/DoctorMobileShell";
 import { useModuleNav } from "@/hooks/useModuleNav";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { cn } from "@/lib/utils";
-import { Bell, TrendingUp, Wallet, ArrowDownToLine, ChevronLeft } from "lucide-react";
+import { Bell, CalendarCheck, TrendingUp, Wallet, ArrowDownToLine, ChevronLeft } from "lucide-react";
 import { DoctorPrivateBalance } from "@/components/doctor/DoctorPrivateBalance";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { reconcilePendingDoctorWallet } from "@/lib/services/doctor-wallet-pending";
@@ -102,122 +101,144 @@ export function DoctorHomeDashboard() {
   });
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       {doctorName && (
-        <div className="flex items-center gap-3 rounded-mc-xl border border-slate-border bg-surface-card px-4 py-3.5 shadow-card mc-hover-lift">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-base font-bold text-primary">
-            {doctorName.trim().charAt(0)}
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs text-slate-muted">{t("welcome")}</p>
-            <p className="truncate text-lg font-bold tracking-tight text-slate-text">{doctorName}</p>
-            {specialty && (
-              <p className="text-xs font-medium text-primary">{specialty}</p>
-            )}
-          </div>
+        <div className="px-1">
+          <p className="text-sm text-slate-muted">{t("welcome")} 👋</p>
+          <p className="mt-0.5 truncate text-2xl font-bold tracking-tight text-slate-text">
+            {doctorName}
+          </p>
+          {specialty && (
+            <p className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-premium-200 bg-premium-50 px-2.5 py-0.5 text-[11px] font-semibold text-premium-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-premium-400" />
+              {specialty}
+            </p>
+          )}
         </div>
       )}
 
-      <div className="relative overflow-hidden rounded-mc-2xl bg-mc-navy p-5 text-white shadow-premium ring-1 ring-primary/20">
-        <div className="pointer-events-none absolute -end-10 -top-14 h-48 w-48 rounded-full bg-white/5 blur-2xl" />
-        <div className="pointer-events-none absolute -start-8 bottom-[-3rem] h-40 w-40 rounded-full bg-premium-400/10 blur-2xl" />
-        <div className="relative flex items-start justify-between">
+      <section className="mc-hero rounded-[28px] p-5 sm:p-6">
+        <div className="pointer-events-none absolute -end-14 -top-16 h-52 w-52 rounded-full border border-white/[0.07]" />
+        <div className="pointer-events-none absolute -end-2 -top-6 h-32 w-32 rounded-full border border-white/[0.09]" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/icons/pearl-192.png"
+          alt=""
+          aria-hidden
+          className="pointer-events-none absolute -bottom-6 -start-6 h-32 w-32 rounded-[36px] opacity-[0.08] mix-blend-screen"
+        />
+
+        <div className="relative flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-white/70">{t("currentBalance")}</p>
+            <p className="flex items-center gap-1.5 text-xs font-medium text-white/65">
+              <Wallet className="h-3.5 w-3.5 text-[#dcc29a]" />
+              {t("currentBalance")}
+            </p>
             <DoctorPrivateBalance
               amount={wallet?.availableBalance ?? null}
-              className="mt-1 text-3xl font-extrabold tracking-tight"
+              className="mc-text-champagne mt-2 text-[34px] font-black leading-none tracking-tight"
               isDebtor={(wallet?.availableBalance ?? 0) < 0}
               showDebtLabel
+              iconClassName="text-white/70 hover:text-white"
             />
           </div>
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
-            <Wallet className="h-5 w-5" />
+          <span dir="ltr" className="text-[10px] font-semibold tracking-[0.25em] text-white/35">
+            PEARL SYSTEM
+          </span>
+        </div>
+
+        {((wallet?.pendingAmount ?? 0) > 0 || (wallet?.approvedAmount ?? 0) > 0) && (
+          <div className="relative mt-5 grid grid-cols-2 gap-2 text-[11px]">
+            {(wallet?.pendingAmount ?? 0) > 0 && (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-3 py-2.5 backdrop-blur">
+                <p className="text-white/60">{t("pendingShort")}</p>
+                <p className="mt-0.5 text-sm font-bold tabular-nums">
+                  {formatMoney(wallet?.pendingAmount ?? 0)}
+                </p>
+              </div>
+            )}
+            {(wallet?.approvedAmount ?? 0) > 0 && (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.07] px-3 py-2.5 backdrop-blur">
+                <p className="text-white/60">{t("docApprovedUnpaid")}</p>
+                <p className="mt-0.5 text-sm font-bold tabular-nums">
+                  {formatMoney(wallet?.approvedAmount ?? 0)}
+                </p>
+              </div>
+            )}
           </div>
+        )}
+
+        <div className="relative mt-5 grid grid-cols-2 gap-2.5">
+          <Link
+            href="/doctor/withdraw"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-mc-pearl py-3 text-sm font-bold text-[#0b1f3a] shadow-[0_12px_26px_-10px_rgba(220,194,154,0.75)] transition-transform active:scale-[0.98]"
+          >
+            <ArrowDownToLine className="h-4 w-4" />
+            {t("navWithdrawRequest")}
+          </Link>
+          <Link
+            href="/doctor/wallet"
+            className="flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/[0.08] py-3 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/[0.14] active:scale-[0.98]"
+          >
+            <TrendingUp className="h-4 w-4 text-[#dcc29a]" />
+            {t("walletDetails")}
+          </Link>
         </div>
-        <div className="relative mt-4 grid gap-2 text-center text-[10px]">
-          {(wallet?.pendingAmount ?? 0) > 0 && (
-            <div className="rounded-xl border border-white/10 bg-white/10 p-2 backdrop-blur-sm">
-              <p className="text-white/70">{t("pendingShort")}</p>
-              <p className="font-bold tabular-nums">
-                {formatMoney(wallet?.pendingAmount ?? 0)}
-              </p>
-            </div>
-          )}
-          {(wallet?.approvedAmount ?? 0) > 0 && (
-            <div className="rounded-xl border border-white/10 bg-white/10 p-2 backdrop-blur-sm">
-              <p className="text-white/70">{t("docApprovedUnpaid")}</p>
-              <p className="font-bold tabular-nums">
-                {formatMoney(wallet?.approvedAmount ?? 0)}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+      </section>
 
       <div className="grid grid-cols-2 gap-3">
-        <Link
-          href="/doctor/withdraw"
-          className="mc-hover-lift flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/[0.06] p-3 active:scale-[0.98]"
-        >
-          <span className="mc-icon-badge-primary">
-            <ArrowDownToLine className="h-5 w-5" />
+        <div className="rounded-3xl border border-slate-border bg-surface-card p-4 shadow-card">
+          <span className="mc-icon-tile h-10 w-10">
+            <CalendarCheck className="h-[18px] w-[18px]" />
           </span>
-          <span className="text-sm font-semibold text-slate-text">{t("navWithdrawRequest")}</span>
-        </Link>
-        <Link
-          href="/doctor/wallet"
-          className="mc-hover-lift flex items-center gap-3 rounded-xl border border-slate-border bg-surface-card p-3 active:scale-[0.98]"
-        >
-          <span className="mc-icon-badge-soft">
-            <TrendingUp className="h-5 w-5" />
-          </span>
-          <span className="text-sm font-semibold text-slate-text">{t("walletDetails")}</span>
-        </Link>
-      </div>
-
-      <div className="flex gap-3 text-sm">
-        <div className="mc-stat-primary flex-1">
-          <p className="mc-stat-value">{todayOps}</p>
-          <p className="mc-stat-label">{t("todayOperations")}</p>
+          <p className="mt-3 text-3xl font-black tabular-nums tracking-tight text-slate-text">{todayOps}</p>
+          <p className="text-xs font-medium text-slate-muted">{t("todayOperations")}</p>
         </div>
         <Link
           href="/doctor/notifications"
-          className="mc-stat-neutral relative flex flex-1 items-center justify-center gap-2"
+          className="group relative rounded-3xl border border-slate-border bg-surface-card p-4 shadow-card transition-all hover:border-premium-300/70 hover:shadow-elevated active:scale-[0.98]"
         >
-          <Bell className="h-5 w-5 text-primary" />
-          {notifications > 0 ? (
-            <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-debt-text px-1 text-[10px] font-bold text-white">
-              {notifications > 9 ? "9+" : notifications}
+          <span className="relative inline-flex">
+            <span className="mc-icon-tile h-10 w-10">
+              <Bell className="h-[18px] w-[18px]" />
             </span>
-          ) : null}
-          <span className="text-xs text-slate-muted">{t("notifications")}</span>
+            {notifications > 0 && (
+              <span className="absolute -end-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-debt-text px-1 text-[10px] font-bold text-white ring-2 ring-surface-card">
+                {notifications > 9 ? "9+" : notifications}
+              </span>
+            )}
+          </span>
+          <p className="mt-3 text-3xl font-black tabular-nums tracking-tight text-slate-text">{notifications}</p>
+          <p className="text-xs font-medium text-slate-muted">{t("notifications")}</p>
         </Link>
       </div>
 
-      <p className="text-sm font-semibold text-slate-muted">{t("tasks")}</p>
-      <div className="grid gap-3">
-        {quickActions.map(({ href, labelKey, icon }) => {
-          const Icon = QUICK_ACTION_ICON_MAP[icon] ?? Wallet;
-          return (
-          <Link
-            key={href}
-            href={href}
-            className={cn(
-              "mc-hover-lift group flex items-center gap-4 rounded-xl border border-slate-border bg-surface-card p-4 shadow-card active:scale-[0.98]"
-            )}
-          >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
-              <Icon className="h-6 w-6" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-slate-text">{t(labelKey)}</p>
-            </div>
-            <ChevronLeft className="h-4 w-4 shrink-0 text-slate-muted/50 transition-transform group-hover:-translate-x-0.5" />
-          </Link>
-          );
-        })}
-      </div>
+      <section>
+        <div className="mb-3 flex items-center gap-3 px-1">
+          <h2 className="no-accent text-sm font-bold text-slate-text">{t("tasks")}</h2>
+          <span className="h-px flex-1 bg-gradient-to-l from-transparent to-slate-border" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {quickActions.map(({ href, labelKey, icon }) => {
+            const Icon = QUICK_ACTION_ICON_MAP[icon] ?? Wallet;
+            return (
+              <Link
+                key={href}
+                href={href}
+                className="group flex min-h-[112px] flex-col justify-between gap-3 rounded-3xl border border-slate-border bg-surface-card p-4 shadow-card transition-all duration-300 ease-mc-out hover:-translate-y-0.5 hover:border-premium-300/70 hover:shadow-elevated active:scale-[0.98]"
+              >
+                <span className="flex items-start justify-between">
+                  <span className="mc-icon-tile h-11 w-11 transition-transform duration-300 group-hover:scale-105">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <ChevronLeft className="h-4 w-4 text-slate-muted/40 transition-all group-hover:-translate-x-0.5 group-hover:text-premium-500 ltr:rotate-180" />
+                </span>
+                <span className="text-sm font-bold leading-snug text-slate-text">{t(labelKey)}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

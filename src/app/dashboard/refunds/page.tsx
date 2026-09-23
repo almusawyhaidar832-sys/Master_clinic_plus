@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { Alert } from "@/components/ui/Alert";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { SessionRefundModal } from "@/components/sessions/SessionRefundModal";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthProfile } from "@/lib/clinic-context";
@@ -18,9 +18,18 @@ import {
   type RefundableSessionRow,
   type RefundHistoryRow,
 } from "@/lib/services/session-refunds";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import type { Doctor, PatientOperation } from "@/types";
-import { CheckCircle2, Search, Undo2, User, Stethoscope } from "lucide-react";
+import {
+  CheckCircle2,
+  Search,
+  Undo2,
+  User,
+  Stethoscope,
+  FileBarChart,
+  ListChecks,
+  History,
+} from "lucide-react";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useActiveClinicId } from "@/hooks/useActiveClinicId";
 
@@ -28,6 +37,7 @@ type SearchMode = "patient" | "doctor";
 
 export default function RefundsDashboardPage() {
   const { clinicId } = useActiveClinicId();
+  const { bi } = useLanguage();
   const [mode, setMode] = useState<SearchMode>("patient");
   const [patientQuery, setPatientQuery] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
@@ -167,26 +177,20 @@ export default function RefundsDashboardPage() {
   });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-text sm:text-2xl">
-            <span className="mc-icon-badge-primary">
-              <Undo2 className="h-5 w-5" />
-            </span>
-            إدارة المرتجعات
-          </h1>
-          <p className="mt-1 text-sm text-slate-muted">
-            ابحث عن المراجع أو الطبيب، اختر الجلسة، وسجّل الإرجاع مع تتبّع كامل
-          </p>
-        </div>
-        <Link
-          href="/dashboard/reports"
-          className="text-sm font-semibold text-primary underline"
-        >
-          سجل المرتجعات في التقارير
-        </Link>
-      </div>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <PageHeader
+        title="إدارة المرتجعات"
+        eyebrow={bi("المالية", "Finance")}
+        icon={Undo2}
+        subtitle="ابحث عن المراجع أو الطبيب، اختر الجلسة، وسجّل الإرجاع مع تتبّع كامل"
+        className="mb-0"
+        actions={
+          <Link href="/dashboard/reports" className="mc-btn-soft py-2.5">
+            <FileBarChart className="h-4 w-4 text-premium-500" />
+            سجل المرتجعات في التقارير
+          </Link>
+        }
+      />
 
       {success && (
         <Alert variant="success" className="flex items-center gap-2">
@@ -196,20 +200,20 @@ export default function RefundsDashboardPage() {
       )}
       {message && <Alert variant="warning">{message}</Alert>}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>بحث جلسة للإرجاع</CardTitle>
-        </CardHeader>
-        <div className="space-y-4 px-4 pb-4">
-          <div className="flex flex-wrap gap-2">
+      <div className="mc-panel">
+        <div className="mc-panel-head">
+          <h3 className="mc-panel-title">
+            <Search />
+            بحث جلسة للإرجاع
+          </h3>
+          <div className="mc-tab-group p-1 shadow-none">
             <button
               type="button"
               onClick={() => setMode("patient")}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
-                mode === "patient"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-slate-border text-slate-muted hover:bg-surface"
-              }`}
+              className={cn(
+                "mc-tab min-w-0 px-4 py-2",
+                mode === "patient" && "mc-tab--active"
+              )}
             >
               <User className="h-4 w-4" />
               بالمراجع
@@ -217,21 +221,21 @@ export default function RefundsDashboardPage() {
             <button
               type="button"
               onClick={() => setMode("doctor")}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
-                mode === "doctor"
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-slate-border text-slate-muted hover:bg-surface"
-              }`}
+              className={cn(
+                "mc-tab min-w-0 px-4 py-2",
+                mode === "doctor" && "mc-tab--active"
+              )}
             >
               <Stethoscope className="h-4 w-4" />
               بالطبيب
             </button>
           </div>
-
+        </div>
+        <div className="mc-panel-body">
           {mode === "patient" ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <div className="min-w-0 flex-1">
-                <p className="mb-1 text-xs font-medium text-slate-muted">
+                <p className="mc-label mb-1.5">
                   ابحث بالاسم — تظهر النتائج أثناء الكتابة
                 </p>
                 <PatientSearchField
@@ -250,16 +254,18 @@ export default function RefundsDashboardPage() {
                   }}
                 />
               </div>
-              <Button
+              <button
+                type="button"
+                className="mc-btn-navy h-10 px-5"
                 onClick={() => searchSessions()}
                 disabled={loading || !selectedPatientId}
               >
-                <Search className="h-4 w-4" />
+                <Search className="h-4 w-4 text-premium-300" />
                 عرض الجلسات
-              </Button>
+              </button>
             </div>
           ) : (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <div className="min-w-0 flex-1">
                 <Select
                   label="الطبيب"
@@ -272,68 +278,77 @@ export default function RefundsDashboardPage() {
                   }))}
                 />
               </div>
-              <Button onClick={() => searchSessions()} disabled={loading}>
-                <Search className="h-4 w-4" />
+              <button
+                type="button"
+                className="mc-btn-navy h-10 px-5"
+                onClick={() => searchSessions()}
+                disabled={loading}
+              >
+                <Search className="h-4 w-4 text-premium-300" />
                 عرض الجلسات
-              </Button>
+              </button>
             </div>
           )}
         </div>
-      </Card>
+      </div>
 
       {searched && sessions.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>جلسات قابلة للإرجاع ({sessions.length})</CardTitle>
-          </CardHeader>
-          <div className="overflow-x-auto px-2 pb-4">
+        <div className="mc-panel">
+          <div className="mc-panel-head">
+            <h3 className="mc-panel-title">
+              <ListChecks />
+              جلسات قابلة للإرجاع ({sessions.length})
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
               <thead>
-                <tr className="border-b border-slate-border text-right text-xs font-bold uppercase tracking-wide text-slate-muted">
-                  <th className="py-2 pr-2">التاريخ</th>
-                  <th className="py-2">المراجع</th>
-                  <th className="py-2">الطبيب</th>
-                  <th className="py-2">الإجراء</th>
-                  <th className="py-2">مدفوع</th>
-                  <th className="py-2">مُسترجع سابقاً</th>
-                  <th className="py-2">قابل للإرجاع</th>
-                  <th className="py-2">إجراء</th>
+                <tr className="border-b border-slate-border bg-surface text-right text-xs font-bold uppercase tracking-wide text-slate-muted">
+                  <th className="px-4 py-3">التاريخ</th>
+                  <th className="px-4 py-3">المراجع</th>
+                  <th className="px-4 py-3">الطبيب</th>
+                  <th className="px-4 py-3">الإجراء</th>
+                  <th className="px-4 py-3">مدفوع</th>
+                  <th className="px-4 py-3">مُسترجع سابقاً</th>
+                  <th className="px-4 py-3">قابل للإرجاع</th>
+                  <th className="px-4 py-3">إجراء</th>
                 </tr>
               </thead>
               <tbody>
                 {sessions.map((row) => (
                   <tr
                     key={row.id}
-                    className="border-b border-slate-border/50 hover:bg-surface/50"
+                    className="border-b border-slate-border transition-colors last:border-b-0 hover:bg-surface"
                   >
-                    <td className="py-2 pr-2 tabular-nums">
+                    <td className="px-4 py-3 tabular-nums text-slate-muted">
                       {formatDate(row.operationDate)}
                     </td>
-                    <td className="py-2 font-medium">
+                    <td className="px-4 py-3 font-semibold">
                       <Link
                         href={`/dashboard/patients/${row.patientId}`}
-                        className="text-primary hover:underline"
+                        className="text-primary-700 hover:underline"
                       >
                         {row.patientName}
                       </Link>
                     </td>
-                    <td className="py-2">{formatDoctorDisplayName(row.doctorName)}</td>
-                    <td className="py-2 text-slate-muted">{row.operationName}</td>
-                    <td className="py-2 tabular-nums">{formatCurrency(row.paidAmount)}</td>
-                    <td className="py-2 tabular-nums text-warning-text">
+                    <td className="px-4 py-3 text-slate-text">{formatDoctorDisplayName(row.doctorName)}</td>
+                    <td className="px-4 py-3 text-slate-muted">{row.operationName}</td>
+                    <td className="px-4 py-3 font-semibold tabular-nums text-slate-text">{formatCurrency(row.paidAmount)}</td>
+                    <td className="px-4 py-3 tabular-nums text-warning-text">
                       {row.refundedAmount > 0
                         ? formatCurrency(row.refundedAmount)
                         : "—"}
                     </td>
-                    <td className="py-2 font-semibold tabular-nums text-primary">
+                    <td className="px-4 py-3 font-black tabular-nums text-slate-text">
                       {formatCurrency(row.maxRefundable)}
                     </td>
-                    <td className="py-2">
+                    <td className="px-4 py-3">
                       <button
                         type="button"
                         onClick={() => setRefundTarget(row)}
-                        className="rounded-lg border border-warning-border bg-warning px-2.5 py-1 text-xs font-bold text-warning-text transition-colors hover:brightness-95"
+                        className="inline-flex items-center gap-1 rounded-xl border border-warning-border bg-warning px-3 py-1.5 text-xs font-bold text-warning-text transition-all hover:-translate-y-px hover:shadow-soft"
                       >
+                        <Undo2 className="h-3.5 w-3.5" />
                         استرجاع
                       </button>
                     </td>
@@ -342,49 +357,57 @@ export default function RefundsDashboardPage() {
               </tbody>
             </table>
           </div>
-        </Card>
+        </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>سجل المرتجعات المنجزة</CardTitle>
-        </CardHeader>
-        <div className="overflow-x-auto px-2 pb-4">
+      <div className="mc-panel">
+        <div className="mc-panel-head">
+          <h3 className="mc-panel-title">
+            <History />
+            سجل المرتجعات المنجزة
+          </h3>
+        </div>
+        <div className="overflow-x-auto">
           {history.length === 0 ? (
-            <p className="px-2 pb-4 text-sm text-slate-muted">
-              لا توجد مرتجعات مسجّلة بعد
-            </p>
+            <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+              <span className="mc-icon-tile h-11 w-11 rounded-xl">
+                <Undo2 className="h-5 w-5" />
+              </span>
+              <p className="text-sm text-slate-muted">
+                لا توجد مرتجعات مسجّلة بعد
+              </p>
+            </div>
           ) : (
             <table className="w-full min-w-[560px] text-sm">
               <thead>
-                <tr className="border-b border-slate-border text-right text-xs font-bold uppercase tracking-wide text-slate-muted">
-                  <th className="py-2 pr-2">التاريخ</th>
-                  <th className="py-2">المراجع</th>
-                  <th className="py-2">الطبيب</th>
-                  <th className="py-2">المبلغ</th>
-                  <th className="py-2">السبب</th>
-                  <th className="py-2">الحالة</th>
+                <tr className="border-b border-slate-border bg-surface text-right text-xs font-bold uppercase tracking-wide text-slate-muted">
+                  <th className="px-4 py-3">التاريخ</th>
+                  <th className="px-4 py-3">المراجع</th>
+                  <th className="px-4 py-3">الطبيب</th>
+                  <th className="px-4 py-3">المبلغ</th>
+                  <th className="px-4 py-3">السبب</th>
+                  <th className="px-4 py-3">الحالة</th>
                 </tr>
               </thead>
               <tbody>
                 {history.map((row) => (
                   <tr
                     key={row.id}
-                    className="border-b border-slate-border/50"
+                    className="border-b border-slate-border transition-colors last:border-b-0 hover:bg-surface"
                   >
-                    <td className="py-2 pr-2 tabular-nums whitespace-nowrap">
+                    <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-muted">
                       {formatDate(row.createdAt)}
                     </td>
-                    <td className="py-2 font-medium">{row.patientName}</td>
-                    <td className="py-2">{formatDoctorDisplayName(row.doctorName)}</td>
-                    <td className="py-2 font-bold tabular-nums text-warning-text">
+                    <td className="px-4 py-3 font-semibold text-slate-text">{row.patientName}</td>
+                    <td className="px-4 py-3 text-slate-text">{formatDoctorDisplayName(row.doctorName)}</td>
+                    <td className="px-4 py-3 font-bold tabular-nums text-warning-text">
                       {formatCurrency(row.amount)}
                     </td>
-                    <td className="py-2 max-w-[200px] truncate text-slate-muted">
+                    <td className="max-w-[200px] truncate px-4 py-3 text-slate-muted">
                       {row.reason}
                     </td>
-                    <td className="py-2">
-                      <span className="inline-flex items-center gap-1 rounded-full bg-success px-2 py-0.5 text-xs font-semibold text-success-text">
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-success-border bg-success px-2.5 py-0.5 text-xs font-semibold text-success-text">
                         <CheckCircle2 className="h-3.5 w-3.5" />
                         تم الإرجاع
                       </span>
@@ -395,7 +418,7 @@ export default function RefundsDashboardPage() {
             </table>
           )}
         </div>
-      </Card>
+      </div>
 
       {refundTarget && (
         <SessionRefundModal

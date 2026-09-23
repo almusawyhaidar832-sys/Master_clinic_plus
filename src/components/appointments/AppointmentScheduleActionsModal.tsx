@@ -10,7 +10,11 @@ import {
   Check,
   Ban,
   Trash2,
+  CalendarClock,
+  Clock,
+  Stethoscope,
 } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
 import { resolveAppointmentPatientProfileHref } from "@/lib/services/ensure-appointment-patient-client";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
@@ -91,53 +95,42 @@ export function AppointmentScheduleActionsModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center"
-      onClick={onClose}
+    <Modal
+      onClose={onClose}
+      title={appointment.patient_name_ar || "موعد"}
+      icon={CalendarClock}
+      size="md"
     >
-      <div
-        className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-slate-800">
-              {appointment.patient_name_ar || "موعد"}
-            </h2>
-            <p className="mt-1 text-sm text-slate-muted">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-border bg-surface p-3.5">
+          <div className="min-w-0 space-y-1 text-sm">
+            <p className="flex items-center gap-2 font-semibold text-slate-text">
+              <Clock className="h-4 w-4 text-premium-500" />
               {formatDate(appointment.appointment_date)}
               {" · "}
-              <span dir="ltr">
+              <span dir="ltr" className="tabular-nums">
                 {formatTime(appointment.start_time)} – {formatTime(appointment.end_time)}
               </span>
             </p>
             {appointment.doctor?.full_name_ar && (
-              <p className="mt-0.5 text-sm text-slate-600">
+              <p className="flex items-center gap-2 text-slate-muted">
+                <Stethoscope className="h-4 w-4 text-premium-500" />
                 {formatDoctorDisplayName(appointment.doctor.full_name_ar)}
               </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1 hover:bg-slate-100"
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+              APPOINTMENT_STATUS_COLORS[appointment.status] ??
+                APPOINTMENT_STATUS_COLORS.scheduled
+            )}
           >
-            <X className="h-5 w-5 text-slate-500" />
-          </button>
+            {statusLabels[appointment.status] ?? appointment.status}
+          </span>
         </div>
 
-        <span
-          className={cn(
-            "mb-4 inline-block rounded-full px-2.5 py-1 text-xs font-medium",
-            APPOINTMENT_STATUS_COLORS[appointment.status] ??
-              APPOINTMENT_STATUS_COLORS.scheduled
-          )}
-        >
-          {statusLabels[appointment.status] ?? appointment.status}
-        </span>
-
         {error && (
-          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+          <p className="mb-3 rounded-xl border border-debt-border bg-debt px-3 py-2 text-sm text-debt-text">
             {error}
           </p>
         )}
@@ -149,7 +142,7 @@ export function AppointmentScheduleActionsModal({
                 type="button"
                 onClick={() => void handleAccept()}
                 disabled={accepting}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                className="mc-btn-navy w-full py-3"
               >
                 {accepting ? (
                   <RefreshCw className="h-4 w-4 animate-spin" />
@@ -164,7 +157,7 @@ export function AppointmentScheduleActionsModal({
                   onReject();
                   onClose();
                 }}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 hover:bg-red-100"
+                className="mc-btn-soft w-full py-3 text-debt-text hover:border-debt-border hover:bg-debt"
               >
                 <X className="h-4 w-4" />
                 رفض الطلب
@@ -179,7 +172,7 @@ export function AppointmentScheduleActionsModal({
                 onCancel();
                 onClose();
               }}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 hover:bg-amber-100"
+              className="mc-btn-soft w-full py-3 text-warning-text hover:border-warning-border hover:bg-warning"
             >
               <Ban className="h-4 w-4" />
               إلغاء الحجز
@@ -193,7 +186,7 @@ export function AppointmentScheduleActionsModal({
                 onDelete();
                 onClose();
               }}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50"
+              className="mc-btn-soft w-full py-3 text-debt-text hover:border-debt-border hover:bg-debt"
             >
               <Trash2 className="h-4 w-4" />
               حذف نهائي
@@ -204,7 +197,7 @@ export function AppointmentScheduleActionsModal({
             type="button"
             onClick={() => void handleOpenPatient()}
             disabled={openingPatient}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+            className="mc-btn-pearl w-full py-3"
           >
             {openingPatient ? (
               <RefreshCw className="h-4 w-4 animate-spin" />
@@ -221,7 +214,7 @@ export function AppointmentScheduleActionsModal({
                 onEdit();
                 onClose();
               }}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-border bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="mc-btn-soft w-full py-3"
             >
               <Pencil className="h-4 w-4" />
               تعديل الموعد
@@ -232,13 +225,12 @@ export function AppointmentScheduleActionsModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-muted transition-colors hover:bg-surface hover:text-slate-text"
             >
               إبقاء الحجز كما هو
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

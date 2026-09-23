@@ -163,7 +163,7 @@ export default function AdminMasterReportPage() {
           <MasterReportDocument
             report={report}
             title="التقرير المالي الشامل للعيادة"
-            subtitle="تقرير المالك — Pearl Clinic"
+            subtitle="تقرير المالك — Pearl System"
           />
         </div>
       )}

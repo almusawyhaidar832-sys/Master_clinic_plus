@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { HandCoins } from "lucide-react";
 import { Alert } from "@/components/ui/Alert";
 import { createClient } from "@/lib/supabase/client";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
@@ -113,15 +112,21 @@ export function DoctorSalaryPayoutPanel({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>صرف راتب يدوي (اختياري)</CardTitle>
-        <p className="text-sm text-slate-muted">
-          للخصم والمكافأة استخدم البطاقة <strong>أعلاه</strong> ثم «تأكيد صرف
-          الراتب». هذا النموذج لصرف مبلغ يدوي خارج القسيمة الشهرية فقط.
-        </p>
-      </CardHeader>
+    <div className="mc-panel">
+      <div className="mc-panel-head">
+        <div>
+          <h3 className="mc-panel-title">
+            <HandCoins />
+            صرف راتب يدوي (اختياري)
+          </h3>
+          <p className="mt-1 text-sm text-slate-muted">
+            للخصم والمكافأة استخدم البطاقة <strong className="text-slate-text">أعلاه</strong> ثم «تأكيد صرف
+            الراتب». هذا النموذج لصرف مبلغ يدوي خارج القسيمة الشهرية فقط.
+          </p>
+        </div>
+      </div>
 
+      <div className="mc-panel-body">
       {salaryDoctors.length === 0 ? (
         <Alert variant="info">
           لا يوجد أطباء على نظام الراتب الثابت. عيّن الاتفاق المالي للطبيب إلى «راتب»
@@ -151,7 +156,7 @@ export function DoctorSalaryPayoutPanel({
           />
 
           {selectedDoctor && (
-            <p className="rounded-lg bg-surface/60 px-3 py-2 text-sm text-slate-600">
+            <p className="rounded-xl border border-slate-border bg-surface px-3.5 py-2.5 text-sm text-slate-text">
               الاتفاق المالي: {doctorPaymentLabel(selectedDoctor)}
             </p>
           )}
@@ -187,20 +192,27 @@ export function DoctorSalaryPayoutPanel({
           />
 
           {selectedDoctor && amount && (
-            <p className="text-sm text-slate-600">
+            <p className="rounded-xl border border-debt-border bg-debt px-3.5 py-2.5 text-sm text-slate-text">
               سيُخصم{" "}
-              <span className="font-bold text-red-600">
+              <span className="font-bold tabular-nums text-debt-text">
                 {formatCurrency(parseFloat(amount) || 0)}
               </span>{" "}
               من رصيد العيادة ويُسجَّل في كشف الطبيب (خصم واحد في اللوحة التنفيذية).
             </p>
           )}
 
-          <Button type="submit" disabled={loading || !clinicId || !doctorId}>
-            {loading ? "جارٍ الصرف..." : "صرف الراتب"}
-          </Button>
+          <div className="flex justify-end border-t border-slate-border pt-4">
+            <button
+              type="submit"
+              className="mc-btn-navy px-6 py-2.5"
+              disabled={loading || !clinicId || !doctorId}
+            >
+              {loading ? "جارٍ الصرف..." : "صرف الراتب"}
+            </button>
+          </div>
         </form>
       )}
-    </Card>
+      </div>
+    </div>
   );
 }

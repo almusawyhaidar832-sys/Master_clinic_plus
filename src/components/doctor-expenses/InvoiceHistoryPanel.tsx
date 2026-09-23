@@ -170,7 +170,7 @@ export function InvoiceHistoryPanel({
       key: "patient",
       header: "المراجع",
       render: (row) => (
-        <span className="min-w-[6rem] font-medium text-slate-800">
+        <span className="min-w-[6rem] font-medium text-slate-text">
           {historyPatientLabel(row)}
         </span>
       ),
@@ -180,7 +180,7 @@ export function InvoiceHistoryPanel({
       header: "الحالة",
       render: (row) => {
         const fin = historyRowFinancials(row);
-        if (!fin) return <span className="text-slate-400">—</span>;
+        if (!fin) return <span className="text-slate-muted">—</span>;
         return (
           <div className="min-w-[7rem]">
             <p className="font-semibold text-slate-text">{fin.treatmentName}</p>
@@ -199,12 +199,12 @@ export function InvoiceHistoryPanel({
       header: "دفع الجلسة",
       render: (row) => {
         const fin = historyRowFinancials(row);
-        if (!fin) return <span className="text-slate-400">—</span>;
+        if (!fin) return <span className="text-slate-muted">—</span>;
         return (
           <span
             className={
               fin.paidSession > 0
-                ? "font-bold tabular-nums text-emerald-700"
+                ? "font-bold tabular-nums text-success-text"
                 : "tabular-nums text-slate-muted"
             }
           >
@@ -219,10 +219,10 @@ export function InvoiceHistoryPanel({
       render: (row) => {
         const fin = historyRowFinancials(row);
         if (!fin || fin.caseTotal <= 0) {
-          return <span className="text-slate-400">—</span>;
+          return <span className="text-slate-muted">—</span>;
         }
         return (
-          <span className="tabular-nums font-medium text-slate-700">
+          <span className="tabular-nums font-medium text-slate-text">
             {formatCurrency(fin.caseTotal)}
           </span>
         );
@@ -234,7 +234,7 @@ export function InvoiceHistoryPanel({
       render: (row) => {
         const fin = historyRowFinancials(row);
         if (!fin || fin.casePaid <= 0) {
-          return <span className="text-slate-400">—</span>;
+          return <span className="text-slate-muted">—</span>;
         }
         return (
           <span className="tabular-nums font-semibold text-primary">
@@ -248,13 +248,13 @@ export function InvoiceHistoryPanel({
       header: "المتبقي",
       render: (row) => {
         const fin = historyRowFinancials(row);
-        if (!fin) return <span className="text-slate-400">—</span>;
+        if (!fin) return <span className="text-slate-muted">—</span>;
         return (
           <span
             className={
               fin.remaining > 0
                 ? "font-bold tabular-nums text-debt-text"
-                : "font-semibold tabular-nums text-emerald-700"
+                : "font-semibold tabular-nums text-success-text"
             }
           >
             {formatCurrency(fin.remaining)}
@@ -267,7 +267,7 @@ export function InvoiceHistoryPanel({
       header: "إعادة إرسال",
       render: (row) => {
         if (!canResendHistoryInvoice(row)) {
-          return <span className="text-slate-400">—</span>;
+          return <span className="text-slate-muted">—</span>;
         }
         return (
           <button
@@ -295,7 +295,7 @@ export function InvoiceHistoryPanel({
             snapshot: row.snapshot_json as Record<string, unknown>,
           })
         ) {
-          return <span className="text-slate-400">—</span>;
+          return <span className="text-slate-muted">—</span>;
         }
         const fileName = (
           row.snapshot_json as { invoice_file_name?: string | null } | null
@@ -323,7 +323,7 @@ export function InvoiceHistoryPanel({
       header: "النوع",
       render: (row) =>
         row.record_kind === "doctor_expense" ? (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+          <span className="rounded-full bg-warning px-2 py-0.5 text-xs font-medium text-warning-text">
             صرفية عيادة
           </span>
         ) : (
@@ -339,9 +339,9 @@ export function InvoiceHistoryPanel({
         const lab = historyLabDetails(row);
         const split = labSplitFromHistoryRow(row);
         const cost = split?.materialsCost ?? lab.materialsCost;
-        if (!cost) return <span className="text-slate-400">—</span>;
+        if (!cost) return <span className="text-slate-muted">—</span>;
         return (
-          <span className="tabular-nums text-amber-800">
+          <span className="tabular-nums text-warning-text">
             {formatCurrency(cost)}
           </span>
         );
@@ -353,11 +353,11 @@ export function InvoiceHistoryPanel({
       render: (row) => {
         const split = labSplitFromHistoryRow(row);
         if (!split?.doctorShare) {
-          return <span className="text-slate-400">—</span>;
+          return <span className="text-slate-muted">—</span>;
         }
         return (
           <span
-            className="tabular-nums font-semibold text-red-600"
+            className="tabular-nums font-semibold text-debt-text"
             title={
               split.materialsSharePct > 0
                 ? `${split.materialsSharePct}% من تكلفة المختبر`
@@ -375,11 +375,11 @@ export function InvoiceHistoryPanel({
       render: (row) => {
         const split = labSplitFromHistoryRow(row);
         if (!split?.clinicShare) {
-          return <span className="text-slate-400">—</span>;
+          return <span className="text-slate-muted">—</span>;
         }
         return (
           <span
-            className="tabular-nums font-semibold text-slate-800"
+            className="tabular-nums font-semibold text-slate-text"
             title={
               split.materialsSharePct > 0
                 ? `${100 - split.materialsSharePct}% من تكلفة المختبر`
@@ -397,11 +397,11 @@ export function InvoiceHistoryPanel({
       render: (row) => {
         const lab = historyLabDetails(row);
         if (!hasLabDetails(lab) || !lab.labNotes) {
-          return <span className="text-slate-400">—</span>;
+          return <span className="text-slate-muted">—</span>;
         }
         return (
           <span
-            className="max-w-[12rem] truncate text-xs text-slate-600"
+            className="max-w-[12rem] truncate text-xs text-slate-muted"
             title={lab.labNotes}
           >
             {truncateLabNotes(lab.labNotes, 56)}
@@ -414,7 +414,7 @@ export function InvoiceHistoryPanel({
       header: "حصة الطبيب",
       render: (row) => {
         if (row.record_kind === "doctor_expense") {
-          return <span className="text-slate-400">—</span>;
+          return <span className="text-slate-muted">—</span>;
         }
         const snap = row.snapshot_json as {
           doctorShareTotal?: number;
@@ -423,9 +423,9 @@ export function InvoiceHistoryPanel({
           row.doctor_share > 0
             ? row.doctor_share
             : Number(snap?.doctorShareTotal ?? 0);
-        if (!share) return <span className="text-slate-400">—</span>;
+        if (!share) return <span className="text-slate-muted">—</span>;
         return (
-          <span className="tabular-nums text-emerald-700">
+          <span className="tabular-nums text-success-text">
             {formatCurrency(share)}
           </span>
         );
@@ -436,7 +436,7 @@ export function InvoiceHistoryPanel({
       header: "حصة العيادة",
       render: (row) => {
         if (row.record_kind === "doctor_expense") {
-          return <span className="text-slate-400">—</span>;
+          return <span className="text-slate-muted">—</span>;
         }
         const snap = row.snapshot_json as {
           clinicShareTotal?: number;
@@ -445,9 +445,9 @@ export function InvoiceHistoryPanel({
           row.clinic_share > 0
             ? row.clinic_share
             : Number(snap?.clinicShareTotal ?? 0);
-        if (!share) return <span className="text-slate-400">—</span>;
+        if (!share) return <span className="text-slate-muted">—</span>;
         return (
-          <span className="tabular-nums text-slate-700">
+          <span className="tabular-nums text-slate-text">
             {formatCurrency(share)}
           </span>
         );
@@ -459,11 +459,11 @@ export function InvoiceHistoryPanel({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-slate-text">
             <History className="h-5 w-5 text-primary" />
             السجل التاريخي
           </h2>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-muted">
             فواتير الجلسات مع المبالغ المدفوعة والمتبقية — إعادة إرسال الفاتورة
             والوصفة للمراجع عبر واتساب
           </p>
@@ -471,7 +471,7 @@ export function InvoiceHistoryPanel({
         <button
           type="button"
           onClick={() => void load()}
-          className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="flex items-center gap-1 rounded-lg border border-slate-border px-3 py-1.5 text-sm text-slate-muted hover:bg-surface"
         >
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
           تحديث
@@ -511,7 +511,7 @@ export function InvoiceHistoryPanel({
       </div>
 
       {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+        <p className="rounded-lg bg-debt px-3 py-2 text-sm text-debt-text">
           {error}
         </p>
       )}
@@ -520,7 +520,7 @@ export function InvoiceHistoryPanel({
         <Alert variant="warning">{resendNotice}</Alert>
       )}
 
-      <p className="text-sm text-slate-600">
+      <p className="text-sm text-slate-muted">
         إجمالي النتائج: <strong>{total}</strong>
       </p>
 

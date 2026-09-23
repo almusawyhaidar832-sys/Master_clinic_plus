@@ -1,6 +1,5 @@
 "use client";
 
-import { Button } from "@/components/ui/Button";
 import { FileDown, Printer, Share2 } from "lucide-react";
 
 interface ReportActionsProps {
@@ -36,26 +35,34 @@ export function ReportActions({
   }
 
   return (
-    <div className="no-print flex flex-wrap gap-2">
+    <div className="no-print mc-panel flex flex-wrap gap-2 p-2.5">
       {onExportPdf && (
-        <Button
-          className="min-w-[8rem] flex-1"
-          variant="outline"
+        <button
+          type="button"
+          className="mc-btn-soft min-w-[8rem] flex-1 py-2.5"
           disabled={pdfLoading}
           onClick={() => void onExportPdf()}
         >
-          <FileDown className="h-4 w-4" />
+          <FileDown className="h-4 w-4 text-premium-500" />
           {pdfLoading ? "جاري التصدير..." : "تصدير PDF"}
-        </Button>
+        </button>
       )}
-      <Button className="min-w-[8rem] flex-1" onClick={handlePrint}>
-        <Printer className="h-4 w-4" />
+      <button
+        type="button"
+        className="mc-btn-navy min-w-[8rem] flex-1 py-2.5"
+        onClick={handlePrint}
+      >
+        <Printer className="h-4 w-4 text-premium-300" />
         طباعة
-      </Button>
-      <Button variant="outline" className="min-w-[8rem] flex-1" onClick={handleShare}>
-        <Share2 className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        className="mc-btn-soft min-w-[8rem] flex-1 py-2.5"
+        onClick={handleShare}
+      >
+        <Share2 className="h-4 w-4 text-premium-500" />
         مشاركة
-      </Button>
+      </button>
     </div>
   );
 }

@@ -240,26 +240,26 @@ export function VisualMedicalRecord({
       className={cn(
         "space-y-4",
         collapsible && !examMode
-          ? "border-t border-slate-100 px-3 pb-3 pt-2"
+          ? "border-t border-slate-border px-3 pb-3 pt-2"
           : examMode
             ? ""
             : "rounded-xl border border-teal-200/50 bg-teal-50/20 p-3"
       )}
     >
       {portal === "accountant" && !reviewOnly && operationId && !singleChartAccountant && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <p className="rounded-xl border border-warning-border bg-warning px-3 py-2 text-xs text-warning-text">
           إذا نسي الطبيب المخطط أو الأشعة — أضفها هنا ثم اضغط «حفظ على هذه الجلسة»
         </p>
       )}
 
       {singleChartAccountant && hasExisting && !showAdditionForm && (
-        <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+        <p className="rounded-lg border border-slate-border bg-surface px-3 py-2 text-xs text-slate-text">
           هذا مخطط الطبيب لهذه الجلسة — للتعديل أو الإضافة على نفس السجل اضغط الزر أدناه
         </p>
       )}
 
       {operationId && loading && (
-        <p className="text-xs text-slate-500">جاري تحميل السجل...</p>
+        <p className="text-xs text-slate-muted">جاري تحميل السجل...</p>
       )}
 
       {operationId && !loading && hasExisting && existing && !examMode && (
@@ -269,7 +269,7 @@ export function VisualMedicalRecord({
       )}
 
       {operationId && !loading && !hasExisting && !isDraftMode && (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-muted">
           لا يوجد مخطط أسنان أو صور أشعة مسجّلة لهذه الجلسة بعد
         </p>
       )}
@@ -353,14 +353,14 @@ export function VisualMedicalRecord({
   if (examMode) {
     return (
       <div className={cn("mc-exam-section overflow-hidden", className)}>
-        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50/80 px-1 pb-3">
+        <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-border bg-gradient-to-r from-primary-50 to-premium-50/60 dark:from-primary-900/20 dark:to-premium-500/5 px-1 pb-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white shadow-sm">
             <Scan className="h-5 w-5" />
           </div>
           <div>
             <h4 className="text-base font-bold text-primary">السجل السريري</h4>
             {summaryHint && (
-              <span className="text-xs text-slate-600">{summaryHint}</span>
+              <span className="text-xs text-slate-muted">{summaryHint}</span>
             )}
           </div>
         </div>

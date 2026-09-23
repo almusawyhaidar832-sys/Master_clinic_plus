@@ -55,12 +55,12 @@ export function DashboardShell({
 
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-text/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-[#020710]/60 backdrop-blur-sm lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
       <div
-        className={`fixed inset-y-0 right-0 z-50 w-64 transform transition-transform lg:hidden ${
+        className={`fixed inset-y-0 right-0 z-50 w-[17rem] transform shadow-premium transition-transform duration-300 ease-mc-out lg:hidden ${
           mobileOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -85,7 +85,7 @@ export function DashboardShell({
           showGlobalSync={showGlobalSync}
           clinicId={clinicId}
         />
-        <main className="mc-app-main flex-1 p-4 sm:p-6">{children}</main>
+        <main className="mc-app-main mx-auto w-full max-w-[1500px] flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

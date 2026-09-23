@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Alert } from "@/components/ui/Alert";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Smile } from "lucide-react";
 import { PatientSearchField } from "@/components/patients/PatientSearchField";
 import { InteractiveDentalChart } from "@/components/clinical/InteractiveDentalChart.lazy";
 import { ModuleGuard } from "@/components/layout/ModuleGuard";
@@ -226,15 +228,13 @@ function DentalChartContent() {
 
   return (
     <ModuleGuard module="dental_chart">
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-lg font-bold text-slate-text">
-            {t("docDentalChartTitle")}
-          </h2>
-          <p className="text-sm text-slate-muted">
-            {t("docDentalChartSubtitle")}
-          </p>
-        </div>
+      <div className="space-y-5">
+        <PageHeader
+          title={t("docDentalChartTitle")}
+          subtitle={t("docDentalChartSubtitle")}
+          eyebrow={bi("بوابة الطبيب", "Doctor portal")}
+          icon={Smile}
+        />
 
         <OfflineViewBanner
           refreshing={refreshing}
@@ -244,8 +244,10 @@ function DentalChartContent() {
           offlineLabel={t("offlineViewCachedAt")}
         />
 
+        <section className="mc-panel">
+        <div className="mc-panel-body space-y-3">
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-slate-text">
+          <label className="mc-label block">
             {t("docSelectPatient")}
           </label>
           <PatientSearchField
@@ -266,15 +268,22 @@ function DentalChartContent() {
             clinicId={clinicId}
             selectedPatientId={patientId || null}
             placeholder={t("docStatementSearchPlaceholder")}
-            inputClassName="h-10"
+            inputClassName="h-11"
           />
         </div>
 
         {patientId && patientName && (
-          <p className="text-sm text-slate-text">
-            {t("docPatientLabel")} <strong>{patientName}</strong>
-          </p>
+          <div className="flex items-center gap-3 rounded-xl border border-slate-border bg-surface px-3 py-2.5">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-mc-pearl text-xs font-bold text-[#0b1f3a] ring-1 ring-inset ring-premium-300/60">
+              {patientName.slice(0, 2)}
+            </span>
+            <p className="min-w-0 truncate text-sm text-slate-text">
+              {t("docPatientLabel")} <strong>{patientName}</strong>
+            </p>
+          </div>
         )}
+        </div>
+        </section>
 
         {message && (
           <Alert
@@ -291,7 +300,10 @@ function DentalChartContent() {
         )}
 
         {loading && !Object.keys(chart).length && (
-          <p className="text-sm text-slate-muted">{t("docLoadingChart")}</p>
+          <div className="space-y-2">
+            <div className="mc-skeleton h-64 rounded-2xl" />
+            <p className="text-center text-sm text-slate-muted">{t("docLoadingChart")}</p>
+          </div>
         )}
 
         {patientId && (!loading || cachedAt != null) && (
@@ -305,9 +317,14 @@ function DentalChartContent() {
         )}
 
         {!patientId && (
-          <p className="rounded-xl border border-dashed border-slate-border p-6 text-center text-sm text-slate-muted">
-            {t("docSelectPatientForChart")}
-          </p>
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-slate-border bg-surface-card px-6 py-12 text-center">
+            <span className="mc-icon-tile h-12 w-12 rounded-2xl">
+              <Smile className="h-6 w-6" />
+            </span>
+            <p className="max-w-xs text-sm text-slate-muted">
+              {t("docSelectPatientForChart")}
+            </p>
+          </div>
         )}
       </div>
     </ModuleGuard>

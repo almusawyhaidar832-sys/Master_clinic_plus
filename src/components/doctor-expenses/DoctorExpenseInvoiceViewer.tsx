@@ -88,32 +88,35 @@ export function DoctorExpenseInvoiceViewer({
 
       {open && (
         <div
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-primary-950/60 p-4 backdrop-blur-sm sm:items-center"
           onClick={closeViewer}
         >
           <div
-            className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-border bg-surface-card shadow-elevated"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <p className="truncate text-sm font-bold text-slate-800">
+            <div className="mc-modal-head">
+              <span className="mc-icon-tile h-10 w-10 rounded-xl" aria-hidden>
+                <FileImage className="h-5 w-5" />
+              </span>
+              <p className="min-w-0 flex-1 truncate text-base font-bold text-slate-text">
                 {resolvedName ?? "مرفق الفاتورة"}
               </p>
               <button
                 type="button"
                 onClick={closeViewer}
-                className="rounded-lg p-1 hover:bg-slate-100"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-muted transition-colors hover:bg-surface hover:text-slate-text"
               >
-                <X className="h-5 w-5 text-slate-500" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="flex min-h-[16rem] flex-1 items-center justify-center bg-slate-50 p-4">
+            <div className="flex min-h-[16rem] flex-1 items-center justify-center bg-surface p-4">
               {loading && (
                 <RefreshCw className="h-8 w-8 animate-spin text-primary" />
               )}
               {!loading && error && (
-                <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
+                <p className="rounded-xl border border-debt-border bg-debt px-4 py-3 text-sm text-debt-text">
                   {error}
                 </p>
               )}
@@ -121,7 +124,7 @@ export function DoctorExpenseInvoiceViewer({
                 <iframe
                   src={url}
                   title={resolvedName ?? "فاتورة PDF"}
-                  className="h-[70vh] w-full rounded-lg border border-slate-200 bg-white"
+                  className="h-[70vh] w-full rounded-lg border border-slate-border bg-surface-card"
                 />
               )}
               {!loading && url && !isPdfMime(mimeType, resolvedName) && (
@@ -135,12 +138,12 @@ export function DoctorExpenseInvoiceViewer({
             </div>
 
             {url && (
-              <div className="border-t border-slate-200 px-4 py-3 text-center">
+              <div className="flex justify-center border-t border-slate-border bg-surface px-4 py-3">
                 <a
                   href={url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm font-medium text-primary hover:underline"
+                  className="mc-btn-soft px-4 py-2 text-sm"
                 >
                   فتح في نافذة جديدة
                 </a>

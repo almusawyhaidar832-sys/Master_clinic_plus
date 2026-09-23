@@ -12,7 +12,9 @@ import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { formatDate, formatTime, localDateISO, todayISO } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Select } from "@/components/ui/Select";
-import { CalendarRange, RefreshCw } from "lucide-react";
+import { CalendarRange, Filter, RefreshCw } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { EditAppointmentModal } from "@/components/assistant/EditAppointmentModal";
 import { CancelAppointmentModal } from "@/components/assistant/CancelAppointmentModal";
 import { RejectAppointmentModal } from "@/components/assistant/RejectAppointmentModal";
@@ -43,6 +45,7 @@ const PRESET_LABELS: Record<Exclude<RangePreset, "custom">, string> = {
 
 export function AppointmentScheduleView() {
   const statusLabels = useAppointmentStatusLabels();
+  const { bi } = useLanguage();
   const { clinicId, loading: clinicLoading, missingClinic } = useActiveClinicId();
   const [preset, setPreset] = useState<RangePreset>("this_week");
   const [dateFrom, setDateFrom] = useState(todayISO());
@@ -128,7 +131,7 @@ export function AppointmentScheduleView() {
 
   if (!clinicId) {
     return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-800">
+      <div className="rounded-2xl border border-warning-border bg-warning p-6 text-center text-sm font-medium text-warning-text shadow-card">
         {missingClinic
           ? "حسابك غير مربوط بعيادة — تواصل مع الإدارة"
           : "تعذر تحميل بيانات العيادة"}
@@ -138,37 +141,35 @@ export function AppointmentScheduleView() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-text">
-          <CalendarRange className="h-7 w-7 text-primary" />
-          جدول المواعيد
-        </h1>
-        <p className="mt-1 text-sm text-slate-muted">
-          عرض أجندة الحجوزات — تأكيد أو إلغاء أو حذف حسب الحالة (مرحلتان: إلغاء ثم
-          حذف)
-        </p>
-      </div>
+      <PageHeader
+        eyebrow={bi("المواعيد", "Scheduling")}
+        title="جدول المواعيد"
+        subtitle="عرض أجندة الحجوزات — تأكيد أو إلغاء أو حذف حسب الحالة (مرحلتان: إلغاء ثم حذف)"
+        icon={CalendarRange}
+        className="mb-0"
+      />
 
       {message && (
-        <p className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+        <p className="flex items-center gap-2 rounded-2xl border border-success-border bg-success px-4 py-2.5 text-sm font-medium text-success-text">
+          <Check className="h-4 w-4 shrink-0" />
           {message}
         </p>
       )}
 
-      <div className="rounded-2xl border border-slate-border bg-surface-card p-4 shadow-card space-y-4">
-        <div className="flex flex-wrap gap-2">
+      <section className="mc-panel">
+        <div className="mc-panel-head">
+          <h2 className="mc-panel-title">
+            <Filter />
+            {bi("نطاق العرض", "View range")}
+          </h2>
+          <div className="flex flex-wrap gap-2">
           {(Object.keys(PRESET_LABELS) as Exclude<RangePreset, "custom">[]).map(
             (key) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => applyPreset(key)}
-                className={cn(
-                  "rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
-                  preset === key
-                    ? "bg-primary text-white"
-                    : "border border-slate-border bg-white text-slate-muted hover:bg-surface"
-                )}
+                className={cn("mc-chip", preset === key && "mc-chip--active")}
               >
                 {PRESET_LABELS[key]}
               </button>
@@ -177,20 +178,17 @@ export function AppointmentScheduleView() {
           <button
             type="button"
             onClick={() => setPreset("custom")}
-            className={cn(
-              "rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
-              preset === "custom"
-                ? "bg-primary text-white"
-                : "border border-slate-border bg-white text-slate-muted hover:bg-surface"
-            )}
+            className={cn("mc-chip", preset === "custom" && "mc-chip--active")}
           >
             نطاق مخصص
           </button>
+          </div>
         </div>
 
+        <div className="mc-panel-body space-y-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-muted">
+            <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
               من تاريخ
             </label>
             <input
@@ -200,11 +198,11 @@ export function AppointmentScheduleView() {
                 setPreset("custom");
                 setDateFrom(e.target.value);
               }}
-              className="w-full rounded-lg border border-slate-border px-3 py-2 text-sm"
+              className="mc-field"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-muted">
+            <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
               إلى تاريخ
             </label>
             <input
@@ -215,7 +213,7 @@ export function AppointmentScheduleView() {
                 setPreset("custom");
                 setDateTo(e.target.value);
               }}
-              className="w-full rounded-lg border border-slate-border px-3 py-2 text-sm"
+              className="mc-field"
             />
           </div>
           <div className="sm:col-span-2">
@@ -235,42 +233,52 @@ export function AppointmentScheduleView() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-          <p className="text-slate-muted">
-            النطاق: <span className="font-semibold text-slate-text">{rangeLabel}</span>
-            {" · "}
-            <span className="tabular-nums">{appointments.length}</span> موعد
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-border pt-4 text-sm">
+          <p className="flex flex-wrap items-center gap-2 text-slate-muted">
+            <span>
+              النطاق: <span className="font-semibold text-slate-text">{rangeLabel}</span>
+            </span>
+            <span className="inline-flex items-center rounded-full bg-primary-50 px-2.5 py-0.5 text-xs font-bold text-primary-700 ring-1 ring-inset ring-primary-200">
+              <span className="tabular-nums">{appointments.length}</span>&nbsp;موعد
+            </span>
           </p>
           <button
             type="button"
             onClick={() => refresh()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-border px-3 py-1.5 text-slate-muted hover:bg-surface"
+            className="mc-btn-soft"
           >
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             تحديث
           </button>
         </div>
-      </div>
+        </div>
+      </section>
 
+      <section className="mc-panel">
       {loading ? (
-        <div className="flex justify-center py-12">
-          <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+        <div className="space-y-2 p-5">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="mc-skeleton h-12 w-full" />
+          ))}
         </div>
       ) : appointments.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-border bg-white p-10 text-center text-sm text-slate-muted">
-          لا توجد حجوزات في هذا النطاق
+        <div className="flex flex-col items-center px-6 py-14 text-center">
+          <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-surface text-slate-muted ring-1 ring-inset ring-slate-border">
+            <CalendarRange className="h-7 w-7" strokeWidth={1.6} />
+          </span>
+          <p className="text-sm font-medium text-slate-muted">لا توجد حجوزات في هذا النطاق</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-border bg-white shadow-sm">
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
-              <tr className="border-b bg-slate-50 text-right text-xs text-slate-muted">
-                <th className="px-4 py-3 font-medium">اسم المريض</th>
-                <th className="px-4 py-3 font-medium">الطبيب</th>
-                <th className="px-4 py-3 font-medium">التاريخ</th>
-                <th className="px-4 py-3 font-medium">الوقت</th>
-                <th className="px-4 py-3 font-medium">حالة الحجز</th>
-                <th className="px-4 py-3 font-medium">إجراءات</th>
+              <tr className="text-xs text-slate-muted">
+                <th className="px-5 py-3 text-start font-semibold">اسم المريض</th>
+                <th className="px-4 py-3 text-start font-semibold">الطبيب</th>
+                <th className="px-4 py-3 text-start font-semibold">التاريخ</th>
+                <th className="px-4 py-3 text-start font-semibold">الوقت</th>
+                <th className="px-4 py-3 text-start font-semibold">حالة الحجز</th>
+                <th className="px-4 py-3 text-start font-semibold">إجراءات</th>
               </tr>
             </thead>
             <tbody>
@@ -288,29 +296,36 @@ export function AppointmentScheduleView() {
                       setSelected(a);
                     }
                   }}
-                  className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-primary/5 focus:bg-primary/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  className="cursor-pointer border-b border-slate-border last:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
                 >
-                  <td className="px-4 py-3 font-semibold text-slate-text">
-                    {a.patient_name_ar || "—"}
-                    {a.patient_phone && (
-                      <span className="mt-0.5 block text-xs font-normal text-slate-muted" dir="ltr">
-                        {a.patient_phone}
+                  <td className="px-5 py-3.5 font-semibold text-slate-text">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-mc-pearl text-sm font-bold text-[#0b1f3a] ring-1 ring-inset ring-premium-200">
+                        {(a.patient_name_ar || "—").trim().charAt(0)}
                       </span>
-                    )}
+                      <span className="min-w-0">
+                        {a.patient_name_ar || "—"}
+                        {a.patient_phone && (
+                          <span className="mt-0.5 block text-xs font-normal tabular-nums text-slate-muted" dir="ltr">
+                            {a.patient_phone}
+                          </span>
+                        )}
+                      </span>
+                    </div>
                   </td>
-                  <td className="px-4 py-3 text-slate-700">
+                  <td className="px-4 py-3.5 font-medium text-slate-text">
                     {formatDoctorDisplayName(a.doctor?.full_name_ar) || "—"}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <td className="px-4 py-3.5 text-slate-muted">
                     {formatDate(a.appointment_date)}
                   </td>
-                  <td className="px-4 py-3 text-slate-600 tabular-nums" dir="ltr">
+                  <td className="px-4 py-3.5 font-semibold text-slate-text tabular-nums" dir="ltr">
                     {formatTime(a.start_time)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3.5">
                     <span
                       className={cn(
-                        "inline-block rounded-full px-2.5 py-1 text-xs font-medium",
+                        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
                         APPOINTMENT_STATUS_COLORS[a.status] ??
                           APPOINTMENT_STATUS_COLORS.scheduled
                       )}
@@ -318,12 +333,12 @@ export function AppointmentScheduleView() {
                       {statusLabels[a.status] ?? a.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex flex-wrap gap-1">
+                  <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-wrap gap-1.5">
                       {flags.isPending && (
                         <ScheduleActionBtn
                           onClick={() => setSelected(a)}
-                          className="bg-emerald-600 text-white hover:bg-emerald-700"
+                          className="border-transparent bg-mc-navy text-white shadow-soft hover:brightness-110"
                         >
                           <Check className="h-3 w-3" />
                           تأكيد
@@ -332,7 +347,7 @@ export function AppointmentScheduleView() {
                       {flags.canCancel && (
                         <ScheduleActionBtn
                           onClick={() => setCancelling(a)}
-                          className="border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                          className="text-warning-text hover:border-warning-border hover:bg-warning"
                         >
                           <Ban className="h-3 w-3" />
                           إلغاء
@@ -342,7 +357,7 @@ export function AppointmentScheduleView() {
                         <ScheduleActionBtn
                           disabled={actionId === a.id}
                           onClick={() => void handleDelete(a)}
-                          className="border border-red-200 text-red-600 hover:bg-red-50"
+                          className="text-debt-text hover:border-debt-border hover:bg-debt"
                         >
                           <Trash2 className="h-3 w-3" />
                           حذف
@@ -351,7 +366,7 @@ export function AppointmentScheduleView() {
                       {flags.isPending && (
                         <ScheduleActionBtn
                           onClick={() => setRejecting(a)}
-                          className="border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                          className="text-debt-text hover:border-debt-border hover:bg-debt"
                         >
                           <X className="h-3 w-3" />
                           رفض
@@ -366,6 +381,7 @@ export function AppointmentScheduleView() {
           </table>
         </div>
       )}
+      </section>
 
       {selected && clinicId && (
         <AppointmentScheduleActionsModal
@@ -441,7 +457,7 @@ function ScheduleActionBtn({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium disabled:opacity-50",
+        "inline-flex items-center gap-1 rounded-lg border border-slate-border bg-surface-card px-2.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50",
         className
       )}
     >

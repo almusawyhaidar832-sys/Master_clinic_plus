@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
-import { Copy, Download, ExternalLink, Monitor, QrCode, RefreshCw, X } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
+import { Check, Copy, Download, ExternalLink, Monitor, QrCode, RefreshCw, Tv } from "lucide-react";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 
 interface ScreenQrInfo {
@@ -47,7 +47,7 @@ export function QueueScreenSetupModal({ open, onClose }: QueueScreenSetupModalPr
       const dataUrl = await QRCode.toDataURL(data.screenUrl, {
         width: 280,
         margin: 2,
-        color: { dark: "#0056b3", light: "#ffffff" },
+        color: { dark: "#0e446b", light: "#ffffff" },
       });
       setQrDataUrl(dataUrl);
     } catch (e) {
@@ -64,77 +64,73 @@ export function QueueScreenSetupModal({ open, onClose }: QueueScreenSetupModalPr
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800">
-            <Monitor className="h-5 w-5 text-primary" />
-            ربط شاشة التلفاز
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1 hover:bg-slate-100"
-            aria-label="إغلاق"
-          >
-            <X className="h-5 w-5 text-slate-400" />
-          </button>
-        </div>
+    <Modal
+      onClose={onClose}
+      title="ربط شاشة التلفاز"
+      subtitle="شاشة الانتظار · Queue screen"
+      icon={Monitor}
+      size="md"
+    >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-border bg-surface p-4">
+            <p className="text-sm leading-relaxed text-slate-text">
+              <strong>الباركود للجوال فقط</strong> — التلفاز ما يحتاج كاميرا. على شاشة
+              العيادة: افتح Chrome واكتب رمز العيادة (أو استخدم HDMI).
+            </p>
 
-        <div className="space-y-4 p-5">
-          <p className="text-sm leading-relaxed text-slate-600">
-            <strong>الباركود للجوال فقط</strong> — التلفاز ما يحتاج كاميرا. على شاشة
-            العيادة: افتح Chrome واكتب رمز العيادة (أو استخدم HDMI).
-          </p>
-
-          <ol className="list-decimal space-y-1 pr-5 text-sm text-slate-600">
-            <li>افتح <strong>Chrome</strong> على تلفاز العيادة</li>
-            <li>اكتب <span className="font-mono">/queue-screen</span> وادخل رمز العيادة</li>
-            <li>
-              <strong>مرة واحدة فقط</strong> — يُحفظ الرمز ويفتح تلقائياً كل يوم
-            </li>
-            <li>من Chrome: <strong>تثبيت التطبيق</strong> → إضافة للشاشة الرئيسية</li>
-          </ol>
+            <ol className="mt-3 list-decimal space-y-1.5 ps-5 text-sm text-slate-muted marker:font-bold marker:text-premium-500">
+              <li>افتح <strong>Chrome</strong> على تلفاز العيادة</li>
+              <li>اكتب <span className="font-mono">/queue-screen</span> وادخل رمز العيادة</li>
+              <li>
+                <strong>مرة واحدة فقط</strong> — يُحفظ الرمز ويفتح تلقائياً كل يوم
+              </li>
+              <li>من Chrome: <strong>تثبيت التطبيق</strong> → إضافة للشاشة الرئيسية</li>
+            </ol>
+          </div>
 
           {error && <Alert variant="error">{error}</Alert>}
 
           {loading && !info ? (
-            <div className="flex h-48 items-center justify-center">
-              <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+            <div className="flex flex-col items-center gap-3">
+              <div className="mc-skeleton h-[264px] w-[264px] rounded-2xl" />
+              <div className="mc-skeleton h-24 w-full rounded-2xl" />
             </div>
           ) : info && qrDataUrl ? (
             <div className="flex flex-col items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={qrDataUrl}
-                alt="باركود شاشة الانتظار"
-                className="rounded-xl border border-slate-200 bg-white p-3"
-                width={240}
-                height={240}
-              />
+              <div className="rounded-3xl bg-mc-pearl p-2 shadow-gold ring-1 ring-inset ring-premium-300/60">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={qrDataUrl}
+                  alt="باركود شاشة الانتظار"
+                  className="rounded-2xl bg-white p-3"
+                  width={240}
+                  height={240}
+                />
+              </div>
 
-              <div className="w-full rounded-lg bg-slate-50 p-3 text-center">
-                <p className="text-xs text-slate-muted">رمز عيادتك — اكتبه على تلفاز Chrome</p>
-                <p className="font-mono text-2xl font-bold tracking-[0.15em] text-primary">
+              <div className="relative w-full overflow-hidden rounded-2xl bg-mc-navy p-4 text-center text-white shadow-soft">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-premium-300">
+                  رمز عيادتك — اكتبه على تلفاز Chrome
+                </p>
+                <p className="mt-1 font-mono text-3xl font-black tracking-[0.2em] text-premium-200" dir="ltr">
                   {info.clinicCode}
                 </p>
-                <p className="mt-2 text-xs text-slate-muted">
+                <p className="mt-2 text-xs text-white/75">
                   على التلفاز: افتح{" "}
-                  <span className="font-mono text-slate-700" dir="ltr">
+                  <span className="font-mono text-white" dir="ltr">
                     /queue-screen
                   </span>{" "}
                   ثم أدخل هذا الرمز
                 </p>
-                <p className="mt-2 break-all text-xs text-slate-500" dir="ltr">
+                <p className="mt-2 break-all rounded-lg bg-white/10 px-2 py-1 text-[11px] text-white/80" dir="ltr">
                   {info.screenUrl}
                 </p>
               </div>
 
-              <div className="flex w-full flex-wrap gap-2">
-                <Button
+              <div className="grid w-full grid-cols-2 gap-2">
+                <button
                   type="button"
-                  variant="outline"
-                  className="flex-1"
+                  className="mc-btn-soft"
                   onClick={async () => {
                     try {
                       await navigator.clipboard.writeText(info.screenUrl);
@@ -145,23 +141,23 @@ export function QueueScreenSetupModal({ open, onClose }: QueueScreenSetupModalPr
                     }
                   }}
                 >
-                  <Copy className="ml-2 h-4 w-4" />
+                  {copied ? <Check className="h-4 w-4 text-success-text" /> : <Copy className="h-4 w-4 text-premium-500" />}
                   {copied ? "تم النسخ" : "نسخ الرابط"}
-                </Button>
+                </button>
                 <a
                   href={info.screenUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+                  className="mc-btn-soft"
                 >
-                  <ExternalLink className="h-4 w-4" />
+                  <ExternalLink className="h-4 w-4 text-premium-500" />
                   فتح الشاشة
                 </a>
               </div>
 
-              <Button
+              <button
                 type="button"
-                className="w-full"
+                className="mc-btn-navy w-full py-2.5"
                 onClick={() => {
                   const link = document.createElement("a");
                   link.download = `queue-screen-${info.clinicCode}.png`;
@@ -169,13 +165,16 @@ export function QueueScreenSetupModal({ open, onClose }: QueueScreenSetupModalPr
                   link.click();
                 }}
               >
-                <Download className="ml-2 h-4 w-4" />
+                <Download className="h-4 w-4" />
                 تحميل الباركود (اختياري — للطباعة)
-              </Button>
+              </button>
 
-              <div className="w-full rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-                    <p className="mb-2 font-bold">تلفاز Chrome بدون كاميرا</p>
-                    <ol className="list-decimal space-y-2 pr-5 text-xs leading-relaxed">
+              <div className="w-full rounded-2xl border border-warning-border bg-warning p-4 text-sm text-warning-text">
+                    <p className="mb-2 flex items-center gap-1.5 font-bold">
+                      <Tv className="h-4 w-4" />
+                      تلفاز Chrome بدون كاميرا
+                    </p>
+                    <ol className="list-decimal space-y-2 ps-5 text-xs leading-relaxed">
                       <li>
                         <strong>من Chrome على التلفاز (بدون كاميرا):</strong> اكتب عنوان
                         الموقع ثم <span className="font-mono">/queue-screen</span> — تظهر
@@ -204,13 +203,12 @@ export function QueueScreenSetupModal({ open, onClose }: QueueScreenSetupModalPr
             </p>
           </Alert>
 
-          <Button type="button" variant="outline" onClick={load} disabled={loading} className="w-full">
-            <RefreshCw className={`ml-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          <button type="button" onClick={load} disabled={loading} className="mc-btn-soft w-full py-2.5">
+            <RefreshCw className={`h-4 w-4 text-premium-500 ${loading ? "animate-spin" : ""}`} />
             تحديث الباركود
-          </Button>
+          </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

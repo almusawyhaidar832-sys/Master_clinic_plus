@@ -42,7 +42,7 @@ export function ClinicalRecordDisplay({
                   href={x.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block overflow-hidden rounded-lg border border-slate-border bg-white"
+                  className="block overflow-hidden rounded-lg border border-slate-border bg-surface-card"
                 >
                   {isPdf ? (
                     <div className="flex h-24 items-center justify-center text-xs text-slate-muted">

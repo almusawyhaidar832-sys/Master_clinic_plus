@@ -10,6 +10,8 @@ import type {
   DoctorLedgerOperationRow,
 } from "@/lib/services/doctor-financial-ledger";
 import {
+  AlertCircle,
+  Info,
   RefreshCw,
   ArrowDownToLine,
   Banknote,
@@ -27,32 +29,32 @@ const KIND_KEYS: Record<
 > = {
   withdrawal: {
     labelKey: "docKindWithdraw",
-    color: "bg-violet-100 text-violet-800",
+    color: "mc-tone-royal",
     icon: ArrowDownToLine,
   },
   salary_payout: {
     labelKey: "docKindSalary",
-    color: "bg-emerald-100 text-emerald-800",
+    color: "mc-tone-success",
     icon: Banknote,
   },
   salary_adjustment: {
     labelKey: "docKindSalaryEntry",
-    color: "bg-sky-100 text-sky-800",
+    color: "mc-tone-navy",
     icon: Banknote,
   },
   expense_deduction: {
     labelKey: "docKindExpenseDeduction",
-    color: "bg-amber-100 text-amber-800",
+    color: "mc-tone-warning",
     icon: Receipt,
   },
   payroll_deduction: {
     labelKey: "docKindAssistant",
-    color: "bg-slate-100 text-slate-700",
+    color: "mc-tone-muted",
     icon: Users,
   },
   balance_credit: {
     labelKey: "docKindBalanceTopUp",
-    color: "bg-emerald-100 text-emerald-800",
+    color: "mc-tone-success",
     icon: Banknote,
   },
 };
@@ -115,65 +117,74 @@ export function DoctorLedgerOperationsTab({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-muted">{t("docLedgerOpsIntro")}</p>
-      <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-muted">
-        {t("docLedgerDefaultMonthNote")}
-      </p>
+      <p className="px-1 text-xs leading-relaxed text-slate-muted">{t("docLedgerOpsIntro")}</p>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Input
-          label={t("docFromDate")}
-          type="date"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-          dir="ltr"
-          className="text-left"
-        />
-        <Input
-          label={t("docToDate")}
-          type="date"
-          value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
-          dir="ltr"
-          className="text-left"
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-slate-600">
-          {t("docOperationsCountLabel")} <strong>{total}</strong>
-          {rows.length > 0 && (
-            <span className="mr-2 text-red-600">
-              — {t("docTotalLabel")} {formatMoney(totalOut)}
-            </span>
-          )}
+      <section className="mc-panel">
+        <p className="flex items-start gap-2 border-b border-slate-border bg-surface px-4 py-2.5 text-[11px] leading-relaxed text-slate-muted">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-premium-500" />
+          {t("docLedgerDefaultMonthNote")}
         </p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="flex items-center gap-1 rounded-lg border border-slate-border px-3 py-1.5 text-sm text-slate-muted hover:bg-surface-card"
-        >
-          <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-          {t("refresh")}
-        </button>
-      </div>
+        <div className="grid grid-cols-2 gap-2.5 p-4">
+          <Input
+            label={t("docFromDate")}
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            dir="ltr"
+            className="h-11 rounded-xl text-left"
+          />
+          <Input
+            label={t("docToDate")}
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            dir="ltr"
+            className="h-11 rounded-xl text-left"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t border-slate-border bg-surface px-4 py-2.5">
+          <p className="min-w-0 text-xs text-slate-muted">
+            {t("docOperationsCountLabel")}{" "}
+            <strong className="text-sm font-black tabular-nums text-slate-text">{total}</strong>
+            {rows.length > 0 && (
+              <span className="ms-2 font-semibold tabular-nums text-debt-text">
+                — {t("docTotalLabel")} {formatMoney(totalOut)}
+              </span>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="mc-btn-soft min-h-[40px] shrink-0 px-3"
+          >
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            {t("refresh")}
+          </button>
+        </div>
+      </section>
 
       {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+        <p className="flex items-center gap-2 rounded-2xl border border-debt-border bg-debt px-4 py-3 text-sm text-debt-text">
+          <AlertCircle className="h-4 w-4 shrink-0" />
           {error}
         </p>
       )}
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+        <div className="space-y-2.5">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="mc-skeleton h-[72px] rounded-2xl" />
+          ))}
         </div>
       ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-border p-8 text-center text-sm text-slate-muted">
-          {t("docNoFinancialOps")}
+        <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-slate-border bg-surface-card px-4 py-10 text-center">
+          <span className="mc-kpi__icon mc-tone-muted h-11 w-11">
+            <ArrowDownToLine className="h-5 w-5" />
+          </span>
+          <p className="text-sm text-slate-muted">{t("docNoFinancialOps")}</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="mc-panel divide-y divide-slate-border">
           {rows.map((row) => {
             const meta = KIND_KEYS[row.kind];
             const Icon = meta.icon;
@@ -184,32 +195,28 @@ export function DoctorLedgerOperationsTab({
             return (
               <div
                 key={`${row.kind}-${row.id}`}
-                className="flex items-start justify-between gap-3 rounded-xl border border-slate-border bg-surface-card p-3"
+                className="flex min-h-[64px] items-center gap-3 px-4 py-3 transition-colors hover:bg-surface"
               >
+                <span className={cn("mc-kpi__icon h-10 w-10 rounded-xl", meta.color)}>
+                  <Icon className="h-4 w-4" />
+                </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-                        meta.color
-                      )}
-                    >
-                      <Icon className="h-3 w-3" />
-                      {t(meta.labelKey)}
-                    </span>
+                  <p className="truncate text-sm font-bold text-slate-text">{row.label}</p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-muted">
+                    <span className="font-semibold">{t(meta.labelKey)}</span>
+                    <span className="text-slate-border">•</span>
+                    <span>{formatDate(row.operation_date, dateLocale)}</span>
                     {row.status === "pending" && (
-                      <span className="text-xs text-amber-600">{t("pendingShort")}</span>
+                      <span className="mc-tone-warning inline-flex rounded-full px-1.5 py-px text-[10px] font-semibold ring-1 ring-inset">
+                        {t("pendingShort")}
+                      </span>
                     )}
                   </div>
-                  <p className="mt-1 text-sm text-slate-text">{row.label}</p>
-                  <p className="text-xs text-slate-muted">
-                    {formatDate(row.operation_date, dateLocale)}
-                  </p>
                 </div>
                 <p
                   className={cn(
-                    "shrink-0 text-lg font-bold tabular-nums",
-                    showAsCredit ? "text-emerald-700" : "text-red-600"
+                    "shrink-0 text-base font-black tabular-nums",
+                    showAsCredit ? "text-success-text" : "text-debt-text"
                   )}
                 >
                   {showAsCredit ? "+" : "−"}

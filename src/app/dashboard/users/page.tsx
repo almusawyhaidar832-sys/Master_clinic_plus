@@ -18,6 +18,9 @@ import {
   Eye, EyeOff, CheckCircle2, XCircle, RefreshCw, ShieldAlert,
   UserRound,
 } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatTile } from "@/components/ui/StatTile";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface ClinicUser {
   id: string;
@@ -37,10 +40,10 @@ interface ClinicDoctor {
 type CreateTargetRole = "accountant" | "doctor" | "assistant";
 
 const ROLE_CONFIG = {
-  doctor:      { label: "طبيب",        icon: Stethoscope, color: "bg-blue-100 text-blue-700"     },
-  accountant:  { label: "محاسب",       icon: UserCog,     color: "bg-violet-100 text-violet-700" },
-  super_admin: { label: "مالك",        icon: Users,       color: "bg-primary/10 text-primary"    },
-  assistant:   { label: "مساعد طبيب",  icon: UserRound,   color: "bg-teal-100 text-teal-700"     },
+  doctor:      { label: "طبيب",        icon: Stethoscope, color: "bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-200"  },
+  accountant:  { label: "محاسب",       icon: UserCog,     color: "bg-royal-50 text-royal-700 ring-1 ring-inset ring-royal-200"        },
+  super_admin: { label: "مالك",        icon: Users,       color: "bg-premium-50 text-premium-700 ring-1 ring-inset ring-premium-200"  },
+  assistant:   { label: "مساعد طبيب",  icon: UserRound,   color: "bg-surface text-slate-text ring-1 ring-inset ring-slate-border"     },
 };
 
 const ALLOWED_TARGETS: Record<string, CreateTargetRole[]> = {
@@ -50,6 +53,7 @@ const ALLOWED_TARGETS: Record<string, CreateTargetRole[]> = {
 
 export default function UsersPage() {
   const supabase = createClient();
+  const { bi } = useLanguage();
 
   const [callerRole, setCallerRole] = useState<string | null>(null);
   const [users,      setUsers]      = useState<ClinicUser[]>([]);
@@ -201,79 +205,84 @@ export default function UsersPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-text">إدارة المستخدمين</h1>
-          <p className="text-sm text-slate-muted">
-            {callerRole === "super_admin"
-              ? "أضف محاسبين للعيادة"
-              : "أضف أطباء أو مساعدين — المساعد يُربط تلقائياً بالطبيب والعيادة"}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {allowedTargets.map((role) => {
-            const cfg = ROLE_CONFIG[role];
-            return (
-              <button
-                key={role}
-                type="button"
-                onClick={() => openForm(role)}
-                className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-primary/90"
-              >
-                <UserPlus className="h-4 w-4" />
-                {role === "assistant" ? "مساعد جديد" : role === "doctor" ? "طبيب جديد" : "محاسب جديد"}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <PageHeader
+        eyebrow={bi("إدارة العيادة", "Clinic management")}
+        title="إدارة المستخدمين"
+        subtitle={
+          callerRole === "super_admin"
+            ? "أضف محاسبين للعيادة"
+            : "أضف أطباء أو مساعدين — المساعد يُربط تلقائياً بالطبيب والعيادة"
+        }
+        icon={Users}
+        className="mb-0"
+        actions={
+          allowedTargets.length > 0 ? (
+            <>
+              {allowedTargets.map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => openForm(role)}
+                  className="mc-btn-navy"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  {role === "assistant" ? "مساعد جديد" : role === "doctor" ? "طبيب جديد" : "محاسب جديد"}
+                </button>
+              ))}
+            </>
+          ) : undefined
+        }
+      />
 
       {callerRole && (
-        <div className="flex items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-800">
-          <ShieldAlert className="mt-0.5 h-4 w-4 flex-shrink-0" />
+        <div className="flex items-start gap-3 rounded-2xl border border-primary-200 bg-primary-50 p-4 text-sm text-primary-800">
+          <span className="mc-icon-tile h-9 w-9 rounded-xl">
+            <ShieldAlert className="h-4 w-4" />
+          </span>
           <div>
             <p className="font-semibold">
               {callerRole === "super_admin"
                 ? "أنت مسجل كـ مالك — يمكنك إنشاء حسابات المحاسبين فقط"
                 : "أنت مسجل كـ محاسب — يمكنك إنشاء أطباء ومساعدين"}
             </p>
-            <p className="mt-0.5 text-blue-600">
+            <p className="mt-0.5 text-xs text-primary-700">
               عند تسجيل مساعد، اختر الطبيب من القائمة لربطه بـ doctor_id و clinic_id تلقائياً.
             </p>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          { label: "النشطون", value: activeCount,    color: "bg-emerald-50 text-emerald-700" },
-          { label: "الأطباء", value: doctorCount,   color: "bg-blue-50 text-blue-700"       },
-          { label: "المساعدون", value: assistantCount, color: "bg-teal-50 text-teal-700"   },
-          { label: "المحاسبون", value: accountCount, color: "bg-violet-50 text-violet-700" },
-        ].map((s) => (
-          <div key={s.label} className={cn("rounded-2xl p-4 text-center", s.color)}>
-            <p className="text-2xl font-black">{s.value}</p>
-            <p className="text-xs font-medium">{s.label}</p>
-          </div>
-        ))}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile label="النشطون" value={activeCount} icon={CheckCircle2} tone="success" />
+        <StatTile label="الأطباء" value={doctorCount} icon={Stethoscope} tone="navy" />
+        <StatTile label="المساعدون" value={assistantCount} icon={UserRound} tone="muted" />
+        <StatTile label="المحاسبون" value={accountCount} icon={UserCog} tone="royal" />
       </div>
 
       {showForm && targetRole && targetCfg && (
-        <div className="rounded-2xl border border-primary/20 bg-white p-6 shadow-sm">
-          <h2 className="mb-5 flex items-center gap-2 text-lg font-bold text-slate-700">
-            <TargetIcon className="h-5 w-5 text-primary" />
-            {targetRole === "assistant" ? "تسجيل مساعد" : `إنشاء حساب ${targetCfg.label} جديد`}
-          </h2>
+        <section className="mc-panel animate-fade-in">
+          <div className="mc-panel-head">
+            <h2 className="mc-panel-title">
+              <TargetIcon />
+              {targetRole === "assistant" ? "تسجيل مساعد" : `إنشاء حساب ${targetCfg.label} جديد`}
+            </h2>
+            <span className="flex items-center gap-2 text-xs text-slate-muted">
+              <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", targetCfg.color)}>
+                {targetCfg.label}
+              </span>
+              الدور المحدد بناءً على صلاحيتك
+            </span>
+          </div>
+          <div className="mc-panel-body">
 
           {msg && (
             <div className={cn(
               "mb-4 flex items-center gap-2 rounded-xl border p-3 text-sm",
               msg.ok
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-red-200 bg-red-50 text-red-700"
+                ? "border-success-border bg-success text-success-text"
+                : "border-debt-border bg-debt text-debt-text"
             )}>
               {msg.ok
                 ? <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
@@ -282,40 +291,33 @@ export default function UsersPage() {
             </div>
           )}
 
-          <div className="mb-4 flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
-            <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", targetCfg.color)}>
-              {targetCfg.label}
-            </span>
-            <span className="text-slate-500">الدور المحدد بناءً على صلاحيتك</span>
-          </div>
-
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">الاسم الكامل</label>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">الاسم الكامل</label>
                 <input
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
                   placeholder={targetRole === "doctor" ? "د. محمد أحمد" : targetRole === "assistant" ? "سارة علي" : "أحمد محمد"}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+                  className="mc-field"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">رقم الهاتف (اختياري)</label>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">رقم الهاتف (اختياري)</label>
                 <input
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="07xxxxxxxx"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+                  className="mc-field"
                 />
               </div>
 
               {targetRole === "accountant" && (
                 <>
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-600">
-                      الراتب الشهري <span className="text-red-500">*</span>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
+                      الراتب الشهري <span className="text-debt-text">*</span>
                     </label>
                     <input
                       type="number"
@@ -326,19 +328,19 @@ export default function UsersPage() {
                       required
                       placeholder="800000"
                       dir="ltr"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-left focus:border-primary focus:outline-none"
+                      className="mc-field text-left"
                     />
-                    <p className="mt-1 text-xs text-violet-600">
+                    <p className="mt-1 text-xs text-royal-600">
                       يظهر في قائمة الرواتب ويُصرف كمصاريف عيادة
                     </p>
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-600">الوظيفة</label>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-muted">الوظيفة</label>
                     <input
                       value={jobTitle}
                       onChange={(e) => setJobTitle(e.target.value)}
                       placeholder="محاسب"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+                      className="mc-field"
                     />
                   </div>
                 </>
@@ -346,14 +348,14 @@ export default function UsersPage() {
 
               {targetRole === "assistant" && (
                 <div className="sm:col-span-2">
-                  <label className="mb-1 block text-sm font-medium text-slate-600">
-                    الطبيب المرتبط <span className="text-red-500">*</span>
+                  <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
+                    الطبيب المرتبط <span className="text-debt-text">*</span>
                   </label>
                   <select
                     value={doctorId}
                     onChange={(e) => setDoctorId(e.target.value)}
                     required
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+                    className="mc-field"
                   >
                     <option value="">— اختر الطبيب —</option>
                     {doctors.map((d) => (
@@ -363,24 +365,24 @@ export default function UsersPage() {
                     ))}
                   </select>
                   {doctors.length === 0 && (
-                    <p className="mt-1 text-xs text-amber-600">لا يوجد أطباء نشطون — أضف طبيباً أولاً</p>
+                    <p className="mt-1 text-xs text-warning-text">لا يوجد أطباء نشطون — أضف طبيباً أولاً</p>
                   )}
                 </div>
               )}
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">اسم المستخدم (للدخول)</label>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">اسم المستخدم (للدخول)</label>
                 <input
                   value={username}
                   onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
                   required
                   placeholder={targetRole === "doctor" ? "dr_ahmed" : targetRole === "assistant" ? "asst_sara" : "acc_sara"}
                   dir="ltr"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-left focus:border-primary focus:outline-none"
+                  className="mc-field text-left"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">كلمة المرور</label>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">كلمة المرور</label>
                 <div className="relative">
                   <input
                     type={showPass ? "text" : "password"}
@@ -390,12 +392,12 @@ export default function UsersPage() {
                     minLength={6}
                     placeholder="6 أحرف على الأقل"
                     dir="ltr"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-left focus:border-primary focus:outline-none"
+                    className="mc-field text-left"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPass(!showPass)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-muted hover:text-slate-text"
                   >
                     {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -404,9 +406,9 @@ export default function UsersPage() {
             </div>
 
             {fullName && username && (
-              <div className="rounded-xl bg-slate-50 p-3 text-sm">
-                <p className="font-medium text-slate-700">ملخص الحساب الجديد:</p>
-                <p className="mt-1 text-slate-500">
+              <div className="rounded-2xl border border-premium-200 bg-premium-50/60 p-3.5 text-sm">
+                <p className="font-bold text-slate-text">ملخص الحساب الجديد:</p>
+                <p className="mt-1 leading-relaxed text-slate-muted">
                   الاسم: <strong>{fullName}</strong> ·
                   الدخول بـ: <strong dir="ltr">{username}</strong> ·
                   الدور: <strong>{targetCfg.label}</strong> ·
@@ -418,11 +420,11 @@ export default function UsersPage() {
               </div>
             )}
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 border-t border-slate-border pt-4">
               <button
                 type="submit"
                 disabled={saving || (targetRole === "assistant" && doctors.length === 0)}
-                className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-60"
+                className="mc-btn-navy px-6 py-2.5"
               >
                 {saving && <RefreshCw className="h-4 w-4 animate-spin" />}
                 {saving ? "جارٍ الإنشاء..." : targetRole === "assistant" ? "تسجيل المساعد" : `إنشاء حساب ${targetCfg.label}`}
@@ -430,31 +432,37 @@ export default function UsersPage() {
               <button
                 type="button"
                 onClick={() => { setShowForm(false); setTargetRole(null); }}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50"
+                className="mc-btn-soft px-4 py-2.5"
               >
                 إلغاء
               </button>
             </div>
           </form>
-        </div>
+          </div>
+        </section>
       )}
 
       {msg?.ok && !showForm && (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+        <div className="flex items-center gap-2 rounded-2xl border border-success-border bg-success px-4 py-3 text-sm font-medium text-success-text">
           <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
           {msg.text}
         </div>
       )}
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+        <div className="grid gap-3 md:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="mc-skeleton h-20 rounded-2xl" />
+          ))}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="grid gap-3 md:grid-cols-2">
           {users.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">
-              لا يوجد مستخدمون بعد
+            <div className="mc-panel flex flex-col items-center px-6 py-12 text-center md:col-span-2">
+              <span className="mc-icon-tile mb-3 h-12 w-12">
+                <Users className="h-6 w-6" />
+              </span>
+              <p className="text-sm font-medium text-slate-muted">لا يوجد مستخدمون بعد</p>
             </div>
           )}
           {users.map((u) => {
@@ -468,42 +476,47 @@ export default function UsersPage() {
               <div
                 key={u.id}
                 className={cn(
-                  "flex items-center gap-4 rounded-2xl border bg-white p-4 transition-opacity",
-                  !u.is_active && "opacity-50"
+                  "mc-list-row",
+                  !u.is_active && "opacity-60"
                 )}
               >
-                <div className={cn("flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl", cfg.color)}>
-                  <Icon className="h-5 w-5" />
+                <div className="relative shrink-0">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-mc-pearl text-lg font-extrabold text-[#0b1f3a] ring-1 ring-inset ring-premium-300/60">
+                    {(u.full_name || "?").trim().charAt(0)}
+                  </span>
+                  <span className={cn("absolute -bottom-1 -end-1 flex h-6 w-6 items-center justify-center rounded-lg bg-surface-card shadow-card", cfg.color)}>
+                    <Icon className="h-3.5 w-3.5" />
+                  </span>
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-slate-800">{u.full_name}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                    <span className={cn("rounded-full px-2 py-0.5 font-medium", cfg.color)}>
+                  <p className="truncate font-bold text-slate-text">{u.full_name}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-muted">
+                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", cfg.color)}>
                       {cfg.label}
                     </span>
                     {u.username && (
-                      <span dir="ltr" className="rounded bg-slate-100 px-1.5 py-0.5 font-mono">
+                      <span dir="ltr" className="rounded-md bg-surface px-1.5 py-0.5 font-mono text-[11px] ring-1 ring-inset ring-slate-border">
                         @{u.username}
                       </span>
                     )}
-                    {u.phone && <span>{u.phone}</span>}
+                    {u.phone && <span className="tabular-nums" dir="ltr">{u.phone}</span>}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 flex-col items-end gap-2">
                   {u.is_active
-                    ? <span className="flex items-center gap-1 text-xs text-emerald-600"><CheckCircle2 className="h-3.5 w-3.5"/>نشط</span>
-                    : <span className="text-xs text-slate-400">موقوف</span>
+                    ? <span className="flex items-center gap-1 rounded-full bg-success px-2 py-0.5 text-[11px] font-semibold text-success-text ring-1 ring-inset ring-success-border"><CheckCircle2 className="h-3 w-3"/>نشط</span>
+                    : <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-slate-muted ring-1 ring-inset ring-slate-border">موقوف</span>
                   }
                   {canToggle && (
                     <button
                       onClick={() => toggleActive(u)}
                       className={cn(
-                        "rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors",
+                        "mc-btn-soft px-3 py-1 text-xs",
                         u.is_active
-                          ? "border-slate-200 text-slate-500 hover:border-red-200 hover:text-red-600"
-                          : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                          ? "text-slate-muted hover:border-debt-border hover:bg-debt hover:text-debt-text"
+                          : "text-success-text hover:border-success-border hover:bg-success"
                       )}
                     >
                       {u.is_active ? "إيقاف" : "تفعيل"}

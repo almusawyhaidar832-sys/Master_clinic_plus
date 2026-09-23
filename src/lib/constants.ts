@@ -116,8 +116,8 @@ export const USER_ROLE_LABELS: Record<string, string> = {
   assistant: "مساعد طبيب",
 };
 
-export const APP_NAME = "بيرل كلينك";
-export const APP_NAME_EN = "Pearl Clinic";
+export const APP_NAME = "بيرل سيستم";
+export const APP_NAME_EN = "Pearl System";
 
 /** Iraqi Dinar — ISO code for APIs/Intl; Arabic label in UI */
 export const CURRENCY_CODE = "IQD";

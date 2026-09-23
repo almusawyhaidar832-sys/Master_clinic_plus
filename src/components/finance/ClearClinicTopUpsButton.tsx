@@ -267,7 +267,7 @@ export function ClearClinicTopUpsButton({
           حذف شحن رصيد
         </Button>
         {message && !open && (
-          <p className="text-xs text-emerald-700">{message}</p>
+          <p className="text-xs text-success-text">{message}</p>
         )}
       </div>
 

@@ -38,8 +38,13 @@ import type { PatientSearchResult } from "@/lib/services/patient-search";
 import type { Assistant } from "@/types";
 import {
   Users, Clock, UserCheck, Plus, RefreshCw, Send, RotateCcw,
-  ChevronRight, X, LogIn, ArrowRightLeft,
+  ChevronRight, X, LogIn, ArrowRightLeft, ListOrdered, UserPlus, Stethoscope,
+  StickyNote, Phone, HeartPulse, AlertTriangle,
 } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatTile } from "@/components/ui/StatTile";
+import { Modal } from "@/components/ui/Modal";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 interface ClinicDoctor {
   id: string;
@@ -72,14 +77,17 @@ interface QueueEntry {
   doctor?: { full_name_ar: string } | null;
 }
 
-const STATUS_STYLE: Record<QueueStatus, { color: string; bg: string }> = {
-  waiting:     { color: "text-amber-600",  bg: "bg-amber-50"   },
-  called:      { color: "text-blue-600",   bg: "bg-blue-50"    },
-  in_progress: { color: "text-emerald-600",bg: "bg-emerald-50" },
-  ready_for_billing: { color: "text-violet-600", bg: "bg-violet-50" },
-  ready_for_payment: { color: "text-violet-600", bg: "bg-violet-50" },
-  done:        { color: "text-slate-500",  bg: "bg-slate-50"   },
-  cancelled:   { color: "text-red-500",    bg: "bg-red-50"     },
+const STATUS_STYLE: Record<
+  QueueStatus,
+  { color: string; bg: string; bar: string; pill: string; active: boolean }
+> = {
+  waiting:           { color: "text-warning-text", bg: "border border-warning-border bg-warning", bar: "bg-amber-400",   pill: "border-warning-border bg-warning text-warning-text", active: false },
+  called:            { color: "text-primary-700",  bg: "border border-primary-200 bg-primary-50", bar: "bg-primary-500", pill: "border-primary-200 bg-primary-50 text-primary-700", active: true },
+  in_progress:       { color: "text-success-text", bg: "border border-success-border bg-success", bar: "bg-emerald-500", pill: "border-success-border bg-success text-success-text", active: true },
+  ready_for_billing: { color: "text-royal-700",    bg: "border border-royal-200 bg-royal-50",     bar: "bg-royal-500",   pill: "border-royal-200 bg-royal-50 text-royal-700", active: false },
+  ready_for_payment: { color: "text-royal-700",    bg: "border border-royal-200 bg-royal-50",     bar: "bg-royal-500",   pill: "border-royal-200 bg-royal-50 text-royal-700", active: false },
+  done:              { color: "text-slate-muted",  bg: "border border-slate-border bg-surface",   bar: "bg-slate-300",   pill: "border-slate-border bg-surface text-slate-muted", active: false },
+  cancelled:         { color: "text-debt-text",    bg: "border border-debt-border bg-debt",       bar: "bg-red-400",     pill: "border-debt-border bg-debt text-debt-text", active: false },
 };
 
 const NEXT_STATUS: Partial<Record<QueueStatus, QueueStatus>> = {
@@ -193,22 +201,44 @@ function AddToQueueModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">{t("addToQueue")}</h2>
-          <button onClick={onClose} className="rounded-lg p-1 hover:bg-slate-100">
-            <X className="h-5 w-5 text-slate-500" />
+    <Modal
+      onClose={onClose}
+      title={t("addToQueue")}
+      icon={UserPlus}
+      size="md"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="mc-btn-soft flex-1 py-2.5"
+          >
+            {t("cancel")}
           </button>
-        </div>
-
-        <p className="mb-4 text-sm text-slate-500">
-          {t("selectDoctor")}: <span className="font-semibold text-slate-700">{doctorName}</span>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={() => void handleSubmit()}
+            className="mc-btn-navy flex-1 py-2.5"
+          >
+            <Plus className="h-4 w-4" />
+            {submitting ? t("queueAddingPatient") : t("queueAddPatientBtn")}
+          </button>
+        </>
+      }
+    >
+        <p className="mb-4 flex items-center gap-2 rounded-xl border border-slate-border bg-surface px-3.5 py-2.5 text-sm text-slate-muted">
+          <Stethoscope className="h-4 w-4 text-premium-500" />
+          {t("selectDoctor")}: <span className="font-semibold text-slate-text">{doctorName}</span>
         </p>
 
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">{t("patientName")}</label>
+            <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-slate-muted">
+              <Users className="h-3.5 w-3.5 text-premium-500" />
+              {t("patientName")}
+            </label>
             <PatientSearchField
               portal="assistant"
               value={name}
@@ -219,68 +249,51 @@ function AddToQueueModal({
               }}
               onSelect={handlePatientSelect}
               placeholder={t("queueSearchPlaceholder")}
-              inputClassName="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pr-10 pl-4 text-sm focus:border-primary focus:outline-none"
+              inputClassName="mc-field pr-10 pl-4"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">{t("patientPhone")}</label>
+            <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-slate-muted">
+              <Phone className="h-3.5 w-3.5 text-premium-500" />
+              {t("patientPhone")}
+            </label>
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder={t("queuePhonePlaceholder")}
               dir="ltr"
               inputMode="tel"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+              className="mc-field"
             />
-            <p className="mt-1 text-xs text-slate-500">{t("queuePhoneHint")}</p>
+            <p className="mt-1 text-[11px] text-slate-muted">{t("queuePhoneHint")}</p>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">{t("queueIntakeNotes")}</label>
+            <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-slate-muted">
+              <StickyNote className="h-3.5 w-3.5 text-premium-500" />
+              {t("queueIntakeNotes")}
+            </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder={t("queueIntakeNotesPlaceholder")}
               rows={3}
-              className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
+              className="mc-field resize-none"
             />
-            <p className="mt-1 text-xs text-slate-500">{t("queueIntakeNotesHint")}</p>
+            <p className="mt-1 text-[11px] text-slate-muted">{t("queueIntakeNotesHint")}</p>
           </div>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-border bg-surface px-3.5 py-3 text-sm font-medium text-slate-text transition-colors hover:border-primary-200">
             <input
               type="checkbox"
               checked={sendNow}
               onChange={(e) => setSendNow(e.target.checked)}
               className="h-4 w-4 rounded border-slate-300 text-primary"
             />
+            <Send className="h-4 w-4 text-premium-500" />
             {t("queueNotifyDoctor")}
           </label>
-          {formError && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-              {formError}
-            </p>
-          )}
+          {formError && <Alert variant="error">{formError}</Alert>}
         </div>
-
-        <div className="mt-6 flex gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-          >
-            {t("cancel")}
-          </button>
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => void handleSubmit()}
-            className="flex-1 rounded-xl bg-teal-600 py-2.5 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60"
-          >
-            {submitting ? t("queueAddingPatient") : t("queueAddPatientBtn")}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -556,15 +569,24 @@ export function AssistantQueuePanel() {
 
   if (loading && !assistant) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-200 border-t-teal-600" />
+      <div className="space-y-4">
+        <div className="mc-skeleton h-24 rounded-3xl" />
+        <div className="grid grid-cols-3 gap-3">
+          <div className="mc-skeleton h-[76px] rounded-2xl" />
+          <div className="mc-skeleton h-[76px] rounded-2xl" />
+          <div className="mc-skeleton h-[76px] rounded-2xl" />
+        </div>
+        <div className="mc-skeleton h-32 rounded-2xl" />
       </div>
     );
   }
 
   if (!assistant?.doctor_id) {
     return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-800">
+      <div className="flex flex-col items-center gap-3 rounded-2xl border border-warning-border bg-warning p-8 text-center text-sm text-warning-text">
+        <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-surface-card shadow-card">
+          <AlertTriangle className="h-6 w-6" />
+        </span>
         لم يتم ربط حسابك بسجل مساعد — تواصل مع المحاسب لإعادة الربط.
       </div>
     );
@@ -581,50 +603,40 @@ export function AssistantQueuePanel() {
     : null;
 
   return (
-    <div className="mc-exam-page">
+    <div className="space-y-4 animate-fade-in sm:space-y-5">
+      <PageHeader
+        className="mb-0"
+        title={t("queueTitle")}
+        subtitle={doctorName ? `د. ${doctorName}` : t("navWaitingRoom")}
+        eyebrow={bi("بوابة المساعد", "Assistant portal")}
+        icon={ListOrdered}
+        actions={
+          <>
+            <button
+              onClick={() => void fetchQueue()}
+              className="mc-btn-soft"
+              title={t("queueRefresh")}
+            >
+              <RefreshCw className="h-4 w-4 text-premium-500" />
+              <span className="hidden sm:inline">{t("queueRefresh")}</span>
+            </button>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="mc-btn-navy"
+            >
+              <Plus className="h-4 w-4" />
+              {t("queueAddPatientBtn")}
+            </button>
+          </>
+        }
+      />
+
       {pageError && <Alert variant="error">{pageError}</Alert>}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">{t("queueTitle")}</h1>
-          <p className="text-xs text-slate-500">
-            {doctorName ? `د. ${doctorName}` : t("navWaitingRoom")}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => void fetchQueue()}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            {t("queueRefresh")}
-          </button>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-teal-600 px-3 py-2 text-xs font-bold text-white"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {t("queueAddPatientBtn")}
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-xl border border-amber-100 bg-white p-3 text-center shadow-sm">
-          <Clock className="mx-auto mb-1 h-4 w-4 text-amber-600" />
-          <p className="text-lg font-bold text-amber-700">{stats.waiting}</p>
-          <p className="text-[10px] text-amber-600">{t("waitingCount")}</p>
-        </div>
-        <div className="rounded-xl border border-blue-100 bg-white p-3 text-center shadow-sm">
-          <UserCheck className="mx-auto mb-1 h-4 w-4 text-blue-600" />
-          <p className="text-lg font-bold text-blue-700">{stats.called}</p>
-          <p className="text-[10px] text-blue-600">{t("calledStatus")}</p>
-        </div>
-        <div className="rounded-xl border border-emerald-100 bg-white p-3 text-center shadow-sm">
-          <LogIn className="mx-auto mb-1 h-4 w-4 text-emerald-600" />
-          <p className="text-lg font-bold text-emerald-700">{stats.in_progress}</p>
-          <p className="text-[10px] text-emerald-600">{t("inProgressStatus")}</p>
-        </div>
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-3">
+        <StatTile label={t("waitingCount")} value={stats.waiting} icon={Clock} tone="warning" />
+        <StatTile label={t("calledStatus")} value={stats.called} icon={UserCheck} tone="navy" />
+        <StatTile label={t("inProgressStatus")} value={stats.in_progress} icon={LogIn} tone="success" />
       </div>
 
       {clinicalEntry?.patient_id && (
@@ -632,13 +644,18 @@ export function AssistantQueuePanel() {
           id={CLINICAL_EXAM_ANCHOR}
           className="mc-exam-shell"
         >
-          <div className="mc-exam-shell-header">
-            <p className="text-lg font-bold text-white">
-              {clinicalEntry.patient?.full_name_ar ??
-                clinicalEntry.patient_name ??
-                t("queueUnnamedPatient")}
-            </p>
-            <p className="mt-1 text-xs text-blue-100">{t("docVisualMedicalRecordHint")}</p>
+          <div className="mc-exam-shell-header flex items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 text-premium-300 ring-1 ring-inset ring-premium-300/40">
+              <HeartPulse className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-lg font-bold text-white">
+                {clinicalEntry.patient?.full_name_ar ??
+                  clinicalEntry.patient_name ??
+                  t("queueUnnamedPatient")}
+              </p>
+              <p className="mt-0.5 text-xs text-white/70">{t("docVisualMedicalRecordHint")}</p>
+            </div>
           </div>
           <div className="mc-exam-shell-body">
           <VisitSessionClinicalPanel
@@ -653,12 +670,20 @@ export function AssistantQueuePanel() {
       )}
 
       {queue.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white py-12 text-center">
-          <Users className="mb-2 h-8 w-8 text-slate-300" />
-          <p className="text-sm font-medium text-slate-500">{t("queueEmpty")}</p>
-        </div>
+        <EmptyState
+          icon={Users}
+          message={t("queueEmpty")}
+          className="rounded-2xl py-14"
+        />
       ) : (
         <div className="space-y-3">
+          <h3 className="flex items-center gap-2 px-1 text-sm font-bold text-slate-text">
+            <Users className="h-4 w-4 text-premium-500" />
+            {bi("قائمة المراجعين", "Patient list")}
+            <span className="rounded-full border border-premium-200 bg-premium-50 px-2 py-0.5 text-[11px] font-bold tabular-nums text-premium-700">
+              {queue.length}
+            </span>
+          </h3>
           {queue.map((entry) => {
             const style = STATUS_STYLE[entry.status];
             const statusLabel = getQueueStatusLabel(t, entry.status as QueueStatusKey);
@@ -685,38 +710,53 @@ export function AssistantQueuePanel() {
             return (
               <div
                 key={entry.id}
-                className="flex flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm"
+                className={cn(
+                  "mc-list-row flex-col items-stretch gap-3 overflow-hidden ps-5",
+                  transferPending && "border-royal-300 ring-1 ring-royal-200"
+                )}
               >
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute inset-y-3 start-0 w-1 rounded-full",
+                    transferPending ? "bg-royal-500" : style.bar
+                  )}
+                />
                 <div className="flex items-center gap-3">
                   <div
                     className={cn(
-                      "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg font-black",
-                      style.bg,
-                      style.color
+                      "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-xl font-black tabular-nums",
+                      style.active ? "mc-icon-tile rounded-xl" : cn(style.bg, style.color)
                     )}
                   >
                     {entry.ticket_number}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-slate-800">{patientDisplay}</p>
-                    <p className={cn("text-xs font-medium", style.color)}>{statusLabel}</p>
+                    <p className="truncate text-[15px] font-bold text-slate-text">{patientDisplay}</p>
+                    <span className={cn("mt-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold", style.pill)}>
+                      <span className={cn("h-1.5 w-1.5 rounded-full", style.bar)} />
+                      {statusLabel}
+                    </span>
                     {transferPending && (
-                      <p className="mt-0.5 text-[10px] text-violet-700">
-                        {t("docQueueTransferLine")}{" "}
-                        {entry.transfer_to_doctor?.full_name_ar ?? t("docQueueOtherDoctor")} —{" "}
-                        {t("docQueueAwaitAccountant")}
+                      <p className="mt-2 flex items-start gap-1.5 rounded-lg border border-royal-200 bg-royal-50 px-2.5 py-1.5 text-[11px] font-medium text-royal-700">
+                        <ArrowRightLeft className="mt-0.5 h-3 w-3 shrink-0" />
+                        <span>
+                          {t("docQueueTransferLine")}{" "}
+                          {entry.transfer_to_doctor?.full_name_ar ?? t("docQueueOtherDoctor")} —{" "}
+                          {t("docQueueAwaitAccountant")}
+                        </span>
                       </p>
                     )}
                   </div>
                 </div>
 
                 {!transferPending && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2 border-t border-slate-border pt-3">
                   {canSend && (
                     <button
                       onClick={() => void sendToDoctor(entry)}
                       disabled={updating === entry.id}
-                      className="flex items-center gap-1 rounded-xl bg-violet-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                      className="mc-btn-navy px-3 text-xs"
                     >
                       <Send className="h-3.5 w-3.5" />
                       {t("queueSendDoctorTitle")}
@@ -726,7 +766,7 @@ export function AssistantQueuePanel() {
                     <button
                       onClick={() => void recallPatient(entry)}
                       disabled={updating === entry.id}
-                      className="flex items-center gap-1 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 disabled:opacity-60"
+                      className="mc-btn-soft px-3 text-xs text-primary-700"
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
                       {t("queueReCallTitle")}
@@ -736,7 +776,7 @@ export function AssistantQueuePanel() {
                     <button
                       onClick={() => void advanceStatus(entry)}
                       disabled={updating === entry.id}
-                      className="flex items-center gap-1 rounded-xl bg-teal-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                      className="mc-btn-navy px-3 text-xs"
                     >
                       {updating === entry.id ? (
                         <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -749,8 +789,9 @@ export function AssistantQueuePanel() {
                   {entry.status === "in_progress" && entry.patient_id && (
                     <button
                       onClick={() => openClinicalExam(entry)}
-                      className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700"
+                      className="mc-btn-pearl px-3 text-xs"
                     >
+                      <HeartPulse className="h-3.5 w-3.5" />
                       {t("navPatientCare")}
                     </button>
                   )}
@@ -762,7 +803,7 @@ export function AssistantQueuePanel() {
                         setTransferTargetId("");
                       }}
                       disabled={updating === entry.id}
-                      className="flex items-center gap-1 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-800 disabled:opacity-60"
+                      className="mc-btn-soft px-3 text-xs text-royal-700"
                     >
                       <ArrowRightLeft className="h-3.5 w-3.5" />
                       {t("docTransferShort")}
@@ -772,8 +813,9 @@ export function AssistantQueuePanel() {
                     <button
                       onClick={() => void cancelEntry(entry)}
                       disabled={updating === entry.id}
-                      className="rounded-xl border border-red-200 px-3 py-2 text-xs font-medium text-red-600 disabled:opacity-60"
+                      className="ms-auto inline-flex items-center gap-1 rounded-xl border border-transparent px-3 py-2 text-xs font-semibold text-slate-muted transition-colors hover:border-debt-border hover:bg-debt hover:text-debt-text disabled:pointer-events-none disabled:opacity-60"
                     >
+                      <X className="h-3.5 w-3.5" />
                       {t("cancel")}
                     </button>
                   )}
@@ -795,45 +837,24 @@ export function AssistantQueuePanel() {
       )}
 
       {transferEntry && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-          <div className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-2xl sm:rounded-2xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-800">{t("docTransferModalTitle")}</h3>
+        <Modal
+          onClose={() => {
+            setTransferEntry(null);
+            setTransferTargetId("");
+          }}
+          title={t("docTransferModalTitle")}
+          subtitle={transferEntry.patient?.full_name_ar ?? transferEntry.patient_name ?? undefined}
+          icon={ArrowRightLeft}
+          size="md"
+          footer={
+            <>
               <button
                 type="button"
                 onClick={() => {
                   setTransferEntry(null);
                   setTransferTargetId("");
                 }}
-                className="rounded-lg p-1 hover:bg-slate-100"
-              >
-                <X className="h-5 w-5 text-slate-500" />
-              </button>
-            </div>
-            <p className="mb-4 text-sm text-slate-600">{t("docTransferModalHint")}</p>
-            <select
-              value={transferTargetId}
-              onChange={(e) => setTransferTargetId(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm focus:border-primary focus:outline-none"
-            >
-              <option value="">{t("docSelectDoctor")}</option>
-              {clinicDoctors
-                .filter((d) => d.id !== doctorId)
-                .map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.full_name_ar}
-                    {d.specialty_ar ? ` — ${d.specialty_ar}` : ""}
-                  </option>
-                ))}
-            </select>
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setTransferEntry(null);
-                  setTransferTargetId("");
-                }}
-                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-600"
+                className="mc-btn-soft flex-1 py-2.5"
               >
                 {t("cancel")}
               </button>
@@ -841,13 +862,35 @@ export function AssistantQueuePanel() {
                 type="button"
                 onClick={() => void submitTransfer()}
                 disabled={!transferTargetId || updating === transferEntry.id}
-                className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+                className="mc-btn-navy flex-1 py-2.5"
               >
+                <ArrowRightLeft className="h-4 w-4" />
                 {t("docRequestTransfer")}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <p className="mb-4 text-sm text-slate-muted">{t("docTransferModalHint")}</p>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-slate-muted">
+            <Stethoscope className="h-3.5 w-3.5 text-premium-500" />
+            {t("docSelectDoctor")}
+          </label>
+          <select
+            value={transferTargetId}
+            onChange={(e) => setTransferTargetId(e.target.value)}
+            className="mc-field"
+          >
+            <option value="">{t("docSelectDoctor")}</option>
+            {clinicDoctors
+              .filter((d) => d.id !== doctorId)
+              .map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.full_name_ar}
+                  {d.specialty_ar ? ` — ${d.specialty_ar}` : ""}
+                </option>
+              ))}
+          </select>
+        </Modal>
       )}
     </div>
   );

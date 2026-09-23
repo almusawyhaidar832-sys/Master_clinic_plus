@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
+import colors from "tailwindcss/colors";
 
-/** Clinical Blue — rgb channels for opacity modifiers (bg-primary/5, etc.) */
+/** Pearl ocean navy — rgb channels for opacity modifiers (bg-primary/5, etc.) */
 const primary = {
   DEFAULT: "rgb(var(--color-primary-500-rgb) / <alpha-value>)",
   50:  "rgb(var(--color-primary-50-rgb) / <alpha-value>)",
@@ -13,6 +14,7 @@ const primary = {
   700: "rgb(var(--color-primary-700-rgb) / <alpha-value>)",
   800: "rgb(var(--color-primary-800-rgb) / <alpha-value>)",
   900: "rgb(var(--color-primary-900-rgb) / <alpha-value>)",
+  950: "rgb(6 26 48 / <alpha-value>)",
 };
 
 /** Premium gold/brass — rgb channels for opacity modifiers (bg-premium/10, etc.) */
@@ -30,6 +32,14 @@ const premium = {
   900: "rgb(var(--color-premium-900-rgb) / <alpha-value>)",
 };
 
+const royal = Object.fromEntries(
+  [50, 100, 200, 300, 400, 500, 600, 700, 800, 900].map((s) => [
+    s,
+    `rgb(var(--color-royal-${s}-rgb) / <alpha-value>)`,
+  ])
+) as Record<number, string>;
+royal[950] = "rgb(28 24 51 / <alpha-value>)";
+
 const config: Config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -42,8 +52,19 @@ const config: Config = {
       colors: {
         primary,
         premium,
-        /** كل teal-* القديمة → نفس الأزرق الطبي */
+        /** Stray hues fold into the Pearl palette so legacy classes stay on-brand (and dark-aware). */
         teal: primary,
+        blue: primary,
+        sky: primary,
+        cyan: primary,
+        indigo: primary,
+        royal,
+        violet: royal,
+        purple: royal,
+        fuchsia: royal,
+        gray: colors.slate,
+        zinc: colors.slate,
+        neutral: colors.slate,
         slate: {
           text:   "var(--color-text)",
           muted:  "var(--color-muted)",
@@ -136,8 +157,9 @@ const config: Config = {
         strong:  "var(--color-ring-strong)",
       },
       backgroundImage: {
-        "mc-navy": "linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-600) 45%, var(--color-primary-800) 100%)",
-        "mc-gold": "linear-gradient(135deg, var(--color-premium-400) 0%, var(--color-premium-500) 50%, var(--color-premium-600) 100%)",
+        "mc-navy": "var(--pearl-navy-gradient)",
+        "mc-gold": "linear-gradient(135deg, var(--color-premium-300) 0%, var(--color-premium-400) 50%, var(--color-premium-500) 100%)",
+        "mc-pearl": "var(--pearl-champagne-gradient)",
       },
       letterSpacing: {
         tightest2: "-0.03em",

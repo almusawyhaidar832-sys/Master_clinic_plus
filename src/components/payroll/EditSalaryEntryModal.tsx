@@ -250,7 +250,7 @@ export function EditSalaryEntryModal({
           />
 
           {error ? (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p className="rounded-lg bg-debt px-3 py-2 text-sm text-debt-text">
               {error}
             </p>
           ) : null}

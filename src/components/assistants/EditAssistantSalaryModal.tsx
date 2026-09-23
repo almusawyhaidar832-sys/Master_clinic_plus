@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { X, RefreshCw } from "lucide-react";
+import { RefreshCw, Wallet } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
 import { authPortalHeaders } from "@/lib/auth/api-portal";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import { formatCurrency } from "@/lib/utils";
@@ -81,24 +82,15 @@ export function EditAssistantSalaryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="w-full max-w-md rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">
-            تعديل راتب — {assistant.full_name_ar}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1 hover:bg-slate-100"
-          >
-            <X className="h-5 w-5 text-slate-400" />
-          </button>
-        </div>
-
+    <Modal
+      onClose={onClose}
+      title={`تعديل راتب — ${assistant.full_name_ar}`}
+      icon={Wallet}
+      size="md"
+    >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">
+            <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
               الراتب الكلي للمساعد
             </label>
             <input
@@ -109,12 +101,12 @@ export function EditAssistantSalaryModal({
               onChange={(e) => setTotalSalary(e.target.value)}
               required
               dir="ltr"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              className="mc-field"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-600">
+            <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
               نسبة تحمّل الطبيب (%)
             </label>
             <input
@@ -125,43 +117,42 @@ export function EditAssistantSalaryModal({
               value={doctorSharePct}
               onChange={(e) => setDoctorSharePct(e.target.value)}
               dir="ltr"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+              className="mc-field"
             />
-            <p className="mt-2 rounded-lg bg-teal-50 px-3 py-2 text-xs text-teal-800">
+            <p className="mt-2 rounded-xl border border-premium-200 bg-premium-50 px-3 py-2 text-xs font-semibold tabular-nums text-premium-700">
               معاينة: الطبيب {formatCurrency(preview.doctorShare)} · العيادة{" "}
               {formatCurrency(preview.clinicShare)}
             </p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1.5 text-xs text-slate-muted">
               يُحدَّث تلقائياً في سجلات الرواتب غير المُصرفة — السجلات المدفوعة
               تبقى كما هي.
             </p>
           </div>
 
           {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p className="rounded-xl border border-debt-border bg-debt px-3 py-2 text-sm text-debt-text">
               {error}
             </p>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 border-t border-slate-border pt-4">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              className="mc-btn-soft flex-1 py-2.5"
             >
               إلغاء
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60"
+              className="mc-btn-navy flex-1 py-2.5"
             >
               {saving && <RefreshCw className="h-4 w-4 animate-spin" />}
               حفظ
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -16,9 +16,13 @@ import { cn } from "@/lib/utils";
 import { EditEmployeeSalaryModal } from "@/components/payroll/EditEmployeeSalaryModal";
 import type { PayrollPerson } from "@/lib/services/payroll-persons";
 import { ArchiveAssistantDialog } from "@/components/assistants/ArchiveAssistantDialog";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatTile } from "@/components/ui/StatTile";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   UserPlus, UserRound, Stethoscope, Eye, EyeOff,
   RefreshCw, CheckCircle2, XCircle, X, Pencil, Archive,
+  Users, UserCheck, Info,
 } from "lucide-react";
 
 interface DoctorOption {
@@ -73,6 +77,7 @@ function assistantRowToPayrollPerson(a: AssistantRow): PayrollPerson {
 
 export default function AssistantsPage() {
   const supabase = createClient();
+  const { bi } = useLanguage();
 
   const [clinicId, setClinicId] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
@@ -256,78 +261,83 @@ export default function AssistantsPage() {
   ).length;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-800">
-            <UserRound className="h-7 w-7 text-teal-600" />
-            Manage Assistants — إدارة المساعدين
-          </h1>
-          <p className="text-sm text-slate-500">
-            إدارة المساعدين، تعديل الرواتب، وأرشفة من توليد الرواتب المستقبلية
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => { setShowForm(true); setMsg(null); }}
-          className="flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-700"
-        >
-          <UserPlus className="h-4 w-4" />
-          مساعد جديد
-        </button>
-      </div>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <PageHeader
+        eyebrow={bi("إدارة العيادة", "Clinic management")}
+        title="Manage Assistants — إدارة المساعدين"
+        subtitle="إدارة المساعدين، تعديل الرواتب، وأرشفة من توليد الرواتب المستقبلية"
+        icon={UserRound}
+        className="mb-0"
+        actions={
+          <button
+            type="button"
+            onClick={() => { setShowForm(true); setMsg(null); }}
+            className="mc-btn-navy"
+          >
+            <UserPlus className="h-4 w-4" />
+            مساعد جديد
+          </button>
+        }
+      />
 
       {msg && (
         <div
           className={cn(
-            "flex items-center gap-2 rounded-xl border p-3 text-sm",
+            "flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium",
             msg.ok
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-red-200 bg-red-50 text-red-700"
+              ? "border-success-border bg-success text-success-text"
+              : "border-debt-border bg-debt text-debt-text"
           )}
         >
-          {msg.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+          {msg.ok ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <XCircle className="h-4 w-4 shrink-0" />}
           {msg.text}
         </div>
       )}
 
       {showForm && (
-        <div className="rounded-2xl border border-teal-100 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-slate-700">تسجيل مساعد جديد</h2>
-            <button type="button" onClick={() => setShowForm(false)} className="p-1 hover:bg-slate-100 rounded-lg">
-              <X className="h-5 w-5 text-slate-400" />
+        <section className="mc-panel animate-fade-in">
+          <div className="mc-panel-head">
+            <h2 className="mc-panel-title">
+              <UserPlus />
+              تسجيل مساعد جديد
+            </h2>
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-muted transition-colors hover:bg-surface hover:text-slate-text"
+            >
+              <X className="h-5 w-5" />
             </button>
           </div>
 
-          <form onSubmit={handleCreate} className="space-y-4">
+          <form onSubmit={handleCreate} className="mc-panel-body space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">الاسم الكامل</label>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">الاسم الكامل</label>
                 <input
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+                  className="mc-field"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">الهاتف</label>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">الهاتف</label>
                 <input
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+                  className="mc-field"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">
-                  الطبيب المسؤول <span className="text-red-500">*</span>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
+                  الطبيب المسؤول <span className="text-debt-text">*</span>
                 </label>
                 <select
                   value={doctorId}
                   onChange={(e) => setDoctorId(e.target.value)}
                   required
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+                  className="mc-field"
                 >
                   <option value="">— اختر الطبيب —</option>
                   {doctors.map((d) => (
@@ -336,11 +346,18 @@ export default function AssistantsPage() {
                 </select>
               </div>
               <div className="sm:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-600">
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
                   نظام التعويض
                 </label>
-                <div className="flex flex-wrap gap-4">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition-all",
+                      compensationMode === "monthly_fixed"
+                        ? "border-primary-300 bg-primary-50 text-primary-800 ring-1 ring-inset ring-primary-200"
+                        : "border-slate-border bg-surface-card text-slate-muted hover:border-premium-300"
+                    )}
+                  >
                     <input
                       type="radio"
                       name="compensationMode"
@@ -349,7 +366,14 @@ export default function AssistantsPage() {
                     />
                     {ASSISTANT_COMPENSATION_LABELS.monthly_fixed}
                   </label>
-                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <label
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition-all",
+                      compensationMode === "daily_wage"
+                        ? "border-primary-300 bg-primary-50 text-primary-800 ring-1 ring-inset ring-primary-200"
+                        : "border-slate-border bg-surface-card text-slate-muted hover:border-premium-300"
+                    )}
+                  >
                     <input
                       type="radio"
                       name="compensationMode"
@@ -360,7 +384,7 @@ export default function AssistantsPage() {
                   </label>
                 </div>
                 {isDailyMode && (
-                  <p className="mt-1 text-xs text-teal-700">
+                  <p className="mt-1.5 text-xs text-royal-700">
                     سجّل أجر كل يوم من صفحة الرواتب — يُجمع الشهر ثم يُخصم عند
                     التوليد والتأكيد.
                   </p>
@@ -368,7 +392,7 @@ export default function AssistantsPage() {
               </div>
               {!isDailyMode && (
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
                   الراتب الكلي للمساعد
                 </label>
                 <input
@@ -379,12 +403,12 @@ export default function AssistantsPage() {
                   onChange={(e) => setTotalSalary(e.target.value)}
                   required
                   dir="ltr"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+                  className="mc-field"
                 />
               </div>
               )}
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">
                   نسبة تحمّل الطبيب (%)
                 </label>
                 <input
@@ -395,9 +419,9 @@ export default function AssistantsPage() {
                   value={doctorSharePct}
                   onChange={(e) => setDoctorSharePct(e.target.value)}
                   dir="ltr"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm"
+                  className="mc-field"
                 />
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-slate-muted">
                   {previewBreakdown ? (
                     <>
                       الطبيب {formatCurrency(previewBreakdown.doctorShare)} · العيادة{" "}
@@ -409,17 +433,17 @@ export default function AssistantsPage() {
                 </p>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">اسم المستخدم</label>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">اسم المستخدم</label>
                 <input
                   value={username}
                   onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
                   required
                   dir="ltr"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-left"
+                  className="mc-field text-left"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-600">كلمة المرور</label>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-muted">كلمة المرور</label>
                 <div className="relative">
                   <input
                     type={showPass ? "text" : "password"}
@@ -428,12 +452,12 @@ export default function AssistantsPage() {
                     required
                     minLength={6}
                     dir="ltr"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-left"
+                    className="mc-field text-left"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPass(!showPass)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-muted hover:text-slate-text"
                   >
                     {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -441,22 +465,33 @@ export default function AssistantsPage() {
               </div>
             </div>
 
-            <p className="rounded-xl bg-teal-50 px-3 py-2 text-xs text-teal-800">
+            <p className="flex gap-2 rounded-xl border border-primary-200 bg-primary-50 px-3.5 py-2.5 text-xs leading-relaxed text-primary-800">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
               بعد الإنشاء يدخل المساعد من بوابة «المساعد» في صفحة الدخول → يُوجَّه لحجوزات طبيبه فقط.
               يُخصم من تصفية الطبيب الشهرية: الراتب الكلي × نسبة تحمّل الطبيب.
+              </span>
             </p>
 
+            <div className="flex justify-end border-t border-slate-border pt-4">
             <button
               type="submit"
               disabled={saving || doctors.length === 0}
-              className="flex items-center gap-2 rounded-xl bg-teal-600 px-6 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              className="mc-btn-navy px-6 py-2.5"
             >
               {saving && <RefreshCw className="h-4 w-4 animate-spin" />}
               {saving ? "جارٍ الإنشاء..." : "إنشاء حساب المساعد"}
             </button>
+            </div>
           </form>
-        </div>
+        </section>
       )}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatTile label={bi("إجمالي المساعدين", "Total assistants")} value={assistants.length} icon={Users} tone="navy" />
+        <StatTile label={bi("نشط", "Active")} value={activeCount} icon={UserCheck} tone="success" />
+        <StatTile label={bi("مؤرشف", "Archived")} value={assistants.length - activeCount} icon={Archive} tone="muted" />
+      </div>
 
       <div className="flex flex-wrap gap-2">
         {(
@@ -470,12 +505,7 @@ export default function AssistantsPage() {
             key={f.key}
             type="button"
             onClick={() => setListFilter(f.key)}
-            className={cn(
-              "rounded-full px-3 py-1 text-xs font-medium",
-              listFilter === f.key
-                ? "bg-teal-600 text-white"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            )}
+            className={cn("mc-chip", listFilter === f.key && "mc-chip--active")}
           >
             {f.label}
           </button>
@@ -483,17 +513,24 @@ export default function AssistantsPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <RefreshCw className="h-6 w-6 animate-spin text-teal-600" />
+        <div className="grid gap-3 md:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="mc-skeleton h-32 rounded-2xl" />
+          ))}
         </div>
       ) : filteredAssistants.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-400">
+        <div className="mc-panel flex flex-col items-center px-6 py-14 text-center">
+          <span className="mc-icon-tile mb-4 h-14 w-14">
+            <UserRound className="h-7 w-7" />
+          </span>
+          <p className="text-sm font-medium text-slate-muted">
           {assistants.length === 0
             ? "لا يوجد مساعدون — أضف أول مساعد"
             : "لا يوجد مساعدون في هذا التصفية"}
+          </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="grid gap-3 md:grid-cols-2">
           {filteredAssistants.map((a) => {
             const mode = normalizeAssistantCompensationMode(
               a.compensation_mode ?? undefined
@@ -510,61 +547,65 @@ export default function AssistantsPage() {
               <div
                 key={a.id}
                 className={cn(
-                  "flex flex-wrap items-center gap-4 rounded-2xl border bg-white p-4",
-                  !active && "border-dashed opacity-70"
+                  "mc-panel mc-hover-lift flex flex-col",
+                  !active && "opacity-70"
                 )}
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-100 text-teal-700">
-                  <UserRound className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-slate-800">{a.full_name_ar}</p>
-                    {!active && (
-                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-600">
-                        مؤرشف
+                <div className="flex items-start gap-3.5 p-4">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-mc-pearl text-lg font-extrabold text-[#0b1f3a] ring-1 ring-inset ring-premium-300/60">
+                    {a.full_name_ar.trim().charAt(0)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="truncate font-bold text-slate-text">{a.full_name_ar}</p>
+                      {!active && (
+                        <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-slate-muted ring-1 ring-inset ring-slate-border">
+                          مؤرشف
+                        </span>
+                      )}
+                      {daily && (
+                        <span className="rounded-full bg-royal-50 px-2 py-0.5 text-[11px] font-semibold text-royal-700 ring-1 ring-inset ring-royal-200">
+                          أجر يومي
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-muted">
+                      <span className="flex items-center gap-1">
+                        <Stethoscope className="h-3.5 w-3.5 text-premium-500" />
+                        {a.doctor?.full_name_ar ?? "طبيب"}
                       </span>
-                    )}
-                    {daily && (
-                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800">
-                        أجر يومي
-                      </span>
-                    )}
+                      {a.profile?.username && (
+                        <span dir="ltr" className="rounded-md bg-surface px-1.5 py-0.5 font-mono text-[11px] ring-1 ring-inset ring-slate-border">
+                          @{a.profile.username}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] font-semibold">
+                      {daily ? (
+                        <span className="rounded-full bg-royal-50 px-2 py-0.5 text-royal-700 ring-1 ring-inset ring-royal-200">
+                          أجر يومي متغير
+                        </span>
+                      ) : b ? (
+                        <>
+                          <span className="rounded-full bg-primary-50 px-2 py-0.5 tabular-nums text-primary-700 ring-1 ring-inset ring-primary-200">
+                            كلي {formatCurrency(b.totalSalary)}
+                          </span>
+                          <span className="rounded-full bg-surface px-2 py-0.5 tabular-nums text-slate-muted ring-1 ring-inset ring-slate-border">
+                            عيادة {formatCurrency(b.clinicShare)}
+                          </span>
+                          <span className="rounded-full bg-premium-50 px-2 py-0.5 tabular-nums text-premium-700 ring-1 ring-inset ring-premium-200">
+                            طبيب {formatCurrency(b.doctorShare)} ({b.doctorSharePercentage}%)
+                          </span>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <Stethoscope className="h-3 w-3" />
-                      {a.doctor?.full_name_ar ?? "طبيب"}
-                    </span>
-                    {a.profile?.username && (
-                      <span dir="ltr" className="rounded bg-slate-100 px-1.5 font-mono">
-                        @{a.profile.username}
-                      </span>
-                    )}
-                    {daily ? (
-                      <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-800">
-                        أجر يومي متغير
-                      </span>
-                    ) : b ? (
-                      <>
-                        <span className="rounded-full bg-teal-50 px-2 py-0.5 text-teal-700">
-                          كلي {formatCurrency(b.totalSalary)}
-                        </span>
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5">
-                          عيادة {formatCurrency(b.clinicShare)}
-                        </span>
-                        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">
-                          طبيب {formatCurrency(b.doctorShare)} ({b.doctorSharePercentage}%)
-                        </span>
-                      </>
-                    ) : null}
-                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="mt-auto flex flex-wrap justify-end gap-2 border-t border-slate-border bg-surface px-4 py-2.5">
                   <button
                     type="button"
                     onClick={() => setEditingPerson(assistantRowToPayrollPerson(a))}
-                    className="flex items-center gap-1 rounded-xl border border-teal-200 px-3 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-50"
+                    className="mc-btn-soft px-3 py-1.5 text-xs"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                     Edit
@@ -573,7 +614,7 @@ export default function AssistantsPage() {
                     <button
                       type="button"
                       onClick={() => setArchivingAssistant(a)}
-                      className="flex items-center gap-1 rounded-xl border border-amber-200 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50"
+                      className="mc-btn-soft px-3 py-1.5 text-xs text-warning-text hover:border-warning-border hover:bg-warning"
                     >
                       <Archive className="h-3.5 w-3.5" />
                       أرشفة
@@ -582,7 +623,7 @@ export default function AssistantsPage() {
                     <button
                       type="button"
                       onClick={() => restoreAssistant(a)}
-                      className="rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                      className="mc-btn-soft px-3 py-1.5 text-xs text-success-text hover:border-success-border hover:bg-success"
                     >
                       استعادة
                     </button>

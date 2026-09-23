@@ -52,12 +52,12 @@ const CATEGORY_ICONS: Record<
 };
 
 const CATEGORY_COLORS: Record<ProfitLedgerCategory, string> = {
-  general_expense: "bg-amber-100 text-amber-700",
+  general_expense: "bg-warning text-warning-text",
   doctor_expense_clinic: "bg-orange-100 text-orange-700",
   assistant_payroll: "bg-violet-100 text-violet-700",
   staff_salary: "bg-rose-100 text-rose-700",
   doctor_salary: "bg-pink-100 text-pink-700",
-  balance_topup: "bg-emerald-100 text-emerald-700",
+  balance_topup: "bg-success text-success-text",
 };
 
 const PROFIT_PERIOD_TABS = PROFIT_PERIOD_TAB_ORDER;
@@ -75,8 +75,8 @@ function LedgerGroupSection({ group }: { group: ProfitLedgerGroup }) {
   const isAddition = group.category === "balance_topup";
 
   return (
-    <section className="rounded-xl border border-slate-border bg-surface/50 overflow-hidden">
-      <div className="flex items-center justify-between gap-2 border-b border-slate-border/60 bg-surface-card px-3 py-2.5">
+    <section className="rounded-xl border border-slate-border bg-surface overflow-hidden">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-border bg-surface-card px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
           <div
             className={cn(
@@ -102,7 +102,7 @@ function LedgerGroupSection({ group }: { group: ProfitLedgerGroup }) {
         </span>
       </div>
 
-      <ul className="divide-y divide-slate-border/40">
+      <ul className="divide-y divide-slate-border">
         {group.lines.map((line) => (
           <ProfitLedgerLineRow key={line.id} line={line} />
         ))}

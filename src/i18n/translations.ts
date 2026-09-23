@@ -15,7 +15,7 @@ export type TranslationKey = keyof typeof translations.ar;
 const translations = {
   ar: {
     // ── App ──
-    appName:            "بيرل كلينك",
+    appName:            "بيرل سيستم",
     appTagline:         "نظام إدارة العيادات الذكي",
     offlineModeHint:    "لا يوجد اتصال — يمكنك إدخال بيانات المراجع وسيتم رفعها تلقائياً عند عودة النت",
     offlineSavedPending: "تم الحفظ محلياً — بانتظار رفع البيانات عند عودة النت",
@@ -306,6 +306,8 @@ const translations = {
 
     // ── Dashboard home ──
     quickActionsTitle:            "الإجراءات السريعة",
+    accHeroTitle:                 "عيادتك بين يديك",
+    accHeroSub:                   "تابع الجلسات والطابور والمواعيد والحسابات من مكان واحد",
     qlLedgerTitle:                "إدخال عملية جديدة",
     qlLedgerDesc:                 "سجل مريض — حساب المتبقي تلقائياً",
     qlDailyCollectionsTitle:      "كشف مالي",
@@ -821,7 +823,7 @@ const translations = {
 
   en: {
     // ── App ──
-    appName:            "Pearl Clinic",
+    appName:            "Pearl System",
     appTagline:         "Smart Clinic Management System",
     offlineModeHint:    "No connection — you can enter visit data; it will upload automatically when you're back online",
     offlineSavedPending: "Saved locally — waiting to upload when online",
@@ -1112,6 +1114,8 @@ const translations = {
 
     // ── Dashboard home ──
     quickActionsTitle:            "Quick Actions",
+    accHeroTitle:                 "Your clinic, at a glance",
+    accHeroSub:                   "Track sessions, queue, appointments and finances from one place",
     qlLedgerTitle:                "New Session Entry",
     qlLedgerDesc:                 "Register patient — balance calculated automatically",
     qlDailyCollectionsTitle:      "Financial Report",

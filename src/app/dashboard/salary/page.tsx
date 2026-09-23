@@ -83,7 +83,16 @@ import {
   formatPayrollEntryTypesList,
   payrollEntryFormSubtitle,
 } from "@/lib/services/salary-entry-display";
-import { ChevronDown } from "lucide-react";
+import {
+  Banknote,
+  CalendarDays,
+  ChevronDown,
+  Info,
+  RotateCcw,
+  Stethoscope,
+} from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface DoctorOption {
   id: string;
@@ -108,13 +117,13 @@ function StaffRow({
   return (
     <li className="flex flex-wrap items-center gap-2 py-3 px-1">
       <div className="flex-1 min-w-0">
-        <p className={`font-medium text-sm ${s.is_active ? "text-slate-text" : "text-slate-400 line-through"}`}>
+        <p className={`font-medium text-sm ${s.is_active ? "text-slate-text" : "text-slate-muted line-through"}`}>
           {s.full_name_ar}
         </p>
         <p className="text-xs text-slate-muted">{s.job_title_ar}</p>
       </div>
 
-      <span className="rounded-lg border border-slate-border bg-slate-50 px-3 py-1 text-sm font-semibold text-slate-700">
+      <span className="rounded-lg border border-slate-border bg-surface px-3 py-1 text-sm font-semibold text-slate-text">
         {formatCurrency(s.base_salary)}
       </span>
 
@@ -125,7 +134,7 @@ function StaffRow({
         size="sm"
         variant="outline"
         onClick={onDeactivate}
-        className="border-amber-300 text-amber-800 hover:bg-amber-50"
+        className="border-warning-border text-warning-text hover:bg-warning"
       >
         إيقاف
       </Button>
@@ -230,6 +239,7 @@ function entryDisabledReason(opts: {
 }
 
 export default function SalaryPage() {
+  const { bi } = useLanguage();
   const {
     clinicId,
     clinicName,
@@ -1559,10 +1569,13 @@ export default function SalaryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-text">رواتب الموظفين</h2>
-          <p className="text-slate-muted">
+      <PageHeader
+        title="رواتب الموظفين"
+        eyebrow={bi("الرواتب والموارد البشرية", "Payroll & HR")}
+        icon={Banknote}
+        className="mb-0"
+        subtitle={
+          <>
             عدد موظفين غير محدود — حساب منفصل لكل شهر
             {clinicName ? (
               <>
@@ -1572,32 +1585,43 @@ export default function SalaryPage() {
                 {clinicSource === "developer" ? " (دخول نيابة)" : ""}
               </>
             ) : null}
-          </p>
+          </>
+        }
+      />
+
+      <div className="mc-panel flex flex-wrap items-end justify-between gap-4 p-4 sm:px-5">
+        <div className="flex min-w-0 items-end gap-3">
+          <span className="mc-kpi__icon mc-tone-gold mb-0.5 h-10 w-10">
+            <CalendarDays className="h-5 w-5" />
+          </span>
+          <div className="w-full min-w-[220px]">
+            <Select
+              label="شهر العمل"
+              value={workMonth}
+              onChange={(e) => setWorkMonth(e.target.value)}
+              options={monthOptions}
+              className="h-11 rounded-xl font-semibold"
+            />
+          </div>
         </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[200px]">
-          <Select
-            label="شهر العمل"
-            value={workMonth}
-            onChange={(e) => setWorkMonth(e.target.value)}
-            options={monthOptions}
-          />
-          {isActivePayrollMonth && !monthClosed && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={resetting || !clinicId}
-              onClick={handleResetBoard}
-              className="border-amber-300 text-amber-800 hover:bg-amber-50"
-            >
-              {resetting ? "جاري التصفير..." : "تصفير اللوحة — شهر جديد"}
-            </Button>
-          )}
-        </div>
+        {isActivePayrollMonth && !monthClosed && (
+          <button
+            type="button"
+            disabled={resetting || !clinicId}
+            onClick={handleResetBoard}
+            className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border border-warning-border bg-warning px-4 text-sm font-semibold text-warning-text transition-all hover:-translate-y-px hover:shadow-soft disabled:pointer-events-none disabled:opacity-60"
+          >
+            <RotateCcw className="h-4 w-4" />
+            {resetting ? "جاري التصفير..." : "تصفير اللوحة — شهر جديد"}
+          </button>
+        )}
       </div>
 
       <Alert variant="info">
-        <p className="font-medium">كيف يعمل النظام شهرياً؟</p>
+        <p className="flex items-center gap-2 font-semibold">
+          <Info className="h-4 w-4" />
+          كيف يعمل النظام شهرياً؟
+        </p>
         <ul className="mt-2 list-inside list-disc space-y-1 text-sm">
           <li>
             <strong>الراتب الأساسي</strong> يبقى على ملف الموظف (لا يُصفَّر).
@@ -1658,16 +1682,23 @@ export default function SalaryPage() {
 
       {isDoctorSalarySelected && selectedPerson && (
         <div ref={entryFormRef}>
-          <Card className="border-amber-200 bg-gradient-to-b from-amber-50/80 to-white">
-            <CardHeader>
+          <Card className="border-s-4 border-s-premium-400">
+            <CardHeader className="flex-row items-center gap-3.5">
+              <span className="mc-icon-tile h-11 w-11 rounded-xl">
+                <Stethoscope className="h-5 w-5" strokeWidth={1.8} />
+              </span>
+              <div className="min-w-0">
               <CardTitle>
                 طبيب راتب ثابت — سلفة · خصم · غياب · مكافأة (
                 {formatMonthYearAr(workMonth)})
               </CardTitle>
-              <p className="text-xs text-amber-900">
+              <p className="mt-0.5 text-xs text-slate-muted">
                 {selectedPerson.full_name_ar} — الراتب الأساسي{" "}
-                {formatCurrency(selectedPerson.base_salary)}
+                <span className="font-bold tabular-nums text-slate-text">
+                  {formatCurrency(selectedPerson.base_salary)}
+                </span>
               </p>
+              </div>
             </CardHeader>
             <form
               noValidate
@@ -1683,10 +1714,10 @@ export default function SalaryPage() {
                     key={t.value}
                     type="button"
                     onClick={() => setEntryType(t.value)}
-                    className={`rounded-lg border px-3 py-3 text-sm font-semibold transition ${
+                    className={`rounded-xl border px-3 py-3 text-sm font-semibold transition-all ${
                       entryType === t.value
-                        ? "border-amber-600 bg-amber-600 text-white shadow-sm"
-                        : "border-slate-border bg-white text-slate-text hover:border-amber-500 hover:bg-amber-50"
+                        ? "border-transparent bg-mc-navy text-white shadow-soft"
+                        : "border-slate-border bg-surface-card text-slate-text shadow-card hover:border-premium-300"
                     }`}
                   >
                     {entryTypeShortLabel[t.value] ?? t.label}
@@ -1730,24 +1761,24 @@ export default function SalaryPage() {
               )}
 
               {netAfterPending != null && (
-                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                <p className="rounded-xl border border-warning-border bg-warning px-4 py-2.5 text-sm text-warning-text">
                   صافي الراتب بعد هذه الحركة:{" "}
-                  <strong className="text-amber-900">
+                  <strong className="tabular-nums">
                     {formatCurrency(netAfterPending)}
                   </strong>
                 </p>
               )}
 
-              <Button
+              <button
                 type="button"
-                className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-70"
+                className="mc-btn-navy w-full py-3"
                 disabled={saving}
                 onClick={() => void handleDoctorSalaryEntry()}
               >
                 {saving ? "جاري الحفظ..." : entrySubmitLabel(entryType)}
-              </Button>
+              </button>
               {doctorEntryBlockReason ? (
-                <p className="text-center text-xs text-amber-800">
+                <p className="text-center text-xs text-warning-text">
                   تنبيه: {doctorEntryBlockReason}
                 </p>
               ) : (
@@ -1798,7 +1829,7 @@ export default function SalaryPage() {
             </button>
           </CardHeader>
           {showActiveStaff && (
-            <ul className="mt-4 divide-y divide-slate-border/40 border-t border-slate-border/40 pt-4">
+            <ul className="mt-4 divide-y divide-slate-border border-t border-slate-border pt-4">
               {staff.map((s) => (
                 <StaffRow
                   key={s.id}
@@ -1841,7 +1872,7 @@ export default function SalaryPage() {
         {showMonthlyPayroll && (
           <>
             {isActivePayrollMonth && !monthClosed && (
-              <div className="mb-3 flex justify-end border-t border-slate-border/40 pt-4">
+              <div className="mb-3 flex justify-end border-t border-slate-border pt-4">
                 <Button
                   type="button"
                   size="sm"
@@ -1895,12 +1926,12 @@ export default function SalaryPage() {
                     return (
                       <tr
                         key={rowKey}
-                        className="border-b border-slate-border/30"
+                        className="border-b border-slate-border"
                       >
                         <td className="py-2 pe-2 font-medium">
                           {person.full_name_ar}
                         </td>
-                        <td className="py-2 pe-2 text-slate-600">
+                        <td className="py-2 pe-2 text-slate-muted">
                           {payrollCategoryLabel(person.category)}
                         </td>
                         <td className="py-2 pe-2">
@@ -1918,7 +1949,7 @@ export default function SalaryPage() {
                             ? formatCurrency(clinicNet)
                             : "—"}
                         </td>
-                        <td className="py-2 pe-2 text-amber-800">
+                        <td className="py-2 pe-2 text-warning-text">
                           {isAssistant && record
                             ? `${formatCurrency(doctorShare ?? 0)} (${record.doctor_share_percentage}%)`
                             : "—"}
@@ -1936,7 +1967,7 @@ export default function SalaryPage() {
                                 {(record.status === "paid" ||
                                   assistantPaidClinicShare(record) > 0 ||
                                   assistantPaidDoctorShare(record) > 0) && (
-                                  <span className="mt-0.5 block text-emerald-700">
+                                  <span className="mt-0.5 block text-success-text">
                                     ✓ دُفع — لا يُعاد التأكيد
                                   </span>
                                 )}
@@ -1949,7 +1980,7 @@ export default function SalaryPage() {
                                 )}
                               </div>
                             ) : (
-                              <span className="text-amber-700">لم يُسجَّل بعد</span>
+                              <span className="text-warning-text">لم يُسجَّل بعد</span>
                             )
                           ) : slip ? (
                             <div className="flex flex-wrap items-center gap-2">
@@ -1962,7 +1993,7 @@ export default function SalaryPage() {
                               {slipIsFullyPaid(slip, {
                                 dailyWage: person.compensation_mode === "daily_wage",
                               }) && (
-                                <span className="text-emerald-700">
+                                <span className="text-success-text">
                                   ✓ لا يُعاد التأكيد
                                 </span>
                               )}
@@ -1991,7 +2022,7 @@ export default function SalaryPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                                    className="border-warning-border text-warning-text hover:bg-warning"
                                     disabled={slip.status !== "paid"}
                                     onClick={() => unmarkSlipPaid(slip.id)}
                                   >
@@ -2001,7 +2032,7 @@ export default function SalaryPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-amber-700">لم يُولَّد</span>
+                            <span className="text-warning-text">لم يُولَّد</span>
                           )}
                         </td>
                       </tr>
@@ -2011,11 +2042,11 @@ export default function SalaryPage() {
               </table>
             </div>
             {!hasGeneratedPayroll && (
-              <p className="mt-3 text-center text-xs text-amber-800">
+              <p className="mt-3 text-center text-xs text-warning-text">
                 اضغط «توليد رواتب الشهر» لإنشاء قسائم موظفي العيادة
               </p>
             )}
-            <div className="mt-3 flex flex-wrap gap-4 border-t border-slate-border/40 pt-3 text-sm">
+            <div className="mt-3 flex flex-wrap gap-4 border-t border-slate-border pt-3 text-sm">
               <span>
                 إجمالي مصاريف العيادة:{" "}
                 <strong className="text-primary">
@@ -2024,7 +2055,7 @@ export default function SalaryPage() {
               </span>
               <span>
                 إجمالي خصم الأطباء (مساعدون فقط):{" "}
-                <strong className="text-amber-800">
+                <strong className="text-warning-text">
                   {formatCurrency(payrollDoctorTotal)}
                 </strong>
               </span>
@@ -2063,7 +2094,7 @@ export default function SalaryPage() {
             </button>
           </CardHeader>
           {showAddEmployee && (
-          <form onSubmit={addStaff} className="mt-4 space-y-4 border-t border-slate-border/40 pt-4">
+          <form onSubmit={addStaff} className="mt-4 space-y-4 border-t border-slate-border pt-4">
             <div>
               <p className="mb-2 text-sm font-medium text-slate-text">نوع الموظف</p>
               <div className="flex flex-wrap gap-4">
@@ -2243,11 +2274,11 @@ export default function SalaryPage() {
             <CardTitle>
               تسجيل حركات الراتب — {formatMonthYearAr(workMonth)}
             </CardTitle>
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-slate-muted">
               {payrollEntryFormSubtitle(payrollEntryTypes)}
             </p>
             {isDailyWageSelected && (
-              <p className="text-xs text-teal-800">
+              <p className="text-xs text-primary-700">
                 {isDailyStaffSelected
                   ? "لكل يوم عمل: اختر «أجر يومي»، اكتب المبلغ، وحدّد تاريخ ذلك اليوم. ثم «توليد رواتب الشهر» و«تأكيد الصرف»."
                   : "لكل يوم عمل: سجّل «أجر يومي» ثم «تأكيد صرف» من جدول الحركات أو من بطاقة المساعد — يُخصم فوراً ويظهر في رواتب الشهر."}
@@ -2255,7 +2286,7 @@ export default function SalaryPage() {
             )}
           </CardHeader>
           {isDoctorSalarySelected ? (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+            <p className="rounded-xl border border-warning-border bg-warning px-4 py-4 text-sm text-warning-text">
               سلفة وخصم ومكافأة طبيب الراتب الثابت من النموذج المخصص أعلاه.
             </p>
           ) : (
@@ -2268,7 +2299,7 @@ export default function SalaryPage() {
               className="space-y-4"
             >
               {selectedPerson ? (
-                <div className="rounded-lg border border-slate-border bg-slate-50 px-3 py-2 text-sm">
+                <div className="rounded-lg border border-slate-border bg-surface px-3 py-2 text-sm">
                   <span className="text-slate-muted">الموظف المختار: </span>
                   <strong>{selectedPerson.full_name_ar}</strong>
                   {!isDailyWageSelected && (
@@ -2284,7 +2315,7 @@ export default function SalaryPage() {
                   )}
                 </div>
               ) : (
-                <p className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <p className="rounded-xl border border-dashed border-warning-border bg-warning px-3 py-2 text-sm text-warning-text">
                   اختر موظفاً من القائمة الشاملة أعلاه أولاً
                 </p>
               )}
@@ -2339,7 +2370,7 @@ export default function SalaryPage() {
                     العيادة تتحمل {100 - dailyWageEntryPreview.doctorSharePercentage}% ={" "}
                     <strong>{formatCurrency(dailyWageEntryPreview.clinicShare)}</strong>
                   </p>
-                  <p className="text-teal-700">
+                  <p className="text-primary-700">
                     يُجمع مع أيام الشهر ثم يُخصم عند توليد الرواتب وتأكيد الصرف.
                   </p>
                 </div>
@@ -2380,7 +2411,7 @@ export default function SalaryPage() {
                     {formatCurrency(netAfterPending)}
                   </strong>
                   {dailyWageEntryPreview && (
-                    <span className="mt-1 block text-xs text-slate-600">
+                    <span className="mt-1 block text-xs text-slate-muted">
                       (شامل هذا اليوم — الطبيب{" "}
                       {formatCurrency(dailyWageEntryPreview.doctorShare)} · العيادة{" "}
                       {formatCurrency(dailyWageEntryPreview.clinicShare)})
@@ -2400,25 +2431,25 @@ export default function SalaryPage() {
                   : entrySubmitLabel(entryType)}
               </Button>
               {employeeEntryBlockReason ? (
-                <p className="text-center text-xs text-amber-800">
+                <p className="text-center text-xs text-warning-text">
                   تنبيه: {employeeEntryBlockReason}
                 </p>
               ) : !selectedPerson || (!staffId && !assistantId) ? (
-                <p className="text-center text-xs text-amber-800">
+                <p className="text-center text-xs text-warning-text">
                   اختر موظفاً أو مساعداً من القائمة أعلاه أولاً
                 </p>
               ) : isDailyAssistantSelected && slipConfirmedAmount > 0 && slipPendingAmount > 0 ? (
-                <p className="text-center text-xs text-teal-800">
+                <p className="text-center text-xs text-primary-700">
                   أكّد كل يوم من جدول الحركات أدناه بمبلغه المستقل فقط
                 </p>
               ) : isDailyWageSelected && slipConfirmedAmount > 0 && slipPendingAmount > 0 ? (
-                <p className="text-center text-xs text-teal-800">
+                <p className="text-center text-xs text-primary-700">
                   مُؤكَّد {formatCurrency(slipConfirmedAmount)} — المتبقي{" "}
                   {formatCurrency(slipPendingAmount)} يُجمَع في الجدول ويُخصم عند «تأكيد
                   الصرف» فقط
                 </p>
               ) : isDailyWageSelected && entryType === "daily_wage" ? (
-                <p className="text-center text-xs text-teal-800">
+                <p className="text-center text-xs text-primary-700">
                   مثال: اليوم 15,000 — غداً 10,000 (سجّل كل يوم بحركة منفصلة)
                 </p>
               ) : (
@@ -2449,7 +2480,7 @@ export default function SalaryPage() {
                     </div>
                   )}
                   {dailyWages > 0 && (
-                    <div className="flex justify-between text-teal-800">
+                    <div className="flex justify-between text-primary-700">
                       <span>+ أيام العمل</span>
                       <span>{formatCurrency(dailyWages)}</span>
                     </div>
@@ -2467,7 +2498,7 @@ export default function SalaryPage() {
                     </div>
                   )}
                   {bonuses > 0 && (
-                    <div className="flex justify-between text-emerald-700">
+                    <div className="flex justify-between text-success-text">
                       <span>+ مكافآت</span>
                       <span>{formatCurrency(bonuses)}</span>
                     </div>
@@ -2485,12 +2516,12 @@ export default function SalaryPage() {
                     <span>حصة العيادة</span>
                     <span>{formatCurrency(selectedAssistantRecord.clinic_share_amount)}</span>
                   </div>
-                  <div className="flex justify-between text-amber-800">
+                  <div className="flex justify-between text-warning-text">
                     <span>حصة الطبيب ({selectedAssistantRecord.doctor_share_percentage}%)</span>
                     <span>{formatCurrency(selectedAssistantRecord.doctor_share_amount)}</span>
                   </div>
                   <hr className="border-slate-border" />
-                  <p className="text-xs text-teal-800">
+                  <p className="text-xs text-primary-700">
                     {isDailyAssistantSelected
                       ? "أجر يومي: أكّد كل يوم من جدول الحركات أدناه — كل يوم يُخصم بمبلغه المكتوب وحده فقط، ولا يُجمَع مع أيام سابقة."
                       : "تأكيد الصرف من هنا يخصم فوراً من الطبيب والعيادة — يظهر مؤكداً في «رواتب الشهر» بدون تأكيد ثانٍ."}
@@ -2526,7 +2557,7 @@ export default function SalaryPage() {
                       <Button
                         type="button"
                         variant="outline"
-                        className="flex-1 min-w-[10rem] border-amber-300 text-amber-800 hover:bg-amber-50"
+                        className="flex-1 min-w-[10rem] border-warning-border text-warning-text hover:bg-warning"
                         disabled={!canUnconfirmPayroll}
                         onClick={() =>
                           unmarkAssistantPayrollPaid(selectedAssistantRecord.id)
@@ -2559,20 +2590,20 @@ export default function SalaryPage() {
             </>
           ) : (
             <>
-              <p className="mb-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-muted">
+              <p className="mb-3 rounded-lg bg-surface px-3 py-2 text-xs text-slate-muted">
                 {isDoctorSalarySelected
                   ? "طبيب راتب ثابت — الصرف من مصاريف العيادة. الجلسات لا تدخل محفظة الطبيب."
                   : "موظف خدمات — الراتب كامل من مصاريف تشغيل العيادة، بدون ربط بطبيب."}
               </p>
               {staffSlipThisMonth && slipFullySettled && slipPendingAmount <= 0 && (
-                <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                <p className="mb-3 rounded-lg bg-success px-3 py-2 text-sm text-success-text">
                   ✓ قسيمة{" "}
                   {selectedStaff?.full_name_ar ?? selectedPerson?.full_name_ar}{" "}
                   لهذا الشهر <strong>مدفوعة بالكامل</strong>.
                 </p>
               )}
               {staffSlipThisMonth && slipConfirmedAmount > 0 && slipPendingAmount > 0 && (
-                <p className="mb-3 rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-800">
+                <p className="mb-3 rounded-lg bg-teal-50 px-3 py-2 text-sm text-primary-700">
                   مُؤكَّد {formatCurrency(slipConfirmedAmount)} — المتبقي{" "}
                   {formatCurrency(slipPendingAmount)} يُخصم عند «تأكيد الصرف» فقط
                 </p>
@@ -2597,7 +2628,7 @@ export default function SalaryPage() {
                   <span>{formatCurrency(deductions)}</span>
                 </div>
                 {bonuses > 0 && (
-                  <div className="flex justify-between text-emerald-700">
+                  <div className="flex justify-between text-success-text">
                     <span>+ مكافآت {formatMonthYearAr(workMonth)}</span>
                     <span>{formatCurrency(bonuses)}</span>
                   </div>
@@ -2645,7 +2676,7 @@ export default function SalaryPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                      className="border-warning-border text-warning-text hover:bg-warning"
                       disabled={!canUnconfirmPayroll}
                       onClick={() => unmarkSlipPaid(staffSlipThisMonth.id)}
                     >
@@ -2686,12 +2717,12 @@ export default function SalaryPage() {
               return (
                 <li
                   key={e.id}
-                  className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-border/40 py-2"
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-border py-2"
                 >
                   <span className="min-w-0 flex-1">
                     {typeLabel} — {e.entry_date}
                     {e.payroll_confirmed ? (
-                      <span className="ms-2 text-xs text-emerald-700">
+                      <span className="ms-2 text-xs text-success-text">
                         مُؤكَّد ✓
                       </span>
                     ) : null}
@@ -2705,7 +2736,7 @@ export default function SalaryPage() {
                   </span>
                   <div className="flex items-center gap-2">
                     <span
-                      className={`font-medium ${isBonus ? "text-emerald-700" : ""}`}
+                      className={`font-medium ${isBonus ? "text-success-text" : ""}`}
                     >
                       {isBonus ? "+" : "−"}
                       {formatCurrency(e.amount)}
@@ -2794,7 +2825,7 @@ export default function SalaryPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                    className="border-warning-border text-warning-text hover:bg-warning"
                     disabled={slip.status !== "paid" || boardLocked}
                     onClick={() => unmarkSlipPaid(slip.id)}
                   >

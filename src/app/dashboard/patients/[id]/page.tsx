@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { StatTile } from "@/components/ui/StatTile";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicSync } from "@/hooks/useClinicSync";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { ClinicBrandingHeader } from "@/components/branding/ClinicBrandingHeader";
 import { QuickEntryForm } from "@/components/accountant/QuickEntryForm.lazy";
 import {
@@ -52,12 +54,25 @@ import {
   cacheXraysForClinicalData,
   hydrateClinicalWithCachedXrays,
 } from "@/lib/offline/clinical-xray-cache";
-import { ArrowRight, Plus, X } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowRight,
+  CalendarCheck,
+  CheckCircle2,
+  ClipboardList,
+  FolderHeart,
+  Layers,
+  Phone,
+  Plus,
+  Wallet,
+  X,
+} from "lucide-react";
 
 export default function PatientProfilePage() {
   const params = useParams();
   const id = params.id as string;
   const { profile, displayName } = useClinicProfile();
+  const { bi } = useLanguage();
   const [activeTab, setActiveTab] = useState<"file" | "archive">("file");
   const [medicalLogs, setMedicalLogs] = useState<
     (MedicalLog & { doctor?: { full_name_ar: string } })[]
@@ -327,12 +342,10 @@ export default function PatientProfilePage() {
 
   if (accessDenied) {
     return (
-      <div className="space-y-4 py-8">
-        <Link href="/dashboard/patients">
-          <Button variant="ghost" size="sm">
-            <ArrowRight className="h-4 w-4" />
-            العودة للبحث
-          </Button>
+      <div className="mx-auto max-w-2xl space-y-4 py-8">
+        <Link href="/dashboard/patients" className="mc-btn-soft">
+          <ArrowRight className="h-4 w-4 ltr:rotate-180" />
+          العودة للبحث
         </Link>
         <Alert variant="warning">
           هذا المريض غير تابع لعيادتك أو حسابك غير مربوط بعيادة.
@@ -344,12 +357,10 @@ export default function PatientProfilePage() {
   if (!patient) {
     if (offlineMiss) {
       return (
-        <div className="space-y-4 py-8">
-          <Link href="/dashboard/patients">
-            <Button variant="ghost" size="sm">
-              <ArrowRight className="h-4 w-4" />
-              العودة للبحث
-            </Button>
+        <div className="mx-auto max-w-2xl space-y-4 py-8">
+          <Link href="/dashboard/patients" className="mc-btn-soft">
+            <ArrowRight className="h-4 w-4 ltr:rotate-180" />
+            العودة للبحث
           </Link>
           <Alert variant="warning">
             لا يوجد اتصال ولا نسخة محفوظة لهذا المريض — افتح ملفه مرة مع النت أولاً.
@@ -358,8 +369,16 @@ export default function PatientProfilePage() {
       );
     }
     return (
-      <div className="flex items-center justify-center py-16 text-slate-muted">
-        جاري تحميل ملف المريض...
+      <div className="space-y-4 py-6" aria-busy>
+        <div className="mc-skeleton h-40 rounded-3xl" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="mc-skeleton h-20 rounded-2xl" />
+          <div className="mc-skeleton h-20 rounded-2xl" />
+          <div className="mc-skeleton h-20 rounded-2xl" />
+        </div>
+        <p className="text-center text-sm text-slate-muted">
+          جاري تحميل ملف المريض...
+        </p>
       </div>
     );
   }
@@ -373,28 +392,34 @@ export default function PatientProfilePage() {
         refreshingLabel="عرض سريع من الذاكرة — جاري التحديث من السيرفر…"
         offlineLabel="بدون اتصال — آخر تحديث: {time}"
       />
-      <Link href="/dashboard/patients">
-        <Button variant="ghost" size="sm">
-          <ArrowRight className="h-4 w-4" />
-          البحث عن مريض
-        </Button>
-      </Link>
 
-      <div className="mc-tab-group">
-        <button
-          type="button"
-          onClick={() => setActiveTab("file")}
-          className={cn("mc-tab", activeTab === "file" && "mc-tab--active")}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          href="/dashboard/patients"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-600 hover:text-primary-800"
         >
-          الملف المالي
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("archive")}
-          className={cn("mc-tab", activeTab === "archive" && "mc-tab--active")}
-        >
-          الأرشيف الطبي
-        </button>
+          <ArrowRight className="h-4 w-4 ltr:rotate-180" />
+          البحث عن مريض
+        </Link>
+
+        <div className="mc-tab-group">
+          <button
+            type="button"
+            onClick={() => setActiveTab("file")}
+            className={cn("mc-tab", activeTab === "file" && "mc-tab--active")}
+          >
+            <Wallet className="h-4 w-4" />
+            الملف المالي
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("archive")}
+            className={cn("mc-tab", activeTab === "archive" && "mc-tab--active")}
+          >
+            <FolderHeart className="h-4 w-4" />
+            الأرشيف الطبي
+          </button>
+        </div>
       </div>
 
       {activeTab === "archive" ? (
@@ -409,25 +434,37 @@ export default function PatientProfilePage() {
         />
       ) : (
         <>
-      <Card className="overflow-hidden">
-        <div className="border-b border-slate-border bg-surface/50 px-4 py-3">
+      <section className="mc-panel rounded-3xl">
+        <div className="border-b border-slate-border bg-surface px-5 py-3">
           <ClinicBrandingHeader profile={profile} size="sm" className="border-0 pb-0" />
         </div>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-700 text-base font-bold text-white shadow-sm">
+        <div className="relative p-5 sm:p-6">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-premium-100/40 to-transparent dark:from-premium-500/10"
+          />
+          <div className="relative flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+            <div className="flex min-w-0 items-start gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl bg-mc-pearl text-xl font-bold text-[#0b1f3a] shadow-gold ring-1 ring-inset ring-premium-300/60">
                 {patient.full_name_ar.slice(0, 2)}
               </div>
-              <div>
-                <CardTitle>{patient.full_name_ar}</CardTitle>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-premium-600">
+                  {bi("ملفات المرضى", "Patient files")}
+                </p>
+                <h1 className="mt-0.5 text-2xl font-bold leading-tight text-slate-text">
+                  {patient.full_name_ar}
+                </h1>
                 {getPatientDisplayPhone(patient) && (
-                  <p className="text-sm text-slate-muted" dir="ltr">
-                    📱 {getPatientDisplayPhone(patient)}
+                  <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-slate-muted tabular-nums" dir="ltr">
+                    <Phone className="h-3.5 w-3.5 text-premium-500" />
+                    {getPatientDisplayPhone(patient)}
                   </p>
                 )}
                 {patient.notes && (
-                  <p className="mt-1 text-xs text-slate-muted">{patient.notes}</p>
+                  <p className="mt-2 rounded-xl border border-slate-border bg-surface px-3 py-2 text-xs leading-relaxed text-slate-muted">
+                    {patient.notes}
+                  </p>
                 )}
                 <PatientBasicInfoEditor
                   patient={patient}
@@ -445,7 +482,8 @@ export default function PatientProfilePage() {
               </div>
             </div>
             <Button
-              size="sm"
+              size="md"
+              className="shrink-0 self-start"
               onClick={() => {
                 if (showAddSession || continueCaseId) {
                   closeSessionForms();
@@ -469,26 +507,30 @@ export default function PatientProfilePage() {
               )}
             </Button>
           </div>
-        </CardHeader>
 
-        <div className="grid grid-cols-3 gap-3 px-4 pb-4">
-          <div className="mc-stat-neutral">
-            <p className="mc-stat-value">{operations.length}</p>
-            <p className="mc-stat-label">إجمالي الجلسات (كل الحالات)</p>
-          </div>
-          <div className="mc-stat-primary">
-            <p className="mc-stat-value">{formatCurrency(totalPaid)}</p>
-            <p className="mc-stat-label">مدفوع</p>
-          </div>
-          <div className={totalDebt > 0 ? "mc-stat-debt" : "mc-stat-success"}>
-            <p className="mc-stat-value">{formatCurrency(totalDebt)}</p>
-            <p className="mc-stat-label">
-              {totalDebt > 0 ? "ذمة متبقية" : "لا ذمة"}
-            </p>
+          <div className="relative mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <StatTile
+              icon={CalendarCheck}
+              tone="navy"
+              value={<span className="tabular-nums">{operations.length}</span>}
+              label="إجمالي الجلسات (كل الحالات)"
+            />
+            <StatTile
+              icon={Wallet}
+              tone="gold"
+              value={<span className="tabular-nums">{formatCurrency(totalPaid)}</span>}
+              label="مدفوع"
+            />
+            <StatTile
+              icon={totalDebt > 0 ? AlertCircle : CheckCircle2}
+              tone={totalDebt > 0 ? "danger" : "success"}
+              value={<span className="tabular-nums">{formatCurrency(totalDebt)}</span>}
+              label={totalDebt > 0 ? "ذمة متبقية" : "لا ذمة"}
+            />
           </div>
         </div>
 
-        <div className="space-y-4 px-4 pb-4">
+        <div className="space-y-4 border-t border-slate-border bg-surface px-5 py-4">
           <TransferDoctorPanel
             patientId={id}
             clinicId={patient.clinic_id}
@@ -502,8 +544,9 @@ export default function PatientProfilePage() {
         </div>
 
         {treatmentCases.length > 0 && (
-          <div className="border-t border-slate-border px-4 pb-4 pt-3">
-            <p className="text-xs font-semibold text-slate-muted mb-2">
+          <div className="border-t border-slate-border px-5 pb-5 pt-4">
+            <p className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-muted">
+              <Layers className="h-4 w-4 text-premium-500" />
               ملخص الحالات
             </p>
             <ul className="flex flex-wrap gap-2">
@@ -526,7 +569,7 @@ export default function PatientProfilePage() {
                       <button
                         type="button"
                         onClick={() => openContinueCase(c.id)}
-                        className="rounded-full border border-primary/40 bg-primary/5 px-3 py-1 text-xs hover:bg-primary/10"
+                        className="mc-press rounded-full border border-debt-border bg-surface-card px-3.5 py-1.5 text-xs shadow-card transition-all hover:-translate-y-px hover:border-primary-300 hover:shadow-soft"
                       >
                         <span className="font-medium text-slate-text">
                           {treatmentCaseDisplayLabel(c, treatmentCases)}
@@ -547,7 +590,7 @@ export default function PatientProfilePage() {
                         </span>
                       </button>
                     ) : (
-                      <span className="inline-block rounded-full border border-slate-border bg-surface/80 px-3 py-1 text-xs">
+                      <span className="inline-block rounded-full border border-slate-border bg-surface px-3.5 py-1.5 text-xs">
                         <span className="font-medium text-slate-text">
                           {treatmentCaseDisplayLabel(c, treatmentCases)}
                         </span>
@@ -560,7 +603,7 @@ export default function PatientProfilePage() {
                         ) : null}
                         {" — "}
                         {settled ? (
-                          <span className="text-emerald-700 font-semibold">مكتمل</span>
+                          <span className="font-semibold text-success-text">مكتمل</span>
                         ) : (
                           <span className="text-slate-muted">—</span>
                         )}
@@ -572,17 +615,21 @@ export default function PatientProfilePage() {
             </ul>
           </div>
         )}
-      </Card>
+      </section>
 
       {showAddSession && !continueCaseId && (
         <div
           ref={sessionFormRef}
           id="session-entry-form"
-          className="rounded-xl border-2 border-primary/20 bg-primary/5 p-4 scroll-mt-4"
+          className="mc-panel scroll-mt-4 animate-fade-in border-primary-200"
         >
-          <p className="mb-3 text-sm font-semibold text-primary">
-            إضافة جلسة جديدة للمريض: {patient.full_name_ar}
-          </p>
+          <div className="mc-panel-head">
+            <p className="mc-panel-title">
+              <Plus />
+              إضافة جلسة جديدة للمريض: {patient.full_name_ar}
+            </p>
+          </div>
+          <div className="mc-panel-body">
           <QuickEntryForm
             key={`${id}-new-${newCasePrefillName ?? "generic"}`}
             defaultPatientId={id}
@@ -594,21 +641,31 @@ export default function PatientProfilePage() {
             onTreatmentCasesChanged={setTreatmentCases}
             onSuccess={(op) => handleSessionSaved(op, { wasNewPlan: true })}
           />
+          </div>
         </div>
       )}
 
-      <div>
-        <h3 className="mb-3 text-lg font-semibold text-slate-text">
-          سجل الجلسات حسب الحالة
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-2 px-1">
+          <h3 className="flex items-center gap-3 text-lg font-bold text-slate-text">
+            <span className="mc-icon-tile h-9 w-9 rounded-xl">
+              <ClipboardList className="h-4 w-4" />
+            </span>
+            سجل الجلسات حسب الحالة
+          </h3>
           {totalBilled > 0 && (
-            <span className="text-sm font-normal text-slate-muted mr-2">
+            <span className="rounded-full border border-premium-300/60 bg-premium-50 px-3 py-1 text-xs font-semibold text-premium-800 tabular-nums dark:bg-premium-500/10 dark:text-premium-200">
               — فواتير {formatCurrency(totalBilled)}
             </span>
           )}
-        </h3>
+        </div>
 
         {operations.length === 0 ? (
-          <Alert variant="info">لا توجد جلسات مسجّلة لهذا المريض</Alert>
+          <EmptyState
+            icon={ClipboardList}
+            message="لا توجد جلسات مسجّلة لهذا المريض"
+            className="rounded-2xl"
+          />
         ) : (
           <PatientSessionsByCase
             patientId={id}
@@ -625,11 +682,11 @@ export default function PatientProfilePage() {
           <div
             ref={continueFormRef}
             id="continue-case-form"
-            className="mt-4 rounded-xl border-2 border-primary bg-primary/10 p-4 shadow-sm scroll-mt-4"
+            className="mc-panel mt-4 scroll-mt-4 animate-fade-in border-primary-300 shadow-elevated"
           >
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-lg font-bold text-primary">
+            <div className="mc-panel-head items-start">
+              <div className="min-w-0">
+                <p className="text-lg font-bold text-primary-800 dark:text-primary-200">
                   متابعة: {continueCase?.treatment_name_ar ?? "حالة العلاج"}
                 </p>
                 {continueCase ? (
@@ -665,6 +722,7 @@ export default function PatientProfilePage() {
                 إلغاء
               </Button>
             </div>
+            <div className="mc-panel-body">
             <QuickEntryForm
               key={continueFormKey}
               embedded
@@ -678,6 +736,7 @@ export default function PatientProfilePage() {
               onTreatmentCasesChanged={setTreatmentCases}
               onSuccess={handleSessionSaved}
             />
+            </div>
           </div>
         )}
       </div>
