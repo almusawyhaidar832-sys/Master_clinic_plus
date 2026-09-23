@@ -4,8 +4,8 @@ import { AppProviders } from "@/components/providers/AppProviders";
 import { AccountantPwaBootstrap } from "@/components/pwa/AccountantPwaBootstrap";
 
 export const metadata: Metadata = {
-  title: "Accountant | Master Clinic Plus",
-  applicationName: "Master Clinic Accountant",
+  title: "Accountant | Pearl Clinic",
+  applicationName: "Pearl Clinic Accountant",
   manifest: "/manifest-accountant.json",
   icons: {
     icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
@@ -14,12 +14,12 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Master Clinic Accountant",
+    title: "Pearl Clinic Accountant",
   },
   other: {
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-capable": "yes",
-    "apple-mobile-web-app-title": "Master Clinic Accountant",
+    "apple-mobile-web-app-title": "Pearl Clinic Accountant",
   },
 };
 

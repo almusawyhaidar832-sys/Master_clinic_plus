@@ -117,7 +117,7 @@ function buildRailwaySupportMessage(input: {
   return [
     "=== طلب دعم Railway — Evolution API / Baileys لا يُسلّم الرسائل ===",
     "",
-    "المشروع: Master Clinic Plus (عيادة)",
+    "المشروع: Pearl Clinic (عيادة)",
     `التاريخ: ${new Date().toISOString().slice(0, 10)}`,
     "",
     "الأعراض:",

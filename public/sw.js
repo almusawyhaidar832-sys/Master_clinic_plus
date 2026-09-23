@@ -1,4 +1,4 @@
-const CACHE_NAME = "mcp-app-v25-doctor-push-always";
+const CACHE_NAME = "mcp-app-v26-pearl-clinic-brand";
 
 const NOTIFICATION_ICON = "/icons/icon-192.png";
 
@@ -84,7 +84,7 @@ function buildCustomNotification(title, payload) {
   }
 
   return {
-    title: title || "Master Clinic Plus",
+    title: title || "Pearl Clinic",
     options,
   };
 }

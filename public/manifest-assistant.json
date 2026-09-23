@@ -1,8 +1,8 @@
 {
   "id": "/assistant",
-  "name": "Master Clinic Assistant",
+  "name": "Pearl Clinic Assistant",
   "short_name": "Assistant",
-  "description": "تطبيق المساعد — ماستر كلينك",
+  "description": "تطبيق المساعد — بيرل كلينك",
   "start_url": "/assistant",
   "scope": "/assistant",
   "display": "standalone",

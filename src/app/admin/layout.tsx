@@ -3,8 +3,8 @@ import { AdminLayoutClient } from "@/components/layout/AdminLayoutClient";
 import { AppProviders } from "@/components/providers/AppProviders";
 
 export const metadata: Metadata = {
-  title: "Owner | Master Clinic Plus",
-  applicationName: "Master Clinic Owner",
+  title: "Owner | Pearl Clinic",
+  applicationName: "Pearl Clinic Owner",
   icons: {
     icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
     apple: [{ url: "/icons/icon-192.png", sizes: "180x180", type: "image/png" }],
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Master Clinic Owner",
+    title: "Pearl Clinic Owner",
   },
 };
 

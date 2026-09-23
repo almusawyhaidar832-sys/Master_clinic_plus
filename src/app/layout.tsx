@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_Arabic } from "next/font/google";
 import "./globals.css";
-import { APP_NAME, DEVELOPER } from "@/lib/constants";
+import { APP_NAME, APP_NAME_EN, DEVELOPER } from "@/lib/constants";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import { OfflineToast } from "@/components/pwa/OfflineToast";
 import { LanguageProvider } from "@/contexts/LanguageContext";
@@ -17,22 +17,23 @@ export const metadata: Metadata = {
     default: APP_NAME,
     template: `%s | ${APP_NAME}`,
   },
-  description: "نظام إدارة عيادات متعدد المستأجرين — ماستر كلينك بلس",
-  applicationName: "Master Clinic",
+  description: "نظام إدارة عيادات متعدد المستأجرين — بيرل كلينك",
+  applicationName: APP_NAME_EN,
   authors: [{ name: DEVELOPER.nameEn }],
   creator: DEVELOPER.nameEn,
   manifest: "/manifest.json",
   icons: {
     icon: [
+      { url: "/icons/favicon-48.png", sizes: "48x48", type: "image/png" },
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: [{ url: "/icons/icon-192.png", sizes: "180x180", type: "image/png" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Master Clinic",
+    title: APP_NAME_EN,
   },
   formatDetection: {
     telephone: false,
@@ -40,7 +41,7 @@ export const metadata: Metadata = {
   other: {
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-capable": "yes",
-    "apple-mobile-web-app-title": "Master Clinic",
+    "apple-mobile-web-app-title": APP_NAME_EN,
     "apple-mobile-web-app-status-bar-style": "black-translucent",
   },
 };

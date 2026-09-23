@@ -1,4 +1,4 @@
-# ماستر كلينك بلس — Master Clinic Plus
+# بيرل كلينك — Pearl Clinic
 
 نظام إدارة عيادات متعدد المستأجرين (Multi-Tenant) بواجهة عربية كاملة، مبني على **Next.js 15 (App Router)** + **Tailwind CSS** + **Supabase**.
 
@@ -104,4 +104,4 @@ npm run dev
 
 ---
 
-© Master Clinic Plus — جاهز للتوسع بعدد غير محدود من العيادات.
+© Pearl Clinic — جاهز للتوسع بعدد غير محدود من العيادات.

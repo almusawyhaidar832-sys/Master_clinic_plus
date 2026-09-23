@@ -3,8 +3,8 @@ import { AssistantMobileShell } from "@/components/layout/AssistantMobileShell";
 import { AppProviders } from "@/components/providers/AppProviders";
 
 export const metadata: Metadata = {
-  title: "Assistant App | Master Clinic Plus",
-  applicationName: "Master Clinic Assistant",
+  title: "Assistant App | Pearl Clinic",
+  applicationName: "Pearl Clinic Assistant",
   manifest: "/manifest-assistant.json",
   icons: {
     icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
@@ -13,12 +13,12 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Master Clinic Assistant",
+    title: "Pearl Clinic Assistant",
   },
   other: {
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-capable": "yes",
-    "apple-mobile-web-app-title": "Master Clinic Assistant",
+    "apple-mobile-web-app-title": "Pearl Clinic Assistant",
   },
 };
 
