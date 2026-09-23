@@ -1,5 +1,5 @@
 /**
- * Pearl Clinic — Dynamic Module System Types
+ * Master Clinic Plus — Dynamic Module System Types
  * Single source of truth for all module/specialty definitions
  */
 

@@ -1,5 +1,5 @@
 /**
- * Pearl Clinic — Translation Dictionary
+ * Master Clinic Plus — Translation Dictionary
  * Two languages: Arabic (ar) and English (en)
  */
 
@@ -15,7 +15,7 @@ export type TranslationKey = keyof typeof translations.ar;
 const translations = {
   ar: {
     // ── App ──
-    appName:            "بيرل كلينك",
+    appName:            "ماستر كلينك بلس",
     appTagline:         "نظام إدارة العيادات الذكي",
     offlineModeHint:    "لا يوجد اتصال — يمكنك إدخال بيانات المراجع وسيتم رفعها تلقائياً عند عودة النت",
     offlineSavedPending: "تم الحفظ محلياً — بانتظار رفع البيانات عند عودة النت",
@@ -810,7 +810,7 @@ const translations = {
 
   en: {
     // ── App ──
-    appName:            "Pearl Clinic",
+    appName:            "Master Clinic Plus",
     appTagline:         "Smart Clinic Management System",
     offlineModeHint:    "No connection — you can enter visit data; it will upload automatically when you're back online",
     offlineSavedPending: "Saved locally — waiting to upload when online",

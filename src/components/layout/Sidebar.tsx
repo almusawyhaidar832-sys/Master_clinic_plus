@@ -131,12 +131,9 @@ export function Sidebar({
               className="h-10 w-10 rounded-xl border border-slate-border object-contain bg-surface-card p-0.5 shadow-sm"
             />
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src="/icons/icon-192.png"
-              alt="Pearl Clinic"
-              className="h-10 w-10 rounded-xl object-cover shadow-elevated ring-1 ring-white/10"
-            />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-mc-navy text-sm font-bold tracking-tight text-white shadow-elevated ring-1 ring-white/10">
+              MC
+            </div>
           )}
           <div className="min-w-0">
             <p className="truncate font-bold tracking-tight text-slate-text leading-tight">

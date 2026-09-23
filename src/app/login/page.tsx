@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { FaTooth } from "react-icons/fa";
 import {
   isValidSanitizedUsername,
   sanitizeUsername,
@@ -209,14 +210,11 @@ function LoginPageContent() {
 
       <div className="z-10 w-full max-w-lg">
         <div className="mb-8 flex flex-col items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/icons/icon-192.png"
-            alt="Pearl Clinic"
-            className="h-20 w-20 rounded-[22px] border border-white/15 object-cover shadow-glass"
-          />
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white shadow-glass backdrop-blur-md">
+            <FaTooth size={30} />
+          </div>
           <h1 className="font-mono text-3xl font-extrabold tracking-widest text-white">
-            PEARL CLINIC
+            MASTER CLINIC PLUS
           </h1>
           <p className="text-xs font-bold uppercase tracking-widest text-premium-300">
             {t("appTagline")}

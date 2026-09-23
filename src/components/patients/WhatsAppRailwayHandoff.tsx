@@ -18,7 +18,7 @@ function buildHandoffText(serverUrl: string | null): string {
     "=== طلب دعم Railway — Evolution API / Baileys لا يُسلّم الرسائل ===",
     "",
     `التاريخ: ${today}`,
-    "المشروع: Pearl Clinic",
+    "المشروع: Master Clinic Plus",
     "",
     "الأعراض:",
     "- HTTP 201 على sendText لكن status = PENDING",

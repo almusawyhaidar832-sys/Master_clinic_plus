@@ -1,5 +1,5 @@
 /**
- * Supabase database types — Pearl Clinic
+ * Supabase database types — Master Clinic Plus
  * Tables: clinics, profiles, doctors, patients, appointments,
  *         patient_operations, operation_types, doctor_withdrawals,
  *         expenses, staff_members, notifications, transactions
