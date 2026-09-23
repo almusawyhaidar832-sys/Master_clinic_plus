@@ -12,6 +12,7 @@ import {
   fetchAllRows,
   fetchAllRowsInChunks,
 } from "@/lib/supabase/fetch-all-rows";
+import { dedupeInflight } from "@/lib/supabase/dedupe-inflight";
 import { opDebt, opName, type Doctor, type PatientOperation } from "@/types";
 import type { TopPerformersPayload } from "@/lib/services/doctor-performance";
 
@@ -556,6 +557,20 @@ export async function fetchPaidSalariesBundle(
   from: string,
   to: string
 ): Promise<PaidSalariesBundle> {
+  const bundle = await dedupeInflight(
+    supabase,
+    `fetchPaidSalariesBundle:${clinicId}:${from}:${to}`,
+    () => fetchPaidSalariesBundleUncached(supabase, clinicId, from, to)
+  );
+  return { ...bundle };
+}
+
+async function fetchPaidSalariesBundleUncached(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<PaidSalariesBundle> {
   const [slipRows, recordRows, closedMonths, assistantTxPaid] = await Promise.all([
     fetchSalarySlipsForProfitLegacy(supabase, clinicId),
     fetchPayrollRecordsForProfitLegacy(supabase, clinicId),
@@ -904,6 +919,20 @@ export async function loadOperationsInPeriod(
   from: string,
   to: string
 ): Promise<PatientOperation[]> {
+  const ops = await dedupeInflight(
+    supabase,
+    `loadOperationsInPeriod:${clinicId}:${from}:${to}`,
+    () => loadOperationsInPeriodUncached(supabase, clinicId, from, to)
+  );
+  return [...ops];
+}
+
+async function loadOperationsInPeriodUncached(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<PatientOperation[]> {
   const seen = new Map<string, PatientOperation>();
   const { startIso, endIso } = localPeriodUtcBounds(from, to);
 
@@ -1197,6 +1226,20 @@ export async function fetchNewPatientsInPeriod(
 
 /** ديون المراجعين الذين زاروا خلال الفترة (ذمتهم الكاملة، ليس جلسات اليوم فقط) */
 export async function fetchPeriodVisitorDebt(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<{ debt: number; visitorCount: number }> {
+  const result = await dedupeInflight(
+    supabase,
+    `fetchPeriodVisitorDebt:${clinicId}:${from}:${to}`,
+    () => fetchPeriodVisitorDebtUncached(supabase, clinicId, from, to)
+  );
+  return { ...result };
+}
+
+async function fetchPeriodVisitorDebtUncached(
   supabase: SupabaseClient,
   clinicId: string,
   from: string,

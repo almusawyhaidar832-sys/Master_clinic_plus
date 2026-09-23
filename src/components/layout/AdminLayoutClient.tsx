@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { AdminMobileShell } from "./AdminMobileShell";
 import { createClient } from "@/lib/supabase/client";
-import { fetchUnreadNotificationCountViaApi } from "@/lib/notifications/client";
+import {
+  fetchUnreadNotificationCountViaApi,
+  pollWhileVisible,
+} from "@/lib/notifications/client";
 import { getAuthProfile } from "@/lib/clinic-context";
 import { useClinicSync } from "@/hooks/useClinicSync";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
@@ -28,14 +31,17 @@ export function AdminLayoutClient({
     setNotificationCount(count);
   }, []);
 
+  const refreshNotificationCount = useCallback(async () => {
+    setNotificationCount(await fetchUnreadNotificationCountViaApi("admin"));
+  }, []);
+
   useEffect(() => {
     void loadNotifications();
     // ملاحظة: موضوع "notifications" ليس مغطى بـ Supabase Realtime — لذلك هذا
     // الاستطلاع هو المسار الوحيد لتحديث عداد الإشعارات بين المستخدمين.
     // أعيدت المدة إلى 30 ثانية كما كانت.
-    const interval = setInterval(() => void loadNotifications(), 30_000);
-    return () => clearInterval(interval);
-  }, [loadNotifications]);
+    return pollWhileVisible(() => void refreshNotificationCount(), 30_000);
+  }, [loadNotifications, refreshNotificationCount]);
 
   useEffect(() => {
     const warm = () => {

@@ -4,7 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { accountantModuleNav, superAdminModuleNav } from "@/config/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { fetchUnreadNotificationCountViaApi } from "@/lib/notifications/client";
+import {
+  fetchUnreadNotificationCountViaApi,
+  pollWhileVisible,
+} from "@/lib/notifications/client";
 import { getAuthProfile } from "@/lib/clinic-context";
 import { useClinicProfile } from "@/contexts/ClinicProfileContext";
 import { useClinicModules } from "@/contexts/ClinicModulesContext";
@@ -61,15 +64,18 @@ export function DashboardLayoutClient({
     setNotificationCount(count);
   }, []);
 
+  const refreshNotificationCount = useCallback(async () => {
+    setNotificationCount(await fetchUnreadNotificationCountViaApi("accountant"));
+  }, []);
+
   useEffect(() => {
     void loadNotifications();
     // ملاحظة: مواضيع "queue"/"notifications" ليست مغطاة بـ Supabase Realtime
     // (لا يوجد جدول patient_queue/notifications ضمن ClinicDataSyncBridge) — لذلك
     // هذا الاستطلاع هو المسار الوحيد الذي يوصل إشعار الطبيب للمحاسب بين المستخدمين.
     // أعيدت المدة إلى 30 ثانية كما كانت (تجربة سابقة بـ 120 ثانية أخّرت الإشعارات).
-    const interval = setInterval(() => void loadNotifications(), 30_000);
-    return () => clearInterval(interval);
-  }, [loadNotifications]);
+    return pollWhileVisible(() => void refreshNotificationCount(), 30_000);
+  }, [loadNotifications, refreshNotificationCount]);
 
   useClinicSync({
     topics: ["sessions", "refunds", "queue", "appointments", "notifications"],

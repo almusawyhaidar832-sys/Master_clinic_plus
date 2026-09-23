@@ -13,6 +13,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "يجب تسجيل الدخول" }, { status: 401 });
     }
 
+    if (req.nextUrl.searchParams.get("count_only") === "1") {
+      const unreadCount = await fetchUnreadNotificationCountForRecipient(profile.id);
+      return NextResponse.json({ unread_count: unreadCount });
+    }
+
     const [items, unreadCount] = await Promise.all([
       fetchNotificationsForRecipient(profile.id),
       fetchUnreadNotificationCountForRecipient(profile.id),

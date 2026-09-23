@@ -35,7 +35,28 @@ async function getCookieStore(): Promise<CookieStore> {
   };
 }
 
-export async function createApiSessionClient(req?: Request) {
+// Several helpers resolve the session for the same request — reuse one client so
+// Supabase Auth (getUser network call) is hit once per request, not 2-3 times.
+const sessionClientByRequest = new WeakMap<
+  Request,
+  ReturnType<typeof createApiSessionClientUncached>
+>();
+const callerProfileByRequest = new WeakMap<
+  Request,
+  ReturnType<typeof getApiCallerProfileUncached>
+>();
+
+export function createApiSessionClient(req?: Request) {
+  if (!req) return createApiSessionClientUncached(req);
+  const cached = sessionClientByRequest.get(req);
+  if (cached) return cached;
+  const promise = createApiSessionClientUncached(req);
+  sessionClientByRequest.set(req, promise);
+  promise.catch(() => sessionClientByRequest.delete(req));
+  return promise;
+}
+
+async function createApiSessionClientUncached(req?: Request) {
   const store = await getCookieStore();
   const portalId = resolvePortalFromRequest(req);
 
@@ -73,7 +94,17 @@ export async function getApiActiveClinicId(req?: Request): Promise<string | null
   return caller?.clinic_id ?? null;
 }
 
-export async function getApiCallerProfile(req?: Request) {
+export function getApiCallerProfile(req?: Request) {
+  if (!req) return getApiCallerProfileUncached(req);
+  const cached = callerProfileByRequest.get(req);
+  if (cached) return cached;
+  const promise = getApiCallerProfileUncached(req);
+  callerProfileByRequest.set(req, promise);
+  promise.catch(() => callerProfileByRequest.delete(req));
+  return promise;
+}
+
+async function getApiCallerProfileUncached(req?: Request) {
   const actingClinicId = await resolveDeveloperActingClinicId(req);
   const profileSelect = "id, role, clinic_id, full_name";
   const user = await getApiSessionUser(req);

@@ -96,8 +96,37 @@ export async function fetchNotificationsInboxViaApi(
 export async function fetchUnreadNotificationCountViaApi(
   portal: AuthPortalId
 ): Promise<number> {
-  const result = await fetchNotificationsInboxViaApi(portal);
-  return result.ok ? (result.unreadCount ?? 0) : 0;
+  try {
+    const res = await fetch("/api/notifications/inbox?count_only=1", {
+      credentials: "include",
+      headers: authPortalHeaders(portal),
+    });
+    if (!res.ok) return 0;
+    const json = (await res.json()) as { unread_count?: number };
+    return json.unread_count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** استطلاع عداد الإشعارات — يتوقف والتبويب مخفي ويتحدّث فور الرجوع إليه */
+export function pollWhileVisible(
+  refresh: () => void,
+  intervalMs: number
+): () => void {
+  const isHidden = () =>
+    typeof document !== "undefined" && document.visibilityState === "hidden";
+  const interval = setInterval(() => {
+    if (!isHidden()) refresh();
+  }, intervalMs);
+  const onVisibility = () => {
+    if (!isHidden()) refresh();
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+  return () => {
+    clearInterval(interval);
+    document.removeEventListener("visibilitychange", onVisibility);
+  };
 }
 
 /** تعليم إشعار أو الكل كمقروء — عبر السيرفر لضمان التحديث */

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
+import { dedupeInflight } from "@/lib/supabase/dedupe-inflight";
 import type { PayrollRecord, SalarySlip } from "@/types";
 
 function roundMoney(n: number): number {
@@ -260,7 +261,20 @@ export function payrollProfitDeductionFromTransactionAmount(
 }
 
 /** حركات صرف مؤكَّدة ضمن الفترة — transaction_date (تقويم محلي عند التأكيد) */
-export async function fetchConfirmedPayrollProfitDeduction(
+export function fetchConfirmedPayrollProfitDeduction(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<number> {
+  return dedupeInflight(
+    supabase,
+    `fetchConfirmedPayrollProfitDeduction:${clinicId}:${from}:${to}`,
+    () => fetchConfirmedPayrollProfitDeductionUncached(supabase, clinicId, from, to)
+  );
+}
+
+async function fetchConfirmedPayrollProfitDeductionUncached(
   supabase: SupabaseClient,
   clinicId: string,
   from: string,

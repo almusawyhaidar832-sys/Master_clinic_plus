@@ -127,11 +127,13 @@ export default function PatientProfilePage() {
     const supabase = createClient();
     const clinic = await getActiveClinicId(supabase);
     if (!clinic?.clinicId) return;
-    const data = await fetchPatientOperationsForProfile(supabase, id, {
-      clinicId: clinic.clinicId,
-    });
+    const [data, clinical] = await Promise.all([
+      fetchPatientOperationsForProfile(supabase, id, {
+        clinicId: clinic.clinicId,
+      }),
+      fetchPatientClinicalRecords(id),
+    ]);
     setOperations(data);
-    const clinical = await fetchPatientClinicalRecords(id);
     setClinicalByOp(clinical);
   }, [id]);
 
@@ -217,12 +219,24 @@ export default function PatientProfilePage() {
         return;
       }
 
-      const { data: pRes } = await supabase
-        .from("patients")
-        .select("*")
-        .eq("id", id)
-        .eq("clinic_id", clinic.clinicId)
-        .maybeSingle();
+      const [{ data: pRes }, logsRes, ops, clinical, cases] = await Promise.all([
+        supabase
+          .from("patients")
+          .select("*")
+          .eq("id", id)
+          .eq("clinic_id", clinic.clinicId)
+          .maybeSingle(),
+        supabase
+          .from("medical_logs")
+          .select("*, doctor:doctors!doctor_id(full_name_ar)")
+          .eq("patient_id", id)
+          .order("log_date", { ascending: false }),
+        fetchPatientOperationsForProfile(supabase, id, {
+          clinicId: clinic.clinicId,
+        }),
+        fetchPatientClinicalRecords(id, "accountant"),
+        fetchPatientTreatmentCases(supabase, id, clinic.clinicId),
+      ]);
       if (!pRes) {
         setAccessDenied(true);
         setRefreshing(false);
@@ -231,21 +245,8 @@ export default function PatientProfilePage() {
       setAccessDenied(false);
       setPatient(pRes as Patient);
 
-      const logsRes = await supabase
-        .from("medical_logs")
-        .select("*, doctor:doctors!doctor_id(full_name_ar)")
-        .eq("patient_id", id)
-        .order("log_date", { ascending: false });
       const nextLogs = (logsRes.data as typeof medicalLogs) ?? [];
       setMedicalLogs(nextLogs);
-
-      const [ops, clinical, cases] = await Promise.all([
-        fetchPatientOperationsForProfile(supabase, id, {
-          clinicId: clinic.clinicId,
-        }),
-        fetchPatientClinicalRecords(id, "accountant"),
-        fetchPatientTreatmentCases(supabase, id, clinic.clinicId),
-      ]);
       setOperations(ops);
       setClinicalByOp(clinical);
       setTreatmentCases(cases);

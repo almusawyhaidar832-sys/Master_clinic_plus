@@ -121,9 +121,9 @@ export async function GET(req: NextRequest) {
     }
 
     const admin = getAdminClient();
-    const ops = await loadOperationsInPeriod(admin, clinicId, from, to);
-    const [supplement, profitStatsRaw, collectionFinancials, topPerformers, newPatients] =
+    const [ops, supplement, profitStatsRaw, collectionFinancials, topPerformers, newPatients] =
       await Promise.all([
+        loadOperationsInPeriod(admin, clinicId, from, to),
         fetchExecutiveDashboardSupplement(admin, clinicId, from, to),
         fetchClinicProfitStatsForPeriod(admin, clinicId, from, to),
         fetchPeriodCollectionFinancialTotals(admin, clinicId, from, to),

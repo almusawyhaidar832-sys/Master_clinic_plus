@@ -28,6 +28,7 @@ import {
   fetchAllRows,
   fetchAllRowsInChunks,
 } from "@/lib/supabase/fetch-all-rows";
+import { dedupeInflight } from "@/lib/supabase/dedupe-inflight";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import { DOCTOR_FINANCE_WITH_NAME_SELECT } from "@/lib/services/doctor-db-select";
 import {
@@ -1803,6 +1804,25 @@ function isRefundOperation(op: TodayOperationRow): boolean {
  * - الفترة حسب operation_date (مثل المحفظة و get_clinic_financial_snapshot)
  */
 export async function fetchPeriodCollectionFinancialTotals(
+  supabase: SupabaseClient,
+  clinicId: string,
+  from: string,
+  to: string
+): Promise<{
+  collected: number;
+  doctorShareTotal: number;
+  clinicShareTotal: number;
+  byDoctor: PeriodDoctorEarningRow[];
+}> {
+  const totals = await dedupeInflight(
+    supabase,
+    `fetchPeriodCollectionFinancialTotals:${clinicId}:${from}:${to}`,
+    () => fetchPeriodCollectionFinancialTotalsUncached(supabase, clinicId, from, to)
+  );
+  return { ...totals, byDoctor: totals.byDoctor.map((row) => ({ ...row })) };
+}
+
+async function fetchPeriodCollectionFinancialTotalsUncached(
   supabase: SupabaseClient,
   clinicId: string,
   from: string,
