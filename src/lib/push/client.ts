@@ -327,8 +327,8 @@ export async function showAppNotification(
   try {
     await registration.showNotification(payload.title, {
       body: payload.body,
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
+      icon: "/icons/pearl-192.png",
+      badge: "/icons/pearl-192.png",
       tag: payload.tag ?? "mcp-doctor",
       // renotify is standard but missing from the current TS DOM lib typings
       renotify: payload.renotify !== false,

@@ -7,8 +7,8 @@ export const metadata: Metadata = {
   applicationName: "شاشة الانتظار",
   manifest: "/manifest-queue-screen.json",
   icons: {
-    icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
-    apple: [{ url: "/icons/icon-192.png", sizes: "180x180", type: "image/png" }],
+    icon: [{ url: "/icons/pearl-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/icons/pearl-192.png", sizes: "180x180", type: "image/png" }],
   },
   appleWebApp: {
     capable: true,

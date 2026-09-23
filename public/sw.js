@@ -1,6 +1,6 @@
-const CACHE_NAME = "mcp-app-v26-pearl-clinic-brand";
+const CACHE_NAME = "mcp-app-v27-pearl-login-about";
 
-const NOTIFICATION_ICON = "/icons/icon-192.png";
+const NOTIFICATION_ICON = "/icons/pearl-192.png";
 
 /** App shell — يُخزَّن عند install */
 const APP_SHELL_URLS = [
@@ -27,8 +27,8 @@ const APP_SHELL_URLS = [
   "/manifest-assistant.json",
   "/manifest-queue-screen.json",
   "/queue-screen",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
+  "/icons/pearl-192.png",
+  "/icons/pearl-512.png",
 ];
 
 const STATIC_EXTENSIONS = new Set([

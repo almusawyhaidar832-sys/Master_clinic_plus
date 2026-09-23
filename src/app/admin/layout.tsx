@@ -6,8 +6,8 @@ export const metadata: Metadata = {
   title: "Owner | Pearl Clinic",
   applicationName: "Pearl Clinic Owner",
   icons: {
-    icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
-    apple: [{ url: "/icons/icon-192.png", sizes: "180x180", type: "image/png" }],
+    icon: [{ url: "/icons/pearl-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/icons/pearl-192.png", sizes: "180x180", type: "image/png" }],
   },
   appleWebApp: {
     capable: true,

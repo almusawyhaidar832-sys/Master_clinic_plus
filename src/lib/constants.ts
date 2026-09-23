@@ -124,10 +124,13 @@ export const CURRENCY_CODE = "IQD";
 export const CURRENCY_SYMBOL_AR = "د.ع";
 
 export const DEVELOPER = {
-  nameAr:   "حيدر حازم الموسوي",
-  nameEn:   "Haidar Hazem Almusawi",
-  initials: "HH",
-  role:     "Full-Stack Developer & Product Designer",
-  roleAr:   "مطوّر برمجيات ومصمم المنتج",
+  nameAr:   "Nexura Technologies",
+  nameEn:   "Nexura Technologies",
+  initials: "NX",
+  role:     "Software Engineering & Product Design",
+  roleAr:   "هندسة البرمجيات وتصميم المنتجات",
   year:     2026,
+  email:    "almusawyhaidar832@gmail.com",
+  phone:    "07731002610",
+  phoneIntl: "+9647731002610",
 } as const;

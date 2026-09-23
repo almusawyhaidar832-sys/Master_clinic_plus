@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { DeveloperCredit } from "@/components/layout/DeveloperCredit";
-import { DeveloperFooterLink } from "@/components/layout/DeveloperFooterLink";
 import type { NavItem } from "@/types";
 import {
   LayoutDashboard, Users, Stethoscope, Wallet, Receipt,
@@ -133,7 +132,7 @@ export function Sidebar({
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src="/icons/icon-192.png"
+              src="/icons/pearl-192.png"
               alt="Pearl Clinic"
               className="h-10 w-10 rounded-xl object-cover shadow-elevated ring-1 ring-white/10"
             />
@@ -209,8 +208,7 @@ export function Sidebar({
           {t("logout")}
         </button>
 
-        <DeveloperCredit variant="sidebar" className="mb-1" />
-        <DeveloperFooterLink />
+        <DeveloperCredit className="mb-1" />
       </div>
     </aside>
   );
