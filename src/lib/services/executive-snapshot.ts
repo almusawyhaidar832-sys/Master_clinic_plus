@@ -8,6 +8,10 @@ import {
 import { fetchPatientFinancialPlansBatch } from "@/lib/services/patient-financial-plan";
 import { resolveOperationPaymentSplit } from "@/lib/services/session-billing-mode";
 import { localDateISO, localPeriodUtcBounds } from "@/lib/utils";
+import {
+  fetchAllRows,
+  fetchAllRowsInChunks,
+} from "@/lib/supabase/fetch-all-rows";
 import { opDebt, opName, type Doctor, type PatientOperation } from "@/types";
 import type { TopPerformersPayload } from "@/lib/services/doctor-performance";
 
@@ -53,25 +57,39 @@ async function collectPeriodVisitorPatientIds(
   const ids = new Set<string>();
   const { startIso, endIso } = localPeriodUtcBounds(from, to);
 
+  type VisitorRow = {
+    patient_id: string | null;
+    operation_date?: string | null;
+    created_at?: string | null;
+  };
   const [byOpDate, byCreated, casesRes] = await Promise.all([
-    supabase
-      .from("patient_operations")
-      .select("patient_id")
-      .eq("clinic_id", clinicId)
-      .gte("operation_date", from)
-      .lte("operation_date", to),
-    supabase
-      .from("patient_operations")
-      .select("patient_id, operation_date, created_at")
-      .eq("clinic_id", clinicId)
-      .gte("created_at", startIso)
-      .lte("created_at", endIso),
-    supabase
-      .from("patient_treatment_cases")
-      .select("patient_id, created_at")
-      .eq("clinic_id", clinicId)
-      .gte("created_at", startIso)
-      .lte("created_at", endIso),
+    fetchAllRows<VisitorRow>(() =>
+      supabase
+        .from("patient_operations")
+        .select("patient_id")
+        .eq("clinic_id", clinicId)
+        .gte("operation_date", from)
+        .lte("operation_date", to)
+        .order("id", { ascending: true })
+    ),
+    fetchAllRows<VisitorRow>(() =>
+      supabase
+        .from("patient_operations")
+        .select("patient_id, operation_date, created_at")
+        .eq("clinic_id", clinicId)
+        .gte("created_at", startIso)
+        .lte("created_at", endIso)
+        .order("id", { ascending: true })
+    ),
+    fetchAllRows<VisitorRow>(() =>
+      supabase
+        .from("patient_treatment_cases")
+        .select("patient_id, created_at")
+        .eq("clinic_id", clinicId)
+        .gte("created_at", startIso)
+        .lte("created_at", endIso)
+        .order("id", { ascending: true })
+    ),
   ]);
 
   for (const row of byOpDate.data ?? []) {
@@ -119,34 +137,54 @@ async function sumOutstandingDebtForPatients(
 ): Promise<{ total: number; debtorCount: number }> {
   if (patientIds.length === 0) return { total: 0, debtorCount: 0 };
 
+  type CaseDebtRow = {
+    patient_id: string;
+    case_price: number | null;
+    discount_total: number | null;
+    final_price: number | null;
+    total_paid: number | null;
+  };
   const [patientsRes, casesRes, opsRes] = await Promise.all([
-    supabase
-      .from("patients")
-      .select("id, agreed_total, total_paid")
-      .eq("clinic_id", clinicId)
-      .in("id", patientIds),
-    supabase
-      .from("patient_treatment_cases")
-      .select(
-        "patient_id, case_price, discount_total, final_price, total_paid"
-      )
-      .eq("clinic_id", clinicId)
-      .in("patient_id", patientIds),
-    supabase
-      .from("patient_operations")
-      .select(
-        "patient_id, remaining_debt, total_amount, paid_amount, session_kind"
-      )
-      .eq("clinic_id", clinicId)
-      .in("patient_id", patientIds),
+    fetchAllRowsInChunks<{
+      id: string;
+      agreed_total: number | string | null;
+      total_paid: number | string | null;
+    }>(patientIds, (chunk) =>
+      supabase
+        .from("patients")
+        .select("id, agreed_total, total_paid")
+        .eq("clinic_id", clinicId)
+        .in("id", chunk)
+        .order("id", { ascending: true })
+    ),
+    fetchAllRowsInChunks<CaseDebtRow>(patientIds, (chunk) =>
+      supabase
+        .from("patient_treatment_cases")
+        .select(
+          "id, patient_id, case_price, discount_total, final_price, total_paid"
+        )
+        .eq("clinic_id", clinicId)
+        .in("patient_id", chunk)
+        .order("id", { ascending: true })
+    ),
+    fetchAllRowsInChunks<Record<string, unknown>>(patientIds, (chunk) =>
+      supabase
+        .from("patient_operations")
+        .select(
+          "id, patient_id, remaining_debt, total_amount, paid_amount, session_kind"
+        )
+        .eq("clinic_id", clinicId)
+        .in("patient_id", chunk)
+        .order("id", { ascending: true })
+    ),
   ]);
 
   const patientById = new Map(
     (patientsRes.data ?? []).map((p) => [p.id as string, p])
   );
-  const casesByPatient = new Map<string, typeof casesRes.data>();
+  const casesByPatient = new Map<string, CaseDebtRow[]>();
   for (const row of casesRes.data ?? []) {
-    const pid = row.patient_id as string;
+    const pid = row.patient_id;
     const list = casesByPatient.get(pid) ?? [];
     list.push(row);
     casesByPatient.set(pid, list);
@@ -155,7 +193,7 @@ async function sumOutstandingDebtForPatients(
   for (const row of opsRes.data ?? []) {
     const pid = row.patient_id as string;
     const list = opsByPatient.get(pid) ?? [];
-    list.push(row as PatientOperation);
+    list.push(row as unknown as PatientOperation);
     opsByPatient.set(pid, list);
   }
 
@@ -167,7 +205,13 @@ async function sumOutstandingDebtForPatients(
     const p = patientById.get(pid);
     const agreed = num(p?.agreed_total);
     if (agreed > 0) {
-      const owed = Math.max(0, agreed - num(p?.total_paid));
+      // patients.total_paid كان يتضخم مع كل تعديل على الجلسة (trigger على
+      // UPDATE يضيف المبلغ مرة ثانية) — مجموع الجلسات نفسها هو الحقيقة.
+      const patientOps = opsByPatient.get(pid);
+      const paid = patientOps?.length
+        ? patientOps.reduce((s, op) => s + num(op.paid_amount), 0)
+        : num(p?.total_paid);
+      const owed = Math.max(0, agreed - paid);
       total += owed;
       if (owed > 0.001) debtorCount += 1;
       continue;
@@ -377,21 +421,34 @@ async function fetchSalarySlipsForProfitLegacy(
   supabase: SupabaseClient,
   clinicId: string
 ) {
-  const withPaidColumn = await supabase
-    .from("salary_slips")
-    .select("net_payout, paid_net_payout, paid_at, month_year, status")
-    .eq("clinic_id", clinicId)
-    .or("status.eq.paid,paid_net_payout.gt.0");
+  type SlipRow = {
+    net_payout: number | null;
+    paid_net_payout?: number | null;
+    paid_at: string | null;
+    month_year: string | null;
+    status: string | null;
+  };
+  const withPaidColumn = await fetchAllRows<SlipRow>(() =>
+    supabase
+      .from("salary_slips")
+      .select("id, net_payout, paid_net_payout, paid_at, month_year, status")
+      .eq("clinic_id", clinicId)
+      .or("status.eq.paid,paid_net_payout.gt.0")
+      .order("id", { ascending: true })
+  );
 
   if (!withPaidColumn.error) {
     return withPaidColumn.data ?? [];
   }
 
-  const legacy = await supabase
-    .from("salary_slips")
-    .select("net_payout, paid_at, month_year, status")
-    .eq("clinic_id", clinicId)
-    .eq("status", "paid");
+  const legacy = await fetchAllRows<SlipRow>(() =>
+    supabase
+      .from("salary_slips")
+      .select("id, net_payout, paid_at, month_year, status")
+      .eq("clinic_id", clinicId)
+      .eq("status", "paid")
+      .order("id", { ascending: true })
+  );
 
   return legacy.data ?? [];
 }
@@ -436,13 +493,17 @@ async function sumAssistantClinicPayrollTransactions(
   from: string,
   to: string
 ): Promise<number> {
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("amount")
-    .eq("clinic_id", clinicId)
-    .eq("type", "assistant_payroll_clinic")
-    .gte("transaction_date", from)
-    .lte("transaction_date", to);
+  const { data, error } = await fetchAllRows<{ amount: number | string | null }>(
+    () =>
+      supabase
+        .from("transactions")
+        .select("amount")
+        .eq("clinic_id", clinicId)
+        .eq("type", "assistant_payroll_clinic")
+        .gte("transaction_date", from)
+        .lte("transaction_date", to)
+        .order("id", { ascending: true })
+  );
 
   if (error || !data?.length) return 0;
 
@@ -454,23 +515,36 @@ async function fetchPayrollRecordsForProfitLegacy(
   supabase: SupabaseClient,
   clinicId: string
 ) {
-  const withPaid = await supabase
-    .from("payroll_records")
-    .select(
-      "clinic_share_amount, paid_clinic_share_amount, paid_at, month_year, status"
-    )
-    .eq("clinic_id", clinicId)
-    .or("status.eq.paid,paid_clinic_share_amount.gt.0");
+  type RecordRow = {
+    clinic_share_amount: number | null;
+    paid_clinic_share_amount?: number | null;
+    paid_at: string | null;
+    month_year: string | null;
+    status: string | null;
+  };
+  const withPaid = await fetchAllRows<RecordRow>(() =>
+    supabase
+      .from("payroll_records")
+      .select(
+        "id, clinic_share_amount, paid_clinic_share_amount, paid_at, month_year, status"
+      )
+      .eq("clinic_id", clinicId)
+      .or("status.eq.paid,paid_clinic_share_amount.gt.0")
+      .order("id", { ascending: true })
+  );
 
   if (!withPaid.error) {
     return withPaid.data ?? [];
   }
 
-  const legacy = await supabase
-    .from("payroll_records")
-    .select("clinic_share_amount, paid_at, month_year, status")
-    .eq("clinic_id", clinicId)
-    .eq("status", "paid");
+  const legacy = await fetchAllRows<RecordRow>(() =>
+    supabase
+      .from("payroll_records")
+      .select("id, clinic_share_amount, paid_at, month_year, status")
+      .eq("clinic_id", clinicId)
+      .eq("status", "paid")
+      .order("id", { ascending: true })
+  );
 
   return legacy.data ?? [];
 }
@@ -729,6 +803,23 @@ export interface PeriodOperationFinancials {
 /**
  * حصص العيادة/الطبيب من المدفوعات — يطابق calc_*_operation_earned (plan/payment).
  */
+async function fetchCaseSharesByIds(
+  supabase: SupabaseClient,
+  caseIds: string[]
+): Promise<{ data: Record<string, unknown>[] }> {
+  if (!caseIds.length) return { data: [] };
+  const { data } = await fetchAllRowsInChunks<Record<string, unknown>>(
+    caseIds,
+    (chunk) =>
+      supabase
+        .from("patient_treatment_cases")
+        .select("id, clinic_share_total, doctor_share_total, final_price")
+        .in("id", chunk)
+        .order("id", { ascending: true })
+  );
+  return { data: data ?? [] };
+}
+
 export async function summarizePeriodOperationFinancials(
   supabase: SupabaseClient,
   ops: PatientOperation[]
@@ -756,14 +847,7 @@ export async function summarizePeriodOperationFinancials(
   ];
 
   const [casesRes, doctorsRes] = await Promise.all([
-    caseIds.length
-      ? supabase
-          .from("patient_treatment_cases")
-          .select(
-            "id, clinic_share_total, doctor_share_total, final_price"
-          )
-          .in("id", caseIds)
-      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    fetchCaseSharesByIds(supabase, caseIds),
     doctorIds.length
       ? supabase
           .from("doctors")
@@ -832,20 +916,24 @@ export async function loadOperationsInPeriod(
   };
 
   const [byOpDateRes, byCreatedRes] = await Promise.all([
-    supabase
-      .from("patient_operations")
-      .select("*")
-      .eq("clinic_id", clinicId)
-      .gte("operation_date", from)
-      .lte("operation_date", to),
-    supabase
-      .from("patient_operations")
-      .select("*")
-      .eq("clinic_id", clinicId)
-      .gte("created_at", startIso)
-      .lte("created_at", endIso)
-      .order("created_at", { ascending: false })
-      .limit(2000),
+    fetchAllRows<PatientOperation>(() =>
+      supabase
+        .from("patient_operations")
+        .select("*")
+        .eq("clinic_id", clinicId)
+        .gte("operation_date", from)
+        .lte("operation_date", to)
+        .order("id", { ascending: true })
+    ),
+    fetchAllRows<PatientOperation>(() =>
+      supabase
+        .from("patient_operations")
+        .select("*")
+        .eq("clinic_id", clinicId)
+        .gte("created_at", startIso)
+        .lte("created_at", endIso)
+        .order("id", { ascending: true })
+    ),
   ]);
 
   addRows((byOpDateRes.data ?? []) as PatientOperation[]);
@@ -880,26 +968,26 @@ export async function fetchTopPerformersForPeriod(
 
   const [expensesRes, doctorsRes, casesRes, paymentDoctorsRes] =
     await Promise.all([
-      supabase
-        .from("expenses")
-        .select("amount, expense_kind, expense_categories(name_ar)")
-        .eq("clinic_id", clinicId)
-        .gte("expense_date", from)
-        .lte("expense_date", to),
+      fetchAllRows<{
+        amount: number | string | null;
+        expense_kind: string | null;
+        expense_categories: unknown;
+      }>(() =>
+        supabase
+          .from("expenses")
+          .select("id, amount, expense_kind, expense_categories(name_ar)")
+          .eq("clinic_id", clinicId)
+          .gte("expense_date", from)
+          .lte("expense_date", to)
+          .order("id", { ascending: true })
+      ),
       supabase
         .from("doctors")
         .select("id, full_name_ar")
         .eq("clinic_id", clinicId)
         .eq("is_active", true)
         .order("full_name_ar"),
-      caseIds.length
-        ? supabase
-            .from("patient_treatment_cases")
-            .select(
-              "id, clinic_share_total, doctor_share_total, final_price"
-            )
-            .in("id", caseIds)
-        : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+      fetchCaseSharesByIds(supabase, caseIds),
       paymentDoctorIds.length
         ? supabase
             .from("doctors")
@@ -1142,11 +1230,14 @@ export async function fetchClinicOutstandingDebtNow(
   supabase: SupabaseClient,
   clinicId: string
 ): Promise<{ debt: number; debtorCount: number }> {
-  const { data } = await supabase
-    .from("patients")
-    .select("id")
-    .eq("clinic_id", clinicId);
-  const patientIds = (data ?? []).map((p) => p.id as string);
+  const { data } = await fetchAllRows<{ id: string }>(() =>
+    supabase
+      .from("patients")
+      .select("id")
+      .eq("clinic_id", clinicId)
+      .order("id", { ascending: true })
+  );
+  const patientIds = (data ?? []).map((p) => p.id);
 
   if (patientIds.length === 0) {
     return { debt: 0, debtorCount: 0 };

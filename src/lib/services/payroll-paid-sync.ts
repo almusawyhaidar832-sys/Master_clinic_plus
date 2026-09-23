@@ -12,6 +12,7 @@ import {
 } from "@/lib/services/payroll-paid-portions";
 import { listSalaryEntriesForPersonMonth } from "@/lib/services/salary-entries-server";
 import type { PayrollRecord, SalarySlip } from "@/types";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
@@ -241,14 +242,17 @@ export async function syncPayrollMonthPaidStatus(
     .filter(Boolean);
 
   const [txRes, assistantsRes, staffRes] = await Promise.all([
-    admin
-      .from("transactions")
-      .select("type, amount, reference_id, reference_type")
-      .eq("clinic_id", clinicId)
-      .in("type", [
-        "assistant_payroll_doctor",
-        "assistant_payroll_clinic",
-      ]),
+    fetchAllRows<AssistantTxRow>(() =>
+      admin
+        .from("transactions")
+        .select("id, type, amount, reference_id, reference_type")
+        .eq("clinic_id", clinicId)
+        .in("type", [
+          "assistant_payroll_doctor",
+          "assistant_payroll_clinic",
+        ])
+        .order("id", { ascending: true })
+    ),
     assistantIds.length
       ? admin
           .from("assistants")

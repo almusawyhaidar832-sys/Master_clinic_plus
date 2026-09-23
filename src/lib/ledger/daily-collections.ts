@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { FINANCIAL_EPSILON, computeLiveDoctorShare, doctorPaymentPct } from "@/lib/services/patient-financial-plan";
+import { FINANCIAL_EPSILON, doctorPaymentPct } from "@/lib/services/patient-financial-plan";
 import { CLINICAL_SESSION_LABEL } from "@/lib/clinical/constants";
 import {
   fetchLedgerOperationsForDate,
@@ -20,10 +20,14 @@ import {
   isDebtRegistrationOperation,
 } from "@/lib/services/patient-treatment-cases";
 import {
+  calcOperationEarned,
   resolveReviewFeeOnOperation,
-  treatmentPaidForDoctorShare,
   isReviewFeeOnlyPayment,
 } from "@/lib/services/doctor-wallet";
+import {
+  fetchAllRows,
+  fetchAllRowsInChunks,
+} from "@/lib/supabase/fetch-all-rows";
 import { isSalaryDoctor } from "@/lib/services/doctor-payment";
 import { DOCTOR_FINANCE_WITH_NAME_SELECT } from "@/lib/services/doctor-db-select";
 import {
@@ -470,13 +474,18 @@ async function fetchPatientPaymentOpsForPeriod(
   if (!patientIds.length) return existing;
   const byId = new Map(existing.map((o) => [o.id, o]));
 
-  const { data } = await supabase
-    .from("patient_operations")
-    .select(PAYMENT_OPS_SELECT)
-    .eq("clinic_id", clinicId)
-    .gte("operation_date", from)
-    .lte("operation_date", to)
-    .in("patient_id", patientIds);
+  const { data } = await fetchAllRowsInChunks<TodayOperationRow>(
+    patientIds,
+    (chunk) =>
+      supabase
+        .from("patient_operations")
+        .select(PAYMENT_OPS_SELECT)
+        .eq("clinic_id", clinicId)
+        .gte("operation_date", from)
+        .lte("operation_date", to)
+        .in("patient_id", chunk)
+        .order("id", { ascending: true })
+  );
 
   for (const row of data ?? []) {
     const op = row as TodayOperationRow;
@@ -605,8 +614,8 @@ type DoctorPaymentMeta = {
   doctor: Doctor | null;
 };
 
-/** حصة الطبيب لزيارة — نسبته الحالية فقط (بدون 50/50 مخزّن) */
-function earnedVisitShareLive(
+/** حصة الطبيب لزيارة — الحصة المجمّدة وقت الدفع (نفس محفظة الطبيب) */
+function earnedVisitShare(
   ops: TodayOperationRow[],
   meta: DoctorPaymentMeta,
   clinicReviewFee = 0
@@ -615,29 +624,13 @@ function earnedVisitShareLive(
 
   let total = 0;
   for (const op of ops) {
-    const raw = op as TodayOperationRow & {
-      review_fee_amount?: unknown;
-      is_review_statement?: boolean | null;
-    };
-    const treatmentPaid = treatmentPaidForDoctorShare(
-      {
-        paid_amount: num(op.paid_amount),
-        review_fee_amount: num(raw.review_fee_amount),
-        is_review_statement: raw.is_review_statement,
-      },
+    total += calcOperationEarned(
+      op as PeriodShareOperationRow,
+      meta.pct,
+      false,
+      meta.doctor,
       clinicReviewFee
     );
-    if (treatmentPaid <= FINANCIAL_EPSILON) continue;
-
-    if (meta.doctor) {
-      total += computeLiveDoctorShare(
-        treatmentPaid,
-        meta.doctor,
-        num(op.materials_cost)
-      );
-    } else if (meta.pct > 0) {
-      total += roundMoney(treatmentPaid * meta.pct);
-    }
   }
   return roundMoney(total);
 }
@@ -679,7 +672,7 @@ function computeVisitDoctorShares(
   for (const { doctorId, vk, ops } of groups.values()) {
     const meta = metaByDoctor.get(doctorId);
     if (!meta) continue;
-    const earned = earnedVisitShareLive(ops, meta, clinicReviewFee);
+    const earned = earnedVisitShare(ops, meta, clinicReviewFee);
     byVisit.set(vk, earned);
     byDoctor.set(doctorId, (byDoctor.get(doctorId) ?? 0) + earned);
   }
@@ -1789,62 +1782,26 @@ export type PeriodDoctorEarningRow = {
   clinicShare: number;
 };
 
-type CaseShareRow = {
-  id?: string | null;
-  final_price?: number | string | null;
-  primary_doctor_id?: string | null;
-};
+const PERIOD_SHARE_OP_SELECT =
+  "*, invoices(paid_amount, total_amount, remaining_amount), patient_treatment_cases(doctor_share_total, clinic_share_total, final_price)";
 
-function isReviewFeeOnlyOperation(
-  op: TodayOperationRow,
-  clinicReviewFee = 0
-): boolean {
-  const raw = op as TodayOperationRow & {
-    is_review_statement?: boolean | null;
-    review_fee_amount?: number | string | null;
-  };
-  return isReviewFeeOnlyPayment(
-    {
-      paid_amount: op.paid_amount,
-      review_fee_amount: raw.review_fee_amount,
-      is_review_statement: raw.is_review_statement,
-    },
-    clinicReviewFee
+type PeriodShareOperationRow = TodayOperationRow &
+  Parameters<typeof calcOperationEarned>[0];
+
+function isRefundOperation(op: TodayOperationRow): boolean {
+  return (
+    op.session_kind === "refund" || num(op.paid_amount) < -FINANCIAL_EPSILON
   );
 }
 
-function doctorShareByLivePercentage(
-  paid: number,
-  doctor: Doctor | null | undefined,
-  op: TodayOperationRow,
-  clinicReviewFee = 0
-): number {
-  if (paid <= FINANCIAL_EPSILON || !doctor || isSalaryDoctor(doctor)) {
-    return 0;
-  }
-
-  const raw = op as TodayOperationRow & {
-    review_fee_amount?: number | string | null;
-    is_review_statement?: boolean | null;
-  };
-  const treatmentPaid = treatmentPaidForDoctorShare(
-    {
-      paid_amount: paid,
-      review_fee_amount: raw.review_fee_amount,
-      is_review_statement: raw.is_review_statement,
-    },
-    clinicReviewFee
-  );
-  if (treatmentPaid <= FINANCIAL_EPSILON) return 0;
-
-  return computeLiveDoctorShare(
-    treatmentPaid,
-    doctor,
-    num(op.materials_cost)
-  );
-}
-
-/** حصص الأطباء/العيادة للوحة التنفيذية — حسب طبيب الحالة ونسبة الطبيب الحالية */
+/**
+ * حصص الأطباء/العيادة لفترة (ربح العيادة + اللوحة التنفيذية).
+ * نفس قواعد محفظة الطبيب بالضبط حتى يتطابق الرقمان:
+ * - الحصة المجمّدة وقت الدفع (calcOperationEarned) — لا نسبة الطبيب الحالية
+ * - الطبيب المسجّل على الجلسة نفسها — لا طبيب الحالة الأساسي
+ * - الإرجاعات (مبالغ سالبة) تُطرح من المحصّل ومن الحصتين
+ * - الفترة حسب operation_date (مثل المحفظة و get_clinic_financial_snapshot)
+ */
 export async function fetchPeriodCollectionFinancialTotals(
   supabase: SupabaseClient,
   clinicId: string,
@@ -1856,45 +1813,27 @@ export async function fetchPeriodCollectionFinancialTotals(
   clinicShareTotal: number;
   byDoctor: PeriodDoctorEarningRow[];
 }> {
-  const { operations } = await fetchLedgerOperationsForDate(supabase, clinicId, {
-    dateFrom: from,
-    dateTo: to,
-  });
-
-  const clinicReviewFee = await loadClinicDefaultReviewFee(supabase, clinicId);
-
-  const caseIds = [
-    ...new Set(
-      operations
-        .map((op) => op.treatment_case_id?.trim())
-        .filter((id): id is string => !!id)
+  const [opsRes, clinicReviewFee] = await Promise.all([
+    fetchAllRows<PeriodShareOperationRow>(() =>
+      supabase
+        .from("patient_operations")
+        .select(PERIOD_SHARE_OP_SELECT)
+        .eq("clinic_id", clinicId)
+        .gte("operation_date", from)
+        .lte("operation_date", to)
+        .order("id", { ascending: true })
     ),
-  ];
-
-  const casesRes = caseIds.length
-    ? await supabase
-        .from("patient_treatment_cases")
-        .select("id, final_price, primary_doctor_id")
-        .in("id", caseIds)
-    : { data: [] as CaseShareRow[] };
-
-  const caseById = new Map(
-    ((casesRes.data ?? []) as CaseShareRow[]).map((row) => [
-      String(row.id),
-      row,
-    ])
-  );
+    loadClinicDefaultReviewFee(supabase, clinicId),
+  ]);
+  if (opsRes.error) {
+    throw new Error(opsRes.error.message);
+  }
+  const operations = opsRes.data ?? [];
 
   const doctorIds = [
     ...new Set(
       operations
-        .map((op) => {
-          const caseId = op.treatment_case_id?.trim();
-          const caseDoctorId = caseId
-            ? caseById.get(caseId)?.primary_doctor_id
-            : null;
-          return caseDoctorId || op.doctor_id;
-        })
+        .map((op) => op.doctor_id)
         .filter((id): id is string => !!id)
     ),
   ];
@@ -1916,32 +1855,36 @@ export async function fetchPeriodCollectionFinancialTotals(
   let doctorShareTotal = 0;
 
   for (const op of operations) {
-    if (isDebtRegistrationOperation(op)) continue;
-    const paid = ledgerPaidToday(op, clinicReviewFee);
-    if (paid <= FINANCIAL_EPSILON) continue;
+    const refund = isRefundOperation(op);
+    // remaining_debt محسوب (total − paid) فيصير موجباً على قيد الإرجاع —
+    // لذلك نفحص الإرجاع قبل فحص «تسجيل دين» حتى لا يُتجاهل الإرجاع.
+    if (!refund && isDebtRegistrationOperation(op)) continue;
+
+    const paid = refund ? num(op.paid_amount) : ledgerPaidToday(op, clinicReviewFee);
+    if (Math.abs(paid) <= FINANCIAL_EPSILON) continue;
 
     collected += paid;
 
-    if (isReviewFeeOnlyOperation(op, clinicReviewFee)) {
-      continue;
-    }
+    const doctorId = op.doctor_id;
+    if (!doctorId) continue;
 
-    const caseId = op.treatment_case_id?.trim();
-    const caseRow = caseId ? caseById.get(caseId) : undefined;
-    const effectiveDoctorId = caseRow?.primary_doctor_id || op.doctor_id;
-    if (!effectiveDoctorId) continue;
-
-    const doctor = doctorById.get(effectiveDoctorId);
-    const doctorShare = doctorShareByLivePercentage(
-      paid,
-      doctor,
-      op,
-      clinicReviewFee
-    );
+    const doctor = doctorById.get(doctorId) ?? null;
+    const salaryDoctor = doctor ? isSalaryDoctor(doctor) : false;
+    const doctorShare = salaryDoctor
+      ? 0
+      : refund
+        ? roundMoney(num(op.doctor_share_amount))
+        : calcOperationEarned(
+            op,
+            doctorPaymentPct(doctor),
+            false,
+            doctor,
+            clinicReviewFee
+          );
     doctorShareTotal += doctorShare;
 
-    const current = byDoctorMap.get(effectiveDoctorId) ?? {
-      doctorId: effectiveDoctorId,
+    const current = byDoctorMap.get(doctorId) ?? {
+      doctorId,
       doctorName: String(doctor?.full_name_ar ?? "طبيب"),
       collected: 0,
       doctorShare: 0,
@@ -1949,15 +1892,13 @@ export async function fetchPeriodCollectionFinancialTotals(
     };
     current.collected = roundMoney(current.collected + paid);
     current.doctorShare = roundMoney(current.doctorShare + doctorShare);
-    current.clinicShare = roundMoney(
-      Math.max(0, current.collected - current.doctorShare)
-    );
-    byDoctorMap.set(effectiveDoctorId, current);
+    current.clinicShare = roundMoney(current.collected - current.doctorShare);
+    byDoctorMap.set(doctorId, current);
   }
 
   collected = roundMoney(collected);
   doctorShareTotal = roundMoney(doctorShareTotal);
-  const clinicShareTotal = roundMoney(Math.max(0, collected - doctorShareTotal));
+  const clinicShareTotal = roundMoney(collected - doctorShareTotal);
   const byDoctor = [...byDoctorMap.values()].sort(
     (a, b) => b.collected - a.collected || b.doctorShare - a.doctorShare
   );

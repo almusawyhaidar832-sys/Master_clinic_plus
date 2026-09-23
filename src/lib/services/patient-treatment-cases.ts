@@ -1,4 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  fetchAllRows,
+  fetchAllRowsInChunks,
+} from "@/lib/supabase/fetch-all-rows";
 import { formatCurrency } from "@/lib/utils";
 import { operationLabelForCase, opDebt, opName } from "@/types";
 import type { PatientOperation } from "@/types";
@@ -702,13 +706,15 @@ export async function fetchOpenTreatmentCasesForDoctor(
   supabase: SupabaseClient,
   doctorId: string
 ): Promise<TreatmentCaseWithPatient[]> {
-  const { data: rows, error } = await supabase
-    .from("patient_treatment_cases")
-    .select(
-      "*, patient:patients!patient_id(id, full_name_ar)"
-    )
-    .or(`primary_doctor_id.eq.${doctorId},primary_doctor_id.is.null`)
-    .order("updated_at", { ascending: false });
+  const { data: rows, error } = await fetchAllRows<Record<string, unknown>>(
+    () =>
+      supabase
+        .from("patient_treatment_cases")
+        .select("*, patient:patients!patient_id(id, full_name_ar)")
+        .or(`primary_doctor_id.eq.${doctorId},primary_doctor_id.is.null`)
+        .order("updated_at", { ascending: false })
+        .order("id", { ascending: true })
+  );
 
   if (error || !rows?.length) return [];
 
@@ -718,14 +724,24 @@ export async function fetchOpenTreatmentCasesForDoctor(
     ),
   ];
 
-  const { data: allOps } = await supabase
-    .from("patient_operations")
-    .select("*")
-    .in("patient_id", patientIds)
-    .order("created_at", { ascending: true });
+  const { data: allOpsRaw } = await fetchAllRowsInChunks<PatientOperation>(
+    patientIds,
+    (chunk) =>
+      supabase
+        .from("patient_operations")
+        .select("*")
+        .in("patient_id", chunk)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+  );
+  const allOps = [...(allOpsRaw ?? [])].sort(
+    (a, b) =>
+      String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")) ||
+      String(a.id).localeCompare(String(b.id))
+  );
 
   const opsByPatient = new Map<string, PatientOperation[]>();
-  for (const op of (allOps ?? []) as PatientOperation[]) {
+  for (const op of allOps) {
     const pid = op.patient_id;
     if (!opsByPatient.has(pid)) opsByPatient.set(pid, []);
     opsByPatient.get(pid)!.push(op);

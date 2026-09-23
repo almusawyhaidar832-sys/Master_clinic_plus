@@ -251,6 +251,7 @@ function PatientRow({ row }: { row: DailyCollectionRow }) {
 
 function AssistantPayrollRow({ line }: { line: DailyAssistantPayrollLine }) {
   const isConfirmed = line.statusLabel === "صرف مؤكّد";
+  const isCorrection = Boolean(line.isCorrection);
 
   return (
     <div className="flex flex-col gap-3 border-b border-slate-border/60 bg-amber-50/30 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
@@ -263,12 +264,14 @@ function AssistantPayrollRow({ line }: { line: DailyAssistantPayrollLine }) {
           <span
             className={cn(
               "inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium",
-              isConfirmed
-                ? "bg-emerald-100 text-emerald-800"
-                : "bg-amber-100 text-amber-900"
+              isCorrection
+                ? "bg-sky-100 text-sky-800"
+                : isConfirmed
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-amber-100 text-amber-900"
             )}
           >
-            {line.statusLabel}
+            {isCorrection ? "تصحيح (استرجاع)" : line.statusLabel}
           </span>
         </div>
         <p className="mt-1 text-xs text-slate-muted">
@@ -278,21 +281,32 @@ function AssistantPayrollRow({ line }: { line: DailyAssistantPayrollLine }) {
 
       <div className="flex flex-wrap items-center gap-4 sm:justify-end">
         <div className="text-right">
-          <p className="text-[11px] text-slate-muted">أجر المساعد</p>
+          <p className="text-[11px] text-slate-muted">
+            {isCorrection ? "المبلغ المسترجع" : "أجر المساعد"}
+          </p>
           <p className="font-bold tabular-nums text-slate-text">
-            {formatCurrency(line.totalSalary)}
+            {formatCurrency(Math.abs(line.totalSalary))}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-[11px] text-slate-muted">يُخصم من الطبيب</p>
-          <p className="font-bold tabular-nums text-red-700">
-            − {formatCurrency(line.doctorDeduction)}
+          <p className="text-[11px] text-slate-muted">
+            {isCorrection ? "يُرجع للطبيب" : "يُخصم من الطبيب"}
+          </p>
+          <p
+            className={cn(
+              "font-bold tabular-nums",
+              isCorrection ? "text-emerald-700" : "text-red-700"
+            )}
+          >
+            {isCorrection ? "+" : "−"} {formatCurrency(Math.abs(line.doctorDeduction))}
           </p>
         </div>
         <div className="text-right">
-          <p className="text-[11px] text-slate-muted">حصة العيادة</p>
+          <p className="text-[11px] text-slate-muted">
+            {isCorrection ? "يُرجع للعيادة" : "حصة العيادة"}
+          </p>
           <p className="font-bold tabular-nums text-slate-text">
-            {formatCurrency(line.clinicShare)}
+            {formatCurrency(Math.abs(line.clinicShare))}
           </p>
         </div>
       </div>

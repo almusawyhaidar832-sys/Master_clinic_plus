@@ -7,6 +7,10 @@ import {
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { assistantPendingClinicShare } from "@/lib/services/payroll-paid-portions";
 import { todayISO } from "@/lib/utils";
+import {
+  fetchAllRows,
+  fetchAllRowsInChunks,
+} from "@/lib/supabase/fetch-all-rows";
 import type { PayrollRecord } from "@/types";
 
 export type DailyAssistantPayrollLine = {
@@ -24,6 +28,8 @@ export type DailyAssistantPayrollLine = {
   clinicShare: number;
   doctorSharePct: number;
   statusLabel: "صرف مؤكّد" | "أجر مسجّل";
+  /** حركة تصحيح بعد حذف/تعديل أجر — المبالغ سالبة (ترجع للطبيب والعيادة) */
+  isCorrection?: boolean;
 };
 
 function num(v: unknown): number {
@@ -53,6 +59,41 @@ type TxRow = {
   transaction_date: string;
 };
 
+/** نفس ASSISTANT_ENTRY_*_REF في payroll-financial — مرجع الحركة = معرّف الأجر اليومي */
+const DAILY_ENTRY_CONFIRM_REFS = [
+  "salary_entry_assistant_doctor",
+  "salary_entry_assistant_clinic",
+];
+
+const ENTRY_ID_CHUNK = 150;
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function fetchDailyConfirmedEntryIds(
+  supabase: SupabaseClient,
+  clinicId: string,
+  entryIds: string[]
+): Promise<Set<string>> {
+  const confirmed = new Set<string>();
+  for (let i = 0; i < entryIds.length; i += ENTRY_ID_CHUNK) {
+    const chunk = entryIds.slice(i, i + ENTRY_ID_CHUNK);
+    const { data } = await fetchAllRows<{ reference_id: string | null }>(() =>
+      supabase
+        .from("transactions")
+        .select("reference_id")
+        .eq("clinic_id", clinicId)
+        .in("reference_type", DAILY_ENTRY_CONFIRM_REFS)
+        .in("reference_id", chunk)
+        .order("id", { ascending: true })
+    );
+    for (const row of data ?? []) {
+      if (row.reference_id) confirmed.add(String(row.reference_id));
+    }
+  }
+  return confirmed;
+}
+
 /** أجور مساعدي الأطباء في فترة محددة — صرف مؤكّد + تسجيل أجر يومي */
 export async function fetchDailyAssistantPayrollLines(
   supabase: SupabaseClient,
@@ -60,33 +101,46 @@ export async function fetchDailyAssistantPayrollLines(
   input: { dateFrom: string; dateTo: string },
   doctorId?: string
 ): Promise<DailyAssistantPayrollLine[]> {
-  const txQuery = supabase
-    .from("transactions")
-    .select(
-      "id, doctor_id, amount, type, reference_type, reference_id, description_ar, transaction_date"
-    )
-    .eq("clinic_id", clinicId)
-    .gte("transaction_date", input.dateFrom)
-    .lte("transaction_date", input.dateTo)
-    .in("type", ["assistant_payroll_doctor", "assistant_payroll_clinic"]);
+  const buildTxQuery = () =>
+    supabase
+      .from("transactions")
+      .select(
+        "id, doctor_id, amount, type, reference_type, reference_id, description_ar, transaction_date"
+      )
+      .eq("clinic_id", clinicId)
+      .gte("transaction_date", input.dateFrom)
+      .lte("transaction_date", input.dateTo)
+      .in("type", ["assistant_payroll_doctor", "assistant_payroll_clinic"])
+      .order("id", { ascending: true });
 
-  const entriesQuery = supabase
-    .from("salary_entries")
-    .select(
-      `
+  const buildEntriesQuery = () =>
+    supabase
+      .from("salary_entries")
+      .select(
+        `
       id, assistant_id, amount, entry_type, entry_date, notes_ar,
       assistant:assistants!assistant_id(
         id, full_name_ar, doctor_id, doctor_share_percentage
       )
     `
-    )
-    .eq("clinic_id", clinicId)
-    .gte("entry_date", input.dateFrom)
-    .lte("entry_date", input.dateTo)
-    .eq("entry_type", "daily_wage")
-    .not("assistant_id", "is", null);
+      )
+      .eq("clinic_id", clinicId)
+      .gte("entry_date", input.dateFrom)
+      .lte("entry_date", input.dateTo)
+      .eq("entry_type", "daily_wage")
+      .not("assistant_id", "is", null)
+      .order("id", { ascending: true });
 
-  const [txRes, entriesRes] = await Promise.all([txQuery, entriesQuery]);
+  const [txRes, entriesRes] = await Promise.all([
+    fetchAllRows<TxRow>(buildTxQuery),
+    fetchAllRows<Record<string, unknown>>(buildEntriesQuery),
+  ]);
+
+  const confirmedEntryIds = await fetchDailyConfirmedEntryIds(
+    supabase,
+    clinicId,
+    (entriesRes.data ?? []).map((row) => String(row.id ?? "")).filter(Boolean)
+  );
 
   const entryRows = [...(entriesRes.data ?? [])].sort((a, b) => {
     const dateCmp = String(a.entry_date ?? "").localeCompare(
@@ -153,7 +207,9 @@ export async function fetchDailyAssistantPayrollLines(
     const parentId = parseReferenceParentId(
       batch.doctor?.reference_id ?? batch.clinic?.reference_id
     );
-    if (parentId) recordIds.add(parentId);
+    // مراجع التصحيح مثل "salary-entry:<id>" ليست UUID — لو دخلت في .in("id")
+    // يرفض Postgres الاستعلام كله ولا يُطابَق أي سجل راتب شهري.
+    if (parentId && UUID_RE.test(parentId)) recordIds.add(parentId);
   }
 
   const recordById = new Map<
@@ -167,13 +223,22 @@ export async function fetchDailyAssistantPayrollLines(
   >();
 
   if (recordIds.size > 0) {
-    const { data: records } = await supabase
-      .from("payroll_records")
-      .select(
-        "id, assistant_id, assistant_name_ar, doctor_id, doctor_share_percentage"
-      )
-      .eq("clinic_id", clinicId)
-      .in("id", [...recordIds]);
+    const { data: records } = await fetchAllRowsInChunks<{
+      id: string;
+      assistant_id: string | null;
+      assistant_name_ar: string | null;
+      doctor_id: string | null;
+      doctor_share_percentage: number | string | null;
+    }>([...recordIds], (chunk) =>
+      supabase
+        .from("payroll_records")
+        .select(
+          "id, assistant_id, assistant_name_ar, doctor_id, doctor_share_percentage"
+        )
+        .eq("clinic_id", clinicId)
+        .in("id", chunk)
+        .order("id", { ascending: true })
+    );
 
     for (const r of records ?? []) {
       recordById.set(String(r.id), {
@@ -189,12 +254,11 @@ export async function fetchDailyAssistantPayrollLines(
   const confirmedTotalsByAssistant = new Map<string, number>();
 
   for (const [batchKey, batch] of batches) {
-    const doctorDeduction = roundMoney(
-      Math.abs(num(batch.doctor?.amount))
-    );
-    const clinicShare = roundMoney(Math.abs(num(batch.clinic?.amount)));
+    // الحركات موقّعة: سالب = خصم، موجب = تصحيح يرجّع جزء من خصم سابق
+    const doctorDeduction = roundMoney(-num(batch.doctor?.amount));
+    const clinicShare = roundMoney(-num(batch.clinic?.amount));
     const totalSalary = roundMoney(doctorDeduction + clinicShare);
-    if (totalSalary <= FINANCIAL_EPSILON) continue;
+    if (Math.abs(totalSalary) <= FINANCIAL_EPSILON) continue;
 
     const parentId = parseReferenceParentId(
       batch.doctor?.reference_id ?? batch.clinic?.reference_id
@@ -206,7 +270,7 @@ export async function fetchDailyAssistantPayrollLines(
     if (doctorId && resolvedDoctorId !== doctorId) continue;
 
     const assistantId = record?.assistant_id ?? null;
-    if (assistantId) {
+    if (assistantId && totalSalary > 0) {
       confirmedTotalsByAssistant.set(
         assistantId,
         roundMoney(
@@ -217,9 +281,7 @@ export async function fetchDailyAssistantPayrollLines(
 
     const pct =
       record?.doctor_share_percentage ??
-      (totalSalary > 0
-        ? roundMoney((doctorDeduction / totalSalary) * 100)
-        : 0);
+      roundMoney((doctorDeduction / totalSalary) * 100);
 
     lines.push({
       id: `tx-${batchKey}`,
@@ -238,6 +300,7 @@ export async function fetchDailyAssistantPayrollLines(
       clinicShare,
       doctorSharePct: pct,
       statusLabel: "صرف مؤكّد",
+      isCorrection: totalSalary < 0,
     });
   }
 
@@ -247,6 +310,8 @@ export async function fetchDailyAssistantPayrollLines(
     const row = raw as Record<string, unknown>;
     const assistantId = row.assistant_id ? String(row.assistant_id) : null;
     if (!assistantId) continue;
+    // أجر يومي مؤكَّد صرفه بحركة خاصة به — يظهر أعلاه كـ «صرف مؤكّد»
+    if (confirmedEntryIds.has(String(row.id ?? ""))) continue;
 
     const assistantRaw = row.assistant;
     let assistant = Array.isArray(assistantRaw)
@@ -353,19 +418,29 @@ export async function fetchRegisteredAssistantPayrollClinicDeduction(
     }
   }
 
-  const { data: records, error } = await supabase
-    .from("payroll_records")
-    .select(
-      `
+  const { data: records, error } = await fetchAllRows<{
+    assistant_id: string | null;
+    clinic_share_amount: number | string | null;
+    paid_clinic_share_amount: number | string | null;
+    doctor_share_percentage: number | null;
+    assistant: unknown;
+  }>(() =>
+    supabase
+      .from("payroll_records")
+      .select(
+        `
+      id,
       assistant_id,
       clinic_share_amount,
       paid_clinic_share_amount,
       doctor_share_percentage,
       assistant:assistants!assistant_id(compensation_mode, doctor_share_percentage)
     `
-    )
-    .eq("clinic_id", clinicId)
-    .neq("status", "paid");
+      )
+      .eq("clinic_id", clinicId)
+      .neq("status", "paid")
+      .order("id", { ascending: true })
+  );
 
   if (!error && records?.length) {
     for (const row of records) {
@@ -496,13 +571,19 @@ export async function fetchDoctorAssistantPayrollDeductionByDoctor(
   // وليس من تجميع الأسطر — لأن حركات "تصحيح" الموجبة (استرجاع جزء من خصم
   // سابق بعد حذف/تعديل يوم عمل مساعد) كانت تُحسب كخصم إضافي بالخطأ بدل أن
   // تُطرح من الخصم الكلي. هذا يطابق get_doctor_wallet_stats في القاعدة تماماً.
-  const { data } = await supabase
-    .from("transactions")
-    .select("doctor_id, amount")
-    .in("doctor_id", doctorIds)
-    .eq("type", "assistant_payroll_doctor")
-    .gte("transaction_date", range.from)
-    .lte("transaction_date", range.to);
+  const { data } = await fetchAllRows<{
+    doctor_id: string | null;
+    amount: number | string | null;
+  }>(() =>
+    supabase
+      .from("transactions")
+      .select("doctor_id, amount")
+      .in("doctor_id", doctorIds)
+      .eq("type", "assistant_payroll_doctor")
+      .gte("transaction_date", range.from)
+      .lte("transaction_date", range.to)
+      .order("id", { ascending: true })
+  );
 
   const netByDoctor = new Map<string, number>();
   for (const row of data ?? []) {

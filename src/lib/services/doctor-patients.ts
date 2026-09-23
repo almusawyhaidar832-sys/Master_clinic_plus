@@ -10,6 +10,10 @@ import {
   PATIENT_SEARCH_MIN_LENGTH,
   type PatientSearchResult,
 } from "@/lib/services/patient-search";
+import {
+  fetchAllRows,
+  fetchAllRowsInChunks,
+} from "@/lib/supabase/fetch-all-rows";
 
 const PATIENT_SEARCH_COLUMNS =
   "id, clinic_id, full_name_ar, phone, phone_number, notes, primary_doctor_id, created_at, updated_at";
@@ -21,21 +25,37 @@ export async function getDoctorPatientIds(
 ): Promise<string[]> {
   const patientIds = new Set<string>();
 
+  type IdRow = { id?: string; patient_id?: string | null };
   const [primaryRes, opsRes, casesRes, apptsRes] = await Promise.all([
-    supabase.from("patients").select("id").eq("primary_doctor_id", doctorId),
-    supabase
-      .from("patient_operations")
-      .select("patient_id")
-      .eq("doctor_id", doctorId),
-    supabase
-      .from("patient_treatment_cases")
-      .select("patient_id")
-      .eq("primary_doctor_id", doctorId),
-    supabase
-      .from("appointments")
-      .select("patient_id")
-      .eq("doctor_id", doctorId)
-      .not("patient_id", "is", null),
+    fetchAllRows<IdRow>(() =>
+      supabase
+        .from("patients")
+        .select("id")
+        .eq("primary_doctor_id", doctorId)
+        .order("id", { ascending: true })
+    ),
+    fetchAllRows<IdRow>(() =>
+      supabase
+        .from("patient_operations")
+        .select("id, patient_id")
+        .eq("doctor_id", doctorId)
+        .order("id", { ascending: true })
+    ),
+    fetchAllRows<IdRow>(() =>
+      supabase
+        .from("patient_treatment_cases")
+        .select("id, patient_id")
+        .eq("primary_doctor_id", doctorId)
+        .order("id", { ascending: true })
+    ),
+    fetchAllRows<IdRow>(() =>
+      supabase
+        .from("appointments")
+        .select("id, patient_id")
+        .eq("doctor_id", doctorId)
+        .not("patient_id", "is", null)
+        .order("id", { ascending: true })
+    ),
   ]);
 
   for (const row of primaryRes.data ?? []) {
@@ -75,35 +95,46 @@ export async function searchPatientsForDoctor(
     return { patients: [] };
   }
 
-  const { data, error } = await supabase
-    .from("patients")
-    .select(PATIENT_SEARCH_COLUMNS)
-    .eq("clinic_id", clinicId)
-    .in("id", ids)
-    .ilike("full_name_ar", `%${q}%`)
-    .order("full_name_ar")
-    .limit(limit);
+  const { data, error } = await fetchAllRowsInChunks<PatientSearchResult>(
+    ids,
+    (chunk) =>
+      supabase
+        .from("patients")
+        .select(PATIENT_SEARCH_COLUMNS)
+        .eq("clinic_id", clinicId)
+        .in("id", chunk)
+        .ilike("full_name_ar", `%${q}%`)
+        .order("full_name_ar")
+        .order("id", { ascending: true })
+  );
 
   if (error) {
     return { patients: [], error: error.message };
   }
 
-  let patients = (data as PatientSearchResult[]) ?? [];
+  let patients = [...(data ?? [])]
+    .sort((a, b) =>
+      String(a.full_name_ar ?? "").localeCompare(String(b.full_name_ar ?? ""))
+    )
+    .slice(0, limit);
 
   if (patients.length === 0 && /^[\d+\s-]{4,}$/.test(q)) {
     const digits = q.replace(/\D/g, "");
     if (digits.length >= 4) {
-      const { data: byPhone, error: phoneErr } = await supabase
-        .from("patients")
-        .select(PATIENT_SEARCH_COLUMNS)
-        .eq("clinic_id", clinicId)
-        .in("id", ids)
-        .or(`phone.ilike.%${digits}%,phone_number.ilike.%${digits}%`)
-        .limit(limit);
+      const { data: byPhone, error: phoneErr } =
+        await fetchAllRowsInChunks<PatientSearchResult>(ids, (chunk) =>
+          supabase
+            .from("patients")
+            .select(PATIENT_SEARCH_COLUMNS)
+            .eq("clinic_id", clinicId)
+            .in("id", chunk)
+            .or(`phone.ilike.%${digits}%,phone_number.ilike.%${digits}%`)
+            .order("id", { ascending: true })
+        );
       if (phoneErr) {
         return { patients: [], error: phoneErr.message };
       }
-      patients = (byPhone as PatientSearchResult[]) ?? [];
+      patients = (byPhone ?? []).slice(0, limit);
     }
   }
 
@@ -122,13 +153,19 @@ export async function fetchPatientsForDoctor(
     return [];
   }
 
-  const { data: merged } = await supabase
-    .from("patients")
-    .select("id, full_name_ar, phone, notes, updated_at")
-    .in("id", ids)
-    .order("updated_at", { ascending: false });
+  const { data: merged } = await fetchAllRowsInChunks<
+    Patient & { updated_at?: string | null }
+  >(ids, (chunk) =>
+    supabase
+      .from("patients")
+      .select("id, full_name_ar, phone, notes, updated_at")
+      .in("id", chunk)
+      .order("id", { ascending: true })
+  );
 
-  return (merged as unknown as Patient[]) ?? [];
+  return [...(merged ?? [])].sort((a, b) =>
+    String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? ""))
+  );
 }
 
 export async function fetchPatientsForCurrentDoctor(

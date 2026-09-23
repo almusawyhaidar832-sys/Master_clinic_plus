@@ -7,6 +7,7 @@ import {
   fetchDoctorTotalEarnings,
 } from "@/lib/services/doctor-wallet";
 import { fetchDoctorBalanceTopupsTotal } from "@/lib/services/balance-topup";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 /** Max amount available for a new withdrawal (reserves pending requests) */
 export async function computeDoctorWithdrawableLimit(
@@ -24,11 +25,14 @@ export async function computeDoctorWalletBreakdown(
   const [totalEarnings, wdsRes, expenseDeductions, payrollDeductions, balanceCredits] =
     await Promise.all([
       fetchDoctorTotalEarnings(admin, doctorId),
-      admin
-        .from("doctor_withdrawals")
-        .select("amount, status")
-        .eq("doctor_id", doctorId)
-        .neq("status", "rejected"),
+      fetchAllRows<{ amount: number | string; status: string }>(() =>
+        admin
+          .from("doctor_withdrawals")
+          .select("amount, status")
+          .eq("doctor_id", doctorId)
+          .neq("status", "rejected")
+          .order("id", { ascending: true })
+      ),
       fetchDoctorExpenseDeductionsTotal(admin, doctorId),
       fetchDoctorTotalPayrollDeductions(admin, doctorId),
       fetchDoctorBalanceTopupsTotal(admin, doctorId),

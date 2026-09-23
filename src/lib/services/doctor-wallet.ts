@@ -17,6 +17,10 @@ import {
 } from "@/lib/services/balance-topup";
 import { currentMonthYear, monthDateRange } from "@/lib/utils";
 import { DOCTOR_FINANCE_SELECT } from "@/lib/services/doctor-db-select";
+import {
+  fetchAllRows,
+  fetchAllRowsInChunks,
+} from "@/lib/supabase/fetch-all-rows";
 import type { Doctor } from "@/types";
 
 export interface DoctorWalletStats {
@@ -378,17 +382,21 @@ export async function fetchDoctorSalaryPayoutsByDoctor(
   const map = initDoctorNumberMap(doctorIds);
   if (!doctorIds.length) return map;
 
-  let txQuery = supabase
-    .from("transactions")
-    .select("doctor_id, amount")
-    .in("doctor_id", doctorIds)
-    .eq("type", "doctor_salary_paid")
-    .lt("amount", 0);
-
-  if (from) txQuery = txQuery.gte("transaction_date", from);
-  if (to) txQuery = txQuery.lte("transaction_date", to);
-
-  const { data: txRows } = await txQuery;
+  const { data: txRows } = await fetchAllRowsInChunks<{
+    doctor_id: string;
+    amount: number | string | null;
+  }>(doctorIds, (chunk) => {
+    let q = supabase
+      .from("transactions")
+      .select("doctor_id, amount")
+      .in("doctor_id", chunk)
+      .eq("type", "doctor_salary_paid")
+      .lt("amount", 0)
+      .order("id", { ascending: true });
+    if (from) q = q.gte("transaction_date", from);
+    if (to) q = q.lte("transaction_date", to);
+    return q;
+  });
 
   for (const row of txRows ?? []) {
     const id = row.doctor_id as string;
@@ -414,18 +422,24 @@ export async function fetchDoctorSalaryPayoutRecords(
   from?: string,
   to?: string
 ): Promise<DoctorSalaryPayoutRecord[]> {
-  let q = supabase
-    .from("transactions")
-    .select("id, amount, transaction_date, description_ar")
-    .eq("doctor_id", doctorId)
-    .eq("type", "doctor_salary_paid")
-    .lt("amount", 0)
-    .order("transaction_date", { ascending: false });
-
-  if (from) q = q.gte("transaction_date", from);
-  if (to) q = q.lte("transaction_date", to);
-
-  const { data } = await q;
+  const { data } = await fetchAllRows<{
+    id: string;
+    amount: number | string | null;
+    transaction_date: string;
+    description_ar: string | null;
+  }>(() => {
+    let q = supabase
+      .from("transactions")
+      .select("id, amount, transaction_date, description_ar")
+      .eq("doctor_id", doctorId)
+      .eq("type", "doctor_salary_paid")
+      .lt("amount", 0)
+      .order("transaction_date", { ascending: false })
+      .order("id", { ascending: true });
+    if (from) q = q.gte("transaction_date", from);
+    if (to) q = q.lte("transaction_date", to);
+    return q;
+  });
   return (data ?? []).map((row) => ({
     id: row.id as string,
     amount: Math.abs(Number(row.amount ?? 0)),
@@ -447,11 +461,14 @@ export async function fetchDoctorExpenseDeductionsTotal(
 ): Promise<number> {
   // صافي موقّع لكل حركات النوع (بلا فلترة amount < 0) — يطرح أي حركة تصحيح
   // موجبة (استرجاع جزء من صرفية سابقة) من الخصم الكلي بدل تجاهلها.
-  const { data } = await supabase
-    .from("transactions")
-    .select("amount")
-    .eq("doctor_id", doctorId)
-    .eq("type", "doctor_expense_doctor");
+  const { data } = await fetchAllRows<{ amount: number | string | null }>(() =>
+    supabase
+      .from("transactions")
+      .select("amount")
+      .eq("doctor_id", doctorId)
+      .eq("type", "doctor_expense_doctor")
+      .order("id", { ascending: true })
+  );
 
   const net = (data ?? []).reduce((s, row) => s + Number(row.amount ?? 0), 0);
   return Math.max(0, Math.round(-net * 100) / 100);
@@ -630,17 +647,20 @@ export async function computeEarningsFromOperationsForDoctors(
   const sums = initDoctorNumberMap(doctorIds);
   if (!doctorIds.length) return sums;
 
-  let opsQuery = supabase
-    .from("patient_operations")
-    .select(OPERATION_EARNINGS_BATCH_SELECT)
-    .in("doctor_id", doctorIds);
-
-  if (from) opsQuery = opsQuery.gte("operation_date", from);
-  if (to) opsQuery = opsQuery.lte("operation_date", to);
+  const buildOpsQuery = () => {
+    let q = supabase
+      .from("patient_operations")
+      .select(OPERATION_EARNINGS_BATCH_SELECT)
+      .in("doctor_id", doctorIds)
+      .order("id", { ascending: true });
+    if (from) q = q.gte("operation_date", from);
+    if (to) q = q.lte("operation_date", to);
+    return q;
+  };
 
   const [paymentMap, opsRes] = await Promise.all([
     fetchDoctorPaymentMap(supabase, doctorIds),
-    opsQuery,
+    fetchAllRows<OperationEarningBatchRow>(buildOpsQuery),
   ]);
 
   const clinicIds = [
@@ -695,31 +715,35 @@ export async function fetchOperationCountsByDoctor(
   const counts = initDoctorNumberMap(doctorIds);
   if (!doctorIds.length) return counts;
 
-  let q = supabase
-    .from("patient_operations")
-    .select("doctor_id")
-    .eq("clinic_id", clinicId)
-    .in("doctor_id", doctorIds);
-
-  if (range) {
-    q = q.gte("operation_date", range.from).lte("operation_date", range.to);
-  }
-
-  const { data } = await q;
-  for (const row of data ?? []) {
-    const id = row.doctor_id as string;
-    counts.set(id, (counts.get(id) ?? 0) + 1);
-  }
+  await Promise.all(
+    doctorIds.map(async (doctorId) => {
+      let q = supabase
+        .from("patient_operations")
+        .select("id", { count: "exact", head: true })
+        .eq("clinic_id", clinicId)
+        .eq("doctor_id", doctorId);
+      if (range) {
+        q = q.gte("operation_date", range.from).lte("operation_date", range.to);
+      }
+      const { count } = await q;
+      counts.set(doctorId, count ?? 0);
+    })
+  );
   return counts;
 }
 
 function groupWithdrawalsByDoctor(
-  rows: { doctor_id: string; amount: number | string; status: string }[] | null
+  rows: (WithdrawalRow & { doctor_id: string })[] | null
 ): Map<string, WithdrawalRow[]> {
   const map = new Map<string, WithdrawalRow[]>();
   for (const row of rows ?? []) {
     const list = map.get(row.doctor_id) ?? [];
-    list.push({ amount: row.amount, status: row.status });
+    list.push({
+      amount: row.amount,
+      status: row.status,
+      requested_at: row.requested_at,
+      processed_at: row.processed_at,
+    });
     map.set(row.doctor_id, list);
   }
   return map;
@@ -772,23 +796,40 @@ export async function fetchDoctorWalletStatsBatch(
       period?.from,
       period?.to
     ),
-    supabase
-      .from("doctor_withdrawals")
-      .select("doctor_id, amount, status")
-      .in("doctor_id", doctorIds)
-      .neq("status", "rejected"),
-    supabase
-      .from("transactions")
-      .select("doctor_id, amount")
-      .in("doctor_id", doctorIds)
-      .eq("type", "doctor_expense_doctor"),
+    fetchAllRowsInChunks<{
+      doctor_id: string;
+      amount: number | string;
+      status: string;
+    }>(doctorIds, (chunk) =>
+      supabase
+        .from("doctor_withdrawals")
+        .select("doctor_id, amount, status")
+        .in("doctor_id", chunk)
+        .neq("status", "rejected")
+        .order("id", { ascending: true })
+    ),
+    fetchAllRowsInChunks<{ doctor_id: string; amount: number | string }>(
+      doctorIds,
+      (chunk) =>
+        supabase
+          .from("transactions")
+          .select("doctor_id, amount")
+          .in("doctor_id", chunk)
+          .eq("type", "doctor_expense_doctor")
+          .order("id", { ascending: true })
+    ),
     fetchAssistantPayrollDeductionByDoctor(supabase, doctorIds),
-    supabase
-      .from("transactions")
-      .select("doctor_id, amount")
-      .in("doctor_id", doctorIds)
-      .eq("type", BALANCE_TOPUP_DOCTOR_TYPE)
-      .gt("amount", 0),
+    fetchAllRowsInChunks<{ doctor_id: string; amount: number | string }>(
+      doctorIds,
+      (chunk) =>
+        supabase
+          .from("transactions")
+          .select("doctor_id, amount")
+          .in("doctor_id", chunk)
+          .eq("type", BALANCE_TOPUP_DOCTOR_TYPE)
+          .gt("amount", 0)
+          .order("id", { ascending: true })
+    ),
     fetchDoctorPaymentMap(supabase, doctorIds),
     fetchDoctorSalaryPayoutsByDoctor(
       supabase,
@@ -884,10 +925,15 @@ export async function fetchWithdrawalSumsByDoctor(
   >();
   if (!doctorIds.length) return map;
 
-  const { data } = await supabase
-    .from("doctor_withdrawals")
-    .select("doctor_id, amount, status, requested_at, processed_at")
-    .in("doctor_id", doctorIds);
+  const { data } = await fetchAllRowsInChunks<
+    WithdrawalRow & { doctor_id: string }
+  >(doctorIds, (chunk) =>
+    supabase
+      .from("doctor_withdrawals")
+      .select("doctor_id, amount, status, requested_at, processed_at")
+      .in("doctor_id", chunk)
+      .order("id", { ascending: true })
+  );
 
   const byDoctor = groupWithdrawalsByDoctor(data);
   for (const doctorId of doctorIds) {
@@ -941,10 +987,13 @@ export async function computeEarningsFromOperations(
   doctorId: string
 ): Promise<number> {
   const [opsRes, doctorRes] = await Promise.all([
-    supabase
-      .from("patient_operations")
-      .select(OPERATION_EARNINGS_SELECT)
-      .eq("doctor_id", doctorId),
+    fetchAllRows<OperationEarningRow>(() =>
+      supabase
+        .from("patient_operations")
+        .select(OPERATION_EARNINGS_SELECT)
+        .eq("doctor_id", doctorId)
+        .order("id", { ascending: true })
+    ),
     supabase
       .from("doctors")
       .select(
@@ -979,13 +1028,16 @@ export async function computeEarningsFromOperationsForPeriod(
   from?: string,
   to?: string
 ): Promise<number> {
-  let opsQuery = supabase
-    .from("patient_operations")
-    .select(OPERATION_EARNINGS_SELECT)
-    .eq("doctor_id", doctorId);
-
-  if (from) opsQuery = opsQuery.gte("operation_date", from);
-  if (to) opsQuery = opsQuery.lte("operation_date", to);
+  const buildOpsQuery = () => {
+    let q = supabase
+      .from("patient_operations")
+      .select(OPERATION_EARNINGS_SELECT)
+      .eq("doctor_id", doctorId)
+      .order("id", { ascending: true });
+    if (from) q = q.gte("operation_date", from);
+    if (to) q = q.lte("operation_date", to);
+    return q;
+  };
 
   const { data: doctorRaw } = await supabase
     .from("doctors")
@@ -1004,7 +1056,7 @@ export async function computeEarningsFromOperationsForPeriod(
     supabase,
     (doctorRow as { clinic_id?: string } | null)?.clinic_id
   );
-  const { data: ops } = await opsQuery;
+  const { data: ops } = await fetchAllRows<OperationEarningRow>(buildOpsQuery);
   return sumOperationEarnings(
     ops,
     pct,
@@ -1072,11 +1124,14 @@ export async function fetchDoctorWalletStats(
   const [totalEarnings, withdrawalsRes, expenseDeductions, payrollDeductions, balanceCredits] =
     await Promise.all([
       computeEarningsFromOperations(supabase, doctorId),
-      supabase
-        .from("doctor_withdrawals")
-        .select("amount, status")
-        .eq("doctor_id", doctorId)
-        .neq("status", "rejected"),
+      fetchAllRows<WithdrawalRow>(() =>
+        supabase
+          .from("doctor_withdrawals")
+          .select("amount, status")
+          .eq("doctor_id", doctorId)
+          .neq("status", "rejected")
+          .order("id", { ascending: true })
+      ),
       fetchDoctorExpenseDeductionsTotal(supabase, doctorId),
       fetchDoctorTotalPayrollDeductions(supabase, doctorId),
       fetchDoctorBalanceTopupsTotal(supabase, doctorId),

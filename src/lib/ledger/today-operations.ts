@@ -21,6 +21,10 @@ import {
 import { CLINICAL_SESSION_LABEL } from "@/lib/clinical/constants";
 import { opDebt, operationLabelForCase, type PatientOperation } from "@/types";
 import { localPeriodUtcBounds, todayISO } from "@/lib/utils";
+import {
+  fetchAllRows,
+  fetchAllRowsInChunks,
+} from "@/lib/supabase/fetch-all-rows";
 
 function num(v: unknown): number {
   const n = Number(v ?? 0);
@@ -313,46 +317,48 @@ export async function fetchLedgerOperationsForDate(
 }> {
   const dateFrom = filters.dateFrom ?? filters.date ?? todayISO();
   const dateTo = filters.dateTo ?? filters.date ?? dateFrom;
-  const singleDay = dateFrom === dateTo;
-  const allDoctors = !filters.doctorId;
-  const limit =
-    filters.limit ??
-    (allDoctors ? undefined : singleDay ? 500 : 2000);
+  const limit = filters.limit;
   const { startIso, endIso } = localPeriodUtcBounds(dateFrom, dateTo);
 
   const selectCols =
     "*, patient:patients!patient_id(full_name_ar, phone, phone_number), doctor:doctors!doctor_id(full_name_ar), invoices(paid_amount, total_amount, remaining_amount)";
 
-  let byOpDateQuery = supabase
-    .from("patient_operations")
-    .select(selectCols)
-    .eq("clinic_id", clinicId)
-    .gte("operation_date", dateFrom)
-    .lte("operation_date", dateTo)
-    .order("created_at", { ascending: false });
+  const buildByOpDateQuery = () => {
+    let q = supabase
+      .from("patient_operations")
+      .select(selectCols)
+      .eq("clinic_id", clinicId)
+      .gte("operation_date", dateFrom)
+      .lte("operation_date", dateTo)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true });
+    if (filters.doctorId) q = q.eq("doctor_id", filters.doctorId);
+    return q;
+  };
 
-  let byCreatedQuery = supabase
-    .from("patient_operations")
-    .select(selectCols)
-    .eq("clinic_id", clinicId)
-    .gte("created_at", startIso)
-    .lte("created_at", endIso)
-    .order("created_at", { ascending: false });
+  const buildByCreatedQuery = () => {
+    let q = supabase
+      .from("patient_operations")
+      .select(selectCols)
+      .eq("clinic_id", clinicId)
+      .gte("created_at", startIso)
+      .lte("created_at", endIso)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true });
+    if (filters.doctorId) q = q.eq("doctor_id", filters.doctorId);
+    return q;
+  };
 
-  if (limit != null) {
-    byOpDateQuery = byOpDateQuery.limit(limit);
-    byCreatedQuery = byCreatedQuery.limit(limit);
-  }
-
-  if (filters.doctorId) {
-    byOpDateQuery = byOpDateQuery.eq("doctor_id", filters.doctorId);
-    byCreatedQuery = byCreatedQuery.eq("doctor_id", filters.doctorId);
-  }
-
-  const [byOpDateRes, byCreatedRes] = await Promise.all([
-    byOpDateQuery,
-    byCreatedQuery,
-  ]);
+  const [byOpDateRes, byCreatedRes] =
+    limit != null
+      ? await Promise.all([
+          buildByOpDateQuery().limit(limit),
+          buildByCreatedQuery().limit(limit),
+        ])
+      : await Promise.all([
+          fetchAllRows<TodayOperationRow>(buildByOpDateQuery),
+          fetchAllRows<TodayOperationRow>(buildByCreatedQuery),
+        ]);
 
   const mergedById = new Map<string, TodayOperationRow>();
   for (const row of [...(byOpDateRes.data ?? []), ...(byCreatedRes.data ?? [])]) {
@@ -379,16 +385,24 @@ export async function fetchLedgerOperationsForDate(
   );
 
   if (patientIds.length > 0) {
-    const { data: patientCases } = await supabase
-      .from("patient_treatment_cases")
-      .select(
-        "id, patient_id, treatment_name_ar, case_price, discount_total, final_price, total_paid, doctor_share_total, clinic_share_total, treatment_status, status"
-      )
-      .eq("clinic_id", clinicId)
-      .in("patient_id", patientIds)
-      .order("created_at", { ascending: false });
+    const { data: patientCasesRaw } = await fetchAllRowsInChunks<
+      Record<string, unknown>
+    >(patientIds, (chunk) =>
+      supabase
+        .from("patient_treatment_cases")
+        .select(
+          "id, patient_id, treatment_name_ar, case_price, discount_total, final_price, total_paid, doctor_share_total, clinic_share_total, status, created_at"
+        )
+        .eq("clinic_id", clinicId)
+        .in("patient_id", chunk)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+    );
+    const patientCases = [...(patientCasesRaw ?? [])].sort((a, b) =>
+      String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))
+    );
 
-    for (const row of patientCases ?? []) {
+    for (const row of patientCases) {
       const r = row as Record<string, unknown>;
       const patientId = String(r.patient_id ?? "");
       const caseId = String(r.id ?? "");
@@ -408,12 +422,17 @@ export async function fetchLedgerOperationsForDate(
   const caseInfoById = new Map<string, TodayCaseInfo>();
 
   if (allCaseIds.size > 0) {
-    const { data: cases } = await supabase
-      .from("patient_treatment_cases")
-      .select(
-        "id, patient_id, treatment_name_ar, case_price, discount_total, final_price, total_paid, doctor_share_total, clinic_share_total, treatment_status, status"
-      )
-      .in("id", [...allCaseIds]);
+    const { data: cases } = await fetchAllRowsInChunks<Record<string, unknown>>(
+      [...allCaseIds],
+      (chunk) =>
+        supabase
+          .from("patient_treatment_cases")
+          .select(
+            "id, patient_id, treatment_name_ar, case_price, discount_total, final_price, total_paid, doctor_share_total, clinic_share_total, status"
+          )
+          .in("id", chunk)
+          .order("id", { ascending: true })
+    );
 
     for (const row of cases ?? []) {
       const info = buildCaseInfoFromRow(row as Record<string, unknown>);
@@ -422,13 +441,23 @@ export async function fetchLedgerOperationsForDate(
     }
 
     if (patientIds.length > 0) {
-      const { data: balanceOps } = await supabase
-        .from("patient_operations")
-        .select(
-          "id, patient_id, treatment_case_id, paid_amount, total_amount, operation_name_ar, operation_type, notes, remaining_debt, created_at, operation_date"
-        )
-        .eq("clinic_id", clinicId)
-        .in("patient_id", patientIds);
+      const { data: balanceOpsRaw } = await fetchAllRowsInChunks<PatientOperation>(
+        patientIds,
+        (chunk) =>
+          supabase
+            .from("patient_operations")
+            .select(
+              "id, patient_id, treatment_case_id, paid_amount, total_amount, operation_name_ar, notes, remaining_debt, created_at, operation_date"
+            )
+            .eq("clinic_id", clinicId)
+            .in("patient_id", chunk)
+            .order("id", { ascending: true })
+      );
+      const balanceOps = [...(balanceOpsRaw ?? [])].sort(
+        (a, b) =>
+          String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")) ||
+          String(a.id).localeCompare(String(b.id))
+      );
 
       for (const caseId of allCaseIds) {
         const info = caseInfoById.get(caseId);

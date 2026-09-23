@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import type { PayrollRecord, SalarySlip } from "@/types";
 
 function roundMoney(n: number): number {
@@ -265,13 +266,17 @@ export async function fetchConfirmedPayrollProfitDeduction(
   from: string,
   to: string
 ): Promise<number> {
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("amount")
-    .eq("clinic_id", clinicId)
-    .gte("transaction_date", from)
-    .lte("transaction_date", to)
-    .in("type", [...PAYROLL_DEDUCTION_TYPES]);
+  const { data, error } = await fetchAllRows<{ amount: number | string | null }>(
+    () =>
+      supabase
+        .from("transactions")
+        .select("amount")
+        .eq("clinic_id", clinicId)
+        .gte("transaction_date", from)
+        .lte("transaction_date", to)
+        .in("type", [...PAYROLL_DEDUCTION_TYPES])
+        .order("id", { ascending: true })
+  );
 
   if (error || !data?.length) return 0;
 
@@ -292,14 +297,24 @@ export async function fetchConfirmedPayrollPayoutLines(
   from: string,
   to: string
 ): Promise<ConfirmedPayrollPayoutLine[]> {
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("id, amount, type, transaction_date, description_ar, reference_id")
-    .eq("clinic_id", clinicId)
-    .gte("transaction_date", from)
-    .lte("transaction_date", to)
-    .in("type", [...PAYROLL_DEDUCTION_TYPES])
-    .order("transaction_date", { ascending: false });
+  const { data, error } = await fetchAllRows<{
+    id: string;
+    amount: number | string | null;
+    type: string | null;
+    transaction_date: string | null;
+    description_ar: string | null;
+    reference_id: string | null;
+  }>(() =>
+    supabase
+      .from("transactions")
+      .select("id, amount, type, transaction_date, description_ar, reference_id")
+      .eq("clinic_id", clinicId)
+      .gte("transaction_date", from)
+      .lte("transaction_date", to)
+      .in("type", [...PAYROLL_DEDUCTION_TYPES])
+      .order("transaction_date", { ascending: false })
+      .order("id", { ascending: true })
+  );
 
   if (error || !data?.length) return [];
 

@@ -8,6 +8,7 @@ import {
   type DoctorWithdrawalLine,
   withdrawalSourceLabel,
 } from "@/lib/withdrawals/display";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 /** يظهر في الكشف المالي — كل الحالات ما عدا المرفوض */
 const STATEMENT_WITHDRAWAL_STATUSES = new Set([
@@ -59,32 +60,25 @@ export async function fetchDailyDoctorWithdrawalLines(
   const selectBase =
     "id, doctor_id, amount, status, requested_at, processed_at, doctor:doctors!doctor_id(full_name_ar)";
 
-  let query = supabase
-    .from("doctor_withdrawals")
-    .select(selectWithSource)
-    .eq("clinic_id", clinicId)
-    .neq("status", "rejected")
-    .order("requested_at", { ascending: false });
+  const load = (select: string) =>
+    fetchAllRows<WithdrawalDbRow>(() => {
+      let query = supabase
+        .from("doctor_withdrawals")
+        .select(select)
+        .eq("clinic_id", clinicId)
+        .neq("status", "rejected")
+        .order("requested_at", { ascending: false })
+        .order("id", { ascending: true });
+      if (opts.doctorId) {
+        query = query.eq("doctor_id", opts.doctorId);
+      }
+      return query;
+    });
 
-  if (opts.doctorId) {
-    query = query.eq("doctor_id", opts.doctorId);
-  }
-
-  let { data, error } = await query;
+  let { data, error } = await load(selectWithSource);
 
   if (error?.message?.includes("source")) {
-    let fallbackQuery = supabase
-      .from("doctor_withdrawals")
-      .select(selectBase)
-      .eq("clinic_id", clinicId)
-      .neq("status", "rejected")
-      .order("requested_at", { ascending: false });
-    if (opts.doctorId) {
-      fallbackQuery = fallbackQuery.eq("doctor_id", opts.doctorId);
-    }
-    const fallback = await fallbackQuery;
-    data = fallback.data as typeof data;
-    error = fallback.error;
+    ({ data, error } = await load(selectBase));
   }
 
   if (error) return [];

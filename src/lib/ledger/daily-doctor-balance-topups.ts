@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatDoctorDisplayName } from "@/lib/services/clinic-profile";
 import { BALANCE_TOPUP_DOCTOR_TYPE } from "@/lib/services/balance-topup";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 export interface DoctorBalanceTopUpLine {
   id: string;
@@ -45,28 +46,29 @@ export async function fetchDailyDoctorBalanceTopUpLines(
   clinicId: string,
   opts: { dateFrom: string; dateTo: string; doctorId?: string }
 ): Promise<DoctorBalanceTopUpLine[]> {
-  let query = supabase
-    .from("transactions")
-    .select(
-      "id, doctor_id, amount, transaction_date, description_ar, doctor:doctors!doctor_id(full_name_ar)"
-    )
-    .eq("clinic_id", clinicId)
-    .eq("type", BALANCE_TOPUP_DOCTOR_TYPE)
-    .gt("amount", 0)
-    .gte("transaction_date", opts.dateFrom)
-    .lte("transaction_date", opts.dateTo)
-    .not("doctor_id", "is", null)
-    .order("transaction_date", { ascending: false });
-
-  if (opts.doctorId) {
-    query = query.eq("doctor_id", opts.doctorId);
-  }
-
-  const { data, error } = await query;
+  const { data, error } = await fetchAllRows<TopUpDbRow>(() => {
+    let query = supabase
+      .from("transactions")
+      .select(
+        "id, doctor_id, amount, transaction_date, description_ar, doctor:doctors!doctor_id(full_name_ar)"
+      )
+      .eq("clinic_id", clinicId)
+      .eq("type", BALANCE_TOPUP_DOCTOR_TYPE)
+      .gt("amount", 0)
+      .gte("transaction_date", opts.dateFrom)
+      .lte("transaction_date", opts.dateTo)
+      .not("doctor_id", "is", null)
+      .order("transaction_date", { ascending: false })
+      .order("id", { ascending: true });
+    if (opts.doctorId) {
+      query = query.eq("doctor_id", opts.doctorId);
+    }
+    return query;
+  });
   if (error) return [];
 
   return (data ?? [])
-    .map((row) => mapTopUpLine(row as TopUpDbRow))
+    .map((row) => mapTopUpLine(row))
     .filter((line): line is DoctorBalanceTopUpLine => line != null);
 }
 

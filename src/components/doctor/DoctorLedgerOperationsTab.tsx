@@ -180,7 +180,7 @@ export function DoctorLedgerOperationsTab({
             const isSalaryBonus =
               row.kind === "salary_adjustment" && row.status === "bonus";
             const showAsCredit =
-              isSalaryBonus || row.kind === "balance_credit";
+              isSalaryBonus || row.kind === "balance_credit" || row.amount < 0;
             return (
               <div
                 key={`${row.kind}-${row.id}`}
@@ -213,7 +213,7 @@ export function DoctorLedgerOperationsTab({
                   )}
                 >
                   {showAsCredit ? "+" : "−"}
-                  {formatMoney(row.amount)}
+                  {formatMoney(Math.abs(row.amount))}
                 </p>
               </div>
             );

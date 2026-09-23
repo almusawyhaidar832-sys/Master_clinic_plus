@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CLINIC_PROFIT_ALL_TIME_FROM, todayISO } from "@/lib/utils";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 export const BALANCE_TOPUP_CLINIC_TYPE = "balance_topup_clinic";
 export const BALANCE_TOPUP_DOCTOR_TYPE = "balance_topup_doctor";
@@ -40,12 +41,15 @@ export async function fetchDoctorBalanceTopupsTotal(
   supabase: SupabaseClient,
   doctorId: string
 ): Promise<number> {
-  const { data } = await supabase
-    .from("transactions")
-    .select("amount")
-    .eq("doctor_id", doctorId)
-    .eq("type", BALANCE_TOPUP_DOCTOR_TYPE)
-    .gt("amount", 0);
+  const { data } = await fetchAllRows<{ amount: number | string }>(() =>
+    supabase
+      .from("transactions")
+      .select("amount")
+      .eq("doctor_id", doctorId)
+      .eq("type", BALANCE_TOPUP_DOCTOR_TYPE)
+      .gt("amount", 0)
+      .order("id", { ascending: true })
+  );
 
   return sumPositiveAmounts(data);
 }
@@ -162,34 +166,30 @@ export async function fetchClinicBalanceTopupsAuthoritative(
   return Math.max(fromTransactions, fromAudit, fromRecent);
 }
 
-/** شحن رصيد العيادة لفترة — أعلى شحن لكل يوم (يتجاهل تكرار المحاولات) */
+/**
+ * شحن رصيد العيادة لفترة — مجموع كل الشحنات (يطابق قائمة الشحنات و
+ * get_clinic_financial_snapshot). الشحن المكرر بالخطأ يُحذف من قائمة الشحنات.
+ */
 export async function fetchClinicBalanceTopupsForPeriod(
   supabase: SupabaseClient,
   clinicId: string,
   from: string,
   to: string
 ): Promise<number> {
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("amount, transaction_date")
-    .eq("clinic_id", clinicId)
-    .eq("type", BALANCE_TOPUP_CLINIC_TYPE)
-    .gt("amount", 0)
-    .gte("transaction_date", from)
-    .lte("transaction_date", to);
+  const { data, error } = await fetchAllRows<{ amount: number | string }>(() =>
+    supabase
+      .from("transactions")
+      .select("amount")
+      .eq("clinic_id", clinicId)
+      .eq("type", BALANCE_TOPUP_CLINIC_TYPE)
+      .gt("amount", 0)
+      .gte("transaction_date", from)
+      .lte("transaction_date", to)
+      .order("id", { ascending: true })
+  );
 
   if (error || !data?.length) return 0;
-
-  const maxByDay = new Map<string, number>();
-  for (const row of data) {
-    const day = String(row.transaction_date ?? "").slice(0, 10);
-    if (!day) continue;
-    const amount = Math.max(0, Number(row.amount ?? 0));
-    maxByDay.set(day, Math.max(maxByDay.get(day) ?? 0, amount));
-  }
-
-  const total = [...maxByDay.values()].reduce((sum, amount) => sum + amount, 0);
-  return Math.round(total * 100) / 100;
+  return sumPositiveAmounts(data);
 }
 
 export interface BalanceTopUpListItem {
@@ -251,15 +251,23 @@ export async function fetchClinicBalanceTopUpLines(
   clinicId: string,
   opts: { dateFrom: string; dateTo: string }
 ): Promise<ClinicBalanceTopUpLine[]> {
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("id, amount, transaction_date, description_ar")
-    .eq("clinic_id", clinicId)
-    .eq("type", BALANCE_TOPUP_CLINIC_TYPE)
-    .gt("amount", 0)
-    .gte("transaction_date", opts.dateFrom)
-    .lte("transaction_date", opts.dateTo)
-    .order("transaction_date", { ascending: false });
+  const { data, error } = await fetchAllRows<{
+    id: string;
+    amount: number | string | null;
+    transaction_date: string;
+    description_ar: string | null;
+  }>(() =>
+    supabase
+      .from("transactions")
+      .select("id, amount, transaction_date, description_ar")
+      .eq("clinic_id", clinicId)
+      .eq("type", BALANCE_TOPUP_CLINIC_TYPE)
+      .gt("amount", 0)
+      .gte("transaction_date", opts.dateFrom)
+      .lte("transaction_date", opts.dateTo)
+      .order("transaction_date", { ascending: false })
+      .order("id", { ascending: true })
+  );
 
   if (error) return [];
 
@@ -276,12 +284,15 @@ export async function fetchClinicBalanceTopupsTotal(
   supabase: SupabaseClient,
   clinicId: string
 ): Promise<number> {
-  const { data } = await supabase
-    .from("transactions")
-    .select("amount")
-    .eq("clinic_id", clinicId)
-    .eq("type", BALANCE_TOPUP_CLINIC_TYPE)
-    .gt("amount", 0);
+  const { data } = await fetchAllRows<{ amount: number | string }>(() =>
+    supabase
+      .from("transactions")
+      .select("amount")
+      .eq("clinic_id", clinicId)
+      .eq("type", BALANCE_TOPUP_CLINIC_TYPE)
+      .gt("amount", 0)
+      .order("id", { ascending: true })
+  );
 
   return sumPositiveAmounts(data);
 }

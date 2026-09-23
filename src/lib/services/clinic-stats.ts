@@ -5,6 +5,7 @@ import {
   fetchClinicBalanceTopupsForProfit,
 } from "@/lib/services/balance-topup";
 import { CLINIC_PROFIT_ALL_TIME_FROM, formatCurrency, todayISO } from "@/lib/utils";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 export interface TodaySummary {
   operationsCount: number;
@@ -184,21 +185,28 @@ export async function fetchClinicProfitStatsForPeriod(
   ] = await Promise.all([
     loadOperationsInPeriod(supabase, clinicId, from, to),
     fetchPeriodCollectionFinancialTotals(supabase, clinicId, from, to),
-    supabase
-      .from("expenses")
-      .select("amount, expense_kind")
-      .eq("clinic_id", clinicId)
-      .gte("expense_date", from)
-      .lte("expense_date", to),
+    fetchAllRows<{ amount: number | string | null; expense_kind: string | null }>(
+      () =>
+        supabase
+          .from("expenses")
+          .select("amount, expense_kind")
+          .eq("clinic_id", clinicId)
+          .gte("expense_date", from)
+          .lte("expense_date", to)
+          .order("id", { ascending: true })
+    ),
     fetchResolvedSalaryDeductionForPeriod(supabase, clinicId, from, to),
     fetchTotalRefundsAmount(supabase, { clinicId, from, to }),
-    supabase
-      .from("transactions")
-      .select("amount")
-      .eq("clinic_id", clinicId)
-      .eq("type", "doctor_expense_clinic")
-      .gte("transaction_date", from)
-      .lte("transaction_date", to),
+    fetchAllRows<{ amount: number | string | null }>(() =>
+      supabase
+        .from("transactions")
+        .select("amount")
+        .eq("clinic_id", clinicId)
+        .eq("type", "doctor_expense_clinic")
+        .gte("transaction_date", from)
+        .lte("transaction_date", to)
+        .order("id", { ascending: true })
+    ),
     fetchPeriodVisitorDebt(supabase, clinicId, from, to),
     fetchClinicBalanceTopupsForPeriod(supabase, clinicId, from, to),
   ]);
@@ -320,10 +328,12 @@ export function clinicProfitStatsFromFinancialSnapshot(
   snap: ClinicFinancialSnapshotRpc
 ): ClinicProfitStats {
   const clinicShareTotal = roundProfitMoney(snap.clinicShares + snap.reviewFees);
+  // net_profit في RPC لا يخصم الرواتب — نخصمها هنا حتى يطابق fetchClinicProfitStatsForPeriod
+  const netProfit = roundProfitMoney(snap.netProfit - snap.salariesPaid);
   return {
     cashInflow: snap.collected,
     outstandingDebts: snap.debt,
-    netProfit: snap.netProfit,
+    netProfit,
     totalRefunds: 0,
     clinicShareTotal,
     doctorShareTotal: snap.doctorShares,
@@ -345,7 +355,7 @@ export function clinicProfitStatsFromFinancialSnapshot(
         : []),
       { label: "صرفيات العيادة", amount: -snap.expenses },
       { label: "رواتب مؤكَّد صرفها", amount: -snap.salariesPaid },
-      { label: NET_PROFIT_LABEL, amount: snap.netProfit },
+      { label: NET_PROFIT_LABEL, amount: netProfit },
     ],
   };
 }

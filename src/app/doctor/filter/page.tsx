@@ -10,6 +10,7 @@ import { getDoctorForCurrentUser } from "@/lib/clinic-context";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatDate, todayISO } from "@/lib/utils";
 import type { PatientOperation } from "@/types";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 export default function DoctorFilterPage() {
   const { t, formatMoney, dateLocale } = useLanguage();
@@ -33,15 +34,18 @@ export default function DoctorFilterPage() {
       return;
     }
 
-    const { data } = await supabase
-      .from("patient_operations")
-      .select("*, patient:patients!patient_id(full_name_ar)")
-      .eq("doctor_id", doctor.id)
-      .gte("operation_date", from)
-      .lte("operation_date", to)
-      .order("operation_date", { ascending: false });
+    const { data } = await fetchAllRows<PatientOperation>(() =>
+      supabase
+        .from("patient_operations")
+        .select("*, patient:patients!patient_id(full_name_ar)")
+        .eq("doctor_id", doctor.id)
+        .gte("operation_date", from)
+        .lte("operation_date", to)
+        .order("operation_date", { ascending: false })
+        .order("id", { ascending: true })
+    );
 
-    const rows = (data as PatientOperation[]) || [];
+    const rows = data ?? [];
     setOperations(rows);
     setStats({
       count: rows.length,

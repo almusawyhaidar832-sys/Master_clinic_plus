@@ -5,6 +5,15 @@ import {
 } from "@/lib/services/payroll-paid-portions";
 import { BALANCE_TOPUP_CLINIC_TYPE } from "@/lib/services/balance-topup";
 import { formatCurrency } from "@/lib/utils";
+import {
+  fetchAllRows,
+  fetchAllRowsInChunks,
+} from "@/lib/supabase/fetch-all-rows";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type LooseRow = Record<string, unknown>;
 
 export type ProfitLedgerCategory =
   | "general_expense"
@@ -97,16 +106,19 @@ async function appendAssistantPayrollBatchedLines(
   getGroup: (cat: ProfitLedgerCategory) => ProfitLedgerGroup,
   payrollParentIds: string[]
 ): Promise<void> {
-  const { data } = await supabase
-    .from("transactions")
-    .select(
-      "id, doctor_id, amount, type, reference_id, description_ar, transaction_date"
-    )
-    .eq("clinic_id", clinicId)
-    .gte("transaction_date", from)
-    .lte("transaction_date", to)
-    .in("type", ["assistant_payroll_doctor", "assistant_payroll_clinic"])
-    .order("transaction_date", { ascending: false });
+  const { data } = await fetchAllRows<AssistantPayrollTxRow>(() =>
+    supabase
+      .from("transactions")
+      .select(
+        "id, doctor_id, amount, type, reference_id, description_ar, transaction_date"
+      )
+      .eq("clinic_id", clinicId)
+      .gte("transaction_date", from)
+      .lte("transaction_date", to)
+      .in("type", ["assistant_payroll_doctor", "assistant_payroll_clinic"])
+      .order("transaction_date", { ascending: false })
+      .order("id", { ascending: true })
+  );
 
   const batches = new Map<
     string,
@@ -137,14 +149,25 @@ async function appendAssistantPayrollBatchedLines(
     }
   >();
 
-  if (parentIds.size > 0) {
-    const { data: records } = await supabase
-      .from("payroll_records")
-      .select(
-        "id, assistant_name_ar, doctor_share_percentage, doctor:doctors(full_name_ar)"
-      )
-      .eq("clinic_id", clinicId)
-      .in("id", [...parentIds]);
+  // مراجع التصحيح مثل "salary-entry:<id>" ليست UUID — وجودها داخل .in("id")
+  // يُفشل الاستعلام كله فتختفي أسماء كل الدفعات.
+  const recordIds = [...parentIds].filter((id) => UUID_RE.test(id));
+  if (recordIds.length > 0) {
+    const { data: records } = await fetchAllRowsInChunks<{
+      id: string;
+      assistant_name_ar: string | null;
+      doctor_share_percentage: number | string | null;
+      doctor: unknown;
+    }>(recordIds, (chunk) =>
+      supabase
+        .from("payroll_records")
+        .select(
+          "id, assistant_name_ar, doctor_share_percentage, doctor:doctors(full_name_ar)"
+        )
+        .eq("clinic_id", clinicId)
+        .in("id", chunk)
+        .order("id", { ascending: true })
+    );
 
     for (const r of records ?? []) {
       const doctor = relationOne(
@@ -277,21 +300,41 @@ export async function resolveLedgerActorNames(
       ...opts.doctorExpenseIds,
       ...opts.payrollParentIds,
       ...opts.financialTxIds,
-    ].filter(Boolean)),
+    ].filter((id) => UUID_RE.test(id))),
   ];
 
   if (allEntityIds.length === 0) return result;
 
   const profileIdsToResolve = new Set<string>();
 
-  const { data: auditRows } = await supabase
-    .from("audit_logs")
-    .select("entity_id, actor_name, changed_by, changed_at")
-    .eq("clinic_id", clinicId)
-    .in("entity_id", allEntityIds)
-    .order("changed_at", { ascending: false });
+  const { data: auditRowsRaw } = await fetchAllRowsInChunks<LooseRow>(
+    allEntityIds,
+    (chunk) =>
+      supabase
+        .from("audit_logs")
+        .select("id, entity_id, actor_name, changed_by, changed_at")
+        .eq("clinic_id", clinicId)
+        .in("entity_id", chunk)
+        .order("changed_at", { ascending: false })
+        .order("id", { ascending: true })
+  );
+  const auditRows = [...(auditRowsRaw ?? [])].sort((a, b) =>
+    String(b.changed_at ?? "").localeCompare(String(a.changed_at ?? ""))
+  );
 
-  for (const row of auditRows ?? []) {
+  const fetchCreatedBy = (table: "expenses" | "doctor_expenses", ids: string[]) =>
+    fetchAllRowsInChunks<LooseRow>(
+      ids.filter((id) => UUID_RE.test(id)),
+      (chunk) =>
+        supabase
+          .from(table)
+          .select("id, created_by")
+          .eq("clinic_id", clinicId)
+          .in("id", chunk)
+          .order("id", { ascending: true })
+    );
+
+  for (const row of auditRows) {
     const entityId = String(row.entity_id ?? "");
     if (!entityId || result.has(entityId)) continue;
 
@@ -304,42 +347,39 @@ export async function resolveLedgerActorNames(
   }
 
   const unresolvedExpenseIds = opts.expenseIds.filter((id) => !result.has(id));
-  if (unresolvedExpenseIds.length > 0) {
-    const { data: expenseRows } = await supabase
-      .from("expenses")
-      .select("id, created_by")
-      .eq("clinic_id", clinicId)
-      .in("id", unresolvedExpenseIds);
-
-    for (const row of expenseRows ?? []) {
-      const id = String(row.id);
-      if (result.has(id) || !row.created_by) continue;
-      profileIdsToResolve.add(String(row.created_by));
-    }
+  const { data: expenseRows } =
+    unresolvedExpenseIds.length > 0
+      ? await fetchCreatedBy("expenses", unresolvedExpenseIds)
+      : { data: [] as LooseRow[] };
+  for (const row of expenseRows ?? []) {
+    const id = String(row.id);
+    if (result.has(id) || !row.created_by) continue;
+    profileIdsToResolve.add(String(row.created_by));
   }
 
   const unresolvedDoctorExpenseIds = opts.doctorExpenseIds.filter(
     (id) => !result.has(id)
   );
-  if (unresolvedDoctorExpenseIds.length > 0) {
-    const { data: doctorExpenseRows } = await supabase
-      .from("doctor_expenses")
-      .select("id, created_by")
-      .eq("clinic_id", clinicId)
-      .in("id", unresolvedDoctorExpenseIds);
-
-    for (const row of doctorExpenseRows ?? []) {
-      const id = String(row.id);
-      if (result.has(id) || !row.created_by) continue;
-      profileIdsToResolve.add(String(row.created_by));
-    }
+  const { data: doctorExpenseRows } =
+    unresolvedDoctorExpenseIds.length > 0
+      ? await fetchCreatedBy("doctor_expenses", unresolvedDoctorExpenseIds)
+      : { data: [] as LooseRow[] };
+  for (const row of doctorExpenseRows ?? []) {
+    const id = String(row.id);
+    if (result.has(id) || !row.created_by) continue;
+    profileIdsToResolve.add(String(row.created_by));
   }
 
   if (profileIdsToResolve.size > 0) {
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .in("id", [...profileIdsToResolve]);
+    const { data: profiles } = await fetchAllRowsInChunks<LooseRow>(
+      [...profileIdsToResolve],
+      (chunk) =>
+        supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", chunk)
+          .order("id", { ascending: true })
+    );
 
     const profileMap = new Map<string, string>();
     for (const p of profiles ?? []) {
@@ -347,41 +387,25 @@ export async function resolveLedgerActorNames(
       if (name) profileMap.set(String(p.id), name);
     }
 
-    for (const row of auditRows ?? []) {
+    for (const row of auditRows) {
       const entityId = String(row.entity_id ?? "");
       if (!entityId || result.has(entityId) || !row.changed_by) continue;
       const name = profileMap.get(String(row.changed_by));
       if (name) result.set(entityId, name);
     }
 
-    if (unresolvedExpenseIds.length > 0) {
-      const { data: expenseRows } = await supabase
-        .from("expenses")
-        .select("id, created_by")
-        .eq("clinic_id", clinicId)
-        .in("id", unresolvedExpenseIds);
-
-      for (const row of expenseRows ?? []) {
-        const id = String(row.id);
-        if (result.has(id) || !row.created_by) continue;
-        const name = profileMap.get(String(row.created_by));
-        if (name) result.set(id, name);
-      }
+    for (const row of expenseRows ?? []) {
+      const id = String(row.id);
+      if (result.has(id) || !row.created_by) continue;
+      const name = profileMap.get(String(row.created_by));
+      if (name) result.set(id, name);
     }
 
-    if (unresolvedDoctorExpenseIds.length > 0) {
-      const { data: doctorExpenseRows } = await supabase
-        .from("doctor_expenses")
-        .select("id, created_by")
-        .eq("clinic_id", clinicId)
-        .in("id", unresolvedDoctorExpenseIds);
-
-      for (const row of doctorExpenseRows ?? []) {
-        const id = String(row.id);
-        if (result.has(id) || !row.created_by) continue;
-        const name = profileMap.get(String(row.created_by));
-        if (name) result.set(id, name);
-      }
+    for (const row of doctorExpenseRows ?? []) {
+      const id = String(row.id);
+      if (result.has(id) || !row.created_by) continue;
+      const name = profileMap.get(String(row.created_by));
+      if (name) result.set(id, name);
     }
   }
 
@@ -450,20 +474,26 @@ async function appendLegacyPayrollLines(
   const covered = new Set(payrollParentIds);
 
   const [recordsRes, slipsRes] = await Promise.all([
-    supabase
-      .from("payroll_records")
-      .select(
-        "id, assistant_name_ar, paid_doctor_share_amount, paid_clinic_share_amount, clinic_share_amount, doctor_share_amount, paid_at, status"
-      )
-      .eq("clinic_id", clinicId)
-      .or("status.eq.paid,paid_clinic_share_amount.gt.0"),
-    supabase
-      .from("salary_slips")
-      .select(
-        "id, paid_net_payout, net_payout, paid_at, month_year, status, doctor_id, staff:staff_members(full_name_ar, job_title_ar), doctor:doctors(full_name_ar)"
-      )
-      .eq("clinic_id", clinicId)
-      .or("status.eq.paid,paid_net_payout.gt.0"),
+    fetchAllRows<LooseRow>(() =>
+      supabase
+        .from("payroll_records")
+        .select(
+          "id, assistant_name_ar, paid_doctor_share_amount, paid_clinic_share_amount, clinic_share_amount, doctor_share_amount, paid_at, status"
+        )
+        .eq("clinic_id", clinicId)
+        .or("status.eq.paid,paid_clinic_share_amount.gt.0")
+        .order("id", { ascending: true })
+    ),
+    fetchAllRows<LooseRow>(() =>
+      supabase
+        .from("salary_slips")
+        .select(
+          "id, paid_net_payout, net_payout, paid_at, month_year, status, doctor_id, staff:staff_members(full_name_ar, job_title_ar), doctor:doctors(full_name_ar)"
+        )
+        .eq("clinic_id", clinicId)
+        .or("status.eq.paid,paid_net_payout.gt.0")
+        .order("id", { ascending: true })
+    ),
   ]);
 
   for (const row of recordsRes.data ?? []) {
@@ -576,36 +606,45 @@ export async function fetchProfitDeductionLedger(
     payrollLines,
     balanceTopupTxRes,
   ] = await Promise.all([
-    supabase
-      .from("expenses")
-      .select(
-        "id, description_ar, amount, expense_date, expense_kind, category:expense_categories(name_ar)"
-      )
-      .eq("clinic_id", clinicId)
-      .gte("expense_date", from)
-      .lte("expense_date", to)
-      .order("expense_date", { ascending: false }),
-    supabase
-      .from("transactions")
-      .select(
-        "id, amount, transaction_date, description_ar, reference_id, doctor_id, doctor:doctors(full_name_ar)"
-      )
-      .eq("clinic_id", clinicId)
-      .eq("type", "doctor_expense_clinic")
-      .lt("amount", 0)
-      .gte("transaction_date", from)
-      .lte("transaction_date", to)
-      .order("transaction_date", { ascending: false }),
+    fetchAllRows<LooseRow>(() =>
+      supabase
+        .from("expenses")
+        .select(
+          "id, description_ar, amount, expense_date, expense_kind, category:expense_categories(name_ar)"
+        )
+        .eq("clinic_id", clinicId)
+        .gte("expense_date", from)
+        .lte("expense_date", to)
+        .order("expense_date", { ascending: false })
+        .order("id", { ascending: true })
+    ),
+    fetchAllRows<LooseRow>(() =>
+      supabase
+        .from("transactions")
+        .select(
+          "id, amount, transaction_date, description_ar, reference_id, doctor_id, doctor:doctors(full_name_ar)"
+        )
+        .eq("clinic_id", clinicId)
+        .eq("type", "doctor_expense_clinic")
+        .lt("amount", 0)
+        .gte("transaction_date", from)
+        .lte("transaction_date", to)
+        .order("transaction_date", { ascending: false })
+        .order("id", { ascending: true })
+    ),
     fetchConfirmedPayrollPayoutLines(supabase, clinicId, from, to),
-    supabase
-      .from("transactions")
-      .select("id, amount, transaction_date, description_ar, reference_id")
-      .eq("clinic_id", clinicId)
-      .eq("type", BALANCE_TOPUP_CLINIC_TYPE)
-      .gt("amount", 0)
-      .gte("transaction_date", from)
-      .lte("transaction_date", to)
-      .order("transaction_date", { ascending: false }),
+    fetchAllRows<LooseRow>(() =>
+      supabase
+        .from("transactions")
+        .select("id, amount, transaction_date, description_ar, reference_id")
+        .eq("clinic_id", clinicId)
+        .eq("type", BALANCE_TOPUP_CLINIC_TYPE)
+        .gt("amount", 0)
+        .gte("transaction_date", from)
+        .lte("transaction_date", to)
+        .order("transaction_date", { ascending: false })
+        .order("id", { ascending: true })
+    ),
   ]);
 
   const groupMap = new Map<ProfitLedgerCategory, ProfitLedgerGroup>();

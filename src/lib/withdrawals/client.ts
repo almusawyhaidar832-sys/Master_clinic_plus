@@ -1,23 +1,26 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DoctorWithdrawal } from "@/types";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 /** Load withdrawals without PostgREST join (FK may be missing in schema cache) */
 export async function fetchWithdrawalsWithDoctors(
   supabase: SupabaseClient,
   options?: { status?: "pending" | "all"; clinicId?: string | null }
 ): Promise<{ items: DoctorWithdrawal[]; error: string | null }> {
-  let query = supabase
-    .from("doctor_withdrawals")
-    .select("*")
-    .order("requested_at", { ascending: false });
-
-  if (options?.status === "pending") {
-    query = query.eq("status", "pending");
-  }
-
-  if (options?.clinicId) {
-    query = query.eq("clinic_id", options.clinicId);
-  }
+  const buildQuery = () => {
+    let query = supabase
+      .from("doctor_withdrawals")
+      .select("*")
+      .order("requested_at", { ascending: false })
+      .order("id", { ascending: true });
+    if (options?.status === "pending") {
+      query = query.eq("status", "pending");
+    }
+    if (options?.clinicId) {
+      query = query.eq("clinic_id", options.clinicId);
+    }
+    return query;
+  };
 
   let doctorsQuery = supabase
     .from("doctors")
@@ -29,7 +32,7 @@ export async function fetchWithdrawalsWithDoctors(
   }
 
   const [withdrawalsRes, doctorsRes] = await Promise.all([
-    query,
+    fetchAllRows<DoctorWithdrawal>(buildQuery),
     doctorsQuery,
   ]);
 

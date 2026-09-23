@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { doctorShareFromExpense } from "@/lib/services/assistant-payroll";
 import { resolveLedgerActorNames } from "@/lib/services/profit-deduction-ledger";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 export type DailyDoctorExpenseLine = {
   id: string;
@@ -38,21 +39,30 @@ export async function fetchDailyDoctorExpenseLines(
   clinicId: string,
   input: { dateFrom: string; dateTo: string; doctorId?: string }
 ): Promise<DailyDoctorExpenseLine[]> {
-  let query = supabase
-    .from("doctor_expenses")
-    .select(
-      "id, doctor_id, amount, percentage_split, expense_date, description_ar, created_by, doctor:doctors(full_name_ar)"
-    )
-    .eq("clinic_id", clinicId)
-    .gte("expense_date", input.dateFrom)
-    .lte("expense_date", input.dateTo)
-    .order("expense_date", { ascending: false });
-
-  if (input.doctorId) {
-    query = query.eq("doctor_id", input.doctorId);
-  }
-
-  const { data, error } = await query;
+  const { data, error } = await fetchAllRows<{
+    id: string;
+    doctor_id: string | null;
+    amount: number | string | null;
+    percentage_split: number | string | null;
+    expense_date: string | null;
+    description_ar: string | null;
+    doctor: unknown;
+  }>(() => {
+    let query = supabase
+      .from("doctor_expenses")
+      .select(
+        "id, doctor_id, amount, percentage_split, expense_date, description_ar, created_by, doctor:doctors(full_name_ar)"
+      )
+      .eq("clinic_id", clinicId)
+      .gte("expense_date", input.dateFrom)
+      .lte("expense_date", input.dateTo)
+      .order("expense_date", { ascending: false })
+      .order("id", { ascending: true });
+    if (input.doctorId) {
+      query = query.eq("doctor_id", input.doctorId);
+    }
+    return query;
+  });
   if (error || !data?.length) return [];
 
   const expenseIds = data.map((row) => String(row.id));
@@ -94,15 +104,25 @@ export async function fetchDailyClinicExpenseLines(
   clinicId: string,
   input: { dateFrom: string; dateTo: string }
 ): Promise<DailyClinicExpenseLine[]> {
-  const { data, error } = await supabase
-    .from("expenses")
-    .select(
-      "id, description_ar, amount, expense_date, expense_kind, created_by, category:expense_categories(name_ar)"
-    )
-    .eq("clinic_id", clinicId)
-    .gte("expense_date", input.dateFrom)
-    .lte("expense_date", input.dateTo)
-    .order("expense_date", { ascending: false });
+  const { data, error } = await fetchAllRows<{
+    id: string;
+    description_ar: string | null;
+    amount: number | string | null;
+    expense_date: string | null;
+    expense_kind: string | null;
+    category: unknown;
+  }>(() =>
+    supabase
+      .from("expenses")
+      .select(
+        "id, description_ar, amount, expense_date, expense_kind, created_by, category:expense_categories(name_ar)"
+      )
+      .eq("clinic_id", clinicId)
+      .gte("expense_date", input.dateFrom)
+      .lte("expense_date", input.dateTo)
+      .order("expense_date", { ascending: false })
+      .order("id", { ascending: true })
+  );
 
   if (error || !data?.length) return [];
 

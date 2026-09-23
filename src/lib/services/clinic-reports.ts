@@ -63,6 +63,7 @@ import {
   labDetailsFromOperation,
   sumMaterialsCosts,
 } from "@/lib/invoices/lab-session-details";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 function mapWithdrawalLine(
   row: {
@@ -113,29 +114,25 @@ async function fetchClinicMonthWithdrawalLines(
     doctor?: { full_name_ar: string } | { full_name_ar: string }[] | null;
   };
 
-  const withSource = await supabase
-    .from("doctor_withdrawals")
-    .select(
-      "id, doctor_id, amount, status, source, requested_at, processed_at, doctor:doctors!doctor_id(full_name_ar)"
-    )
-    .eq("clinic_id", clinicId)
-    .neq("status", "rejected")
-    .order("requested_at", { ascending: false });
+  const load = (select: string) =>
+    fetchAllRows<WithdrawalWithSourceRow>(() =>
+      supabase
+        .from("doctor_withdrawals")
+        .select(select)
+        .eq("clinic_id", clinicId)
+        .neq("status", "rejected")
+        .order("requested_at", { ascending: false })
+        .order("id", { ascending: true })
+    );
 
-  let data: WithdrawalWithSourceRow[] | null = withSource.data;
-  let error = withSource.error;
+  let { data, error } = await load(
+    "id, doctor_id, amount, status, source, requested_at, processed_at, doctor:doctors!doctor_id(full_name_ar)"
+  );
 
   if (error?.message?.includes("source")) {
-    const fallback = await supabase
-      .from("doctor_withdrawals")
-      .select(
-        "id, doctor_id, amount, status, requested_at, processed_at, doctor:doctors!doctor_id(full_name_ar)"
-      )
-      .eq("clinic_id", clinicId)
-      .neq("status", "rejected")
-      .order("requested_at", { ascending: false });
-    data = fallback.data;
-    error = fallback.error;
+    ({ data, error } = await load(
+      "id, doctor_id, amount, status, requested_at, processed_at, doctor:doctors!doctor_id(full_name_ar)"
+    ));
   }
 
   if (error) return [];
@@ -645,17 +642,18 @@ export async function fetchDoctorLedgerDetail(
       .lte("operation_date", end);
   }
 
-  let expensesQuery = supabase
-    .from("doctor_expenses")
-    .select("*")
-    .eq("doctor_id", doctorId)
-    .order("expense_date", { ascending: false });
-
-  if (periodScoped) {
-    expensesQuery = expensesQuery
-      .gte("expense_date", start)
-      .lte("expense_date", end);
-  }
+  const expensesQuery = fetchAllRows<Record<string, unknown>>(() => {
+    let q = supabase
+      .from("doctor_expenses")
+      .select("*")
+      .eq("doctor_id", doctorId)
+      .order("expense_date", { ascending: false })
+      .order("id", { ascending: true });
+    if (periodScoped) {
+      q = q.gte("expense_date", start).lte("expense_date", end);
+    }
+    return q;
+  });
 
   const payrollPromise =
     periodScoped && monthYear
@@ -678,11 +676,21 @@ export async function fetchDoctorLedgerDetail(
     await Promise.all([
       fetchDoctorLedgerSummary(supabase, doctorId, monthYear),
       opsQuery,
-      supabase
-        .from("doctor_withdrawals")
-        .select("*")
-        .eq("doctor_id", doctorId)
-        .order("requested_at", { ascending: false }),
+      fetchAllRows<{
+        id: string;
+        amount: number;
+        status: string;
+        requested_at: string;
+        processed_at?: string | null;
+        source?: string | null;
+      } & Record<string, unknown>>(() =>
+        supabase
+          .from("doctor_withdrawals")
+          .select("*")
+          .eq("doctor_id", doctorId)
+          .order("requested_at", { ascending: false })
+          .order("id", { ascending: true })
+      ),
       payrollPromise,
       expensesQuery,
       assistantsFallbackPromise,
@@ -820,9 +828,9 @@ export async function fetchMasterClinicReport(
   }
 
   const monthOpsDetailSelect =
-    "operation_date, operation_type, operation_name_ar, total_amount, paid_amount, remaining_debt, materials_cost, lab_notes, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)";
+    "operation_date, operation_name_ar, total_amount, paid_amount, remaining_debt, materials_cost, lab_notes, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)";
   const monthOpsDetailSelectBase =
-    "operation_date, operation_type, operation_name_ar, total_amount, paid_amount, remaining_debt, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)";
+    "operation_date, operation_name_ar, total_amount, paid_amount, remaining_debt, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)";
 
   type MonthOpDetailRow = {
     operation_date?: string;
@@ -891,43 +899,71 @@ export async function fetchMasterClinicReport(
     fetchDaySummary(supabase, daySnapshotDate),
     fetchDoctorLedgers(supabase, my),
     clinicId
-      ? supabase
-          .from("doctor_withdrawals")
-          .select("id, amount, requested_at, doctor:doctors!doctor_id(full_name_ar)")
-          .eq("clinic_id", clinicId)
-          .eq("status", "pending")
-          .order("requested_at", { ascending: false })
+      ? fetchAllRows<{
+          id: string;
+          amount: number;
+          requested_at: string;
+          doctor: unknown;
+        }>(() =>
+          supabase
+            .from("doctor_withdrawals")
+            .select("id, amount, requested_at, doctor:doctors!doctor_id(full_name_ar)")
+            .eq("clinic_id", clinicId)
+            .eq("status", "pending")
+            .order("requested_at", { ascending: false })
+            .order("id", { ascending: true })
+        )
       : Promise.resolve({ data: [], error: null }),
     clinicId
-      ? supabase
-          .from("expenses")
-          .select("description_ar, amount, expense_date")
-          .eq("clinic_id", clinicId)
-          .gte("expense_date", start)
-          .lte("expense_date", end)
-          .order("expense_date", { ascending: false })
+      ? fetchAllRows<{
+          description_ar: string;
+          amount: number;
+          expense_date: string;
+        }>(() =>
+          supabase
+            .from("expenses")
+            .select("id, description_ar, amount, expense_date")
+            .eq("clinic_id", clinicId)
+            .gte("expense_date", start)
+            .lte("expense_date", end)
+            .order("expense_date", { ascending: false })
+            .order("id", { ascending: true })
+        )
       : Promise.resolve({ data: [], error: null }),
     clinicId
-      ? supabase
-          .from("salary_entries")
-          .select(
-            `entry_type, amount, entry_date, notes_ar,
+      ? fetchAllRows<{
+          entry_type: string;
+          amount: number;
+          entry_date: string;
+          notes_ar: string | null;
+        } & Record<string, unknown>>(() =>
+          supabase
+            .from("salary_entries")
+            .select(
+              `id, entry_type, amount, entry_date, notes_ar,
          staff_id, assistant_id, doctor_id,
          staff:staff_members!staff_id(full_name_ar, job_title_ar),
          assistant:assistants!assistant_id(full_name_ar),
          doctor:doctors!doctor_id(full_name_ar)`
-          )
-          .eq("clinic_id", clinicId)
-          .gte("entry_date", start)
-          .lte("entry_date", end)
-          .order("entry_date", { ascending: false })
+            )
+            .eq("clinic_id", clinicId)
+            .gte("entry_date", start)
+            .lte("entry_date", end)
+            .order("entry_date", { ascending: false })
+            .order("id", { ascending: true })
+        )
       : Promise.resolve({ data: [], error: null }),
     fetchMonthOperationsDetail(),
-    monthOpsQuery<{
+    fetchAllRows<{
       paid_amount: number | string | null;
       remaining_debt: number | string | null;
       total_amount: number | string | null;
-    }>("paid_amount, remaining_debt, total_amount"),
+    }>(() =>
+      monthOpsQuery("id, paid_amount, remaining_debt, total_amount").order(
+        "id",
+        { ascending: true }
+      )
+    ),
     fetchRefundsForReport(supabase, start, end, clinicId ?? undefined),
     clinicId
       ? fetchTotalRefundsAmount(supabase, {

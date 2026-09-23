@@ -141,7 +141,8 @@ export async function fetchInvoiceHistory(
     .select("*", { count: "exact" })
     .eq("clinic_id", filters.clinicId)
     .order("invoice_date", { ascending: false })
-    .order("finalized_at", { ascending: false });
+    .order("finalized_at", { ascending: false })
+    .order("id", { ascending: true });
 
   if (filters.doctorId) {
     query = query.eq("doctor_id", filters.doctorId);

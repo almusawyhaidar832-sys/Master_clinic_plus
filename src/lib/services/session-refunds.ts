@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calculateDoctorShareForDoctor } from "@/lib/finance";
 import {
+  fetchAllRows,
+  fetchAllRowsInChunks,
+} from "@/lib/supabase/fetch-all-rows";
+import {
   opName,
   type Doctor,
   type DoctorPercentage,
@@ -61,6 +65,35 @@ export function computeRefundShareSplit(
   };
 }
 
+/**
+ * تقسيم الإرجاع بنفس نسبة تقسيم الدفعة الأصلية (الحصة المجمّدة) — حتى لو
+ * تغيّرت نسبة الطبيب لاحقاً أو خُصمت مواد/مختبر من حصته في تلك الدفعة.
+ */
+export function computeRefundShareSplitFromSession(
+  amount: number,
+  session: {
+    paid_amount?: number | string | null;
+    doctor_share_amount?: number | string | null;
+  }
+): RefundShareSplit | null {
+  const refundAmount = Math.max(0, amount);
+  const paid = Number(session.paid_amount ?? 0);
+  if (session.doctor_share_amount === null || session.doctor_share_amount === undefined) {
+    return null;
+  }
+  const sessionDoctorShare = Number(session.doctor_share_amount);
+  if (!Number.isFinite(paid) || paid <= 0 || !Number.isFinite(sessionDoctorShare)) {
+    return null;
+  }
+  const ratio = Math.min(1, Math.max(0, sessionDoctorShare / paid));
+  const doctorShareDeduction = Math.round(refundAmount * ratio * 100) / 100;
+  return {
+    doctorShareDeduction,
+    clinicShareDeduction:
+      Math.round((refundAmount - doctorShareDeduction) * 100) / 100,
+  };
+}
+
 export async function fetchRefundedTotalForSession(
   supabase: SupabaseClient,
   sessionId: string
@@ -96,7 +129,7 @@ export async function createSessionRefund(
   const { data: session, error: sessionErr } = await supabase
     .from("patient_operations")
     .select(
-      "id, clinic_id, patient_id, doctor_id, treatment_case_id, paid_amount, operation_date, operation_name_ar, session_kind"
+      "id, clinic_id, patient_id, doctor_id, treatment_case_id, paid_amount, doctor_share_amount, operation_date, operation_name_ar, session_kind"
     )
     .eq("id", input.sessionId)
     .maybeSingle();
@@ -151,11 +184,13 @@ export async function createSessionRefund(
     return { refund: null as unknown as SessionRefund, error: "بيانات الطبيب غير متوفرة" };
   }
 
-  const split = computeRefundShareSplit(amount, {
-    percentage: doctor.percentage as DoctorPercentage,
-    materials_share: doctor.materials_share as MaterialsCostShare,
-    payment_type: doctor.payment_type as Doctor["payment_type"],
-  });
+  const split =
+    computeRefundShareSplitFromSession(amount, session) ??
+    computeRefundShareSplit(amount, {
+      percentage: doctor.percentage as DoctorPercentage,
+      materials_share: doctor.materials_share as MaterialsCostShare,
+      payment_type: doctor.payment_type as Doctor["payment_type"],
+    });
 
   const sessionLabel = opName(session as Parameters<typeof opName>[0]) || "إرجاع";
   const today = new Date().toISOString().slice(0, 10);
@@ -266,10 +301,16 @@ async function refundedTotalsBySession(
   const map = new Map<string, number>();
   if (sessionIds.length === 0) return map;
 
-  const { data } = await supabase
-    .from("session_refunds")
-    .select("session_id, amount")
-    .in("session_id", sessionIds);
+  const { data } = await fetchAllRowsInChunks<{
+    session_id: string;
+    amount: number | string | null;
+  }>(sessionIds, (chunk) =>
+    supabase
+      .from("session_refunds")
+      .select("id, session_id, amount")
+      .in("session_id", chunk)
+      .order("id", { ascending: true })
+  );
 
   for (const row of data ?? []) {
     const sid = String(row.session_id);
@@ -413,15 +454,18 @@ export async function fetchTotalRefundsAmount(
   supabase: SupabaseClient,
   opts: { clinicId: string; from?: string; to?: string }
 ): Promise<number> {
-  let query = supabase
-    .from("session_refunds")
-    .select("amount")
-    .eq("clinic_id", opts.clinicId);
-
-  if (opts.from) query = query.gte("created_at", `${opts.from}T00:00:00`);
-  if (opts.to) query = query.lte("created_at", `${opts.to}T23:59:59.999`);
-
-  const { data } = await query;
+  const { data } = await fetchAllRows<{ amount: number | string | null }>(
+    () => {
+      let query = supabase
+        .from("session_refunds")
+        .select("id, amount")
+        .eq("clinic_id", opts.clinicId)
+        .order("id", { ascending: true });
+      if (opts.from) query = query.gte("created_at", `${opts.from}T00:00:00`);
+      if (opts.to) query = query.lte("created_at", `${opts.to}T23:59:59.999`);
+      return query;
+    }
+  );
   return (data ?? []).reduce((s, r) => s + Number(r.amount ?? 0), 0);
 }
 
@@ -433,15 +477,25 @@ export async function fetchRefundsForReport(
 ): Promise<RefundReportRow[]> {
   if (!clinicId) return [];
 
-  const { data } = await supabase
-    .from("session_refunds")
-    .select(
-      "id, amount, reason, created_at, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
-    )
-    .eq("clinic_id", clinicId)
-    .gte("created_at", `${from}T00:00:00`)
-    .lte("created_at", `${to}T23:59:59.999`)
-    .order("created_at", { ascending: false });
+  const { data } = await fetchAllRows<{
+    id: string;
+    amount: number | string | null;
+    reason: string | null;
+    created_at: string;
+    patient: unknown;
+    doctor: unknown;
+  }>(() =>
+    supabase
+      .from("session_refunds")
+      .select(
+        "id, amount, reason, created_at, patient:patients!patient_id(full_name_ar), doctor:doctors!doctor_id(full_name_ar)"
+      )
+      .eq("clinic_id", clinicId)
+      .gte("created_at", `${from}T00:00:00`)
+      .lte("created_at", `${to}T23:59:59.999`)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+  );
 
   return (data ?? []).map((row) => {
     const patient = row.patient as

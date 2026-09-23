@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { getActiveClinicId } from "@/lib/clinic-context";
 import { Button } from "@/components/ui/Button";
 import { AddDoctorExpenseModal } from "@/components/doctor-expenses/AddDoctorExpenseModal";
@@ -173,11 +174,14 @@ export default function DoctorExpensesPage() {
         .eq("archived_to_history", false)
         .order("expense_date", { ascending: false })
         .limit(100),
-      supabase
-        .from("transactions")
-        .select("reference_id")
-        .eq("clinic_id", active.clinicId)
-        .eq("reference_type", "doctor_expense_doctor"),
+      fetchAllRows<{ id: string; reference_id: string | null }>(() =>
+        supabase
+          .from("transactions")
+          .select("id, reference_id")
+          .eq("clinic_id", active.clinicId)
+          .eq("reference_type", "doctor_expense_doctor")
+          .order("id", { ascending: true })
+      ),
     ]);
 
     let expRes = expResFirst;

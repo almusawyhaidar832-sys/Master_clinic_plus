@@ -6,6 +6,7 @@ import {
 import { breakdownAssistantSalary } from "@/lib/services/assistant-payroll";
 import { todayISO } from "@/lib/utils";
 import type { PayrollRecord, SalarySlip } from "@/types";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
@@ -70,11 +71,16 @@ async function listPayrollConfirmTransactions(
   referenceType: string,
   parentId: string
 ) {
-  const { data, error } = await admin
-    .from("transactions")
-    .select("id, amount, reference_id, transaction_date, created_at")
-    .eq("clinic_id", clinicId)
-    .eq("reference_type", referenceType);
+  // الحركات السابقة لنفس السجل تُستخدم لمنع الصرف المكرر — لازم تنقرأ كلها.
+  const { data, error } = await fetchAllRows<PayrollConfirmRow>(() =>
+    admin
+      .from("transactions")
+      .select("id, amount, reference_id, transaction_date, created_at")
+      .eq("clinic_id", clinicId)
+      .eq("reference_type", referenceType)
+      .or(`reference_id.eq."${parentId}",reference_id.like."${parentId}:*"`)
+      .order("id", { ascending: true })
+  );
 
   if (error) {
     return {

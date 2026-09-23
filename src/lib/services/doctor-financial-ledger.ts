@@ -28,6 +28,10 @@ import { fetchDailyAssistantPayrollLines } from "@/lib/ledger/daily-assistant-pa
 import { FINANCIAL_EPSILON } from "@/lib/services/patient-financial-plan";
 import { opName, type Doctor, type PatientOperation } from "@/types";
 import type { WithdrawalStatus } from "@/types";
+import {
+  fetchAllRows,
+  fetchAllRowsInChunks,
+} from "@/lib/supabase/fetch-all-rows";
 
 export interface DoctorLedgerDateFilters {
   dateFrom?: string | null;
@@ -204,11 +208,17 @@ async function loadPatientNames(
   const ids = [...new Set(patientIds.filter(Boolean))];
   if (!ids.length) return map;
 
-  const { data } = await admin
-    .from("patients")
-    .select("id, full_name_ar")
-    .eq("clinic_id", clinicId)
-    .in("id", ids);
+  const { data } = await fetchAllRowsInChunks<{
+    id: string;
+    full_name_ar: string | null;
+  }>(ids, (chunk) =>
+    admin
+      .from("patients")
+      .select("id, full_name_ar")
+      .eq("clinic_id", clinicId)
+      .in("id", chunk)
+      .order("id", { ascending: true })
+  );
 
   for (const p of data ?? []) {
     map.set(p.id as string, String(p.full_name_ar ?? "").trim() || "مراجع");
@@ -270,120 +280,53 @@ const OPS_SELECT_BASE_NO_LAB =
 const OPS_SELECT_MINIMAL =
   "id, patient_id, paid_amount, doctor_share_amount, operation_date, created_at, operation_name_ar, total_amount";
 
+/** أعمدة اختيارية قد تغيب في بعض القواعد — نجرّب من الأغنى للأبسط */
+const OPS_SELECT_CANDIDATES = [
+  OPS_SELECT_WITH_CASE,
+  OPS_SELECT_BASE,
+  OPS_SELECT_WITH_CASE_NO_LAB,
+  OPS_SELECT_BASE_NO_LAB,
+  OPS_SELECT_MINIMAL,
+].flatMap((select) => [
+  select,
+  select.replace(", operation_type", ""),
+]).filter((select, i, all) => all.indexOf(select) === i);
+
 async function fetchDoctorPaidOperations(
   admin: SupabaseClient,
   clinicId: string,
   doctorId: string,
   filters: DoctorLedgerDateFilters
-) {
-  let query = admin
-    .from("patient_operations")
-    .select(OPS_SELECT_WITH_CASE)
-    .eq("clinic_id", clinicId)
-    .eq("doctor_id", doctorId)
-    .order("created_at", { ascending: false })
-    .limit(500);
+): Promise<{
+  data: Record<string, unknown>[] | null;
+  error: { message: string } | null;
+}> {
+  let last: {
+    data: Record<string, unknown>[] | null;
+    error: { message: string } | null;
+  } = { data: null, error: null };
 
-  if (filters.dateFrom) {
-    query = query.gte("operation_date", filters.dateFrom);
-  }
-  if (filters.dateTo) {
-    query = query.lte("operation_date", filters.dateTo);
-  }
-
-  let res = await query;
-
-  if (
-    res.error?.message?.includes("patient_treatment_cases") ||
-    res.error?.message?.includes("treatment_case_id") ||
-    res.error?.message?.includes("session_kind")
-  ) {
-    let fallback = admin
-      .from("patient_operations")
-      .select(OPS_SELECT_BASE)
-      .eq("clinic_id", clinicId)
-      .eq("doctor_id", doctorId)
-      .order("created_at", { ascending: false })
-      .limit(500);
-
-    if (filters.dateFrom) {
-      fallback = fallback.gte("operation_date", filters.dateFrom);
-    }
-    if (filters.dateTo) {
-      fallback = fallback.lte("operation_date", filters.dateTo);
-    }
-
-    res = (await fallback) as typeof res;
-  }
-
-  if (
-    res.error?.message?.includes("materials_cost") ||
-    res.error?.message?.includes("lab_notes")
-  ) {
-    let withoutLab = admin
-      .from("patient_operations")
-      .select(OPS_SELECT_WITH_CASE_NO_LAB)
-      .eq("clinic_id", clinicId)
-      .eq("doctor_id", doctorId)
-      .order("created_at", { ascending: false })
-      .limit(500);
-
-    if (filters.dateFrom) {
-      withoutLab = withoutLab.gte("operation_date", filters.dateFrom);
-    }
-    if (filters.dateTo) {
-      withoutLab = withoutLab.lte("operation_date", filters.dateTo);
-    }
-
-    res = (await withoutLab) as typeof res;
-
-    if (
-      res.error?.message?.includes("patient_treatment_cases") ||
-      res.error?.message?.includes("treatment_case_id") ||
-      res.error?.message?.includes("session_kind")
-    ) {
-      let baseNoLab = admin
+  for (const select of OPS_SELECT_CANDIDATES) {
+    last = await fetchAllRows<Record<string, unknown>>(() => {
+      let query = admin
         .from("patient_operations")
-        .select(OPS_SELECT_BASE_NO_LAB)
+        .select(select)
         .eq("clinic_id", clinicId)
         .eq("doctor_id", doctorId)
         .order("created_at", { ascending: false })
-        .limit(500);
-
+        .order("id", { ascending: true });
       if (filters.dateFrom) {
-        baseNoLab = baseNoLab.gte("operation_date", filters.dateFrom);
+        query = query.gte("operation_date", filters.dateFrom);
       }
       if (filters.dateTo) {
-        baseNoLab = baseNoLab.lte("operation_date", filters.dateTo);
+        query = query.lte("operation_date", filters.dateTo);
       }
-
-      res = (await baseNoLab) as typeof res;
-    }
+      return query;
+    });
+    if (!last.error) return last;
   }
 
-  if (
-    res.error?.message?.includes("operation_type") ||
-    res.error?.message?.includes("operation_name_ar")
-  ) {
-    let minimal = admin
-      .from("patient_operations")
-      .select(OPS_SELECT_MINIMAL)
-      .eq("clinic_id", clinicId)
-      .eq("doctor_id", doctorId)
-      .order("created_at", { ascending: false })
-      .limit(500);
-
-    if (filters.dateFrom) {
-      minimal = minimal.gte("operation_date", filters.dateFrom);
-    }
-    if (filters.dateTo) {
-      minimal = minimal.lte("operation_date", filters.dateTo);
-    }
-
-    res = (await minimal) as typeof res;
-  }
-
-  return res;
+  return last;
 }
 
 async function loadDoctorHistoryRecords(
@@ -392,17 +335,24 @@ async function loadDoctorHistoryRecords(
   doctorId: string,
   filters: DoctorLedgerDateFilters
 ): Promise<InvoiceHistoryRow[]> {
+  const pageSize = 200;
+  const all: InvoiceHistoryRow[] = [];
   try {
-    const { rows } = await fetchInvoiceHistory(admin, {
-      clinicId,
-      doctorId,
-      dateFrom: filters.dateFrom,
-      dateTo: filters.dateTo,
-      limit: 500,
-    });
-    return rows;
+    for (let offset = 0; ; offset += pageSize) {
+      const { rows } = await fetchInvoiceHistory(admin, {
+        clinicId,
+        doctorId,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        limit: pageSize,
+        offset,
+      });
+      all.push(...rows);
+      if (rows.length < pageSize) break;
+    }
+    return all;
   } catch {
-    return [];
+    return all;
   }
 }
 
@@ -512,6 +462,14 @@ function resolveHistoryDoctorShare(
   return Math.round(paid * doctorPct * 100) / 100;
 }
 
+function isRefundOperation(op: {
+  session_kind?: string | null;
+  paid_amount?: number | string | null;
+}): boolean {
+  return op.session_kind === "refund" || Number(op.paid_amount ?? 0) < 0;
+}
+
+/** جلسة تؤثر على رصيد الطبيب — دفعة أو إرجاع (سالب) — نفس ما تجمعه المحفظة */
 function isPaidSessionOperation(
   op: OperationEarningSource & { session_kind?: string | null },
   doctorPct: number,
@@ -519,6 +477,7 @@ function isPaidSessionOperation(
   clinicReviewFee = 0
 ): boolean {
   const paid = Number(op.paid_amount ?? 0);
+  if (isRefundOperation(op)) return true;
   if (op.session_kind === "discount" && paid <= 0) return false;
   if (paid > 0) return true;
   return calcOperationEarned(op, doctorPct, salaryDoctor, null, clinicReviewFee) > 0;
@@ -539,29 +498,48 @@ async function fetchDoctorSessionPayments(
     doctorId
   );
 
-  const historyRows = await loadDoctorHistoryRecords(
-    admin,
-    clinicId,
-    doctorId,
-    filters
-  );
+  const [historyRows, opsRes] = await Promise.all([
+    loadDoctorHistoryRecords(admin, clinicId, doctorId, filters),
+    fetchDoctorPaidOperations(admin, clinicId, doctorId, filters),
+  ]);
+
+  // المبلغ والحصة من الجلسة نفسها (الحصة المجمّدة = نفس المحفظة)؛ الأرشيف
+  // يعطي رقم الفاتورة واسم الإجراء فقط. أرقام الأرشيف قد تكون أقدم من تعديل
+  // لاحق على الجلسة.
+  const opById = new Map<string, PatientOperation & OperationEarningSource>();
+  for (const raw of opsRes.error ? [] : (opsRes.data ?? [])) {
+    const op = raw as unknown as PatientOperation & OperationEarningSource;
+    opById.set(op.id, op);
+  }
 
   for (const row of historyRows) {
     const payment = historyToSessionPayment(row, doctorPct, salaryDoctor);
     if (!payment) continue;
-    if (payment.operation_id) seenOps.add(payment.operation_id);
+    const op = payment.operation_id ? opById.get(payment.operation_id) : undefined;
+    if (payment.operation_id) {
+      if (seenOps.has(payment.operation_id)) continue;
+      seenOps.add(payment.operation_id);
+    }
     if (!inDateRange(payment.payment_date, filters.dateFrom, filters.dateTo)) {
       continue;
     }
+    if (op) {
+      const reviewFee = resolveReviewFeeOnOperation(op, clinicReviewFee);
+      payment.paid_amount = normalizeCollectedWithReviewFee(
+        Number(op.paid_amount ?? 0),
+        reviewFee,
+        op.is_review_statement
+      );
+      payment.doctor_share = calcOperationEarned(
+        op,
+        doctorPct,
+        salaryDoctor,
+        doctor,
+        clinicReviewFee
+      );
+    }
     rows.push(payment);
   }
-
-  const opsRes = await fetchDoctorPaidOperations(
-    admin,
-    clinicId,
-    doctorId,
-    filters
-  );
 
   if (!opsRes.error && opsRes.data?.length) {
     const patientMap = await loadPatientNames(
@@ -638,6 +616,7 @@ function markFirstPayments(
 ): DoctorLedgerPatientRow[] {
   const counts = new Map<string, number>();
   for (const p of payments) {
+    if (p.paid_amount < 0) continue;
     const key = patientKey(p);
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
@@ -666,6 +645,25 @@ export async function fetchDoctorLedgerInvoices(
   const limit = Math.min(Math.max(filters.limit ?? 100, 1), 300);
   const offset = Math.max(filters.offset ?? 0, 0);
 
+  const invoiceRows = await collectDoctorLedgerInvoiceRows(
+    admin,
+    doctorId,
+    clinicId,
+    filters
+  );
+
+  return {
+    rows: invoiceRows.slice(offset, offset + limit),
+    total: invoiceRows.length,
+  };
+}
+
+async function collectDoctorLedgerInvoiceRows(
+  admin: SupabaseClient,
+  doctorId: string,
+  clinicId: string,
+  filters: DoctorLedgerDateFilters
+): Promise<DoctorLedgerInvoiceRow[]> {
   const historyRows = await loadDoctorHistoryRecords(
     admin,
     clinicId,
@@ -674,18 +672,13 @@ export async function fetchDoctorLedgerInvoices(
   );
 
   const invoiceRows: DoctorLedgerInvoiceRow[] = [];
-
   for (const row of historyRows) {
     if (Number(row.paid_amount ?? 0) <= 0) continue;
     invoiceRows.push(mapHistoryToInvoiceRow(row));
   }
 
   invoiceRows.sort((a, b) => b.invoice_date.localeCompare(a.invoice_date));
-
-  return {
-    rows: invoiceRows.slice(offset, offset + limit),
-    total: invoiceRows.length,
-  };
+  return invoiceRows;
 }
 
 /** دفعات المراجعين — الأحدث أولاً */
@@ -716,37 +709,52 @@ export async function fetchDoctorLedgerFinancialOps(
   filters: DoctorLedgerDateFilters = {}
 ): Promise<{ rows: DoctorLedgerOperationRow[]; total: number }> {
   const limit = Math.min(Math.max(filters.limit ?? 100, 1), 200);
+  const rows = await collectDoctorLedgerFinancialOps(
+    admin,
+    doctorId,
+    clinicId,
+    filters
+  );
+  return { rows: rows.slice(0, limit), total: rows.length };
+}
+
+type LedgerDbRow = Record<string, unknown>;
+
+async function fetchFirstWorkingSelect(
+  selects: string[],
+  build: (select: string) => { range: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }> }
+): Promise<{ data: LedgerDbRow[] | null; error: { message: string } | null }> {
+  let last: { data: LedgerDbRow[] | null; error: { message: string } | null } =
+    { data: null, error: null };
+  for (const select of selects) {
+    last = await fetchAllRows<LedgerDbRow>(() => build(select));
+    if (!last.error) return last;
+  }
+  return last;
+}
+
+async function collectDoctorLedgerFinancialOps(
+  admin: SupabaseClient,
+  doctorId: string,
+  clinicId: string,
+  filters: DoctorLedgerDateFilters
+): Promise<DoctorLedgerOperationRow[]> {
   const rows: DoctorLedgerOperationRow[] = [];
 
-  const withdrawalSelectFull =
-    "id, amount, status, source, requested_at, processed_at, notes";
-  const withdrawalSelectBase =
-    "id, amount, status, requested_at, processed_at";
-
-  const withdrawalsQuery = admin
-    .from("doctor_withdrawals")
-    .select(withdrawalSelectFull)
-    .eq("doctor_id", doctorId)
-    .order("requested_at", { ascending: false })
-    .limit(200);
-
-  let withdrawalsRes = await withdrawalsQuery;
-  if (withdrawalsRes.error?.message?.includes("notes")) {
-    withdrawalsRes = (await admin
-      .from("doctor_withdrawals")
-      .select(withdrawalSelectBase)
-      .eq("doctor_id", doctorId)
-      .order("requested_at", { ascending: false })
-      .limit(200)) as typeof withdrawalsRes;
-  }
-  if (withdrawalsRes.error?.message?.includes("source")) {
-    withdrawalsRes = (await admin
-      .from("doctor_withdrawals")
-      .select("id, amount, status, requested_at, processed_at")
-      .eq("doctor_id", doctorId)
-      .order("requested_at", { ascending: false })
-      .limit(200)) as typeof withdrawalsRes;
-  }
+  const withdrawalsRes = await fetchFirstWorkingSelect(
+    [
+      "id, amount, status, source, requested_at, processed_at, notes",
+      "id, amount, status, source, requested_at, processed_at",
+      "id, amount, status, requested_at, processed_at",
+    ],
+    (select) =>
+      admin
+        .from("doctor_withdrawals")
+        .select(select)
+        .eq("doctor_id", doctorId)
+        .order("requested_at", { ascending: false })
+        .order("id", { ascending: true })
+  );
 
   const period =
     filters.dateFrom || filters.dateTo
@@ -756,72 +764,51 @@ export async function fetchDoctorLedgerFinancialOps(
         }
       : undefined;
   const withdrawalRows = filterWithdrawalsInPeriod(
-    withdrawalsRes.data ?? [],
+    (withdrawalsRes.data ?? []) as (LedgerDbRow & {
+      amount: number | string;
+      status: string;
+      requested_at?: string;
+      processed_at?: string | null;
+    })[],
     period
   );
 
-  const txSelectFull =
-    "id, type, amount, transaction_date, description_ar, reference_type, reference_id, operation_id, patient_id";
-  const txSelectBase =
-    "id, type, amount, transaction_date, description_ar, reference_type, reference_id";
-
-  let txQuery = admin
-    .from("transactions")
-    .select(txSelectFull)
-    .eq("clinic_id", clinicId)
-    .eq("doctor_id", doctorId)
-    .in("type", ["doctor_salary_paid", "assistant_payroll_doctor", "balance_topup_doctor"])
-    .order("transaction_date", { ascending: false })
-    .limit(150);
-
-  if (filters.dateFrom) txQuery = txQuery.gte("transaction_date", filters.dateFrom);
-  if (filters.dateTo) txQuery = txQuery.lte("transaction_date", filters.dateTo);
-
-  let txRes = await txQuery;
-
-  if (txRes.error?.message?.includes("operation_id")) {
-    let fallback = admin
-      .from("transactions")
-      .select(txSelectBase)
-      .eq("clinic_id", clinicId)
-      .eq("doctor_id", doctorId)
-      .in("type", [
-        "doctor_salary_paid",
-        "doctor_expense_doctor",
-        "assistant_payroll_doctor",
-        "balance_topup_doctor",
-      ])
-      .order("transaction_date", { ascending: false })
-      .limit(150);
-
-    if (filters.dateFrom) {
-      fallback = fallback.gte("transaction_date", filters.dateFrom);
-    }
-    if (filters.dateTo) {
-      fallback = fallback.lte("transaction_date", filters.dateTo);
-    }
-
-    txRes = (await fallback) as typeof txRes;
-  }
-
-  let salaryEntriesQuery = admin
-    .from("salary_entries")
-    .select("id, entry_type, amount, entry_date, notes_ar")
-    .eq("clinic_id", clinicId)
-    .eq("doctor_id", doctorId)
-    .order("entry_date", { ascending: false })
-    .limit(100);
-
-  if (filters.dateFrom) {
-    salaryEntriesQuery = salaryEntriesQuery.gte("entry_date", filters.dateFrom);
-  }
-  if (filters.dateTo) {
-    salaryEntriesQuery = salaryEntriesQuery.lte("entry_date", filters.dateTo);
-  }
-
   const [txResFinal, salaryEntriesRes] = await Promise.all([
-    Promise.resolve(txRes),
-    salaryEntriesQuery,
+    fetchFirstWorkingSelect(
+      [
+        "id, type, amount, transaction_date, description_ar, reference_type, reference_id, operation_id, patient_id",
+        "id, type, amount, transaction_date, description_ar, reference_type, reference_id",
+      ],
+      (select) => {
+        let q = admin
+          .from("transactions")
+          .select(select)
+          .eq("clinic_id", clinicId)
+          .eq("doctor_id", doctorId)
+          .in("type", [
+            "doctor_salary_paid",
+            "assistant_payroll_doctor",
+            "balance_topup_doctor",
+          ])
+          .order("transaction_date", { ascending: false })
+          .order("id", { ascending: true });
+        if (filters.dateFrom) q = q.gte("transaction_date", filters.dateFrom);
+        if (filters.dateTo) q = q.lte("transaction_date", filters.dateTo);
+        return q;
+      }
+    ),
+    fetchAllRows<LedgerDbRow>(() => {
+      let q = admin
+        .from("salary_entries")
+        .select("id, entry_type, amount, entry_date, notes_ar")
+        .eq("clinic_id", clinicId)
+        .eq("doctor_id", doctorId)
+        .order("entry_date", { ascending: false })
+        .order("id", { ascending: true });
+      if (filters.dateFrom) q = q.gte("entry_date", filters.dateFrom);
+      if (filters.dateTo) q = q.lte("entry_date", filters.dateTo);
+      return q;
+    }),
   ]);
 
   if (txResFinal.error) throw new Error(txResFinal.error.message);
@@ -904,11 +891,13 @@ export async function fetchDoctorLedgerFinancialOps(
     doctorId
   );
   for (const line of assistantLines) {
-    if (line.doctorDeduction <= FINANCIAL_EPSILON) continue;
+    if (Math.abs(line.doctorDeduction) <= FINANCIAL_EPSILON) continue;
     rows.push({
       id: line.id,
       kind: "payroll_deduction",
-      label: `مساعد ${line.assistantName} — ${line.statusLabel}`,
+      label: `مساعد ${line.assistantName} — ${
+        line.isCorrection ? "تصحيح (استرجاع)" : line.statusLabel
+      }`,
       amount: line.doctorDeduction,
       operation_date: line.lineDate,
       status: line.statusLabel,
@@ -917,7 +906,7 @@ export async function fetchDoctorLedgerFinancialOps(
 
   rows.sort((a, b) => b.operation_date.localeCompare(a.operation_date));
 
-  return { rows: rows.slice(0, limit), total: rows.length };
+  return rows;
 }
 
 function splitOperations(rows: DoctorLedgerOperationRow[]) {
@@ -938,24 +927,20 @@ export async function fetchDoctorFinancialReport(
   filters: DoctorLedgerDateFilters,
   wallet: { totalEarnings: number; availableBalance: number }
 ): Promise<DoctorFinancialReportData> {
-  const [invoicesRes, patientsRes, opsRes] = await Promise.all([
-    fetchDoctorLedgerInvoices(admin, doctorId, clinicId, {
-      ...filters,
-      limit: 500,
-    }),
-    fetchDoctorLedgerPatients(admin, doctorId, clinicId, {
-      ...filters,
-      limit: 500,
-    }),
-    fetchDoctorLedgerFinancialOps(admin, doctorId, clinicId, {
-      ...filters,
-      limit: 500,
-    }),
+  // المجاميع من كل البيانات — ليس من صفوف العرض المقطوعة
+  const [invoiceRows, payments, opsRows] = await Promise.all([
+    collectDoctorLedgerInvoiceRows(admin, doctorId, clinicId, filters),
+    fetchDoctorSessionPayments(admin, doctorId, clinicId, filters),
+    collectDoctorLedgerFinancialOps(admin, doctorId, clinicId, filters),
   ]);
+  const patientRows = markFirstPayments(payments);
 
-  const split = splitOperations(opsRes.rows);
+  const split = splitOperations(opsRows);
+  const balanceCredits = opsRows
+    .filter((r) => r.kind === "balance_credit")
+    .reduce((s, r) => s + r.amount, 0);
 
-  const expenseInvoices = invoicesRes.rows.filter(
+  const expenseInvoices = invoiceRows.filter(
     (r) => r.record_kind === "doctor_expense"
   );
   const expenseDeductions: DoctorLedgerOperationRow[] = expenseInvoices.map(
@@ -968,8 +953,8 @@ export async function fetchDoctorFinancialReport(
     })
   );
 
-  const totalCollected = patientsRes.rows.reduce((s, r) => s + r.paid_amount, 0);
-  const totalShare = patientsRes.rows.reduce((s, r) => s + r.doctor_share, 0);
+  const totalCollected = patientRows.reduce((s, r) => s + r.paid_amount, 0);
+  const totalShare = patientRows.reduce((s, r) => s + r.doctor_share, 0);
   const totalWithdrawn = split.withdrawals
     .filter((r) => r.status !== "rejected" && r.status !== "pending")
     .reduce((s, r) => s + r.amount, 0);
@@ -985,7 +970,12 @@ export async function fetchDoctorFinancialReport(
 
   const netHint =
     Math.round(
-      (totalShare - totalWithdrawn - totalSalary - totalExpense - totalPayroll) *
+      (totalShare -
+        totalWithdrawn -
+        totalSalary -
+        totalExpense -
+        totalPayroll +
+        balanceCredits) *
         100
     ) / 100;
 
@@ -1003,8 +993,8 @@ export async function fetchDoctorFinancialReport(
     total_expense_deductions: Math.round(totalExpense * 100) / 100,
     total_payroll_deductions: Math.round(totalPayroll * 100) / 100,
     net_calc_hint: netHint,
-    invoices: invoicesRes.rows,
-    patient_payments: patientsRes.rows,
+    invoices: invoiceRows,
+    patient_payments: patientRows,
     withdrawals: split.withdrawals,
     salary_payouts: split.salary_payouts,
     salary_adjustments: split.salary_adjustments,

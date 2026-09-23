@@ -2,6 +2,10 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { previewTreatmentSplit } from "@/lib/services/patient-financial-plan";
+import {
+  fetchAllRows,
+  fetchAllRowsInChunks,
+} from "@/lib/supabase/fetch-all-rows";
 import type { Doctor, DoctorPercentage, MaterialsCostShare } from "@/types";
 
 const MISSING_PAYMENT_SQL =
@@ -18,22 +22,38 @@ export async function refreshActiveTreatmentCaseSharesForDoctor(
   doctorId: string,
   doctor: Doctor
 ): Promise<{ updated: number; error?: string }> {
-  const { data: byPrimary, error: primaryErr } = await admin
-    .from("patient_treatment_cases")
-    .select("id, final_price, total_paid, status")
-    .eq("clinic_id", clinicId)
-    .eq("primary_doctor_id", doctorId)
-    .eq("status", "active");
+  type CaseRow = {
+    id: string;
+    final_price?: number | string | null;
+    total_paid?: number | string | null;
+    status?: string | null;
+  };
+  const { data: byPrimary, error: primaryErr } = await fetchAllRows<CaseRow>(
+    () =>
+      admin
+        .from("patient_treatment_cases")
+        .select("id, final_price, total_paid, status")
+        .eq("clinic_id", clinicId)
+        .eq("primary_doctor_id", doctorId)
+        .eq("status", "active")
+        .order("id", { ascending: true })
+  );
 
   if (primaryErr) {
     return { updated: 0, error: primaryErr.message };
   }
 
-  const { data: opLinks, error: opErr } = await admin
-    .from("patient_operations")
-    .select("treatment_case_id")
-    .eq("doctor_id", doctorId)
-    .not("treatment_case_id", "is", null);
+  const { data: opLinks, error: opErr } = await fetchAllRows<{
+    id: string;
+    treatment_case_id: string | null;
+  }>(() =>
+    admin
+      .from("patient_operations")
+      .select("id, treatment_case_id")
+      .eq("doctor_id", doctorId)
+      .not("treatment_case_id", "is", null)
+      .order("id", { ascending: true })
+  );
 
   if (opErr) {
     return { updated: 0, error: opErr.message };
@@ -52,12 +72,17 @@ export async function refreshActiveTreatmentCaseSharesForDoctor(
     return { updated: 0 };
   }
 
-  const { data: cases, error: casesErr } = await admin
-    .from("patient_treatment_cases")
-    .select("id, final_price, total_paid, status")
-    .eq("clinic_id", clinicId)
-    .in("id", [...caseIds])
-    .eq("status", "active");
+  const { data: cases, error: casesErr } = await fetchAllRowsInChunks<CaseRow>(
+    [...caseIds],
+    (chunk) =>
+      admin
+        .from("patient_treatment_cases")
+        .select("id, final_price, total_paid, status")
+        .eq("clinic_id", clinicId)
+        .in("id", chunk)
+        .eq("status", "active")
+        .order("id", { ascending: true })
+  );
 
   if (casesErr) {
     return { updated: 0, error: casesErr.message };

@@ -12,6 +12,7 @@ import {
   processCasePayment,
 } from "@/lib/services/patient-treatment-cases";
 import { DOCTOR_FINANCE_SELECT } from "@/lib/services/doctor-db-select";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import type { Doctor } from "@/types";
 
 function num(v: unknown): number {
@@ -531,17 +532,17 @@ export async function repairDoctorOperationShares(
     dateTo?: string;
   } = {}
 ): Promise<{ ok: boolean; repaired: number; error?: string }> {
-  let query = admin
-    .from("patient_operations")
-    .select("*")
-    .eq("clinic_id", clinicId);
-
-  if (opts.doctorId) query = query.eq("doctor_id", opts.doctorId);
-  if (opts.date) query = query.eq("operation_date", opts.date);
-  if (opts.dateFrom) query = query.gte("operation_date", opts.dateFrom);
-  if (opts.dateTo) query = query.lte("operation_date", opts.dateTo);
-
-  const { data: ops, error } = await query;
+  const { data: ops, error } = await fetchAllRows<OperationRow>(() => {
+    let query = admin
+      .from("patient_operations")
+      .select("*")
+      .eq("clinic_id", clinicId);
+    if (opts.doctorId) query = query.eq("doctor_id", opts.doctorId);
+    if (opts.date) query = query.eq("operation_date", opts.date);
+    if (opts.dateFrom) query = query.gte("operation_date", opts.dateFrom);
+    if (opts.dateTo) query = query.lte("operation_date", opts.dateTo);
+    return query.order("id", { ascending: true });
+  });
   if (error) return { ok: false, repaired: 0, error: error.message };
 
   const caseIds = new Set<string>();

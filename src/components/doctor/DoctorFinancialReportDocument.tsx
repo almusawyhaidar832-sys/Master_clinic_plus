@@ -271,7 +271,9 @@ export function DoctorFinancialReportDocument({
                 formatDate(op.operation_date, dateLocale),
                 t("docKindAssistant"),
                 op.label,
-                `−${formatMoney(op.amount)}`,
+                op.amount < 0
+                  ? `+${formatMoney(Math.abs(op.amount))}`
+                  : `−${formatMoney(op.amount)}`,
               ]),
             ]}
           />

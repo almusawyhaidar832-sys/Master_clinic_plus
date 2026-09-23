@@ -100,7 +100,7 @@ export default function PatientsSearchPage() {
       let opQuery = supabase
         .from("patient_operations")
         .select(
-          "id, patient_id, total_amount, paid_amount, remaining_debt, operation_name_ar, operation_type, treatment_case_id, notes, created_at, operation_date"
+          "id, patient_id, total_amount, paid_amount, remaining_debt, operation_name_ar, treatment_case_id, notes, created_at, operation_date"
         )
         .in("patient_id", ids)
         .order("created_at", { ascending: true });

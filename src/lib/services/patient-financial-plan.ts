@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeDoctorPercentage } from "@/lib/constants";
+import { fetchAllRowsInChunks } from "@/lib/supabase/fetch-all-rows";
 import {
   calculateDoctorShareForDoctor,
   deductLabCostFromSessionShares,
@@ -339,20 +340,41 @@ export async function fetchPatientFinancialPlansBatch(
   const result = new Map<string, PatientFinancialPlan>();
   if (!patientIds.length) return result;
 
-  const [plansRes, patientsRes, opsRes] = await Promise.all([
-    supabase
-      .from("patient_treatment_plans")
-      .select("*")
-      .in("patient_id", patientIds),
-    supabase.from("patients").select("*").in("id", patientIds),
-    supabase
-      .from("patient_operations")
-      .select(
-        "patient_id, total_amount, paid_amount, remaining_debt, session_kind, created_at"
-      )
-      .in("patient_id", patientIds)
-      .order("created_at", { ascending: true }),
+  type LooseRow = Record<string, unknown>;
+  const [plansRes, patientsRes, opsRaw] = await Promise.all([
+    fetchAllRowsInChunks<LooseRow>(patientIds, (chunk) =>
+      supabase
+        .from("patient_treatment_plans")
+        .select("*")
+        .in("patient_id", chunk)
+        .order("patient_id", { ascending: true })
+    ),
+    fetchAllRowsInChunks<LooseRow>(patientIds, (chunk) =>
+      supabase
+        .from("patients")
+        .select("*")
+        .in("id", chunk)
+        .order("id", { ascending: true })
+    ),
+    fetchAllRowsInChunks<LooseRow>(patientIds, (chunk) =>
+      supabase
+        .from("patient_operations")
+        .select(
+          "id, patient_id, total_amount, paid_amount, remaining_debt, session_kind, created_at"
+        )
+        .in("patient_id", chunk)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+    ),
   ]);
+  const opsRes = {
+    data: [...(opsRaw.data ?? [])].sort(
+      (a, b) =>
+        String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")) ||
+        String(a.id).localeCompare(String(b.id))
+    ),
+    error: opsRaw.error,
+  };
 
   const planByPatient = new Map<string, Record<string, unknown>>();
   for (const row of plansRes.data ?? []) {
